@@ -67,7 +67,7 @@ function importLibrary {
 (
     cd Paper/Paper-Server/
     lastlog=$(git log -1 --oneline)
-    if [[ "$lastlog" = *"Tuinity-Extra mc-dev Imports"* ]]; then
+    if [[ "$lastlog" = *"MultiPaper-Extra mc-dev Imports"* ]]; then
         git reset --hard HEAD^
     fi
 )
@@ -116,6 +116,6 @@ importLibrary com.mojang brigadier  com/mojang/brigadier/arguments BoolArgumentT
     cd Paper/Paper-Server/
     rm -rf nms-patches
     git add src -A
-    echo -e "Tuinity-Extra mc-dev Imports\n\n$MODLOG" | git commit src -F -
+    echo -e "MultiPaper-Extra mc-dev Imports\n\n$MODLOG" | git commit src -F -
     exit 0
 )

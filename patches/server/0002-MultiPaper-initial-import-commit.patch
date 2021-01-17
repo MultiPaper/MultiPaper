@@ -1,0 +1,3327 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 17 Jan 2021 15:56:33 +1000
+Subject: [PATCH] MultiPaper initial import commit
+
+
+diff --git a/src/main/java/com/destroystokyo/paper/PaperWorldConfig.java b/src/main/java/com/destroystokyo/paper/PaperWorldConfig.java
+index c46d5d6aa8246f0cecacba288ab3f51a41e112c8..ebdd36c44d554da0ac9232d3237c9c37b7262d84 100644
+--- a/src/main/java/com/destroystokyo/paper/PaperWorldConfig.java
++++ b/src/main/java/com/destroystokyo/paper/PaperWorldConfig.java
+@@ -661,7 +661,7 @@ public class PaperWorldConfig {
+ 
+     public long delayChunkUnloadsBy;
+     private void delayChunkUnloadsBy() {
+-        delayChunkUnloadsBy = PaperConfig.getSeconds(getString("delay-chunk-unloads-by", "10s"));
++        delayChunkUnloadsBy = 0; // PaperConfig.getSeconds(getString("delay-chunk-unloads-by", "10s")); // MultiPaper disable delay
+         if (delayChunkUnloadsBy > 0) {
+             log("Delaying chunk unloads by " + delayChunkUnloadsBy + " seconds");
+             delayChunkUnloadsBy *= 20;
+diff --git a/src/main/java/net/minecraft/server/AdvancementDataPlayer.java b/src/main/java/net/minecraft/server/AdvancementDataPlayer.java
+index c680319e4040be2b60795b22a5e65d6444cc67ed..5309ca3768e7e4432f19b035a7d38d9944fcb4a9 100644
+--- a/src/main/java/net/minecraft/server/AdvancementDataPlayer.java
++++ b/src/main/java/net/minecraft/server/AdvancementDataPlayer.java
+@@ -32,6 +32,7 @@ import java.util.stream.Stream;
+ import javax.annotation.Nullable;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class AdvancementDataPlayer {
+ 
+@@ -139,9 +140,15 @@ public class AdvancementDataPlayer {
+     }
+ 
+     private void d(AdvancementDataWorld advancementdataworld) {
+-        if (this.f.isFile()) {
++        String json = null;
++        try {
++            json = MultiPaper.readAdvancements(player.getUniqueIDString());
++        } catch (IOException e1) {
++            e1.printStackTrace();
++        }
++        if ((json != null && !json.isEmpty()) || this.f.isFile()) {
+             try {
+-                JsonReader jsonreader = new JsonReader(new StringReader(Files.toString(this.f, StandardCharsets.UTF_8)));
++                JsonReader jsonreader = new JsonReader(new StringReader(json));
+                 Throwable throwable = null;
+ 
+                 try {
+@@ -229,6 +236,12 @@ public class AdvancementDataPlayer {
+         jsonelement.getAsJsonObject().addProperty("DataVersion", SharedConstants.getGameVersion().getWorldVersion());
+ 
+         try {
++            // MultiPaper start
++            if (true) {
++                MultiPaper.writeAdvancements(player.getUniqueIDString(), AdvancementDataPlayer.b.toJson(jsonelement));
++                return;
++            }
++            // MultiPaper end
+             FileOutputStream fileoutputstream = new FileOutputStream(this.f);
+             Throwable throwable = null;
+ 
+diff --git a/src/main/java/net/minecraft/server/Chunk.java b/src/main/java/net/minecraft/server/Chunk.java
+index 9c078d30afef20bd1ea5975299c5513334829b19..c84819e697299bed34c82cc74e1c950f6f936bc0 100644
+--- a/src/main/java/net/minecraft/server/Chunk.java
++++ b/src/main/java/net/minecraft/server/Chunk.java
+@@ -22,6 +22,7 @@ import java.util.stream.StreamSupport;
+ import javax.annotation.Nullable;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class Chunk implements IChunkAccess {
+ 
+@@ -807,6 +808,7 @@ public class Chunk implements IChunkAccess {
+         this.setNeighbourLoaded(0, 0, this);
+         this.loadedTicketLevel = true;
+         // Paper end - neighbour cache
++        MultiPaper.lockChunk(this.loc, this.world); // MultiPaper
+         org.bukkit.Server server = this.world.getServer();
+         ((WorldServer)this.world).getChunkProvider().addLoadedChunk(this); // Paper
+         if (server != null) {
+diff --git a/src/main/java/net/minecraft/server/ChunkProviderServer.java b/src/main/java/net/minecraft/server/ChunkProviderServer.java
+index 6acb5f05a05c542f8257e205ef70987be2d29194..226b5b55d000b4989fdabc520dbb2d2dfba8caf7 100644
+--- a/src/main/java/net/minecraft/server/ChunkProviderServer.java
++++ b/src/main/java/net/minecraft/server/ChunkProviderServer.java
+@@ -21,6 +21,7 @@ import com.destroystokyo.paper.exception.ServerInternalException;
+ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap; // Paper
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class ChunkProviderServer extends IChunkProvider {
+ 
+@@ -669,6 +670,7 @@ public class ChunkProviderServer extends IChunkProvider {
+ 
+     @Override
+     public boolean a(BlockPosition blockposition) {
++        if (!MultiPaper.shouldTickChunk(world, world.getChunkIfLoaded(blockposition))) return false;
+         // Paper start - optimize is ticking ready type functions
+         // is ticking ready
+         PlayerChunk playerChunk = this.getChunk(MCUtil.getCoordinateKey(blockposition));
+@@ -837,6 +839,8 @@ public class ChunkProviderServer extends IChunkProvider {
+                         Chunk chunk = (Chunk) optional1.get();
+                         ChunkCoordIntPair chunkcoordintpair = playerchunk.i();
+ 
++                        if (!MultiPaper.shouldTickChunk(this.world, chunk)) return; // MultiPaper - Should we tick this chunk?
++
+                         if (!this.playerChunkMap.isOutsideOfRange(playerchunk, chunkcoordintpair, false)) { // Paper - optimise isOutsideOfRange
+                             chunk.setInhabitedTime(chunk.getInhabitedTime() + j);
+                             if (flag1 && (this.allowMonsters || this.allowAnimals) && this.world.getWorldBorder().isInBounds(chunk.getPos()) && !this.playerChunkMap.isOutsideOfRange(playerchunk, chunkcoordintpair, true)) { // Spigot // Paper - optimise isOutsideOfRange
+diff --git a/src/main/java/net/minecraft/server/CommandReload.java b/src/main/java/net/minecraft/server/CommandReload.java
+index 4558147a51be6713c11bda6a60fd5ca3a953c096..08e472b71cf85b854eaa831881577ce2c3c03b11 100644
+--- a/src/main/java/net/minecraft/server/CommandReload.java
++++ b/src/main/java/net/minecraft/server/CommandReload.java
+@@ -6,14 +6,13 @@ import java.util.Collection;
+ import java.util.Iterator;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+-import io.papermc.paper.event.server.ServerResourcesReloadedEvent; // Paper
+ 
+ public class CommandReload {
+ 
+     private static final Logger LOGGER = LogManager.getLogger();
+ 
+     public static void a(Collection<String> collection, CommandListenerWrapper commandlistenerwrapper) {
+-        commandlistenerwrapper.getServer().reloadServerResources(collection, ServerResourcesReloadedEvent.Cause.COMMAND).exceptionally((throwable) -> { // Paper
++        commandlistenerwrapper.getServer().a(collection).exceptionally((throwable) -> {
+             CommandReload.LOGGER.warn("Failed to execute reload", throwable);
+             commandlistenerwrapper.sendFailureMessage(new ChatMessage("commands.reload.failure"));
+             return null;
+@@ -43,7 +42,7 @@ public class CommandReload {
+         SaveData savedata = minecraftserver.getSaveData();
+         Collection<String> collection = resourcepackrepository.d();
+         Collection<String> collection1 = a(resourcepackrepository, savedata, collection);
+-        minecraftserver.reloadServerResources(collection1, ServerResourcesReloadedEvent.Cause.PLUGIN); // Paper
++        minecraftserver.a(collection1);
+     }
+     // CraftBukkit end
+ 
+diff --git a/src/main/java/net/minecraft/server/Convertable.java b/src/main/java/net/minecraft/server/Convertable.java
+index 786d90c635310788eaabc1e211975f003dd3ce22..a5a5dd2bd7680ff69b4c4ccc1ea972cab82c3e20 100644
+--- a/src/main/java/net/minecraft/server/Convertable.java
++++ b/src/main/java/net/minecraft/server/Convertable.java
+@@ -23,6 +23,7 @@ import java.util.function.BiFunction;
+ import javax.annotation.Nullable;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class Convertable {
+ 
+@@ -114,7 +115,7 @@ public class Convertable {
+         } else {
+             File file1 = new File(file, "level.dat");
+ 
+-            if (file1.exists()) {
++            if (true || file1.exists()) { // MultiPaper
+                 T t0 = bifunction.apply(file1, this.f);
+ 
+                 if (t0 != null) {
+@@ -130,7 +131,7 @@ public class Convertable {
+     @Nullable
+     private static DataPackConfiguration b(File file, DataFixer datafixer) {
+         try {
+-            NBTTagCompound nbttagcompound = NBTCompressedStreamTools.a(file);
++            NBTTagCompound nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NBTCompressedStreamTools.a(file); // MultiPaper
+             NBTTagCompound nbttagcompound1 = nbttagcompound.getCompound("Data");
+ 
+             nbttagcompound1.remove("Player");
+@@ -147,7 +148,7 @@ public class Convertable {
+     private static BiFunction<File, DataFixer, WorldDataServer> b(DynamicOps<NBTBase> dynamicops, DataPackConfiguration datapackconfiguration) {
+         return (file, datafixer) -> {
+             try {
+-                NBTTagCompound nbttagcompound = NBTCompressedStreamTools.a(file);
++                NBTTagCompound nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NBTCompressedStreamTools.a(file); // MultiPaper
+                 NBTTagCompound nbttagcompound1 = nbttagcompound.getCompound("Data");
+                 NBTTagCompound nbttagcompound2 = nbttagcompound1.hasKeyOfType("Player", 10) ? nbttagcompound1.getCompound("Player") : null;
+ 
+@@ -169,7 +170,7 @@ public class Convertable {
+     private BiFunction<File, DataFixer, WorldInfo> a(File file, boolean flag) {
+         return (file1, datafixer) -> {
+             try {
+-                NBTTagCompound nbttagcompound = NBTCompressedStreamTools.a(file1);
++                NBTTagCompound nbttagcompound = MultiPaper.readLevel(file.getName()); // NBTCompressedStreamTools.a(file1); // MultiPaper
+                 NBTTagCompound nbttagcompound1 = nbttagcompound.getCompound("Data");
+ 
+                 nbttagcompound1.remove("Player");
+@@ -300,6 +301,13 @@ public class Convertable {
+             nbttagcompound2.set("Data", nbttagcompound1);
+ 
+             try {
++                // MultiPaper start
++                if (true) {
++                    MultiPaper.writeLevel(file.getName(), nbttagcompound2);
++                    return;
++                }
++                // MultiPaper end
++
+                 File file1 = File.createTempFile("level", ".dat", file);
+ 
+                 NBTCompressedStreamTools.a(nbttagcompound2, file1);
+diff --git a/src/main/java/net/minecraft/server/CriterionProgress.java b/src/main/java/net/minecraft/server/CriterionProgress.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..cb8d831a92ea37ce53e5607ed50b767aea469412
+--- /dev/null
++++ b/src/main/java/net/minecraft/server/CriterionProgress.java
+@@ -0,0 +1,74 @@
++package net.minecraft.server;
++
++import com.google.gson.JsonElement;
++import com.google.gson.JsonNull;
++import com.google.gson.JsonPrimitive;
++import com.google.gson.JsonSyntaxException;
++import java.text.ParseException;
++import java.text.SimpleDateFormat;
++import java.util.Date;
++
++public class CriterionProgress {
++
++    private static final SimpleDateFormat a = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z");
++    private Date b;
++
++    public CriterionProgress() {}
++
++    public boolean a() {
++        return this.b != null;
++    }
++
++    public void b() {
++        this.b = new Date();
++    }
++
++    public void c() {
++        this.b = null;
++    }
++
++    public Date getDate() {
++        return this.b;
++    }
++
++    public String toString() {
++        return "CriterionProgress{obtained=" + (this.b == null ? "false" : this.b) + '}';
++    }
++
++    public void a(PacketDataSerializer packetdataserializer) {
++        packetdataserializer.writeBoolean(this.b != null);
++        if (this.b != null) {
++            packetdataserializer.a(this.b);
++        }
++
++    }
++
++    public JsonElement e() {
++        try {
++            return (JsonElement) (this.b != null ? new JsonPrimitive(CriterionProgress.a.format(this.b)) : JsonNull.INSTANCE);
++        } catch (Exception e) {
++            return JsonNull.INSTANCE;
++        }
++    }
++
++    public static CriterionProgress b(PacketDataSerializer packetdataserializer) {
++        CriterionProgress criterionprogress = new CriterionProgress();
++
++        if (packetdataserializer.readBoolean()) {
++            criterionprogress.b = packetdataserializer.q();
++        }
++
++        return criterionprogress;
++    }
++
++    public static CriterionProgress a(String s) {
++        CriterionProgress criterionprogress = new CriterionProgress();
++
++        try {
++            criterionprogress.b = CriterionProgress.a.parse(s);
++            return criterionprogress;
++        } catch (ParseException parseexception) {
++            throw new JsonSyntaxException("Invalid datetime: " + s, parseexception);
++        }
++    }
++}
+diff --git a/src/main/java/net/minecraft/server/DedicatedServer.java b/src/main/java/net/minecraft/server/DedicatedServer.java
+index 5504facd2e453238caa71d98743be5416d4dd4fe..c757e91d2ebb87e875cb7b6410903a5824dab1cb 100644
+--- a/src/main/java/net/minecraft/server/DedicatedServer.java
++++ b/src/main/java/net/minecraft/server/DedicatedServer.java
+@@ -30,6 +30,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
+ import org.bukkit.event.server.ServerCommandEvent;
+ import org.bukkit.craftbukkit.util.Waitable;
+ import org.bukkit.event.server.RemoteServerCommandEvent;
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public class DedicatedServer extends MinecraftServer implements IMinecraftServer {
+@@ -207,6 +208,8 @@ public class DedicatedServer extends MinecraftServer implements IMinecraftServer
+         server.enablePlugins(org.bukkit.plugin.PluginLoadOrder.STARTUP);
+         // CraftBukkit end
+ 
++        MultiPaper.onStart(); // MultiPaper
++
+         if (!this.getOnlineMode()) {
+             DedicatedServer.LOGGER.warn("**** SERVER IS RUNNING IN OFFLINE/INSECURE MODE!");
+             DedicatedServer.LOGGER.warn("The server will make no attempt to authenticate usernames. Beware.");
+diff --git a/src/main/java/net/minecraft/server/Entity.java b/src/main/java/net/minecraft/server/Entity.java
+index d9021fde3d0908dc89384617055874ac356a8fcf..e44e5652c12fbee51acedc1f911181b8443fae93 100644
+--- a/src/main/java/net/minecraft/server/Entity.java
++++ b/src/main/java/net/minecraft/server/Entity.java
+@@ -2591,11 +2591,6 @@ public abstract class Entity implements INamableTileEntity, ICommandListener, Ke
+                 // CraftBukkit end
+ 
+                 this.world.getMethodProfiler().exitEnter("reloading");
+-                // Paper start - Change lead drop timing to prevent dupe
+-                if (this instanceof EntityInsentient) {
+-                    ((EntityInsentient) this).unleash(true, true); // Paper drop lead
+-                }
+-                // Paper end
+                 Entity entity = this.getEntityType().a((World) worldserver);
+ 
+                 if (entity != null) {
+@@ -2609,6 +2604,10 @@ public abstract class Entity implements INamableTileEntity, ICommandListener, Ke
+                     // CraftBukkit start - Forward the CraftEntity to the new entity
+                     this.getBukkitEntity().setHandle(entity);
+                     entity.bukkitEntity = this.getBukkitEntity();
++
++                    if (this instanceof EntityInsentient) {
++                        ((EntityInsentient) this).unleash(true, true); // Paper drop lead
++                    }
+                     // CraftBukkit end
+                 }
+ 
+diff --git a/src/main/java/net/minecraft/server/EntityHuman.java b/src/main/java/net/minecraft/server/EntityHuman.java
+index 3ef463e1313b9729c86437f499930ab4cd332a6d..07e2a25d9415b548780560a3739bd1c355f4dea8 100644
+--- a/src/main/java/net/minecraft/server/EntityHuman.java
++++ b/src/main/java/net/minecraft/server/EntityHuman.java
+@@ -27,6 +27,7 @@ import org.bukkit.event.player.PlayerBedLeaveEvent;
+ import org.bukkit.event.player.PlayerDropItemEvent;
+ import org.bukkit.event.player.PlayerVelocityEvent;
+ import org.bukkit.util.Vector;
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public abstract class EntityHuman extends EntityLiving {
+@@ -586,7 +587,7 @@ public abstract class EntityHuman extends EntityLiving {
+             PlayerDropItemEvent event = new PlayerDropItemEvent(player, drop);
+             this.world.getServer().getPluginManager().callEvent(event);
+ 
+-            if (event.isCancelled()) {
++            if (event.isCancelled() || !MultiPaper.shouldTickEntity((WorldServer) world, this)) { // MultiPaper don't drop items if they shouldn't be ticked
+                 org.bukkit.inventory.ItemStack cur = player.getInventory().getItemInHand();
+                 if (flag1 && (cur == null || cur.getAmount() == 0)) {
+                     // The complete stack was dropped
+diff --git a/src/main/java/net/minecraft/server/EntityPlayer.java b/src/main/java/net/minecraft/server/EntityPlayer.java
+index 7240b885d96eb2df187b6229449af1a893a4524e..259e33f61f759a83fbe5b171f1e59fddf09be7e5 100644
+--- a/src/main/java/net/minecraft/server/EntityPlayer.java
++++ b/src/main/java/net/minecraft/server/EntityPlayer.java
+@@ -106,6 +106,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
+     public final int[] mobCounts = new int[ENUMCREATURETYPE_TOTAL_ENUMS]; // Paper
+     public final com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<EntityPlayer> cachedSingleMobDistanceMap;
+     // Paper end
++    public boolean isBeingSentToAnotherServer = false; // MultiPaper
+ 
+     // CraftBukkit start
+     public String displayName;
+@@ -116,6 +117,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
+     public int newTotalExp = 0;
+     public boolean keepLevel = false;
+     public double maxHealthCache;
++    public boolean shouldTickEntities = true; // MultiPaper
+     public boolean joining = true;
+     public boolean sentListPacket = false;
+     public boolean supressTrackerForLogin = false; // Paper
+@@ -273,6 +275,8 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
+             this.ci = new Vec3D(nbttagcompound1.getDouble("x"), nbttagcompound1.getDouble("y"), nbttagcompound1.getDouble("z"));
+         }
+ 
++        this.isBeingSentToAnotherServer = nbttagcompound.getBoolean("isBeingSentToAnotherServer"); // MultiPaper
++
+         this.cd = nbttagcompound.getBoolean("seenCredits");
+         if (nbttagcompound.hasKeyOfType("recipeBook", 10)) {
+             this.recipeBook.a(nbttagcompound.getCompound("recipeBook"), this.server.getCraftingManager());
+@@ -336,6 +340,8 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
+             }
+         }
+ 
++        nbttagcompound.setBoolean("isBeingSentToAnotherServer", this.isBeingSentToAnotherServer); // MultiPaper
++
+         if (persistVehicle && entity1 != null && entity != this && entity.hasSinglePlayerPassenger()) {
+             // CraftBukkit end
+             NBTTagCompound nbttagcompound2 = new NBTTagCompound();
+diff --git a/src/main/java/net/minecraft/server/JsonList.java b/src/main/java/net/minecraft/server/JsonList.java
+index 9213bfb78e92b838189161045e3945588251b486..5c70b80fb1b2885937c17a99ae6ab72d74bbe87b 100644
+--- a/src/main/java/net/minecraft/server/JsonList.java
++++ b/src/main/java/net/minecraft/server/JsonList.java
+@@ -22,6 +22,7 @@ import java.util.Map;
+ import javax.annotation.Nullable;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public abstract class JsonList<K, V extends JsonListEntry<K>> {
+ 
+@@ -159,7 +160,7 @@ public abstract class JsonList<K, V extends JsonListEntry<K>> {
+         Throwable throwable = null;
+ 
+         try {
+-            JsonList.b.toJson(jsonarray, bufferedwriter);
++            MultiPaper.writeJson(this.c.getName(), JsonList.b.toJson(jsonarray)); // JsonList.b.toJson(jsonarray, bufferedwriter); // MultiPaper
+         } catch (Throwable throwable1) {
+             throwable = throwable1;
+             throw throwable1;
+@@ -182,11 +183,11 @@ public abstract class JsonList<K, V extends JsonListEntry<K>> {
+ 
+     public void load() throws IOException {
+         if (this.c.exists()) {
+-            BufferedReader bufferedreader = Files.newReader(this.c, StandardCharsets.UTF_8);
++            BufferedReader bufferedreader = null; // Files.newReader(this.c, StandardCharsets.UTF_8); // MultiPaper
+             Throwable throwable = null;
+ 
+             try {
+-                JsonArray jsonarray = (JsonArray) JsonList.b.fromJson(bufferedreader, JsonArray.class);
++                JsonArray jsonarray = JsonList.b.fromJson(MultiPaper.readJson(this.c.getName()), JsonArray.class); // (JsonArray) JsonList.b.fromJson(bufferedreader, JsonArray.class); // MultiPaper
+ 
+                 this.d.clear();
+                 Iterator iterator = jsonarray.iterator();
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index a7cd98a7cd7fed95e37a178f732339e204650b10..da6637c4ee9195b255d00bd6533d8f5d57638bd4 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -64,8 +64,10 @@ import org.bukkit.event.server.ServerLoadEvent;
+ // CraftBukkit end
+ import co.aikar.timings.MinecraftTimings; // Paper
+ import io.papermc.paper.util.PaperJvmChecker; // Paper
+-import io.papermc.paper.event.server.ServerResourcesReloadedEvent; // Paper
+ import org.spigotmc.SlackActivityAccountant; // Spigot
++import io.papermc.paper.event.server.ServerResourcesReloadedEvent; // Paper
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.ShutdownHandler;
+ 
+ public abstract class MinecraftServer extends IAsyncTaskHandlerReentrant<TickTask> implements IMojangStatistics, ICommandListener, AutoCloseable {
+ 
+@@ -760,6 +762,7 @@ public abstract class MinecraftServer extends IAsyncTaskHandlerReentrant<TickTas
+         // CraftBukkit end
+         MinecraftServer.LOGGER.info("Stopping server");
+         MinecraftTimings.stopServer(); // Paper
++        ShutdownHandler.onStop(); // MultiPaper
+         // CraftBukkit start
+         if (this.server != null) {
+             this.server.disablePlugins();
+@@ -1276,6 +1279,7 @@ public abstract class MinecraftServer extends IAsyncTaskHandlerReentrant<TickTas
+         tickTimes60s.add(this.ticks, l);
+         // Paper end
+ 
++        MultiPaper.sendTickTime(i1 - i); // MultiPaper
+         this.circularTimer.a(i1 - i);
+         this.methodProfiler.exit();
+         org.spigotmc.WatchdogThread.tick(); // Spigot
+diff --git a/src/main/java/net/minecraft/server/PacketPlayInSpectate.java b/src/main/java/net/minecraft/server/PacketPlayInSpectate.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..ea1a29f49b2cd80adb83af359d0aaef5899694db
+--- /dev/null
++++ b/src/main/java/net/minecraft/server/PacketPlayInSpectate.java
+@@ -0,0 +1,41 @@
++package net.minecraft.server;
++
++import java.io.IOException;
++import java.util.UUID;
++import javax.annotation.Nullable;
++
++public class PacketPlayInSpectate implements Packet<PacketListenerPlayIn> {
++
++    private UUID a;
++
++    public PacketPlayInSpectate() {}
++
++    public PacketPlayInSpectate(UUID uuid) {
++        this.a = uuid;
++    }
++
++    @Override
++    public void a(PacketDataSerializer packetdataserializer) throws IOException {
++        this.a = packetdataserializer.k();
++    }
++
++    @Override
++    public void b(PacketDataSerializer packetdataserializer) throws IOException {
++        packetdataserializer.a(this.a);
++    }
++
++    public void a(PacketListenerPlayIn packetlistenerplayin) {
++        packetlistenerplayin.a(this);
++    }
++
++    @Nullable
++    public Entity a(WorldServer worldserver) {
++        return worldserver.getEntity(this.a);
++    }
++
++    // MultiPaper start - Expose uuid
++    public UUID getUUID() {
++        return a;
++    }
++    // MultiPaper end
++}
+diff --git a/src/main/java/net/minecraft/server/PacketPlayOutPlayerInfo.java b/src/main/java/net/minecraft/server/PacketPlayOutPlayerInfo.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..824a54a15d30c61e6054dbeebe5d0637a69fcf4a
+--- /dev/null
++++ b/src/main/java/net/minecraft/server/PacketPlayOutPlayerInfo.java
+@@ -0,0 +1,234 @@
++package net.minecraft.server;
++
++import com.google.common.base.MoreObjects;
++import com.google.common.collect.Lists;
++import com.mojang.authlib.GameProfile;
++import com.mojang.authlib.properties.Property;
++import java.io.IOException;
++import java.util.Iterator;
++import java.util.List;
++import javax.annotation.Nullable;
++
++public class PacketPlayOutPlayerInfo implements Packet<PacketListenerPlayOut> {
++
++    private PacketPlayOutPlayerInfo.EnumPlayerInfoAction a;
++    private final List<PacketPlayOutPlayerInfo.PlayerInfoData> b = Lists.newArrayList();
++
++    public PacketPlayOutPlayerInfo() {}
++
++    public PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction packetplayoutplayerinfo_enumplayerinfoaction, EntityPlayer... aentityplayer) {
++        this.a = packetplayoutplayerinfo_enumplayerinfoaction;
++        EntityPlayer[] aentityplayer1 = aentityplayer;
++        int i = aentityplayer.length;
++
++        for (int j = 0; j < i; ++j) {
++            EntityPlayer entityplayer = aentityplayer1[j];
++
++            this.b.add(new PacketPlayOutPlayerInfo.PlayerInfoData(entityplayer.getProfile(), entityplayer.ping, entityplayer.playerInteractManager.getGameMode(), entityplayer.getPlayerListName()));
++        }
++
++    }
++
++    public PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction packetplayoutplayerinfo_enumplayerinfoaction, Iterable<EntityPlayer> iterable) {
++        this.a = packetplayoutplayerinfo_enumplayerinfoaction;
++        Iterator iterator = iterable.iterator();
++
++        while (iterator.hasNext()) {
++            EntityPlayer entityplayer = (EntityPlayer) iterator.next();
++
++            this.b.add(new PacketPlayOutPlayerInfo.PlayerInfoData(entityplayer.getProfile(), entityplayer.ping, entityplayer.playerInteractManager.getGameMode(), entityplayer.getPlayerListName()));
++        }
++
++    }
++
++    // MultiPaper start
++    public PacketPlayOutPlayerInfo(Iterable<PlayerInfoData> iterable) {
++        this.a = EnumPlayerInfoAction.ADD_PLAYER;
++
++        Iterator<PlayerInfoData> iterator = iterable.iterator();
++
++        while (iterator.hasNext()) {
++            this.b.add(iterator.next());
++        }
++    }
++
++   public PacketPlayOutPlayerInfo.EnumPlayerInfoAction getAction() {
++        return a;
++    }
++
++    public List<PacketPlayOutPlayerInfo.PlayerInfoData> getPlayerInfoDatas() {
++        return b;
++    }
++    // MultiPaper end
++
++    @Override
++    public void a(PacketDataSerializer packetdataserializer) throws IOException {
++        this.a = (PacketPlayOutPlayerInfo.EnumPlayerInfoAction) packetdataserializer.a(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.class);
++        int i = packetdataserializer.i();
++
++        for (int j = 0; j < i; ++j) {
++            GameProfile gameprofile = null;
++            int k = 0;
++            EnumGamemode enumgamemode = null;
++            IChatBaseComponent ichatbasecomponent = null;
++
++            switch (this.a) {
++                case ADD_PLAYER:
++                    gameprofile = new GameProfile(packetdataserializer.k(), packetdataserializer.e(16));
++                    int l = packetdataserializer.i();
++
++                    for (int i1 = 0; i1 < l; ++i1) {
++                        String s = packetdataserializer.e(32767);
++                        String s1 = packetdataserializer.e(32767);
++
++                        if (packetdataserializer.readBoolean()) {
++                            gameprofile.getProperties().put(s, new Property(s, s1, packetdataserializer.e(32767)));
++                        } else {
++                            gameprofile.getProperties().put(s, new Property(s, s1));
++                        }
++                    }
++
++                    enumgamemode = EnumGamemode.getById(packetdataserializer.i());
++                    k = packetdataserializer.i();
++                    if (packetdataserializer.readBoolean()) {
++                        ichatbasecomponent = packetdataserializer.h();
++                    }
++                    break;
++                case UPDATE_GAME_MODE:
++                    gameprofile = new GameProfile(packetdataserializer.k(), (String) null);
++                    enumgamemode = EnumGamemode.getById(packetdataserializer.i());
++                    break;
++                case UPDATE_LATENCY:
++                    gameprofile = new GameProfile(packetdataserializer.k(), (String) null);
++                    k = packetdataserializer.i();
++                    break;
++                case UPDATE_DISPLAY_NAME:
++                    gameprofile = new GameProfile(packetdataserializer.k(), (String) null);
++                    if (packetdataserializer.readBoolean()) {
++                        ichatbasecomponent = packetdataserializer.h();
++                    }
++                    break;
++                case REMOVE_PLAYER:
++                    gameprofile = new GameProfile(packetdataserializer.k(), (String) null);
++            }
++
++            this.b.add(new PacketPlayOutPlayerInfo.PlayerInfoData(gameprofile, k, enumgamemode, ichatbasecomponent));
++        }
++
++    }
++
++    @Override
++    public void b(PacketDataSerializer packetdataserializer) throws IOException {
++        packetdataserializer.a((Enum) this.a);
++        packetdataserializer.d(this.b.size());
++        Iterator iterator = this.b.iterator();
++
++        while (iterator.hasNext()) {
++            PacketPlayOutPlayerInfo.PlayerInfoData packetplayoutplayerinfo_playerinfodata = (PacketPlayOutPlayerInfo.PlayerInfoData) iterator.next();
++
++            switch (this.a) {
++                case ADD_PLAYER:
++                    packetdataserializer.a(packetplayoutplayerinfo_playerinfodata.a().getId());
++                    packetdataserializer.a(packetplayoutplayerinfo_playerinfodata.a().getName());
++                    packetdataserializer.d(packetplayoutplayerinfo_playerinfodata.a().getProperties().size());
++                    Iterator iterator1 = packetplayoutplayerinfo_playerinfodata.a().getProperties().values().iterator();
++
++                    while (iterator1.hasNext()) {
++                        Property property = (Property) iterator1.next();
++
++                        packetdataserializer.a(property.getName());
++                        packetdataserializer.a(property.getValue());
++                        if (property.hasSignature()) {
++                            packetdataserializer.writeBoolean(true);
++                            packetdataserializer.a(property.getSignature());
++                        } else {
++                            packetdataserializer.writeBoolean(false);
++                        }
++                    }
++
++                    packetdataserializer.d(packetplayoutplayerinfo_playerinfodata.c().getId());
++                    packetdataserializer.d(packetplayoutplayerinfo_playerinfodata.b());
++                    if (packetplayoutplayerinfo_playerinfodata.d() == null) {
++                        packetdataserializer.writeBoolean(false);
++                    } else {
++                        packetdataserializer.writeBoolean(true);
++                        packetdataserializer.a(packetplayoutplayerinfo_playerinfodata.d());
++                    }
++                    break;
++                case UPDATE_GAME_MODE:
++                    packetdataserializer.a(packetplayoutplayerinfo_playerinfodata.a().getId());
++                    packetdataserializer.d(packetplayoutplayerinfo_playerinfodata.c().getId());
++                    break;
++                case UPDATE_LATENCY:
++                    packetdataserializer.a(packetplayoutplayerinfo_playerinfodata.a().getId());
++                    packetdataserializer.d(packetplayoutplayerinfo_playerinfodata.b());
++                    break;
++                case UPDATE_DISPLAY_NAME:
++                    packetdataserializer.a(packetplayoutplayerinfo_playerinfodata.a().getId());
++                    if (packetplayoutplayerinfo_playerinfodata.d() == null) {
++                        packetdataserializer.writeBoolean(false);
++                    } else {
++                        packetdataserializer.writeBoolean(true);
++                        packetdataserializer.a(packetplayoutplayerinfo_playerinfodata.d());
++                    }
++                    break;
++                case REMOVE_PLAYER:
++                    packetdataserializer.a(packetplayoutplayerinfo_playerinfodata.a().getId());
++            }
++        }
++
++    }
++
++    public void a(PacketListenerPlayOut packetlistenerplayout) {
++        packetlistenerplayout.a(this);
++    }
++
++    public String toString() {
++        return MoreObjects.toStringHelper(this).add("action", this.a).add("entries", this.b).toString();
++    }
++
++    public class PlayerInfoData {
++
++        // MultiPaper start - make not final and public
++        public int b;
++        public EnumGamemode c;
++        public GameProfile d;
++        public IChatBaseComponent e;
++        // MultiPaper end
++
++        public PlayerInfoData(GameProfile gameprofile, int i, EnumGamemode enumgamemode, @Nullable IChatBaseComponent ichatbasecomponent) {
++            this.d = gameprofile;
++            this.b = i;
++            this.c = enumgamemode;
++            this.e = ichatbasecomponent;
++        }
++
++        public GameProfile a() {
++            return this.d;
++        }
++
++        public int b() {
++            return this.b;
++        }
++
++        public EnumGamemode c() {
++            return this.c;
++        }
++
++        @Nullable
++        public IChatBaseComponent d() {
++            return this.e;
++        }
++
++        public String toString() {
++            return MoreObjects.toStringHelper(this).add("latency", this.b).add("gameMode", this.c).add("profile", this.d).add("displayName", this.e == null ? null : IChatBaseComponent.ChatSerializer.a(this.e)).toString();
++        }
++    }
++
++    public static enum EnumPlayerInfoAction {
++
++        ADD_PLAYER, UPDATE_GAME_MODE, UPDATE_LATENCY, UPDATE_DISPLAY_NAME, REMOVE_PLAYER;
++
++        private EnumPlayerInfoAction() {}
++    }
++}
+diff --git a/src/main/java/net/minecraft/server/PersistentBase.java b/src/main/java/net/minecraft/server/PersistentBase.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..f853e6b7096c1f3760b1080036d928a2eeb12ff7
+--- /dev/null
++++ b/src/main/java/net/minecraft/server/PersistentBase.java
+@@ -0,0 +1,56 @@
++package net.minecraft.server;
++
++import java.io.File;
++import java.io.IOException;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
++
++public abstract class PersistentBase {
++
++    private static final Logger LOGGER = LogManager.getLogger();
++    private final String id;
++    private boolean c;
++
++    public PersistentBase(String s) {
++        this.id = s;
++    }
++
++    public abstract void a(NBTTagCompound nbttagcompound);
++
++    public abstract NBTTagCompound b(NBTTagCompound nbttagcompound);
++
++    public void b() {
++        this.a(true);
++    }
++
++    public void a(boolean flag) {
++        this.c = flag;
++    }
++
++    public boolean c() {
++        return this.c;
++    }
++
++    public String getId() {
++        return this.id;
++    }
++
++    public void a(File file) {
++        if (this.c()) {
++            NBTTagCompound nbttagcompound = new NBTTagCompound();
++
++            nbttagcompound.set("data", this.b(new NBTTagCompound()));
++            nbttagcompound.setInt("DataVersion", SharedConstants.getGameVersion().getWorldVersion());
++
++            try {
++                MultiPaper.writeData(file.getPath(), nbttagcompound); // MultiPaper
++                // NBTCompressedStreamTools.a(nbttagcompound, file); // MultiPaper
++            } catch (IOException ioexception) {
++                PersistentBase.LOGGER.error("Could not save data {}", this, ioexception);
++            }
++
++            this.a(false);
++        }
++    }
++}
+diff --git a/src/main/java/net/minecraft/server/PlayerChunk.java b/src/main/java/net/minecraft/server/PlayerChunk.java
+index 42b12ad5ba68bdf8f76704ddd970715770183de0..3c908a759532f0079f3f1fa5bef2988cdea51ffe 100644
+--- a/src/main/java/net/minecraft/server/PlayerChunk.java
++++ b/src/main/java/net/minecraft/server/PlayerChunk.java
+@@ -71,7 +71,7 @@ public class PlayerChunk {
+         // it's important that we use getChunkAtIfLoadedImmediately to mirror the chunk sending logic used
+         // in Chunk's neighbour callback
+         Chunk ret = this.chunkMap.world.getChunkProvider().getChunkAtIfLoadedImmediately(this.location.x, this.location.z);
+-        if (ret != null && ret.areNeighboursLoaded(1)) {
++        if (ret != null) { // MultiPaper somehow checking for neighbours breaks it
+             return ret;
+         }
+         return null;
+diff --git a/src/main/java/net/minecraft/server/PlayerChunkMap.java b/src/main/java/net/minecraft/server/PlayerChunkMap.java
+index 49008cdec739b19409fdaf1b0ed806a6c0e93200..2807a01cf8b059837bf02050a2d63776764f6085 100644
+--- a/src/main/java/net/minecraft/server/PlayerChunkMap.java
++++ b/src/main/java/net/minecraft/server/PlayerChunkMap.java
+@@ -54,6 +54,8 @@ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.bukkit.entity.Player; // CraftBukkit
+ import org.spigotmc.AsyncCatcher;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.Zone;
+ 
+ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+ 
+@@ -867,8 +869,13 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+ 
+             do {
+                 boolean isShuttingDown = world.getMinecraftServer().hasStopped(); // Paper
++
++                if (!isShuttingDown) new Exception("PlayerChunkMap.save has been called even though the server isn't shutting down!").printStackTrace(); // MultiPaper
++
+                 mutableboolean.setFalse();
+                 list.stream().map((playerchunk) -> {
++                    MultiPaper.releaseChunk(playerchunk.location, playerchunk.getWorld());
++
+                     CompletableFuture completablefuture;
+ 
+                     do {
+@@ -973,6 +980,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+             poiData, null, com.destroystokyo.paper.io.PrioritizedTaskQueue.LOW_PRIORITY);
+ 
+         if (!chunk.isNeedsSaving()) {
++            MultiPaper.notifyChunkNotSaving(chunk.getPos(), this.world);
+             return;
+         }
+ 
+@@ -1033,6 +1041,8 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+                     }
+                     this.autoSaveQueue.remove(playerchunk); // Paper
+ 
++                    MultiPaper.releaseChunk(ichunkaccess.getPos(), this.world); // MultiPaper
++
+                     try {
+                         this.asyncSave(ichunkaccess); // Paper - async chunk saving
+                     } catch (Throwable ex) {
+@@ -1428,6 +1438,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+         try (co.aikar.timings.Timing ignored = this.world.timings.chunkSave.startTiming()) { // Paper
+         this.m.a(ichunkaccess.getPos());
+         if (!ichunkaccess.isNeedsSaving()) {
++            MultiPaper.notifyChunkNotSaving(ichunkaccess.getPos(), this.world);
+             return false;
+         } else {
+             ichunkaccess.setLastSaved(this.world.getTime());
+@@ -1618,6 +1629,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+             }
+             return ret;
+         }
++        if (true) return MultiPaper.readChunk(chunkcoordintpair, world); // MultiPaper
+         return super.read(chunkcoordintpair);
+     }
+ 
+@@ -1629,6 +1641,12 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+                 com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread());
+             return;
+         }
++        // MultiPaper start
++        if (true) {
++            MultiPaper.writeChunk(chunkcoordintpair, world, nbttagcompound);
++            return;
++        }
++        // MultiPaper end
+         super.write(chunkcoordintpair, nbttagcompound);
+     }
+     // Paper end
+@@ -1691,6 +1709,8 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+             // Paper start - async io
+         }
+ 
++        if (true) return null; // MultiPaper - Don't load chunk status from the disk
++
+         NBTTagCompound compound = this.readChunkData(chunkPos);
+ 
+         return ChunkRegionLoader.getStatus(compound);
+@@ -1799,6 +1819,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+ 
+     private boolean cannotLoadChunks(EntityPlayer entityplayer) { return this.b(entityplayer); } // Paper - OBFHELPER
+     private boolean b(EntityPlayer entityplayer) {
++        if (Zone.isBeingSentToAnotherServer(entityplayer.getBukkitEntity())) return true; // MultiPaper
+         return entityplayer.isSpectator() && !this.world.getGameRules().getBoolean(GameRules.SPECTATORS_GENERATE_CHUNKS);
+     }
+ 
+diff --git a/src/main/java/net/minecraft/server/PlayerConnection.java b/src/main/java/net/minecraft/server/PlayerConnection.java
+index 87b1ff21957d5d708209257e569785aeaf191181..e7b7df8d9dadeb65a157e2d56f3f8a356690004a 100644
+--- a/src/main/java/net/minecraft/server/PlayerConnection.java
++++ b/src/main/java/net/minecraft/server/PlayerConnection.java
+@@ -71,6 +71,7 @@ import org.bukkit.inventory.EquipmentSlot;
+ import org.bukkit.inventory.InventoryView;
+ import org.bukkit.util.NumberConversions;
+ import co.aikar.timings.MinecraftTimings; // Paper
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public class PlayerConnection implements PacketListenerPlayIn {
+@@ -1643,6 +1644,13 @@ public class PlayerConnection implements PacketListenerPlayIn {
+                     return;
+                 }
+             }
++
++            // MultiPaper start - Find player on another server
++            Location location = MultiPaper.getPlayerLocation(packetplayinspectate.getUUID());
++            if (location != null) {
++                this.player.getBukkitEntity().teleportAsync(location, PlayerTeleportEvent.TeleportCause.SPECTATE);
++            }
++            // MultiPaper end
+         }
+ 
+     }
+@@ -1996,6 +2004,7 @@ public class PlayerConnection implements PacketListenerPlayIn {
+                         recipient.sendMessage(PlayerConnection.this.player.getUniqueID(), s);
+                     }
+                 }
++                MultiPaper.broadcastPacket(PlayerConnection.this.player.getUniqueID(), s); // MultiPaper
+             }
+         }
+     }
+@@ -2542,6 +2551,12 @@ public class PlayerConnection implements PacketListenerPlayIn {
+                         return;
+                     }
+ 
++                    // MultiPaper start - don't let them click items if they shouldn't be ticked
++                    if (!MultiPaper.shouldTickEntity((WorldServer) player.world, player)) {
++                        event.setCancelled(true);
++                    }
++                    // MultiPaper end
++
+                     switch (event.getResult()) {
+                         case ALLOW:
+                         case DEFAULT:
+diff --git a/src/main/java/net/minecraft/server/PlayerInteractManager.java b/src/main/java/net/minecraft/server/PlayerInteractManager.java
+index 114e986e5132e5e4bb42d0f08a067429bce53ba6..e410204b6494e73587a0949d1d17825b2186d837 100644
+--- a/src/main/java/net/minecraft/server/PlayerInteractManager.java
++++ b/src/main/java/net/minecraft/server/PlayerInteractManager.java
+@@ -47,7 +47,7 @@ public class PlayerInteractManager {
+         this.gamemode = enumgamemode;
+         enumgamemode.a(this.player.abilities);
+         this.player.updateAbilities();
+-        this.player.server.getPlayerList().sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.UPDATE_GAME_MODE, new EntityPlayer[]{this.player}), this.player); // CraftBukkit
++        this.player.server.getPlayerList().sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.UPDATE_GAME_MODE, new EntityPlayer[]{this.player})); // CraftBukkit // MultiPaper - original sendAll
+         this.world.everyoneSleeping();
+     }
+ 
+diff --git a/src/main/java/net/minecraft/server/PlayerList.java b/src/main/java/net/minecraft/server/PlayerList.java
+index 70f702680f8221cb262023814a7bae21b0074da6..db5ea0cf0854a49da781a6fe2e4503d89cdc1da9 100644
+--- a/src/main/java/net/minecraft/server/PlayerList.java
++++ b/src/main/java/net/minecraft/server/PlayerList.java
+@@ -34,14 +34,14 @@ import org.bukkit.Location;
+ import org.bukkit.craftbukkit.util.CraftChatMessage;
+ import org.bukkit.entity.Player;
+ import org.bukkit.event.player.PlayerChangedWorldEvent;
+-import org.bukkit.event.player.PlayerPortalEvent;
+ import org.bukkit.event.player.PlayerJoinEvent;
+ import org.bukkit.event.player.PlayerLoginEvent;
+ import org.bukkit.event.player.PlayerQuitEvent;
+ import org.bukkit.event.player.PlayerRespawnEvent;
+-import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
+-import org.bukkit.util.Vector;
+ import org.spigotmc.event.player.PlayerSpawnLocationEvent;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.PlayerInfoManager;
++import puregero.multipaper.Zone;
+ // CraftBukkit end
+ 
+ public abstract class PlayerList {
+@@ -255,12 +255,18 @@ public abstract class PlayerList {
+         // CraftBukkit start
+         chatmessage.a(EnumChatFormat.YELLOW);
+         String joinMessage = CraftChatMessage.fromComponent(chatmessage);
++        // MultiPaper start
++        if (entityplayer.isBeingSentToAnotherServer) {
++            entityplayer.isBeingSentToAnotherServer = false;
++            joinMessage = null;
++        }
++        // MultiPaper end
+ 
+         playerconnection.a(entityplayer.locX(), entityplayer.locY(), entityplayer.locZ(), entityplayer.yaw, entityplayer.pitch);
+         this.players.add(entityplayer);
+         this.playersByName.put(entityplayer.getName().toLowerCase(java.util.Locale.ROOT), entityplayer); // Spigot
+         this.j.put(entityplayer.getUniqueID(), entityplayer);
+-        // this.sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, new EntityPlayer[]{entityplayer})); // CraftBukkit - replaced with loop below
++        this.sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, new EntityPlayer[]{entityplayer})); // MultiPaper - Keep original sendAll
+ 
+         // Paper start - correctly register player BEFORE PlayerJoinEvent, so the entity is valid and doesn't require tick delay hacks
+         entityplayer.supressTrackerForLogin = true;
+@@ -285,6 +291,11 @@ public abstract class PlayerList {
+         }
+         // CraftBukkit end
+ 
++        MultiPaper.lockPlayer(entityplayer.getUniqueIDString()); // MultiPaper
++        MultiPaper.lockAdvancements(entityplayer.getUniqueIDString()); // MultiPaper
++        MultiPaper.lockStats(entityplayer.getUniqueIDString()); // MultiPaper
++        PlayerInfoManager.send(entityplayer); // MultiPaper
++
+         // CraftBukkit start - sendAll above replaced with this loop
+         PacketPlayOutPlayerInfo packet = new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, entityplayer);
+ 
+@@ -292,7 +303,7 @@ public abstract class PlayerList {
+             EntityPlayer entityplayer1 = (EntityPlayer) this.players.get(i);
+ 
+             if (entityplayer1.getBukkitEntity().canSee(entityplayer.getBukkitEntity())) {
+-                entityplayer1.playerConnection.sendPacket(packet);
++                // entityplayer1.playerConnection.sendPacket(packet); // MultiPaper - Keep original sendAll
+             }
+ 
+             if (!entityplayer.getBukkitEntity().canSee(entityplayer1.getBukkitEntity())) {
+@@ -510,9 +521,12 @@ public abstract class PlayerList {
+         }
+ 
+         PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(cserver.getPlayer(entityplayer), "\u00A7e" + entityplayer.getName() + " left the game", entityplayer.quitReason); // Paper - quit reason
++        if (entityplayer.isBeingSentToAnotherServer) playerQuitEvent.setQuitMessage(null); // MultiPaper - No quit message if they're going to another server
+         if (entityplayer.didPlayerJoinEvent) cserver.getPluginManager().callEvent(playerQuitEvent); // Paper - if we disconnected before join ever fired, don't fire quit
+         entityplayer.getBukkitEntity().disconnect(playerQuitEvent.getQuitMessage());
+ 
++        Zone.onPlayerDisconnect(entityplayer.getBukkitEntity()); // MultiPaper
++
+         if (server.isMainThread()) entityplayer.playerTick(); // SPIGOT-924 // Paper - don't tick during emergency shutdowns (Watchdog)
+         // CraftBukkit end
+ 
+@@ -527,6 +541,9 @@ public abstract class PlayerList {
+         // Paper end
+ 
+         this.savePlayerFile(entityplayer);
++        MultiPaper.releasePlayer(entityplayer.getUniqueIDString()); // MultiPaper
++        MultiPaper.releaseAdvancements(entityplayer.getUniqueIDString()); // MultiPaper
++        MultiPaper.releaseStats(entityplayer.getUniqueIDString()); // MultiPaper
+         if (entityplayer.isPassenger()) {
+             Entity entity = entityplayer.getRootVehicle();
+ 
+@@ -572,13 +589,13 @@ public abstract class PlayerList {
+         // Paper end
+ 
+         // CraftBukkit start
+-        // this.sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER, new EntityPlayer[]{entityplayer}));
++        this.sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER, new EntityPlayer[]{entityplayer})); // MultiPaper - Keep original sendAll
+         PacketPlayOutPlayerInfo packet = new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER, entityplayer);
+         for (int i = 0; i < players.size(); i++) {
+             EntityPlayer entityplayer2 = (EntityPlayer) this.players.get(i);
+ 
+             if (entityplayer2.getBukkitEntity().canSee(entityplayer.getBukkitEntity())) {
+-                entityplayer2.playerConnection.sendPacket(packet);
++                // entityplayer2.playerConnection.sendPacket(packet);
+             } else {
+                 entityplayer2.getBukkitEntity().removeDisconnectingPlayer(entityplayer.getBukkitEntity());
+             }
+@@ -936,6 +953,17 @@ public abstract class PlayerList {
+     }
+ 
+     public void sendAll(Packet<?> packet) {
++        // MultiPaper start - Intercept PacketPlayOutPlayerInfo packet
++        if (packet instanceof PacketPlayOutPlayerInfo) {
++            MultiPaper.broadcastPacket(packet);
++        }
++
++        sendAllNoIntercept(packet);
++    }
++
++    public void sendAllNoIntercept(Packet<?> packet) {
++        // MultiPaper end
++
+         for (int i = 0; i < this.players.size(); ++i) {
+             ((EntityPlayer) this.players.get(i)).playerConnection.sendPacket(packet);
+         }
+@@ -1297,6 +1325,7 @@ public abstract class PlayerList {
+ 
+     public void sendMessage(IChatBaseComponent ichatbasecomponent, ChatMessageType chatmessagetype, UUID uuid) {
+         this.server.sendMessage(ichatbasecomponent, uuid);
++        MultiPaper.broadcastPacket(new PacketPlayOutChat(CraftChatMessage.fixComponent(ichatbasecomponent), chatmessagetype, uuid)); // MultiPaper
+         // CraftBukkit start - we run this through our processor first so we can get web links etc
+         this.sendAll(new PacketPlayOutChat(CraftChatMessage.fixComponent(ichatbasecomponent), chatmessagetype, uuid));
+         // CraftBukkit end
+diff --git a/src/main/java/net/minecraft/server/RegionFile.java b/src/main/java/net/minecraft/server/RegionFile.java
+index 1751fb6934d9242e475c1a44b2a4a1ade6987766..844d8cf24d556d4ed2a2524680f843ce2f36bf78 100644
+--- a/src/main/java/net/minecraft/server/RegionFile.java
++++ b/src/main/java/net/minecraft/server/RegionFile.java
+@@ -82,6 +82,9 @@ public class RegionFile implements AutoCloseable {
+             ((java.nio.Buffer) this.h).limit(1024);
+             ((java.nio.Buffer) this.g).position(4096);
+             this.i = this.g.asIntBuffer();
++            // MultiPaper start
++            this.dataFile = null;
++            /*
+             if (flag) {
+                 this.dataFile = FileChannel.open(java_nio_file_path, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.DSYNC);
+             } else {
+@@ -129,6 +132,8 @@ public class RegionFile implements AutoCloseable {
+                     }
+                 }
+             }
++            */
++            // MultiPaper end
+ 
+         }
+     }
+@@ -397,6 +402,7 @@ public class RegionFile implements AutoCloseable {
+     }
+ 
+     public boolean chunkExists(ChunkCoordIntPair chunkcoordintpair) {
++        if (true) return true;
+         return this.getOffset(chunkcoordintpair) != 0;
+     }
+ 
+@@ -406,6 +412,12 @@ public class RegionFile implements AutoCloseable {
+     }
+ 
+     public void close() throws IOException {
++        // MultiPaper start
++        if (this.dataFile == null) {
++            this.closed = true;
++            return;
++        }
++        // MultiPaper end
+         // Paper start - Prevent regionfiles from being closed during use
+         this.fileLock.lock();
+         synchronized (this) {
+diff --git a/src/main/java/net/minecraft/server/ServerStatisticManager.java b/src/main/java/net/minecraft/server/ServerStatisticManager.java
+index 6ee2f5ba23d573414e31ed2be228adf87e5bf46a..e8f14e93230b177c73cc25f2ac5e427847d95e01 100644
+--- a/src/main/java/net/minecraft/server/ServerStatisticManager.java
++++ b/src/main/java/net/minecraft/server/ServerStatisticManager.java
+@@ -22,6 +22,7 @@ import java.util.Optional;
+ import java.util.Set;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class ServerStatisticManager extends StatisticManager {
+ 
+@@ -41,8 +42,24 @@ public class ServerStatisticManager extends StatisticManager {
+             this.a.put( wrapper, entry.getValue().intValue() );
+         }
+         // Spigot end
++        // MultiPaper start
++        if (true) {
++            try {
++                String json = MultiPaper.readStats(this.d.getName().split("\\.")[0]);
++                if (!json.isEmpty()) {
++                    this.a(minecraftserver.getDataFixer(), json);
++                }
++            } catch (IOException ioexception) {
++                ServerStatisticManager.LOGGER.error("Couldn't read statistics file {}", file, ioexception);
++            } catch (JsonParseException jsonparseexception) {
++                ServerStatisticManager.LOGGER.error("Couldn't parse statistics file {}", file, jsonparseexception);
++            }
++            return;
++        }
++        // MultiPaper end
+         if (file.isFile()) {
+             try {
++
+                 this.a(minecraftserver.getDataFixer(), org.apache.commons.io.FileUtils.readFileToString(file));
+             } catch (IOException ioexception) {
+                 ServerStatisticManager.LOGGER.error("Couldn't read statistics file {}", file, ioexception);
+@@ -56,6 +73,12 @@ public class ServerStatisticManager extends StatisticManager {
+     public void save() {
+         if ( org.spigotmc.SpigotConfig.disableStatSaving ) return; // Spigot
+         try {
++            // MultiPaper start
++            if (true) {
++                MultiPaper.writeStats(this.d.getName().split("\\.")[0], this.b());
++                return;
++            }
++            // MultiPaper end
+             org.apache.commons.io.FileUtils.writeStringToFile(this.d, this.b());
+         } catch (IOException ioexception) {
+             ServerStatisticManager.LOGGER.error("Couldn't save stats", ioexception);
+diff --git a/src/main/java/net/minecraft/server/VillagePlace.java b/src/main/java/net/minecraft/server/VillagePlace.java
+index b926cebd053bef829517c9d9bbf1c609c23ca04a..74e132567268efd523bf1d4bd51d5774d72e02e3 100644
+--- a/src/main/java/net/minecraft/server/VillagePlace.java
++++ b/src/main/java/net/minecraft/server/VillagePlace.java
+@@ -6,6 +6,8 @@ import it.unimi.dsi.fastutil.longs.Long2ByteMap;
+ import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
+ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+ import it.unimi.dsi.fastutil.longs.LongSet;
++import puregero.multipaper.MultiPaper;
++
+ import java.io.File;
+ import java.util.Collections;
+ import java.util.Comparator;
+@@ -282,7 +284,10 @@ public class VillagePlace extends RegionFileSection<VillagePlaceSection> {
+             }
+             return ret;
+         }
+-        return super.read(chunkcoordintpair);
++        // MultiPaper start
++        return MultiPaper.readRegionFileNBT(world, "poi", chunkcoordintpair);
++        // return super.read(chunkcoordintpair);
++        // MultiPaper end
+     }
+ 
+     @Override
+@@ -293,7 +298,10 @@ public class VillagePlace extends RegionFileSection<VillagePlaceSection> {
+                 com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread());
+             return;
+         }
+-        super.write(chunkcoordintpair, nbttagcompound);
++        // MultiPaper start
++        MultiPaper.writeRegionFileNBT(world, "poi", chunkcoordintpair, nbttagcompound);
++        //super.write(chunkcoordintpair, nbttagcompound);
++        // MultiPaper end
+     }
+     // Paper end
+ 
+diff --git a/src/main/java/net/minecraft/server/World.java b/src/main/java/net/minecraft/server/World.java
+index 277c051f814d25dd7c57cdba268ea044873c88d5..0f0c6b358610a50fb7c4585947be9f052c364b39 100644
+--- a/src/main/java/net/minecraft/server/World.java
++++ b/src/main/java/net/minecraft/server/World.java
+@@ -31,6 +31,7 @@ import org.bukkit.craftbukkit.block.CapturedBlockState;
+ import org.bukkit.craftbukkit.block.CraftBlockState;
+ import org.bukkit.craftbukkit.block.data.CraftBlockData;
+ import org.bukkit.event.block.BlockPhysicsEvent;
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public abstract class World implements GeneratorAccess, AutoCloseable {
+@@ -190,7 +191,7 @@ public abstract class World implements GeneratorAccess, AutoCloseable {
+         });
+         // CraftBukkit end
+         timings = new co.aikar.timings.WorldTimingsHandler(this); // Paper - code below can generate new world and access timings
+-        this.keepSpawnInMemory = this.paperConfig.keepSpawnInMemory; // Paper
++        this.keepSpawnInMemory = false; // this.paperConfig.keepSpawnInMemory; // Paper // MultiPaper - default to false
+         this.entityLimiter = new org.spigotmc.TickLimiter(spigotConfig.entityMaxTickTime);
+         this.tileLimiter = new org.spigotmc.TickLimiter(spigotConfig.tileMaxTickTime);
+     }
+@@ -793,6 +794,8 @@ public abstract class World implements GeneratorAccess, AutoCloseable {
+             if (!tileentity.isRemoved() && tileentity.hasWorld()) {
+                 BlockPosition blockposition = tileentity.getPosition();
+ 
++                if (!MultiPaper.shouldTickChunk((WorldServer) this, getChunkIfLoaded(blockposition))) continue; // MultiPaper - Don't tick this tile entity rn
++
+                 Chunk chunk; PlayerChunk playerChunk; if ((chunk = tileentity.getCurrentChunk()) != null && (playerChunk = chunk.playerChunk) != null && playerChunk.isTickingReady() && this.getWorldBorder().isInBounds(blockposition)) { // Paper - optimized tick ready check by inlining ChunkProviderServer.a(BlockPosition). Chunk lookup is no longer required and we can use the PlayerChunk directly available through the tile entity
+                     try {
+                         gameprofilerfiller.a(() -> {
+diff --git a/src/main/java/net/minecraft/server/WorldNBTStorage.java b/src/main/java/net/minecraft/server/WorldNBTStorage.java
+index b5cf60495b85c6ae6c32ee8a1c65d80e59fdce3d..7864b018313c3ddd20ebcb34ef305ba52513e326 100644
+--- a/src/main/java/net/minecraft/server/WorldNBTStorage.java
++++ b/src/main/java/net/minecraft/server/WorldNBTStorage.java
+@@ -10,6 +10,7 @@ import org.apache.logging.log4j.Logger;
+ import java.io.FileInputStream;
+ import java.io.InputStream;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public class WorldNBTStorage {
+@@ -28,6 +29,14 @@ public class WorldNBTStorage {
+         if (org.spigotmc.SpigotConfig.disablePlayerDataSaving) return; // Spigot
+         try {
+             NBTTagCompound nbttagcompound = entityhuman.save(new NBTTagCompound());
++
++            // MultiPaper start
++            if (true) {
++                MultiPaper.writePlayer(entityhuman.getUniqueIDString(), nbttagcompound);
++                return;
++            }
++            // MultiPaper end
++
+             File file = File.createTempFile(entityhuman.getUniqueIDString() + "-", ".dat", this.playerDir);
+ 
+             NBTCompressedStreamTools.a(nbttagcompound, file);
+@@ -46,6 +55,9 @@ public class WorldNBTStorage {
+         NBTTagCompound nbttagcompound = null;
+ 
+         try {
++            nbttagcompound = MultiPaper.readPlayer(entityhuman.getUniqueIDString()); // MultiPaper
++
++            if (false) { // MultiPaper
+             File file = new File(this.playerDir, entityhuman.getUniqueIDString() + ".dat");
+             // Spigot Start
+             boolean usingWrongFile = false;
+@@ -69,12 +81,14 @@ public class WorldNBTStorage {
+                 file.renameTo( new File( file.getPath() + ".offline-read" ) );
+             }
+             // Spigot End
++            } // MultiPaper
+         } catch (Exception exception) {
+             WorldNBTStorage.LOGGER.warn("Failed to load player data for {}", entityhuman.getDisplayName().getString());
+         }
+ 
+         if (nbttagcompound != null) {
+             // CraftBukkit start
++            /* // MultiPlayer
+             if (entityhuman instanceof EntityPlayer) {
+                 CraftPlayer player = (CraftPlayer) entityhuman.getBukkitEntity();
+                 // Only update first played if it is older than the one we have
+@@ -84,6 +98,7 @@ public class WorldNBTStorage {
+                 }
+             }
+             // CraftBukkit end
++            */ // MultiPlayer
+             int i = nbttagcompound.hasKeyOfType("DataVersion", 3) ? nbttagcompound.getInt("DataVersion") : -1;
+ 
+             entityhuman.load(GameProfileSerializer.a(this.a, DataFixTypes.PLAYER, nbttagcompound, i));
+@@ -95,6 +110,8 @@ public class WorldNBTStorage {
+     // CraftBukkit start
+     public NBTTagCompound getPlayerData(String s) {
+         try {
++            if (true) return MultiPaper.readPlayer(s); // MultiPaper
++
+             File file1 = new File(this.playerDir, s + ".dat");
+ 
+             if (file1.exists()) {
+diff --git a/src/main/java/net/minecraft/server/WorldPersistentData.java b/src/main/java/net/minecraft/server/WorldPersistentData.java
+index 138c6d707e33cd352aa4b26dfb279c5b77448de0..0d6da3e93993d53d99bc0b340d2b2ea05aa96d38 100644
+--- a/src/main/java/net/minecraft/server/WorldPersistentData.java
++++ b/src/main/java/net/minecraft/server/WorldPersistentData.java
+@@ -2,19 +2,15 @@ package net.minecraft.server;
+ 
+ import com.google.common.collect.Maps;
+ import com.mojang.datafixers.DataFixer;
+-import java.io.DataInput;
+-import java.io.DataInputStream;
+-import java.io.File;
+-import java.io.FileInputStream;
+-import java.io.IOException;
+-import java.io.InputStream;
+-import java.io.PushbackInputStream;
++
++import java.io.*;
+ import java.util.Iterator;
+ import java.util.Map;
+ import java.util.function.Supplier;
+ import javax.annotation.Nullable;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class WorldPersistentData {
+ 
+@@ -62,10 +58,12 @@ public class WorldPersistentData {
+         try {
+             File file = this.a(s);
+ 
+-            if (file.exists()) {
++            if (true || file.exists()) { // MultiPaper - Always run
+                 T t0 = supplier.get(); // Paper - decompile fix
+                 NBTTagCompound nbttagcompound = this.a(s, SharedConstants.getGameVersion().getWorldVersion());
+ 
++                if (nbttagcompound == null) return null; // MultiPaper
++
+                 t0.a(nbttagcompound.getCompound("data"));
+                 return t0;
+             }
+@@ -82,7 +80,14 @@ public class WorldPersistentData {
+ 
+     public NBTTagCompound a(String s, int i) throws IOException {
+         File file = this.a(s);
+-        FileInputStream fileinputstream = new FileInputStream(file);
++        // MultiPaper start
++        byte[] data = MultiPaper.readData(file.getPath());
++        if (data == null || data.length == 0) {
++            return null;
++        }
++        // FileInputStream fileinputstream = new FileInputStream(file);
++        ByteArrayInputStream fileinputstream = new ByteArrayInputStream(data);
++        // MultiPaper end
+         Throwable throwable = null;
+ 
+         Object object;
+@@ -196,4 +201,10 @@ public class WorldPersistentData {
+         }
+ 
+     }
++
++    // MultiPaper start - save a PersistentBase
++    public void save(PersistentBase persistentbase) {
++        persistentbase.a(this.a(persistentbase.getId()));
++    }
++    // MultiPaper end
+ }
+diff --git a/src/main/java/net/minecraft/server/WorldServer.java b/src/main/java/net/minecraft/server/WorldServer.java
+index 5b0b6edfa790918e56399ff6c83f3feb6e5aca49..5b39a53ee5ea139f4b1992610cd1556b28e2f90e 100644
+--- a/src/main/java/net/minecraft/server/WorldServer.java
++++ b/src/main/java/net/minecraft/server/WorldServer.java
+@@ -54,6 +54,7 @@ import org.bukkit.event.entity.CreatureSpawnEvent;
+ import org.bukkit.event.server.MapInitializeEvent;
+ import org.bukkit.event.weather.LightningStrikeEvent;
+ import org.bukkit.event.world.TimeSkipEvent;
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public class WorldServer extends World implements GeneratorAccessSeed {
+@@ -212,7 +213,7 @@ public class WorldServer extends World implements GeneratorAccessSeed {
+         convertable = convertable_conversionsession;
+         uuid = WorldUUID.getUUID(convertable_conversionsession.folder.toFile());
+         // CraftBukkit end
+-        if (com.destroystokyo.paper.PaperConfig.useOptimizedTickList) {
++        if (com.destroystokyo.paper.PaperConfig.useOptimizedTickList && false) { // MultiPaper disable
+             this.nextTickListBlock = new com.destroystokyo.paper.server.ticklist.PaperTickList<>(this, (block) -> {
+                 return block == null || block.getBlockData().isAir();
+             }, IRegistry.BLOCK::getKey, this::b, "Blocks"); // Paper - Timings
+@@ -501,6 +502,8 @@ public class WorldServer extends World implements GeneratorAccessSeed {
+                 Entity entity = (Entity) entry.getValue();
+                 Entity entity1 = entity.getVehicle();
+ 
++                if (!MultiPaper.shouldTickEntity(this, entity)) continue; // MultiPaper - Should we tick this entity?
++
+                 /* CraftBukkit start - We prevent spawning in general, so this butchering is not needed
+                 if (!this.server.getSpawnAnimals() && (entity instanceof EntityAnimal || entity instanceof EntityWaterAnimal)) {
+                     entity.die();
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index dc7de2b59ec5ca3e5fba34dbb2aa2e6aed8f95cb..360adc10272f9891fa16356357081515da2ed731 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -73,7 +73,6 @@ import net.minecraft.server.GameRules;
+ import net.minecraft.server.GeneratorSettings;
+ import net.minecraft.server.IRecipe;
+ import net.minecraft.server.IRegistry;
+-import net.minecraft.server.IRegistryCustom;
+ import net.minecraft.server.Item;
+ import net.minecraft.server.ItemWorldMap;
+ import net.minecraft.server.Items;
+@@ -227,6 +226,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
+ import org.yaml.snakeyaml.error.MarkedYAMLException;
+ 
+ import net.md_5.bungee.api.chat.BaseComponent; // Spigot
++import puregero.multipaper.MultiPaper;
+ 
+ import javax.annotation.Nullable; // Paper
+ import javax.annotation.Nonnull; // Paper
+@@ -1531,6 +1531,12 @@ public final class CraftServer implements Server {
+ 
+         message = broadcastMessageEvent.getMessage();
+ 
++        // MultiPaper start
++        if (permission.equals(BROADCAST_CHANNEL_USERS)) {
++            MultiPaper.broadcastPacket(null, message);
++        }
++        // MultiPaper end
++
+         for (CommandSender recipient : recipients) {
+             recipient.sendMessage(message);
+         }
+@@ -2287,6 +2293,8 @@ public final class CraftServer implements Server {
+ 
+         @Override
+         public void broadcast(BaseComponent component) {
++            MultiPaper.broadcastPacket(null, component); // MultiPaper
++
+             for (Player player : getOnlinePlayers()) {
+                 player.spigot().sendMessage(component);
+             }
+@@ -2294,6 +2302,8 @@ public final class CraftServer implements Server {
+ 
+         @Override
+         public void broadcast(BaseComponent... components) {
++            MultiPaper.broadcastPacket(null, components); // MultiPaper
++
+             for (Player player : getOnlinePlayers()) {
+                 player.spigot().sendMessage(components);
+             }
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+index 0314cb1270803265dc4bf4268697b09aabf2c612..926bac59bb718f905016a16642652d4a2555c9a4 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+@@ -504,6 +504,7 @@ public class CraftWorld implements World {
+         org.spigotmc.AsyncCatcher.catchOp("chunk unload"); // Spigot
+         if (isChunkLoaded(x, z)) {
+             world.getChunkProvider().removeTicket(TicketType.PLUGIN, new ChunkCoordIntPair(x, z), 0, Unit.INSTANCE); // Paper
++            world.getChunkProvider().removeTicket(TicketType.PLAYER, new ChunkCoordIntPair(x, z), 0, new ChunkCoordIntPair(x, z)); // MultiPaper
+         }
+ 
+         return true;
+diff --git a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+index 2fd69c0f915f1c3cb1c410d5dab0498f05d5c888..9b803b658153d31b1b8f8a3e74570c77a6c262b7 100644
+--- a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
++++ b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+@@ -4,13 +4,28 @@ import java.util.Map;
+ import org.bukkit.Server;
+ import org.bukkit.command.Command;
+ import org.bukkit.command.SimpleCommandMap;
++import puregero.multipaper.ServersCommand;
+ 
+ public class CraftCommandMap extends SimpleCommandMap {
+ 
+     public CraftCommandMap(Server server) {
+         super(server);
++        setDefaultCommands(); // MultiPaper
+     }
+ 
++    // MultiPaper start
++    @Override
++    public void clearCommands() {
++        super.clearCommands();
++
++        setDefaultCommands();
++    }
++
++    private void setDefaultCommands() {
++        register("multipaper", new ServersCommand("servers"));
++    }
++    // MultiPaper end
++
+     public Map<String, Command> getKnownCommands() {
+         return knownCommands;
+     }
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index 58caa3240b90cdc661e1e32e3f5c312ed62c3c21..fd3beac709ce9c0a04f99501e43ae719455af961 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -391,11 +391,14 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+             name = getName();
+         }
+         getHandle().listName = name.equals(getName()) ? null : CraftChatMessage.fromStringOrNull(name);
+-        for (EntityPlayer player : (List<EntityPlayer>) server.getHandle().players) {
+-            if (player.getBukkitEntity().canSee(this)) {
+-                player.playerConnection.sendPacket(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.UPDATE_DISPLAY_NAME, getHandle()));
+-            }
+-        }
++        // MultiPaper start - Use sendAll
++        getHandle().getMinecraftServer().getPlayerList().sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.UPDATE_DISPLAY_NAME, getHandle()));
++        // for (EntityPlayer player : (List<EntityPlayer>) server.getHandle().players) {
++        //    if (player.getBukkitEntity().canSee(this)) {
++        //        player.playerConnection.sendPacket(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.UPDATE_DISPLAY_NAME, getHandle()));
++        //    }
++        // }
++        // MultiPaper end
+     }
+ 
+     private IChatBaseComponent playerListHeader;
+diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
+index c762015e1402b59bf28dae7f947e7737fbac5c1d..17a95cb4043c09807e779a68666073c0f7bade59 100644
+--- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
++++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
+@@ -220,6 +220,7 @@ import org.bukkit.inventory.meta.BookMeta;
+ import org.bukkit.potion.PotionEffect;
+ 
+ import org.bukkit.event.entity.SpawnerSpawnEvent; // Spigot
++import puregero.multipaper.MultiPaper;
+ 
+ public class CraftEventFactory {
+     public static final DamageSource MELTING = CraftDamageSource.copyOf(DamageSource.BURN);
+@@ -509,6 +510,12 @@ public class CraftEventFactory {
+         }
+         craftServer.getPluginManager().callEvent(event);
+ 
++        // MultiPaper start - don't interact if they shouldn't be ticked
++        if (!MultiPaper.shouldTickEntity((WorldServer) who.world, who)) {
++            event.setCancelled(true);
++        }
++        // MultiPaper end
++
+         return event;
+     }
+ 
+diff --git a/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java b/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
+index f101ed6c5a5e16e5804b36f1182edca874981831..ad648caa334afb1424705f2630a2b7debcaafdef 100644
+--- a/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
++++ b/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
+@@ -1,14 +1,10 @@
+ package org.bukkit.craftbukkit.util;
+ 
+-import java.io.DataInputStream;
+-import java.io.DataOutputStream;
+-import java.io.File;
+-import java.io.FileInputStream;
+-import java.io.FileOutputStream;
+-import java.io.IOException;
++import java.io.*;
+ import java.util.UUID;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public final class WorldUUID {
+ 
+@@ -18,6 +14,38 @@ public final class WorldUUID {
+     }
+ 
+     public static UUID getUUID(File baseDir) {
++    // MultiPaper start
++        DataInputStream dis = null;
++        try {
++            dis = MultiPaper.readUid(baseDir.getName());
++            return new UUID(dis.readLong(), dis.readLong());
++        } catch (IOException ex) {
++            LOGGER.warn("Failed to read " + baseDir.getName() + "'s uid.dat, generating new random UUID", ex);
++        } finally {
++            if (dis != null) {
++                try {
++                    dis.close();
++                } catch (IOException ex) {
++                    // NOOP
++                }
++            }
++        }
++
++        UUID uuid = UUID.randomUUID();
++        try {
++            ByteArrayOutputStream baos = new ByteArrayOutputStream();
++            DataOutputStream dos = new DataOutputStream(baos);
++            dos.writeLong(uuid.getMostSignificantBits());
++            dos.writeLong(uuid.getLeastSignificantBits());
++            MultiPaper.writeUid(baseDir.getName(), baos.toByteArray());
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++        return uuid;
++    }
++
++    public static UUID _getUUID(File baseDir) {
++    // MultiPaper end
+         File file1 = new File(baseDir, "uid.dat");
+         if (file1.exists()) {
+             DataInputStream dis = null;
+diff --git a/src/main/java/puregero/multipaper/BungeeCord.java b/src/main/java/puregero/multipaper/BungeeCord.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..4cfbad5085f4ce84ac840e4bc775a73ec604c2a7
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/BungeeCord.java
+@@ -0,0 +1,25 @@
++package puregero.multipaper;
++
++import com.google.common.io.ByteArrayDataOutput;
++import com.google.common.io.ByteStreams;
++import io.netty.buffer.Unpooled;
++import net.minecraft.server.MinecraftKey;
++import net.minecraft.server.PacketDataSerializer;
++import net.minecraft.server.PacketPlayOutCustomPayload;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.entity.Player;
++
++public class BungeeCord {
++    private static final Logger LOGGER = LogManager.getLogger();
++
++    public static void connectPlayer(Player p, String server) {
++        LOGGER.info("Sending " + p.getName() + " to server: " + server);
++        ByteArrayDataOutput out = ByteStreams.newDataOutput();
++        out.writeUTF("Connect");
++        out.writeUTF(server);
++        PacketPlayOutCustomPayload packet = new PacketPlayOutCustomPayload(new MinecraftKey("bungeecord:main"), new PacketDataSerializer(Unpooled.wrappedBuffer(out.toByteArray())));
++        ((CraftPlayer) p).getHandle().playerConnection.sendPacket(packet);
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/DataOutputSender.java b/src/main/java/puregero/multipaper/DataOutputSender.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..3b042efc6942050dc290001eafc0f97f0917ce82
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/DataOutputSender.java
+@@ -0,0 +1,30 @@
++package puregero.multipaper;
++
++import javax.annotation.Nullable;
++import java.io.*;
++import java.util.function.Consumer;
++
++public class DataOutputSender extends DataOutputStream {
++    private final MultiPaperConnection connection;
++    private final int id;
++
++    public DataOutputSender(MultiPaperConnection connection) throws IOException {
++        this(connection, (int) (Math.random() * Integer.MAX_VALUE));
++    }
++
++    public DataOutputSender(MultiPaperConnection connection, int id) throws IOException {
++        super(new ByteArrayOutputStream());
++        this.connection = connection;
++        this.id = id;
++
++        writeInt(id);
++    }
++
++    public void send(@Nullable Consumer<DataInputStream> callback) throws IOException {
++        connection.send(((ByteArrayOutputStream) out).toByteArray(), id, callback);
++    }
++
++    public int getId() {
++        return id;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/ExternalServer.java b/src/main/java/puregero/multipaper/ExternalServer.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..8943de3e4ee0d3e3d3c91864ebbc4fe58056daa9
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/ExternalServer.java
+@@ -0,0 +1,58 @@
++package puregero.multipaper;
++
++import java.util.ArrayList;
++import java.util.UUID;
++
++public class ExternalServer {
++    private final String name;
++    private final boolean me;
++    private int averageTickTime;
++    private double tps;
++    private long lastAlive;
++    private ArrayList<UUID> players = new ArrayList<>();
++
++    public ExternalServer(String name, boolean me) {
++        this.name = name;
++        this.me = me;
++    }
++
++    public int getAverageTickTime() {
++        return averageTickTime;
++    }
++
++    public void setAverageTickTime(int averageTickTime) {
++        this.averageTickTime = averageTickTime;
++    }
++
++    public long getLastAlive() {
++        return lastAlive;
++    }
++
++    public void setLastAlive(long lastAlive) {
++        this.lastAlive = lastAlive;
++    }
++
++    public String getName() {
++        return name;
++    }
++
++    public boolean isMe() {
++        return me;
++    }
++
++    public boolean isAlive() {
++        return getLastAlive() > System.currentTimeMillis() - 2500;
++    }
++
++    public ArrayList<UUID> getPlayers() {
++        return players;
++    }
++
++    public double getTps() {
++        return tps;
++    }
++
++    public void setTps(double tps) {
++        this.tps = tps;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..7e7b8bf38cff071da4b70df7238a0a46a996ba12
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -0,0 +1,339 @@
++package puregero.multipaper;
++
++import net.md_5.bungee.api.chat.BaseComponent;
++import net.minecraft.server.*;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.Location;
++import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.craftbukkit.util.CraftChatMessage;
++import org.bukkit.entity.Player;
++
++import java.io.*;
++import java.nio.file.Files;
++import java.util.UUID;
++
++public class MultiPaper {
++
++    private static final Logger LOGGER = LogManager.getLogger();
++    private static MultiPaperConnection multiPaperConnection = null;
++    private static long last10Seconds = System.currentTimeMillis();
++
++    private static MultiPaperConnection getConnection() {
++        if (multiPaperConnection == null) {
++            multiPaperConnection = new MultiPaperConnection();
++        }
++
++        return multiPaperConnection;
++    }
++
++    private static void tick() {
++        boolean hasBeen10Seconds = last10Seconds < System.currentTimeMillis() - 10 * 1000;
++
++        if (hasBeen10Seconds) last10Seconds = System.currentTimeMillis();
++
++        Bukkit.getWorlds().forEach(world -> {
++            WorldPersistentData persistentData = ((CraftWorld) world).getHandle().getWorldPersistentData();
++            persistentData.data.values().forEach(value -> {
++                if (value != null && (value instanceof PersistentIdCounts || (value instanceof WorldMap && hasBeen10Seconds))) {
++                    persistentData.save(value);
++                }
++            });
++        });
++    }
++
++    public static NBTTagCompound readChunk(ChunkCoordIntPair chunkcoordintpair, WorldServer worldServer) throws IOException {
++        return readRegionFileNBT(worldServer, "region", chunkcoordintpair);
++    }
++
++    public static void writeChunk(ChunkCoordIntPair chunkcoordintpair, WorldServer worldServer, NBTTagCompound nbttagcompound) throws IOException {
++        writeRegionFileNBT(worldServer, "region", chunkcoordintpair, nbttagcompound);
++    }
++
++    public static DataInput readRegionFile(String world, String path, int cx, int cz) throws IOException {
++        return getConnection().readChunk(world, path, cx, cz).join();
++    }
++
++    public static void writeRegionFile(String world, String path, int cx, int cz, byte[] bytes) throws IOException {
++        getConnection().writeChunk(world, path, cx, cz, bytes);
++    }
++
++    public static NBTTagCompound readRegionFileNBT(WorldServer worldServer, String path, ChunkCoordIntPair chunkcoordintpair) throws IOException {
++        DataInput in = readRegionFile(worldServer.worldDataServer.getName(), path, chunkcoordintpair.x, chunkcoordintpair.z);
++
++        return in == null ? null : NBTCompressedStreamTools.a(in);
++    }
++
++    public static void writeRegionFileNBT(WorldServer worldServer, String path, ChunkCoordIntPair chunkcoordintpair, NBTTagCompound nbttagcompound) throws IOException {
++        writeRegionFile(worldServer.worldDataServer.getName(), path, chunkcoordintpair.x, chunkcoordintpair.z, nbtToBytes(nbttagcompound));
++    }
++
++    public static NBTTagCompound readLevel(String world) throws IOException {
++        DataInput in = getConnection().readLevel(world).join();
++
++        return in == null ? null : NBTCompressedStreamTools.a((InputStream) in);
++    }
++
++    public static void writeLevel(String world, NBTTagCompound nbttagcompound) throws IOException {
++        getConnection().writeLevel(world, nbtCompressToBytes(nbttagcompound));
++    }
++
++    public static String readJson(String name) throws IOException {
++        return getConnection().readJson(name).join();
++    }
++
++    public static void writeJson(String name, String json) throws IOException {
++        getConnection().writeJson(name, json);
++    }
++
++    public static NBTTagCompound readPlayer(String uuid) throws IOException {
++        DataInput in = getConnection().readPlayer(uuid).join();
++
++        return in == null ? null : NBTCompressedStreamTools.a((InputStream) in);
++    }
++
++    public static void writePlayer(String uuid, NBTTagCompound nbttagcompound) throws IOException {
++        getConnection().writePlayer(uuid, nbtCompressToBytes(nbttagcompound));
++    }
++
++    public static void lockPlayer(String uuid) {
++        try {
++            getConnection().lockPlayer(uuid);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static void releasePlayer(String uuid) {
++        try {
++            getConnection().releasePlayer(uuid);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static DataInputStream readUid(String world) throws IOException {
++        return getConnection().readUid(world).join();
++    }
++
++    public static void writeUid(String world, byte[] data) throws IOException {
++        getConnection().writeUid(world, data);
++    }
++
++    public static void lockChunk(ChunkCoordIntPair chunkcoordintpair, WorldServer worldServer) {
++        try {
++            if (!Zone.shouldLockChunk(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z)) {
++                return;
++            }
++
++            getConnection().lockChunk(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z).thenAccept(holder -> {
++                if (!Zone.shouldLockChunk(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z)) {
++                    releaseChunk(chunkcoordintpair, worldServer);
++                    return;
++                }
++
++                new Thread(() -> {
++                    if (holder != null) {
++                        Zone.doMerge(worldServer.getWorld().getChunkAt(chunkcoordintpair.x, chunkcoordintpair.z), holder);
++                    } else {
++                        Zone.checkIfShouldMerge(worldServer.getWorld().getChunkAt(chunkcoordintpair.x, chunkcoordintpair.z));
++                    }
++                }).start();
++            });
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static void releaseChunk(ChunkCoordIntPair chunkcoordintpair, WorldServer worldServer) {
++        try {
++            getConnection().releaseChunk(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static void notifyChunkNotSaving(ChunkCoordIntPair chunkcoordintpair, WorldServer worldServer) {
++        try {
++            getConnection().notifyChunkNotSaving(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static void sendTickTime(long time) {
++        tick();
++        try {
++            getConnection().writeTickTime(time);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static String readAdvancements(String uuid) throws IOException {
++        return getConnection().readAdvancements(uuid).join();
++    }
++
++    public static void writeAdvancements(String uuid, String json) throws IOException {
++        getConnection().writeAdvancements(uuid, json);
++    }
++
++    public static void lockAdvancements(String uuid) {
++        try {
++            getConnection().lockAdvancements(uuid);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static void releaseAdvancements(String uuid) {
++        try {
++            getConnection().releaseAdvancements(uuid);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static String readStats(String uuid) throws IOException {
++        return getConnection().readStats(uuid).join();
++    }
++
++    public static void writeStats(String uuid, String json) throws IOException {
++        getConnection().writeStats(uuid, json);
++    }
++
++    public static void lockStats(String uuid) {
++        try {
++            getConnection().lockStats(uuid);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static void releaseStats(String uuid) {
++        try {
++            getConnection().releaseStats(uuid);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static void broadcastPacket(Packet<?> packet) {
++        try {
++            getConnection().broadcastPacket(packet);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static void broadcastPacket(UUID from, String message) {
++        if (from == null) {
++            from = SystemUtils.getNullUUID();
++        }
++
++        for (IChatBaseComponent component : CraftChatMessage.fromString(message)) {
++            broadcastPacket(new PacketPlayOutChat(component, from.equals(SystemUtils.getNullUUID()) ? ChatMessageType.SYSTEM : ChatMessageType.CHAT, from));
++        }
++    }
++
++    public static void broadcastPacket(UUID from, BaseComponent... components) {
++        if (from == null) {
++            from = SystemUtils.getNullUUID();
++        }
++
++        PacketPlayOutChat packet = new PacketPlayOutChat(null, from.equals(SystemUtils.getNullUUID()) ? ChatMessageType.SYSTEM : ChatMessageType.CHAT, SystemUtils.b);
++        packet.components = components;
++        broadcastPacket(packet);
++    }
++
++    public static void onStart() {
++        try {
++            getConnection().sendStart();
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static byte[] readData(String path) {
++        try {
++            return getConnection().readData(path).join();
++        } catch (IOException e) {
++            e.printStackTrace();
++            return null;
++        }
++    }
++
++    public static void writeData(String path, NBTTagCompound nbttagcompound) throws IOException {
++        getConnection().writeData(path, nbtCompressToBytes(nbttagcompound));
++    }
++
++    private static byte[] nbtToBytes(NBTTagCompound nbttagcompound) throws IOException {
++        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
++        NBTCompressedStreamTools.a(nbttagcompound, (DataOutput) new DataOutputStream(buffer));
++        return buffer.toByteArray();
++    }
++
++    private static byte[] nbtCompressToBytes(NBTTagCompound nbttagcompound) throws IOException {
++        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
++        NBTCompressedStreamTools.a(nbttagcompound, buffer);
++        return buffer.toByteArray();
++    }
++
++    public static String getBungeeCordName() throws IOException {
++        File file = new File("bungeecordname.txt");
++        if (!file.isFile()) {
++            Files.write(file.toPath(), ("server" + Double.toString(Math.random()).substring(2, 7)).getBytes());
++        }
++        return new String(Files.readAllBytes(file.toPath())).trim();
++    }
++
++    public static ExternalServer getMe() {
++        return multiPaperConnection.getServersMap().get(multiPaperConnection.getBungeeCordName());
++    }
++
++    public static Iterable<ExternalServer> getServers() {
++        return multiPaperConnection.getServersMap().values();
++    }
++
++    public static Location getPlayerLocation(UUID uuid) {
++        return multiPaperConnection.playerLocations.get(uuid);
++    }
++
++    private static int chunkDistance(Entity entity1, Entity entity2) {
++        return Math.max(Math.abs(entity1.chunkX - entity2.chunkX), Math.abs(entity1.chunkZ - entity2.chunkZ));
++    }
++
++    private static int chunkDistance(Entity entity, Chunk chunk) {
++        return Math.max(Math.abs(entity.chunkX - chunk.getPos().x), Math.abs(entity.chunkZ - chunk.getPos().z));
++    }
++
++    public static boolean shouldTickEntity(WorldServer worldServer, Entity entity) {
++        for (EntityPlayer player : worldServer.players) {
++            if (!Zone.isBeingSentToAnotherServer(player.getBukkitEntity()) && player.shouldTickEntities && chunkDistance(player, entity) <= Bukkit.getViewDistance()) {
++                return true;
++            }
++        }
++
++        return false;
++    }
++
++    public static boolean shouldTickChunk(WorldServer worldServer, Chunk chunk) {
++        if (chunk == null) {
++            return false;
++        }
++
++        for (EntityPlayer player : worldServer.players) {
++            if (!Zone.isBeingSentToAnotherServer(player.getBukkitEntity()) && player.shouldTickEntities && chunkDistance(player, chunk) <= Bukkit.getViewDistance()) {
++                return true;
++            }
++        }
++
++        return false;
++    }
++
++    public static void setPlayerShouldTickEntities(Player player, boolean shouldTickEntities) {
++        ((CraftPlayer) player).getHandle().shouldTickEntities = shouldTickEntities;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..37b3cb2fa82dbb65188c866e5c1ae19c9ac7c1ea
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -0,0 +1,760 @@
++package puregero.multipaper;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import net.minecraft.server.*;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.*;
++import org.bukkit.Chunk;
++import org.bukkit.World;
++import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.craftbukkit.scheduler.CraftScheduler;
++import org.bukkit.entity.Player;
++
++import javax.annotation.Nullable;
++import java.io.*;
++import java.net.Socket;
++import java.net.SocketException;
++import java.nio.charset.StandardCharsets;
++import java.nio.file.Files;
++import java.util.*;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.atomic.AtomicBoolean;
++import java.util.function.Consumer;
++import java.util.zip.DeflaterOutputStream;
++import java.util.zip.InflaterInputStream;
++
++public class MultiPaperConnection extends Thread {
++
++    private static final Logger LOGGER = LogManager.getLogger();
++
++    private Socket socket;
++    private HashMap<Integer, Request> callbacks = new HashMap<>();
++    private HashMap<String, ExternalServer> serversMap = new HashMap<>();
++    private String myName = null;
++    public HashMap<UUID, Location> playerLocations = new HashMap<>();
++
++    public MultiPaperConnection() {
++        start();
++    }
++
++    public void send(byte[] bytes, int id, @Nullable Consumer<DataInputStream> callback) throws IOException {
++        while (true) {
++            try {
++                synchronized (socket) {
++                    if (callback != null) {
++                        callbacks.put(id, new Request(bytes, callback));
++                    }
++                    socket.getOutputStream().write(bytes);
++                    return;
++                }
++            } catch (Exception e) {
++                if (socket != null) {
++                    e.printStackTrace();
++                }
++            }
++
++            try {
++                Thread.sleep(1000);
++            } catch (InterruptedException e) {
++                throw new IOException(e);
++            }
++        }
++    }
++
++    public DataOutputSender buffer(int id) throws IOException {
++        return new DataOutputSender(this, id);
++    }
++
++    private static String getServer() {
++        try {
++            File file = new File("multipaperserver.txt");
++            if (!file.isFile()) {
++                Files.write(file.toPath(), ("localhost:35353").getBytes());
++            }
++            return new String(Files.readAllBytes(file.toPath())).trim();
++        } catch (IOException e) {
++            e.printStackTrace();
++            return "localhost:35353";
++        }
++    }
++
++    @Override
++    public void run() {
++        while (true) {
++            String server = getServer();
++            LOGGER.info("Connecting to " + server + "...");
++            String[] serverParts = server.split(":");
++            try (Socket socket = new Socket(serverParts[0], Integer.parseInt(serverParts[1]))) {
++                this.socket = socket;
++                LOGGER.info("Connected to " + server);
++
++                synchronized (socket) {
++                    DataOutputStream out = new DataOutputStream(socket.getOutputStream());
++                    out.writeUTF(myName = MultiPaper.getBungeeCordName());
++
++                    // Resend requests on this new socket
++                    for (Request request : callbacks.values()) {
++                        socket.getOutputStream().write(request.getData());
++                    }
++                }
++
++                DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
++                while (!socket.isClosed()) {
++                    int id = in.readInt();
++                    String command = in.readUTF();
++
++                    Request request = callbacks.remove(id);
++
++                    if (request != null) {
++                        request.getCallback().accept(in);
++                        continue;
++                    }
++
++                    // Run command(DataInputStream in);
++                    this.getClass().getMethod(command, DataInputStream.class, DataOutputSender.class).invoke(this, in, buffer(id));
++                }
++            } catch (EOFException | SocketException e) {
++                // Ignored
++            } catch (Exception e) {
++                e.printStackTrace();
++            }
++            try {
++                Thread.sleep(1000);
++            } catch (InterruptedException e) {
++                e.printStackTrace();
++                return;
++            }
++        }
++    }
++
++    public void loadJson(DataInputStream in, DataOutputSender out) throws IOException {
++        String file = in.readUTF();
++        LOGGER.info("Reloading json " + file);
++        new Thread(() -> {
++            try {
++                if (DedicatedServer.getServer() == null) {
++                    return;
++                }
++
++                switch (file) {
++                    case "banned-players.json":
++                        DedicatedServer.getServer().getPlayerList().getProfileBans().load();
++                        checkBans();
++                        break;
++                    case "banned-ips.json":
++                        DedicatedServer.getServer().getPlayerList().getIPBans().load();
++                        break;
++                    case "ops.json":
++                        DedicatedServer.getServer().getPlayerList().getOPs().load();
++                        break;
++                    case "whitelist.json":
++                        DedicatedServer.getServer().getPlayerList().getWhitelist().load();
++                        break;
++                    default:
++                        throw new IllegalArgumentException("Invalid json file to load " + file);
++                }
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        }).start();
++    }
++
++    private String p(long n, String s){
++        if(n != 1)return n + " " + s + "s";
++        return n + " " + s;
++    }
++    public String prettyTime(long millis){
++        long seconds = millis/1000;
++        if(seconds >= 60*60*24)
++            return p(seconds/60/60/24,"day") + " and " + p((seconds/60/60)%24,"hour");
++        if(seconds >= 60*60)
++            return p(seconds/60/60,"hour") + " and " + p((seconds/60)%60,"minute");
++        if(seconds >= 60)
++            return p(seconds/60,"minute") + " and " + p((seconds)%60,"second");
++        return p(seconds,"second");
++    }
++    private void checkBans() {
++        for (Player player : Bukkit.getOnlinePlayers()) {
++            BanEntry b = Bukkit.getBanList(BanList.Type.NAME).getBanEntry(player.getName());
++            if (b != null) {
++                ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
++                    Date expire = b.getExpiration();
++                    if (expire != null) {
++                        long t = (expire.getTime() - System.currentTimeMillis());
++                        if (t < 0) return; // Ban expired
++                        player.kickPlayer("You have been banned for:\n" + b.getReason() + "\nYour ban will end in " + prettyTime(t));
++                    } else {
++                        player.kickPlayer("You have been banned for:\n" + b.getReason());
++                    }
++                }, 0, "MultiPaper-KickPlayer");
++            }
++        }
++    }
++
++    public void savePlayer(DataInputStream in, DataOutputSender out) throws IOException {
++        UUID uuid = UUID.fromString(in.readUTF());
++        CraftPlayer player = (CraftPlayer) Bukkit.getPlayer(uuid);
++        if (player != null) {
++            player.saveData();
++        }
++        out.writeUTF("wrotePlayer");
++        out.send(null);
++    }
++
++    public void saveAdvancements(DataInputStream in, DataOutputSender out) throws IOException {
++        UUID uuid = UUID.fromString(in.readUTF());
++        CraftPlayer player = (CraftPlayer) Bukkit.getPlayer(uuid);
++        if (player != null) {
++            player.getHandle().getAdvancementData().b(); // Saves world/advancements
++        }
++        out.writeUTF("wroteAdvancements");
++        out.send(null);
++    }
++
++    public void saveStats(DataInputStream in, DataOutputSender out) throws IOException {
++        UUID uuid = UUID.fromString(in.readUTF());
++        CraftPlayer player = (CraftPlayer) Bukkit.getPlayer(uuid);
++        if (player != null) {
++            player.getHandle().getStatisticManager().save(); // Saves world/stats
++        }
++        out.writeUTF("wroteStats");
++        out.send(null);
++    }
++
++    public void serverInfo(DataInputStream in, DataOutputSender out) throws IOException {
++        ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
++        server.setAverageTickTime(in.readInt());
++        server.setLastAlive(System.currentTimeMillis());
++    }
++
++    public void broadcastPacket(DataInputStream in, DataOutputSender out) throws IOException {
++        try {
++            String className = in.readUTF();
++            int length = in.readInt();
++            ByteBuf buf = Unpooled.buffer(length, length);
++            int i;
++            while ((i = buf.writeBytes(in, length)) < length) {
++                length -= i;
++            }
++            Packet<?> packet = (Packet<?>) Class.forName(className).getConstructor().newInstance();
++            packet.a(new PacketDataSerializer(buf));
++            if (DedicatedServer.getServer() != null && DedicatedServer.getServer().getPlayerList() != null) {
++                DedicatedServer.getServer().getPlayerList().sendAllNoIntercept(packet);
++            }
++
++            if (packet instanceof PacketPlayOutPlayerInfo) {
++                PlayerInfoManager.handle((PacketPlayOutPlayerInfo) packet);
++            }
++        } catch (Exception e) {
++            e.printStackTrace();
++        }
++    }
++
++    public void clearData(DataInputStream in, DataOutputSender out) throws IOException {
++        String pathStr = in.readUTF();
++        File path = new File(pathStr);
++        String file = path.getName().substring(0, path.getName().length() - 4); // Remove .dat suffix
++        while (!path.getParentFile().equals(new File(".")) && !path.getParentFile().equals(path)) {
++            path = path.getParentFile();
++        }
++
++        World world = Bukkit.getWorld(path.getName());
++        if (world == null) {
++            throw new IllegalArgumentException("Unknown world '" + path.getPath() + "' in path " + pathStr);
++        }
++
++        // Clear the data from the world's data cache
++        ((CraftWorld) world).getHandle().getWorldPersistentData().data.remove(file);
++    }
++
++    public void playerList(DataInputStream in, DataOutputSender out) throws IOException {
++        serversMap.values().forEach(server -> server.getPlayers().clear());
++        playerLocations.clear();
++
++        String server;
++        while (!(server = in.readUTF()).isEmpty()) {
++            ExternalServer externalServer = serversMap.get(server);
++
++            double tps = in.readDouble();
++            if (externalServer != null) {
++                externalServer.setTps(tps);
++            }
++
++            int count = in.readInt();
++            for (int i = 0; i < count; i++) {
++                UUID uuid = new UUID(in.readLong(), in.readLong());
++                String world = in.readUTF();
++                double x = in.readDouble();
++                double y = in.readDouble();
++                double z = in.readDouble();
++                float yaw = in.readFloat();
++                float pitch = in.readFloat();
++
++                if (Bukkit.getServer() != null) {
++                    playerLocations.put(uuid, new Location(Bukkit.getWorld(world), x, y, z, yaw, pitch));
++                }
++
++                if (externalServer != null) {
++                    externalServer.getPlayers().add(uuid);
++                }
++            }
++        }
++
++        if (Bukkit.getServer() == null || MinecraftServer.getServer() == null) {
++            out.writeUTF("playerList");
++            out.writeDouble(20);
++            out.writeInt(0);
++        } else {
++            Collection<? extends Player> players = Bukkit.getOnlinePlayers();
++            out.writeUTF("playerList");
++            out.writeDouble(MinecraftServer.getServer().recentTps[0]);
++            out.writeInt(players.size());
++            for (Player player : players) {
++                out.writeLong(player.getUniqueId().getMostSignificantBits());
++                out.writeLong(player.getUniqueId().getLeastSignificantBits());
++                out.writeUTF(player.getWorld().getName());
++                out.writeDouble(player.getLocation().getX());
++                out.writeDouble(player.getLocation().getY());
++                out.writeDouble(player.getLocation().getZ());
++                out.writeFloat(player.getLocation().getYaw());
++                out.writeFloat(player.getLocation().getPitch());
++            }
++        }
++        out.send(null);
++
++        sendLoadedChunkList();
++    }
++
++    public void chunkData(DataInputStream in, DataOutputSender out) throws IOException {
++        int length = in.readInt();
++        in.skipBytes(length);
++        LOGGER.info("Unsolicited chunk data of length: " + length + " bytes");
++    }
++
++    public void lockedChunk(DataInputStream in, DataOutputSender out) throws IOException {
++        String locker = in.readUTF();
++        LOGGER.info("Unsolicited locked chunk with locker: " + (locker.length() == 0 ? "null" : locker));
++    }
++
++    public void start(DataInputStream in, DataOutputSender out) throws IOException {
++        if (DedicatedServer.getServer() != null) {
++            MultiPaper.broadcastPacket(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, DedicatedServer.getServer().getPlayerList().players.toArray(new EntityPlayer[0])));
++        }
++    }
++
++    public CompletableFuture<DataInputStream> readChunk(String world, String path, int cx, int cz) throws IOException {
++        CompletableFuture<DataInputStream> future = new CompletableFuture<>();
++
++        AtomicBoolean hasReturned = new AtomicBoolean(false);
++
++        Consumer<DataInputStream> callback = in -> {
++            try {
++                hasReturned.set(true);
++
++                byte[] data = new byte[in.readInt()];
++                in.readFully(data);
++
++                future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        };
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("readChunk");
++        out.writeUTF(world);
++        out.writeUTF(path);
++        out.writeInt(cx);
++        out.writeInt(cz);
++        out.send(callback);
++
++        new Thread(() -> {
++            int i = 0;
++            while (!hasReturned.get()) {
++                if (++i % 15 == 0) {
++                    if (DedicatedServer.getServer().hasStopped()) {
++                        LOGGER.info("No response for readChunk " + world + "," + path + "," + cx + "," + cz + ", but server has stopped, aborting operation.");
++                        future.complete(null);
++                        return;
++                    }
++                    LOGGER.info("No response for readChunk " + world + "," + path + "," + cx + "," + cz + ", resending...");
++                    try {
++                        out.send(callback);
++                    } catch (IOException e) {
++                        e.printStackTrace();
++                        return;
++                    }
++                }
++                try {
++                    Thread.sleep(1000);
++                } catch (InterruptedException e) {
++                    e.printStackTrace();
++                    return;
++                }
++            }
++        }).start();
++
++        return future;
++    }
++
++    public void writeChunk(String world, String path, int cx, int cz, byte[] data) throws IOException {
++        ByteArrayOutputStream baos = new ByteArrayOutputStream();
++        DeflaterOutputStream deflateOut = new DeflaterOutputStream(baos);
++        deflateOut.write(data);
++        deflateOut.close();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeChunk");
++        out.writeUTF(world);
++        out.writeUTF(path);
++        out.writeInt(cx);
++        out.writeInt(cz);
++        out.writeInt(baos.size());
++        out.write(baos.toByteArray());
++        out.send(in -> { /* Do nothing */ });
++    }
++
++    public CompletableFuture<DataInputStream> readLevel(String world) throws IOException {
++        CompletableFuture<DataInputStream> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("readLevel");
++        out.writeUTF(world);
++        out.send(in -> {
++            try {
++                byte[] data = new byte[in.readInt()];
++                in.readFully(data);
++
++                future.complete(data.length == 0 ? null : new DataInputStream(new ByteArrayInputStream(data)));
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
++
++    public void writeLevel(String world, byte[] data) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeLevel");
++        out.writeUTF(world);
++        out.writeInt(data.length);
++        out.write(data);
++        out.send(in -> { /* Do nothing */ });
++    }
++
++    public CompletableFuture<String> readJson(String name) throws IOException {
++        CompletableFuture<String> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("readJson");
++        out.writeUTF(name);
++        out.send(in -> {
++            try {
++                byte[] data = new byte[in.readInt()];
++                in.readFully(data);
++
++                future.complete(new String(data, StandardCharsets.UTF_8));
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
++
++    public void writeJson(String name, String json) throws IOException {
++        byte[] data = json.getBytes(StandardCharsets.UTF_8);
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeJson");
++        out.writeUTF(name);
++        out.writeInt(data.length);
++        out.write(data);
++        out.send(in -> { /* Do nothing */ });
++    }
++
++    public CompletableFuture<DataInputStream> readPlayer(String uuid) throws IOException {
++        CompletableFuture<DataInputStream> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("readPlayer");
++        out.writeUTF(uuid);
++        out.send(in -> {
++            try {
++                byte[] data = new byte[in.readInt()];
++                in.readFully(data);
++
++                future.complete(data.length == 0 ? null : new DataInputStream(new ByteArrayInputStream(data)));
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
++
++    public void writePlayer(String uuid, byte[] data) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writePlayer");
++        out.writeUTF(uuid);
++        out.writeInt(data.length);
++        out.write(data);
++        out.send(in -> { /* Do nothing */ });
++    }
++
++    public void lockPlayer(String uuid) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("lockPlayer");
++        out.writeUTF(uuid);
++        out.send(null);
++    }
++
++    public void releasePlayer(String uuid) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("releasePlayer");
++        out.writeUTF(uuid);
++        out.send(null);
++    }
++
++    public CompletableFuture<DataInputStream> readUid(String world) throws IOException {
++        CompletableFuture<DataInputStream> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("readUid");
++        out.writeUTF(world);
++        out.send(in -> {
++            try {
++                byte[] data = new byte[in.readInt()];
++                in.readFully(data);
++
++                future.complete(data.length == 0 ? null : new DataInputStream(new ByteArrayInputStream(data)));
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
++
++    public void writeUid(String world, byte[] data) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeUid");
++        out.writeUTF(world);
++        out.writeInt(data.length);
++        out.write(data);
++        out.send(in -> { /* Do nothing */ });
++    }
++
++    public void writeTickTime(long time) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeTickTime");
++        out.writeLong(time);
++        out.send(null);
++    }
++
++    public CompletableFuture<String> lockChunk(String world, int cx, int cz) throws IOException {
++        CompletableFuture<String> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("lockChunk");
++        out.writeUTF(world);
++        out.writeInt(cx);
++        out.writeInt(cz);
++        out.send(in -> {
++            try {
++                String holder = in.readUTF();
++                future.complete(holder.isEmpty() ? null : holder);
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
++
++    public void releaseChunk(String world, int cx, int cz) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("releaseChunk");
++        out.writeUTF(world);
++        out.writeInt(cx);
++        out.writeInt(cz);
++        out.send(null);
++    }
++
++    public void notifyChunkNotSaving(String world, int cx, int cz) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("chunkNotSaving");
++        out.writeUTF(world);
++        out.writeInt(cx);
++        out.writeInt(cz);
++        out.send(null);
++    }
++
++    public CompletableFuture<String> readAdvancements(String uuid) throws IOException {
++        CompletableFuture<String> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("readAdvancements");
++        out.writeUTF(uuid);
++        out.send(in -> {
++            try {
++                byte[] data = new byte[in.readInt()];
++                in.readFully(data);
++
++                future.complete(new String(data, StandardCharsets.UTF_8));
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
++
++    public void writeAdvancements(String uuid, String json) throws IOException {
++        byte[] data = json.getBytes(StandardCharsets.UTF_8);
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeAdvancements");
++        out.writeUTF(uuid);
++        out.writeInt(data.length);
++        out.write(data);
++        out.send(in -> { /* Do nothing */ });
++    }
++
++    public void lockAdvancements(String uuid) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("lockAdvancements");
++        out.writeUTF(uuid);
++        out.send(null);
++    }
++
++    public void releaseAdvancements(String uuid) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("releaseAdvancements");
++        out.writeUTF(uuid);
++        out.send(null);
++    }
++
++    public CompletableFuture<String> readStats(String uuid) throws IOException {
++        CompletableFuture<String> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("readStats");
++        out.writeUTF(uuid);
++        out.send(in -> {
++            try {
++                byte[] data = new byte[in.readInt()];
++                in.readFully(data);
++
++                future.complete(new String(data, StandardCharsets.UTF_8));
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
++
++    public void writeStats(String uuid, String json) throws IOException {
++        byte[] data = json.getBytes(StandardCharsets.UTF_8);
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeStats");
++        out.writeUTF(uuid);
++        out.writeInt(data.length);
++        out.write(data);
++        out.send(in -> { /* Do nothing */ });
++    }
++
++    public void lockStats(String uuid) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("lockStats");
++        out.writeUTF(uuid);
++        out.send(null);
++    }
++
++    public void releaseStats(String uuid) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("releaseStats");
++        out.writeUTF(uuid);
++        out.send(null);
++    }
++
++    public void broadcastPacket(Packet<?> packet) throws IOException {
++        ByteBuf buf = Unpooled.buffer();
++        packet.b(new PacketDataSerializer(buf));
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("broadcastPacket");
++        out.writeUTF(packet.getClass().getName());
++        out.writeInt(buf.readableBytes());
++        buf.readBytes(out, buf.readableBytes());
++        out.send(null);
++    }
++
++    public void sendStart() throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("start");
++        out.send(null);
++    }
++
++    public CompletableFuture<byte[]> readData(String path) throws IOException {
++        CompletableFuture<byte[]> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("readData");
++        out.writeUTF(path);
++        out.send(in -> {
++            try {
++                byte[] data = new byte[in.readInt()];
++                in.readFully(data);
++
++                future.complete(data);
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
++
++    public void writeData(String path, byte[] data) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeData");
++        out.writeUTF(path);
++        out.writeInt(data.length);
++        out.write(data);
++        out.send(in -> { /* Do nothing */ });
++    }
++
++    private void sendLoadedChunkList() throws IOException {
++        if (Bukkit.getServer() != null) {
++            List<Chunk> chunks = new ArrayList<>();
++
++            for (World world : Bukkit.getWorlds()) {
++                chunks.addAll(Arrays.asList(world.getLoadedChunks()));
++            }
++
++            DataOutputSender out = new DataOutputSender(this);
++            out.writeUTF("loadedChunkList");
++            out.writeInt(chunks.size());
++
++            for (Chunk chunk : chunks) {
++                out.writeUTF(chunk.getWorld().getName());
++                out.writeInt(chunk.getX());
++                out.writeInt(chunk.getZ());
++            }
++
++            out.send(null);
++        }
++    }
++
++    public HashMap<String, ExternalServer> getServersMap() {
++        return serversMap;
++    }
++
++    public String getBungeeCordName() {
++        return myName;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/PlayerInfoManager.java b/src/main/java/puregero/multipaper/PlayerInfoManager.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e976c9f81faa553d37c3f17ea2407162c92d5e3d
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/PlayerInfoManager.java
+@@ -0,0 +1,62 @@
++package puregero.multipaper;
++
++import net.minecraft.server.DedicatedServer;
++import net.minecraft.server.EntityPlayer;
++import net.minecraft.server.PacketPlayOutPlayerInfo;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++
++import java.util.HashMap;
++import java.util.UUID;
++
++public class PlayerInfoManager {
++
++    private static final Logger LOGGER = LogManager.getLogger();
++
++    private static HashMap<UUID, PacketPlayOutPlayerInfo.PlayerInfoData> playerInfos = new HashMap<>();
++
++    public static void handle(PacketPlayOutPlayerInfo packet) {
++        for (PacketPlayOutPlayerInfo.PlayerInfoData info : packet.getPlayerInfoDatas()) {
++            UUID uuid = info.a().getId();
++
++            if (packet.getAction() == PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER) {
++                playerInfos.put(uuid, info);
++                return;
++            }
++
++            if (packet.getAction() == PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER) {
++                CraftPlayer player = Bukkit.getServer() == null ? null : (CraftPlayer) Bukkit.getPlayer(uuid);
++                if (player != null) {
++                    DedicatedServer.getServer().getPlayerList().sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, player.getHandle()));
++                }
++
++                playerInfos.remove(uuid);
++                return;
++            }
++
++            PacketPlayOutPlayerInfo.PlayerInfoData infoData = playerInfos.get(uuid);
++
++            if (infoData == null) {
++                return;
++            }
++
++            if (info.b != 0) {
++                infoData.b = info.b;
++            }
++
++            if (info.c != null) {
++                infoData.c = info.c;
++            }
++
++            if (info.e != null) {
++                infoData.e = info.e;
++            }
++        }
++    }
++
++    public static void send(EntityPlayer player) {
++        player.playerConnection.sendPacket(new PacketPlayOutPlayerInfo(playerInfos.values()));
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/Request.java b/src/main/java/puregero/multipaper/Request.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..19b017cb8118b72d06c7016605cf17bb9dcad131
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/Request.java
+@@ -0,0 +1,27 @@
++package puregero.multipaper;
++
++import java.io.DataInputStream;
++import java.util.function.Consumer;
++
++public class Request {
++    private final byte[] data;
++    private final Consumer<DataInputStream> callback;
++    private final long time = System.currentTimeMillis();
++
++    public Request(byte[] data, Consumer<DataInputStream> callback) {
++        this.data = data;
++        this.callback = callback;
++    }
++
++    public byte[] getData() {
++        return data;
++    }
++
++    public Consumer<DataInputStream> getCallback() {
++        return callback;
++    }
++
++    public long getTime() {
++        return time;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/ServersCommand.java b/src/main/java/puregero/multipaper/ServersCommand.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c6f77bfe0b0d11c4e312d73aa5021ebe97e0db8f
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/ServersCommand.java
+@@ -0,0 +1,42 @@
++package puregero.multipaper;
++
++import org.bukkit.ChatColor;
++import org.bukkit.command.Command;
++import org.bukkit.command.CommandSender;
++
++public class ServersCommand extends Command {
++    public ServersCommand(String command) {
++        super(command);
++    }
++
++    @Override
++    public boolean execute(CommandSender sender, String commandLabel, String[] args) {
++        sender.sendMessage(ChatColor.GRAY + "[Servers] (Avg Tick Time / Tps / Player Count)");
++
++        for (ExternalServer server : MultiPaper.getServers()) {
++            String tickTime = Integer.toString(server.getAverageTickTime()) + "ms";
++            if (server.getAverageTickTime() < 40) {
++                tickTime = ChatColor.GREEN + tickTime;
++            } else if (server.getAverageTickTime() < 50) {
++                tickTime = ChatColor.YELLOW + tickTime;
++            } else {
++                tickTime = ChatColor.RED + tickTime;
++            }
++
++            String tpsString = String.format("%.1f tps", server.getTps());
++
++            String playersString = server.getPlayers().size() + " player";
++            if (server.getPlayers().size() != 1) {
++                playersString += "s";
++            }
++
++            if (!server.isAlive()) {
++                sender.sendMessage(ChatColor.DARK_GRAY + "[" + server.getName() + "] " + server.getAverageTickTime() + "ms, " + tpsString + ", " + playersString);
++            } else {
++                sender.sendMessage(ChatColor.GREEN + "[" + (server.isMe() ? ChatColor.GOLD : "") + server.getName() + ChatColor.GREEN + "] " + tickTime + ", " + tpsString + ", " + playersString);
++            }
++        }
++
++        return true;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/ShutdownHandler.java b/src/main/java/puregero/multipaper/ShutdownHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..bab74c4a99e7dc4b488c62b204c8441e6369aebb
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/ShutdownHandler.java
+@@ -0,0 +1,71 @@
++package puregero.multipaper;
++
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.entity.Player;
++
++import java.util.ArrayList;
++import java.util.HashSet;
++import java.util.List;
++
++public class ShutdownHandler {
++    private static final Logger LOGGER = LogManager.getLogger();
++
++    public static void onStop() {
++        movePlayersToDifferentServer();
++    }
++
++    private static void movePlayersToDifferentServer() {
++        HashSet<Player> moved = new HashSet<>();
++        int tries = 0;
++        do {
++            moved.clear();
++
++            if (tries++ > 10) {
++                LOGGER.warn("Given up sending players to another server, disconnecting them instead");
++                return;
++            }
++
++            for (Player player : Bukkit.getOnlinePlayers()) {
++                if (moved.contains(player) || ((CraftPlayer) player).getHandle().playerConnection.isDisconnected()) {
++                    continue;
++                }
++
++                String server = randomServer();
++
++                if (server == null) {
++                    LOGGER.info("No other servers are online, disconnecting players instead");
++                    return;
++                }
++
++                moved.addAll(Zone.doMerge(player.getChunk(), server));
++            }
++
++            LOGGER.info("Moving players to different servers... (" + moved.size() + " players to go)");
++
++            if (!moved.isEmpty()) {
++                // Wait for players to get moved
++                try {
++                    Thread.sleep(2500);
++                } catch (InterruptedException e) {
++                    e.printStackTrace();
++                    return;
++                }
++            }
++        } while (!moved.isEmpty());
++    }
++
++    private static String randomServer() {
++        List<String> servers = new ArrayList<>();
++
++        for (ExternalServer server : MultiPaper.getServers()) {
++            if (server != MultiPaper.getMe() && server.isAlive()) {
++                servers.add(server.getName());
++            }
++        }
++
++        return servers.isEmpty() ? null : servers.get((int) (Math.random() * servers.size()));
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/Zone.java b/src/main/java/puregero/multipaper/Zone.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..bea955f9e1c4e019054f69f71523b92517bb38a7
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/Zone.java
+@@ -0,0 +1,224 @@
++package puregero.multipaper;
++
++import net.minecraft.server.MCUtil;
++import net.minecraft.server.WorldServer;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.Chunk;
++import org.bukkit.Location;
++import org.bukkit.World;
++import org.bukkit.craftbukkit.CraftChunk;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.craftbukkit.scheduler.CraftScheduler;
++import org.bukkit.entity.Player;
++
++import java.util.*;
++import java.util.function.Consumer;
++
++public class Zone {
++    private static final Logger LOGGER = LogManager.getLogger();
++    private static final int SHOULD_MERGE_CHUNK_LIMIT = 15;
++
++    private static HashSet<Player> beingSentToAnotherServer = new HashSet<>();
++    private static HashMap<Player, Zone> zonesToUnload = new HashMap<>();
++
++    private static List<Consumer<Chunk>> chunkSaveHandlers = new ArrayList<>();
++
++    public static void registerChunkSaveHandler(Consumer<Chunk> handler) {
++        chunkSaveHandlers.add(handler);
++    }
++
++    public static boolean shouldLockChunk(String world, int cx, int cz) {
++        for (Player player : Bukkit.getWorld(world).getPlayers()) {
++            if (!beingSentToAnotherServer.contains(player) &&
++                    Math.abs((player.getLocation().getBlockX() >> 4) - cx) <= Bukkit.getViewDistance() + 6 &&
++                    Math.abs((player.getLocation().getBlockZ() >> 4) - cz) <= Bukkit.getViewDistance() + 6) {
++                return true;
++            }
++        }
++
++        return false;
++    }
++
++    public static boolean isBeingSentToAnotherServer(Player player) {
++        return beingSentToAnotherServer.contains(player);
++    }
++
++    public static Collection<Player> doMerge(Chunk chunk, String server) {
++        Zone zone = new Zone(chunk);
++
++        if (zone.players.size() > 0) {
++            return doMerge(chunk, zone, server);
++        }
++
++        return zone.players;
++    }
++
++    private static Collection<Player> doMerge(Chunk chunk, Zone zone1, String server) {
++        LOGGER.info("Merging " + zone1.players.size() + " players and " + zone1.chunks.size() + " chunks with server " + server);
++
++        HashSet<Player> toSend = new HashSet<>();
++        for (Player player : zone1.players) {
++            if (beingSentToAnotherServer.add(player)) {
++                zonesToUnload.put(player, zone1);
++                toSend.add(player);
++            }
++        }
++
++        try {
++            Thread.sleep(50);
++        } catch (InterruptedException e) {
++            e.printStackTrace();
++        }
++
++        Zone zone = new Zone(chunk);
++
++        for (Chunk c : zone.chunks) {
++            net.minecraft.server.Chunk nmsChunk = ((CraftChunk) c).getHandle();
++            MultiPaper.releaseChunk(nmsChunk.getPos(), nmsChunk.world);
++            chunkSaveHandlers.forEach(handler -> handler.accept(c));
++            nmsChunk.world.getChunkProvider().playerChunkMap.saveChunk(nmsChunk);
++        }
++
++        WorldServer worldServer = ((CraftChunk) chunk).getHandle().world;
++        if (worldServer.getMinecraftServer().hasStopped()) {
++            LOGGER.info("Server is stopping, flushing chunk writes");
++            worldServer.asyncChunkTaskManager.flush();
++        }
++
++        for (Player player : toSend) {
++            ((CraftPlayer) player).getHandle().isBeingSentToAnotherServer = true;
++            BungeeCord.connectPlayer(player, server);
++        }
++
++        ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> zone.chunks.forEach(Chunk::unload), 0, "Unload Chunks");
++
++        return toSend;
++    }
++
++    public static void checkIfShouldMerge(Chunk chunk) {
++        ExternalServer serverTo = MultiPaper.getMe();
++
++        // Find server with lowest average tick time
++        for (ExternalServer server : MultiPaper.getServers()) {
++            if (server.getAverageTickTime() < serverTo.getAverageTickTime() - 20 &&
++                    server.isAlive()) {
++                serverTo = server;
++            }
++        }
++
++        if (serverTo.isMe()) {
++            // Can't merge with yourself
++            return;
++        }
++
++        Zone zone = new Zone(chunk, SHOULD_MERGE_CHUNK_LIMIT);
++
++        if (zone.chunks.size() >= SHOULD_MERGE_CHUNK_LIMIT) {
++            // Too many chunks loaded, probably not worth merging
++            return;
++        }
++
++        if (zone.players.isEmpty()) {
++            // No one to merge
++            return;
++        }
++
++        HashSet<Player> nearbyPlayers = new HashSet<>();
++        for (Player player : chunk.getWorld().getPlayers()) {
++            if (!zone.players.contains(player) &&
++                    Math.abs(player.getChunk().getX() - chunk.getX()) < Bukkit.getViewDistance() * 5 &&
++                    Math.abs(player.getChunk().getZ() - chunk.getZ()) < Bukkit.getViewDistance() * 5) {
++                nearbyPlayers.add(player);
++            }
++        }
++
++        if (!nearbyPlayers.isEmpty()) {
++            // There are nearby players on this server, this will probably mean
++            // that if we merge with another server, we might end up merging
++            // back very soon
++            return;
++        }
++
++        Zone.doMerge(chunk, zone, serverTo.getName());
++    }
++
++    public static void onPlayerDisconnect(Player player) {
++        Location location = player.getLocation();
++        String name = player.getName();
++        ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
++            beingSentToAnotherServer.remove(player);
++
++            Zone zone = zonesToUnload.remove(player);
++            if (zone != null) {
++                Zone zone2 = new Zone(location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4);
++
++                zone.chunks.forEach(zone2::mapChunks);
++
++                if (zone2.players.isEmpty()) {
++                    LOGGER.info(name + " has left: Unloading zone with " + zone2.chunks.size() + " loaded chunks");
++                    zone2.chunks.forEach(Chunk::unload);
++                }
++            }
++        }, 1, "Remove player from beingSentToAnotherServer");
++    }
++
++    private final HashSet<Chunk> chunks = new HashSet<>();
++    private final HashSet<Player> players = new HashSet<>();
++    private final int chunkLimit;
++
++    private Zone(Chunk chunk) {
++        this(chunk, Integer.MAX_VALUE);
++    }
++
++    private Zone(Chunk chunk, int chunkLimit) {
++        this.chunkLimit = chunkLimit;
++        mapChunks(chunk);
++        mapPlayers(chunk.getWorld());
++    }
++
++    private Zone(World world, int cx, int cz) {
++        this(world, cx, cz, Integer.MAX_VALUE);
++    }
++
++    private Zone(World world, int cx, int cz, int chunkLimit) {
++        this.chunkLimit = chunkLimit;
++        mapChunks(world, cx, cz);
++        mapPlayers(world);
++    }
++
++    private void mapChunks(Chunk chunk) {
++        if (chunks.contains(chunk)) {
++            return;
++        }
++
++        if (chunk.isLoaded()) {
++            chunks.add(chunk);
++        }
++
++        if (chunks.size() > chunkLimit) {
++            return;
++        }
++
++        mapChunks(chunk.getWorld(), chunk.getX(), chunk.getZ());
++    }
++
++    private void mapChunks(World world, int cx, int cz) {
++        for (int dx = -2; dx <= 2; dx ++) {
++            for (int dz = -2; dz <= 2; dz ++) {
++                if (world.isChunkLoaded(cx + dx, cz + dz)) {
++                    mapChunks(world.getChunkAt(cx + dx, cz + dz));
++                }
++            }
++        }
++    }
++
++    private void mapPlayers(World world) {
++        for (Player player : world.getPlayers()) {
++            if (chunks.contains(player.getChunk())) {
++                players.add(player);
++            }
++        }
++    }
++}

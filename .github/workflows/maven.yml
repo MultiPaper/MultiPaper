@@ -1,0 +1,38 @@
+name: Build main
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        java: [11, 8]
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up JDK ${{ matrix.java }}
+      uses: actions/setup-java@v1
+      with:
+        java-version: ${{ matrix.java }}
+
+    - uses: actions/cache@v2
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-maven-
+
+    - name: Patch Tuinity
+      run: |
+        git config --global user.email "you@example.com"
+        git config --global user.name "Your Name"
+        git submodule update --init --recursive
+        ./tuinity jar
+        
+    - uses: actions/upload-artifact@v2
+      with:
+        name: Tuinity-JDK${{ matrix.java }}
+        path: tuinity-paperclip.jar

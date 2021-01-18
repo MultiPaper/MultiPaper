@@ -266,7 +266,7 @@ index f307a6361144c7e315b2e0ea45df27527cdb26ca..da8d549423b038e1a5bcbacf30680ecd
                  }
  
 diff --git a/src/main/java/net/minecraft/server/EntityHuman.java b/src/main/java/net/minecraft/server/EntityHuman.java
-index 9796b4e57d6680c9f0dc76decdd985572daafb7e..b0ae6d65ed8f4a3aa1399ebae57b2a7e5e027e95 100644
+index 9796b4e57d6680c9f0dc76decdd985572daafb7e..59638428587b392d81daaae7809338c22a67d274 100644
 --- a/src/main/java/net/minecraft/server/EntityHuman.java
 +++ b/src/main/java/net/minecraft/server/EntityHuman.java
 @@ -27,6 +27,7 @@ import org.bukkit.event.player.PlayerBedLeaveEvent;
@@ -282,7 +282,7 @@ index 9796b4e57d6680c9f0dc76decdd985572daafb7e..b0ae6d65ed8f4a3aa1399ebae57b2a7e
              this.world.getServer().getPluginManager().callEvent(event);
  
 -            if (event.isCancelled()) {
-+            if (event.isCancelled() || !MultiPaper.shouldTickEntity((WorldServer) world, this)) { // MultiPaper don't drop items if they shouldn't be ticked
++            if (event.isCancelled() || !MultiPaper.isPlayerSafe(this)) { // MultiPaper don't drop items if they shouldn't be ticked
                  org.bukkit.inventory.ItemStack cur = player.getInventory().getItemInHand();
                  if (flag1 && (cur == null || cur.getAmount() == 0)) {
                      // The complete stack was dropped
@@ -580,7 +580,7 @@ index 49008cdec739b19409fdaf1b0ed806a6c0e93200..2807a01cf8b059837bf02050a2d63776
      }
  
 diff --git a/src/main/java/net/minecraft/server/PlayerConnection.java b/src/main/java/net/minecraft/server/PlayerConnection.java
-index 87b1ff21957d5d708209257e569785aeaf191181..e7b7df8d9dadeb65a157e2d56f3f8a356690004a 100644
+index 87b1ff21957d5d708209257e569785aeaf191181..7e6e0e2966156bc9f2e6694dd2c3e4308f7ccbfc 100644
 --- a/src/main/java/net/minecraft/server/PlayerConnection.java
 +++ b/src/main/java/net/minecraft/server/PlayerConnection.java
 @@ -71,6 +71,7 @@ import org.bukkit.inventory.EquipmentSlot;
@@ -591,7 +591,38 @@ index 87b1ff21957d5d708209257e569785aeaf191181..e7b7df8d9dadeb65a157e2d56f3f8a35
  // CraftBukkit end
  
  public class PlayerConnection implements PacketListenerPlayIn {
-@@ -1643,6 +1644,13 @@ public class PlayerConnection implements PacketListenerPlayIn {
+@@ -1243,10 +1244,16 @@ public class PlayerConnection implements PacketListenerPlayIn {
+                                 }
+ 
+                                 // Prevent 40 event-calls for less than a single pixel of movement >.>
+-                                double delta = Math.pow(this.lastPosX - to.getX(), 2) + Math.pow(this.lastPosY - to.getY(), 2) + Math.pow(this.lastPosZ - to.getZ(), 2);
++                                double delta = Math.pow(this.lastPosX - to.getX(), 2) + Math.pow(this.lastPosY - to.getY(), 2) + Math.pow(this.lastPosZ - to.getX(), 2);
+                                 float deltaAngle = Math.abs(this.lastYaw - to.getYaw()) + Math.abs(this.lastPitch - to.getPitch());
+ 
+                                 if ((delta > 1f / 256 || deltaAngle > 10f) && !this.player.isFrozen()) {
++                                    // MultiPaper start - Detect chunk movements
++                                    if ((int) lastPosX >> 4 != (int) to.getX() >> 4 || (int) lastPosZ >> 4 != (int) to.getZ() >> 4) {
++                                        MultiPaper.isChunkLocked((WorldServer) this.player.world, (int) to.getX() >> 4, (int) to.getZ() >> 4);
++                                    }
++                                    // MultiPaper end
++                                    
+                                     this.lastPosX = to.getX();
+                                     this.lastPosY = to.getY();
+                                     this.lastPosZ = to.getZ();
+@@ -1393,6 +1400,12 @@ public class PlayerConnection implements PacketListenerPlayIn {
+             this.teleportAwait = 0;
+         }
+ 
++        // MultiPaper start - Detect chunk movements
++        if ((int) lastPosX >> 4 != (int) teleportPos.x >> 4 || (int) lastPosZ >> 4 != (int) teleportPos.z >> 4) {
++            MultiPaper.isChunkLocked((WorldServer) this.player.world, (int) teleportPos.x >> 4, (int) teleportPos.z >> 4);
++        }
++        // MultiPaper end
++
+         // CraftBukkit start - update last location
+         this.lastPosX = this.teleportPos.x;
+         this.lastPosY = this.teleportPos.y;
+@@ -1643,6 +1656,13 @@ public class PlayerConnection implements PacketListenerPlayIn {
                      return;
                  }
              }
@@ -605,7 +636,7 @@ index 87b1ff21957d5d708209257e569785aeaf191181..e7b7df8d9dadeb65a157e2d56f3f8a35
          }
  
      }
-@@ -1996,6 +2004,7 @@ public class PlayerConnection implements PacketListenerPlayIn {
+@@ -1996,6 +2016,7 @@ public class PlayerConnection implements PacketListenerPlayIn {
                          recipient.sendMessage(PlayerConnection.this.player.getUniqueID(), s);
                      }
                  }
@@ -613,12 +644,12 @@ index 87b1ff21957d5d708209257e569785aeaf191181..e7b7df8d9dadeb65a157e2d56f3f8a35
              }
          }
      }
-@@ -2542,6 +2551,12 @@ public class PlayerConnection implements PacketListenerPlayIn {
+@@ -2542,6 +2563,12 @@ public class PlayerConnection implements PacketListenerPlayIn {
                          return;
                      }
  
 +                    // MultiPaper start - don't let them click items if they shouldn't be ticked
-+                    if (!MultiPaper.shouldTickEntity((WorldServer) player.world, player)) {
++                    if (!MultiPaper.isPlayerSafe(player)) {
 +                        event.setCancelled(true);
 +                    }
 +                    // MultiPaper end
@@ -1216,7 +1247,7 @@ index 7c18b22c7b93b6ca1189e481dde17476797b8fd5..1a1a02432b871074bf470054d2a72f98
  
      private IChatBaseComponent playerListHeader;
 diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-index 63d329dca12f902e2fb2a62ee4c86aea6453f1a3..eaabfa771e6e2fb7c59ec40b89f8a4ddde38c693 100644
+index 63d329dca12f902e2fb2a62ee4c86aea6453f1a3..ae393353136b7b74114d5c63e93c2cd472bf858a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 +++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 @@ -220,6 +220,7 @@ import org.bukkit.inventory.meta.BookMeta;
@@ -1232,7 +1263,7 @@ index 63d329dca12f902e2fb2a62ee4c86aea6453f1a3..eaabfa771e6e2fb7c59ec40b89f8a4dd
          craftServer.getPluginManager().callEvent(event);
  
 +        // MultiPaper start - don't interact if they shouldn't be ticked
-+        if (!MultiPaper.shouldTickEntity((WorldServer) who.world, who)) {
++        if (!MultiPaper.isPlayerSafe(who)) {
 +            event.setCancelled(true);
 +        }
 +        // MultiPaper end
@@ -1329,6 +1360,45 @@ index 0000000000000000000000000000000000000000..4cfbad5085f4ce84ac840e4bc775a73e
 +        out.writeUTF(server);
 +        PacketPlayOutCustomPayload packet = new PacketPlayOutCustomPayload(new MinecraftKey("bungeecord:main"), new PacketDataSerializer(Unpooled.wrappedBuffer(out.toByteArray())));
 +        ((CraftPlayer) p).getHandle().playerConnection.sendPacket(packet);
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/ChunkKey.java b/src/main/java/puregero/multipaper/ChunkKey.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..a905eca60fccc47d9f6c9746e760d4322ca66766
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/ChunkKey.java
+@@ -0,0 +1,33 @@
++package puregero.multipaper;
++
++public class ChunkKey {
++    private final String name;
++    private final int x;
++    private final int z;
++
++    public ChunkKey(String name, int x, int z) {
++        this.name = name;
++        this.x = x;
++        this.z = z;
++    }
++    
++    @Override
++    public boolean equals(Object other) {
++        if (other instanceof ChunkKey) {
++            return ((ChunkKey) other).name.equals(name)
++                    && ((ChunkKey) other).x == x
++                    && ((ChunkKey) other).z == z;
++        }
++        
++        return super.equals(other);
++    }
++    
++    @Override
++    public int hashCode() {
++        // Taken from ChunkCoordIntPair
++        int i = 1664525 * this.x + 1013904223;
++        int j = 1664525 * (this.z ^ -559038737) + 1013904223;
++        
++        return name.hashCode() ^ i ^ j;
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/DataOutputSender.java b/src/main/java/puregero/multipaper/DataOutputSender.java
@@ -1433,10 +1503,10 @@ index 0000000000000000000000000000000000000000..8943de3e4ee0d3e3d3c91864ebbc4fe5
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7e7b8bf38cff071da4b70df7238a0a46a996ba12
+index 0000000000000000000000000000000000000000..488cf1a8e75636ac0caf3f993b2b32dd7e688cac
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -0,0 +1,339 @@
+@@ -0,0 +1,367 @@
 +package puregero.multipaper;
 +
 +import net.md_5.bungee.api.chat.BaseComponent;
@@ -1452,6 +1522,7 @@ index 0000000000000000000000000000000000000000..7e7b8bf38cff071da4b70df7238a0a46
 +
 +import java.io.*;
 +import java.nio.file.Files;
++import java.util.HashSet;
 +import java.util.UUID;
 +
 +public class MultiPaper {
@@ -1459,6 +1530,7 @@ index 0000000000000000000000000000000000000000..7e7b8bf38cff071da4b70df7238a0a46
 +    private static final Logger LOGGER = LogManager.getLogger();
 +    private static MultiPaperConnection multiPaperConnection = null;
 +    private static long last10Seconds = System.currentTimeMillis();
++    private static HashSet<ChunkKey> lockedChunks = new HashSet<>();
 +
 +    private static MultiPaperConnection getConnection() {
 +        if (multiPaperConnection == null) {
@@ -1573,6 +1645,8 @@ index 0000000000000000000000000000000000000000..7e7b8bf38cff071da4b70df7238a0a46
 +                    return;
 +                }
 +
++                lockedChunks.add(new ChunkKey(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z));
++
 +                new Thread(() -> {
 +                    if (holder != null) {
 +                        Zone.doMerge(worldServer.getWorld().getChunkAt(chunkcoordintpair.x, chunkcoordintpair.z), holder);
@@ -1585,9 +1659,10 @@ index 0000000000000000000000000000000000000000..7e7b8bf38cff071da4b70df7238a0a46
 +            e.printStackTrace();
 +        }
 +    }
-+
++    
 +    public static void releaseChunk(ChunkCoordIntPair chunkcoordintpair, WorldServer worldServer) {
 +        try {
++            lockedChunks.remove(new ChunkKey(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z));
 +            getConnection().releaseChunk(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z);
 +        } catch (IOException e) {
 +            e.printStackTrace();
@@ -1747,10 +1822,33 @@ index 0000000000000000000000000000000000000000..7e7b8bf38cff071da4b70df7238a0a46
 +    private static int chunkDistance(Entity entity, Chunk chunk) {
 +        return Math.max(Math.abs(entity.chunkX - chunk.getPos().x), Math.abs(entity.chunkZ - chunk.getPos().z));
 +    }
++    
++    public static boolean isPlayerSafe(EntityHuman player) {
++        if (!(player instanceof EntityPlayer)) {
++            return true;
++        }
++        
++        return !Zone.isBeingSentToAnotherServer(((EntityPlayer) player).getBukkitEntity()) && isChunkLocked((WorldServer) player.world, player.chunkX, player.chunkZ);
++    }
++
++    public static boolean isChunkLocked(WorldServer world, int chunkX, int chunkZ) {
++        boolean isLocked = lockedChunks.contains(new ChunkKey(world.worldDataServer.getName(), chunkX, chunkZ));
++        
++        if (isLocked) {
++            return true;
++        }
++        
++        if (world.isChunkLoaded(chunkX, chunkZ)) {
++            // The chunk is loaded, so why isn't it locked?
++            lockChunk(new ChunkCoordIntPair(chunkX, chunkZ), world);
++        }
++        
++        return false;
++    }
 +
 +    public static boolean shouldTickEntity(WorldServer worldServer, Entity entity) {
 +        for (EntityPlayer player : worldServer.players) {
-+            if (!Zone.isBeingSentToAnotherServer(player.getBukkitEntity()) && player.shouldTickEntities && chunkDistance(player, entity) <= Bukkit.getViewDistance()) {
++            if (isPlayerSafe(player) && player.shouldTickEntities && chunkDistance(player, entity) <= Bukkit.getViewDistance()) {
 +                return true;
 +            }
 +        }
@@ -1764,7 +1862,7 @@ index 0000000000000000000000000000000000000000..7e7b8bf38cff071da4b70df7238a0a46
 +        }
 +
 +        for (EntityPlayer player : worldServer.players) {
-+            if (!Zone.isBeingSentToAnotherServer(player.getBukkitEntity()) && player.shouldTickEntities && chunkDistance(player, chunk) <= Bukkit.getViewDistance()) {
++            if (isPlayerSafe(player) && player.shouldTickEntities && chunkDistance(player, chunk) <= Bukkit.getViewDistance()) {
 +                return true;
 +            }
 +        }
@@ -2770,13 +2868,12 @@ index 0000000000000000000000000000000000000000..bab74c4a99e7dc4b488c62b204c8441e
 +}
 diff --git a/src/main/java/puregero/multipaper/Zone.java b/src/main/java/puregero/multipaper/Zone.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..bea955f9e1c4e019054f69f71523b92517bb38a7
+index 0000000000000000000000000000000000000000..ab8cf248ff8496e37f11ba49481e41118c2bf381
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/Zone.java
-@@ -0,0 +1,224 @@
+@@ -0,0 +1,223 @@
 +package puregero.multipaper;
 +
-+import net.minecraft.server.MCUtil;
 +import net.minecraft.server.WorldServer;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;

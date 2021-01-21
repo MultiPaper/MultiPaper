@@ -104,7 +104,7 @@ public class ServerConnection extends Thread {
     }
 
     public boolean isOnline() {
-        return lastPing > System.currentTimeMillis() - 5000;
+        return lastPing > System.currentTimeMillis() - 5000 && tps > 0;
     }
 
     @Override
@@ -171,6 +171,10 @@ public class ServerConnection extends Thread {
     }
 
     public void setTps(double tps) {
+        if (this.tps == -1) {
+            throw new IllegalStateException("Trying to set " + getBungeeCordName() + "'s tps to " + tps + " when it is marked as offline (" + this.tps + " tps)");
+        }
+        
         this.tps = tps;
     }
 }

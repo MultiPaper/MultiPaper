@@ -16,7 +16,13 @@ public class WriteTickTimeHandler implements Handler {
 
     @Override
     public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        connection.getTimer().append(in.readLong());
+        long tickTime = in.readLong();
+        
+        connection.getTimer().append(tickTime);
+        
+        if (tickTime == -1) {
+            connection.setTps(-1);
+        }
 
         Worker.runAsync(() -> {
             try {
@@ -31,7 +37,7 @@ public class WriteTickTimeHandler implements Handler {
                     broadcast.close();
                 }
 
-                if (lastPlayerList < System.currentTimeMillis() - 5 * 1000) {
+                if (lastPlayerList < System.currentTimeMillis() - 5 * 1000 || connection.getTps() == -1) {
                     lastPlayerList = System.currentTimeMillis();
 
                     DataOutputStream broadcast = connection.broadcastAll();

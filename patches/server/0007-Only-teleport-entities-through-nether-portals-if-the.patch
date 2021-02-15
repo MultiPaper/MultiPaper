@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: PureGero <puregero@gmail.com>
-Date: Tue, 16 Feb 2021 00:11:10 +1000
+Date: Mon, 15 Feb 2021 14:24:42 +1000
 Subject: [PATCH] Only teleport entities through nether portals if the other
  side is locked
 
@@ -48,10 +48,10 @@ index da8d549423b038e1a5bcbacf30680ecd51bb2b13..166a0fd0e063985168eddc3330e2d42f
                  worldserver = shapedetectorshape.world;
                  this.decouple();
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index d0f128d0a3f514a9843cd5af40f8eb3478ba6b35..9f3a1eaa4eb506927aca4095e4e52beb64fca96a 100644
+index 488cf1a8e75636ac0caf3f993b2b32dd7e688cac..98f306a6f19760b6e8c1277b9e3106c9ac0d3932 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -8,20 +8,21 @@ import org.bukkit.Bukkit;
+@@ -8,13 +8,13 @@ import org.bukkit.Bukkit;
  import org.bukkit.Location;
  import org.bukkit.craftbukkit.CraftWorld;
  import org.bukkit.craftbukkit.entity.CraftPlayer;
@@ -67,11 +67,10 @@ index d0f128d0a3f514a9843cd5af40f8eb3478ba6b35..9f3a1eaa4eb506927aca4095e4e52beb
  
  public class MultiPaper {
  
-     private static final Logger LOGGER = LogManager.getLogger();
+@@ -22,6 +22,7 @@ public class MultiPaper {
      private static MultiPaperConnection multiPaperConnection = null;
      private static long last10Seconds = System.currentTimeMillis();
--    private static HashSet<ChunkKey> lockedChunks = new HashSet<>();
-+    public static HashSet<ChunkKey> lockedChunks = new HashSet<>();
+     private static HashSet<ChunkKey> lockedChunks = new HashSet<>();
 +    private static HashMap<ChunkKey, List<Runnable>> onChunkLockCallbacks = new HashMap<>();
  
      private static MultiPaperConnection getConnection() {
@@ -113,7 +112,19 @@ index d0f128d0a3f514a9843cd5af40f8eb3478ba6b35..9f3a1eaa4eb506927aca4095e4e52beb
                      }
                  }).start();
              });
-@@ -342,6 +349,16 @@ public class MultiPaper {
+@@ -262,6 +269,11 @@ public class MultiPaper {
+     }
+ 
+     public static byte[] readData(String path) {
++        if (path.contains("raids.dat")) {
++            // Don't load raids from dist
++            return null;
++        }
++        
+         try {
+             return getConnection().readData(path).join();
+         } catch (IOException e) {
+@@ -337,6 +349,16 @@ public class MultiPaper {
          return false;
      }
  

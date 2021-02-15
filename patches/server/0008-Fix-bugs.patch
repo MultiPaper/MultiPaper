@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 16 Feb 2021 01:58:58 +1000
+Subject: [PATCH] Fix bugs
+
+
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 98f306a6f19760b6e8c1277b9e3106c9ac0d3932..0b4fb010d483fd60a13c0511204de0719de3d79d 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -137,19 +137,23 @@ public class MultiPaper {
+                     return;
+                 }
+                 
++                if (holder == null) {
++                    ChunkKey key = new ChunkKey(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z);
++
++                    lockedChunks.add(key);
++
++                    List<Runnable> callbacks = onChunkLockCallbacks.remove(key);
++
++                    if (callbacks != null) {
++                        callbacks.forEach(callback -> ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(callback, 0, "onChunkLockCallback-" + callback.getClass().getName()));
++                    }
++                }
++                
+                 new Thread(() -> {
+                     if (holder != null) {
+                         Zone.doMerge(worldServer.getWorld().getChunkAt(chunkcoordintpair.x, chunkcoordintpair.z), holder);
+-                    } else if (!Zone.checkIfShouldMerge(worldServer.getWorld().getChunkAt(chunkcoordintpair.x, chunkcoordintpair.z))) {
+-                        ChunkKey key = new ChunkKey(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z);
+-
+-                        lockedChunks.add(key);
+-
+-                        List<Runnable> callbacks = onChunkLockCallbacks.remove(key);
+-                        
+-                        if (callbacks != null) {
+-                            callbacks.forEach(callback -> ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(callback, 0, "onChunkLockCallback-" + callback.getClass().getName()));
+-                        }
++                    } else {
++                        Zone.checkIfShouldMerge(worldServer.getWorld().getChunkAt(chunkcoordintpair.x, chunkcoordintpair.z));
+                     }
+                 }).start();
+             });
+diff --git a/src/main/java/puregero/multipaper/Zone.java b/src/main/java/puregero/multipaper/Zone.java
+index 3b12508c2b798485ba20414375c0cb4c65ce0544..d587a8723b8f5d92265a2a58cdbf852dc1865b1b 100644
+--- a/src/main/java/puregero/multipaper/Zone.java
++++ b/src/main/java/puregero/multipaper/Zone.java
+@@ -34,7 +34,7 @@ public class Zone {
+         for (Player player : Bukkit.getWorld(world).getPlayers()) {
+             if (!beingSentToAnotherServer.contains(player) &&
+                     Math.abs((player.getLocation().getBlockX() >> 4) - coordIntPair.x) <= Bukkit.getViewDistance() + 6 &&
+-                    Math.abs((player.getLocation().getBlockZ() >> 4) - coordIntPair.x) <= Bukkit.getViewDistance() + 6) {
++                    Math.abs((player.getLocation().getBlockZ() >> 4) - coordIntPair.z) <= Bukkit.getViewDistance() + 6) {
+                 return true;
+             }
+         }
+@@ -126,7 +126,17 @@ public class Zone {
+             nmsChunk.world.getChunkProvider().playerChunkMap.saveChunk(nmsChunk);
+         }
+ 
+-        ((CraftChunk) chunk).getHandle().world.asyncChunkTaskManager.flush();
++        WorldServer worldServer = ((CraftChunk) chunk).getHandle().world;
++        if (worldServer.getMinecraftServer().hasStopped()) {
++            LOGGER.info("Server is stopping, flushing chunk writes");
++            worldServer.asyncChunkTaskManager.flush();
++        }
++
++        try {
++            Thread.sleep(50);
++        } catch (InterruptedException e) {
++            e.printStackTrace();
++        }
+ 
+         for (Player player : toSend) {
+             ((CraftPlayer) player).getHandle().isBeingSentToAnotherServer = true;

@@ -31,29 +31,6 @@ public class LockChunkHandler implements Handler {
             }
         }
         
-        if (world.contains("_the_end")) {
-            // Do nothing for the end
-        } else if (world.contains("_nether")) {
-            // Check if overworld equiv chunk is locked
-            String worldName = world.split("_")[0];
-            locker = ChunkLock.getLockHolder(worldName, cx * 8, cz * 8);
-            if (locker != null && !locker.equals(connection.getBungeeCordName()) && ServerConnection.isAlive(locker)) {
-                out.writeUTF("lockedChunk");
-                out.writeUTF(locker);
-                out.send();
-                return;
-            }
-        } else {
-            // Check if nether equiv chunk is locked
-            locker = ChunkLock.getLockHolder(world + "_nether", cx / 8, cz / 8);
-            if (locker != null && !locker.equals(connection.getBungeeCordName()) && ServerConnection.isAlive(locker)) {
-                out.writeUTF("lockedChunk");
-                out.writeUTF(locker);
-                out.send();
-                return;
-            }
-        }
-        
         locker = ChunkLock.lock(connection.getBungeeCordName(), world, cx, cz);
 
         if (locker != null && !ServerConnection.isAlive(locker)) {

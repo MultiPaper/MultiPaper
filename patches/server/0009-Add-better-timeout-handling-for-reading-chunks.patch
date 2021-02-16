@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 16 Feb 2021 16:53:58 +1000
+Subject: [PATCH] Add better timeout handling for reading chunks
+
+
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 0b4fb010d483fd60a13c0511204de0719de3d79d..97d53d7fdc949f8954b6d2a6dcbc601bdd28ddb1 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -15,6 +15,9 @@ import org.bukkit.entity.Player;
+ import java.io.*;
+ import java.nio.file.Files;
+ import java.util.*;
++import java.util.concurrent.ExecutionException;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.TimeoutException;
+ 
+ public class MultiPaper {
+ 
+@@ -56,7 +59,19 @@ public class MultiPaper {
+     }
+ 
+     public static DataInput readRegionFile(String world, String path, int cx, int cz) throws IOException {
+-        return getConnection().readChunk(world, path, cx, cz).join();
++        while (true) {
++            try {
++                return getConnection().readChunk(world, path, cx, cz).get(15, TimeUnit.SECONDS);
++            } catch (InterruptedException | ExecutionException e) {
++                throw new IOException(e);
++            } catch (TimeoutException e) {
++                if (DedicatedServer.getServer().hasStopped()) {
++                    LOGGER.info("No response for readRegionFile " + world + "," + path + "," + cx + "," + cz + ", but server has stopped, aborting operation.");
++                    return null;
++                }
++                LOGGER.info("No response for readRegionFile " + world + "," + path + "," + cx + "," + cz + ", resending...");
++            }
++        }
+     }
+ 
+     public static void writeRegionFile(String world, String path, int cx, int cz, byte[] bytes) throws IOException {
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index d988a6fd271ff29013c13cffe55297be60ef792e..59df5d4d6c512c4786af7b051e50e7b5be403259 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -360,32 +360,6 @@ public class MultiPaperConnection extends Thread {
+         out.writeInt(cz);
+         out.send(callback);
+ 
+-        new Thread(() -> {
+-            int i = 0;
+-            while (!hasReturned.get()) {
+-                if (++i % 15 == 0) {
+-                    if (DedicatedServer.getServer().hasStopped()) {
+-                        LOGGER.info("No response for readChunk " + world + "," + path + "," + cx + "," + cz + ", but server has stopped, aborting operation.");
+-                        future.complete(null);
+-                        return;
+-                    }
+-                    LOGGER.info("No response for readChunk " + world + "," + path + "," + cx + "," + cz + ", resending...");
+-                    try {
+-                        out.send(callback);
+-                    } catch (IOException e) {
+-                        e.printStackTrace();
+-                        return;
+-                    }
+-                }
+-                try {
+-                    Thread.sleep(1000);
+-                } catch (InterruptedException e) {
+-                    e.printStackTrace();
+-                    return;
+-                }
+-            }
+-        }).start();
+-
+         return future;
+     }
+ 

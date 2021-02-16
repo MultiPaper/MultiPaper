@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 16 Feb 2021 22:40:38 +1000
+Subject: [PATCH] Check if a player is in the opposite dimension instead of
+ blindly returning true
+
+
+diff --git a/src/main/java/puregero/multipaper/Zone.java b/src/main/java/puregero/multipaper/Zone.java
+index d587a8723b8f5d92265a2a58cdbf852dc1865b1b..677612f2b5642d4122a4e378ced44735671ccd7b 100644
+--- a/src/main/java/puregero/multipaper/Zone.java
++++ b/src/main/java/puregero/multipaper/Zone.java
+@@ -29,9 +29,10 @@ public class Zone {
+         chunkSaveHandlers.add(handler);
+     }
+ 
+-    public static boolean shouldLockChunk(String world, ChunkCoordIntPair coordIntPair) {
+-        ArraySetSorted<Ticket<?>> tickets = ((CraftWorld) Bukkit.getWorld(world)).getHandle().chunkProvider.chunkMapDistance.tickets.get(coordIntPair.pair());
+-        for (Player player : Bukkit.getWorld(world).getPlayers()) {
++    public static boolean shouldLockChunk(String worldName, ChunkCoordIntPair coordIntPair) {
++        World world = Bukkit.getWorld(worldName);
++        ArraySetSorted<Ticket<?>> tickets = ((CraftWorld) world).getHandle().chunkProvider.chunkMapDistance.tickets.get(coordIntPair.pair());
++        for (Player player : world.getPlayers()) {
+             if (!beingSentToAnotherServer.contains(player) &&
+                     Math.abs((player.getLocation().getBlockX() >> 4) - coordIntPair.x) <= Bukkit.getViewDistance() + 6 &&
+                     Math.abs((player.getLocation().getBlockZ() >> 4) - coordIntPair.z) <= Bukkit.getViewDistance() + 6) {
+@@ -51,7 +52,33 @@ public class Zone {
+             }
+         }
+         
+-        return true;
++        // Check opposite world for players
++        
++        World oppositeWorld = null;
++        int cx = 0;
++        int cz = 0;
++
++        if (world.getEnvironment() == World.Environment.NORMAL) {
++            oppositeWorld = Bukkit.getWorld(world.getName() + "_nether");
++            cx = coordIntPair.x / 8;
++            cz = coordIntPair.z / 8;
++        } else if (world.getEnvironment() == World.Environment.NETHER) {
++            oppositeWorld = Bukkit.getWorld(world.getName().split("_")[0]);
++            cx = coordIntPair.x * 8;
++            cz = coordIntPair.z * 8;
++        }
++        
++        if (oppositeWorld != null) {
++            for (Player player : oppositeWorld.getPlayers()) {
++                if (!beingSentToAnotherServer.contains(player) &&
++                        Math.abs((player.getLocation().getBlockX() >> 4) - cx) <= Bukkit.getViewDistance() + 6 &&
++                        Math.abs((player.getLocation().getBlockZ() >> 4) - cz) <= Bukkit.getViewDistance() + 6) {
++                    return true;
++                }
++            }
++        }
++        
++        return false;
+     }
+ 
+     public static boolean isBeingSentToAnotherServer(Player player) {

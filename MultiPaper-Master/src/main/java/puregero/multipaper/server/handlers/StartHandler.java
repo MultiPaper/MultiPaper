@@ -3,6 +3,7 @@ package puregero.multipaper.server.handlers;
 import puregero.multipaper.server.DataOutputSender;
 import puregero.multipaper.server.ServerConnection;
 import puregero.multipaper.server.Worker;
+import puregero.multipaper.server.locks.ChunkLock;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -21,6 +22,8 @@ public class StartHandler implements Handler {
             } catch (IOException e) {
                 e.printStackTrace();
             }
+            
+            ChunkLock.releaseAllLocks(connection.getBungeeCordName());
         });
     }
 }

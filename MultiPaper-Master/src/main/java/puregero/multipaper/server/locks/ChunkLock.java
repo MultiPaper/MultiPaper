@@ -1,7 +1,6 @@
 package puregero.multipaper.server.locks;
 
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.*;
 
 public class ChunkLock {
 
@@ -50,5 +49,15 @@ public class ChunkLock {
     public static void chunkWritten(String world, int cx, int cz) {
         removeOnWriter.remove(key(world, cx, cz));
         removeOnWrite.remove(key(world, cx, cz));
+    }
+    
+    public static void releaseAllLocks(String holder) {
+        List<Map.Entry<String, String>> entries = new ArrayList<>(locks.entrySet());
+        
+        entries.forEach(entry -> {
+            if (entry.getValue().equals(holder)) {
+                locks.remove(entry.getKey(), entry.getValue());
+            }
+        });
     }
 }

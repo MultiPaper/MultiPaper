@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 27 Feb 2021 11:49:36 +1000
+Subject: [PATCH] Tick chunks on the other side of a nether portal
+
+
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 97d53d7fdc949f8954b6d2a6dcbc601bdd28ddb1..f9806f17769f2b796b10cb46085c7aa4d4c2680f 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -379,13 +379,7 @@ public class MultiPaper {
+     }
+ 
+     public static boolean shouldTickEntity(WorldServer worldServer, Entity entity) {
+-        for (EntityPlayer player : worldServer.players) {
+-            if (isPlayerSafe(player) && player.shouldTickEntities && chunkDistance(player, entity) <= Bukkit.getViewDistance()) {
+-                return true;
+-            }
+-        }
+-
+-        return false;
++        return shouldTickChunk(worldServer, entity.getCurrentChunk());
+     }
+ 
+     public static boolean shouldTickChunk(WorldServer worldServer, Chunk chunk) {
+@@ -393,13 +387,18 @@ public class MultiPaper {
+             return false;
+         }
+ 
++        boolean playerNearby = false;
++        
+         for (EntityPlayer player : worldServer.players) {
+-            if (isPlayerSafe(player) && player.shouldTickEntities && chunkDistance(player, chunk) <= Bukkit.getViewDistance()) {
+-                return true;
++            if (chunkDistance(player, chunk) <= Bukkit.getViewDistance() * 2) {
++                playerNearby = true;
++                if (isPlayerSafe(player) && player.shouldTickEntities) {
++                    return true;
++                }
+             }
+         }
+ 
+-        return false;
++        return !playerNearby;
+     }
+ 
+     public static void setPlayerShouldTickEntities(Player player, boolean shouldTickEntities) {

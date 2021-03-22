@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 22 Mar 2021 10:09:59 +1000
+Subject: [PATCH] Ignore ConcurrentModificationException in
+ MultiPaper.checkIfPlayersNeedToBeMoved
+
+
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 1b98b924ec39866fb8e8966ff4a8ee0565019fee..d220919f5225c6cafd4855436b2e1df44b59e687 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -53,20 +53,24 @@ public class MultiPaper {
+     }
+ 
+     private static void checkIfPlayersNeedToBeMoved() {
+-        for (Player player : Bukkit.getOnlinePlayers()) {
+-            if (!Zone.isBeingSentToAnotherServer(player) && player.getLastLogin() < System.currentTimeMillis() - 5 * 1000L) {
+-                for (ExternalServer server : getConnection().getServersMap().values()) {
+-                    if (server.isAlive() && !server.isMe()) {
+-                        for (UUID uuid : server.getPlayers()) {
+-                            Location location = getConnection().playerLocations.get(uuid);
+-                            if (Bukkit.getPlayer(uuid) == null && location != null && location.getWorld() == player.getWorld()
+-                                    && chunkDistance(player.getLocation(), location) <= (10 + Bukkit.getViewDistance()) * 2) {
+-                                Zone.doMerge(player.getChunk(), server.getName());
++        try {
++            for (Player player : Bukkit.getOnlinePlayers()) {
++                if (!Zone.isBeingSentToAnotherServer(player) && player.getLastLogin() < System.currentTimeMillis() - 5 * 1000L) {
++                    for (ExternalServer server : getConnection().getServersMap().values()) {
++                        if (server.isAlive() && !server.isMe()) {
++                            for (UUID uuid : server.getPlayers()) {
++                                Location location = getConnection().playerLocations.get(uuid);
++                                if (Bukkit.getPlayer(uuid) == null && location != null && location.getWorld() == player.getWorld()
++                                        && chunkDistance(player.getLocation(), location) <= (10 + Bukkit.getViewDistance()) * 2) {
++                                    Zone.doMerge(player.getChunk(), server.getName());
++                                }
+                             }
+                         }
+                     }
+                 }
+             }
++        } catch (ConcurrentModificationException e) {
++            e.printStackTrace();
+         }
+     }
+ 

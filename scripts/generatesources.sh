@@ -15,23 +15,23 @@ paperVer=$(cat current-paper)
 minecraftversion=$(cat $basedir/Paper/work/BuildData/info.json | grep minecraftVersion | cut -d '"' -f 4)
 decompile="Paper/work/Minecraft/$minecraftversion/spigot"
 
-mkdir -p mc-dev/src/net/minecraft/server
+mkdir -p mc-dev/src/net/minecraft
 
 cd mc-dev
 if [ ! -d ".git" ]; then
-    git init
+	git init
 fi
 
-rm src/net/minecraft/server/*.java
-cp $basedir/$decompile/net/minecraft/server/*.java src/net/minecraft/server
+rm src/net/minecraft/*.java
+cp -r $basedir/$decompile/net/minecraft/* src/net/minecraft
 
-base="$basedir/Paper/Paper-Server/src/main/java/net/minecraft/server"
-cd $basedir/mc-dev/src/net/minecraft/server/
+base="$basedir/Paper/Paper-Server/src/main/java/net/minecraft"
+cd $basedir/mc-dev/src/net/minecraft/
 for file in $(/bin/ls $base)
 do
-    if [ -f "$file" ]; then
-        rm -f "$file"
-    fi
+	if [ -f "$file" ]; then
+		rm -f "$file"
+	fi
 done
 cd $basedir/mc-dev
 git add . -A

@@ -20,8 +20,7 @@ public class Handlers {
         handlers.put("writeTickTime", new WriteTickTimeHandler());
         handlers.put("lockPlayer", new LockPlayerHandler());
         handlers.put("releasePlayer", new ReleasePlayerHandler());
-        handlers.put("lockChunk", new LockChunkHandler());
-        handlers.put("releaseChunk", new ReleaseChunkHandler());
+        handlers.put("willSaveChunk", new WillSaveChunkHandler());
         handlers.put("chunkNotSaving", new ChunkNotSavingHandler());
         handlers.put("readAdvancements", new ReadAdvancementsHandler());
         handlers.put("writeAdvancements", new WriteAdvancementsHandler());

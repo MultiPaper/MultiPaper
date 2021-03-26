@@ -22,8 +22,6 @@ public class StartHandler implements Handler {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            
-            ChunkLock.releaseAllLocks(connection.getBungeeCordName());
         });
     }
 }

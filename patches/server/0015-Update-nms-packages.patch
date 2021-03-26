@@ -1,0 +1,129 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 26 Mar 2021 23:35:28 +1000
+Subject: [PATCH] Update nms packages
+
+
+diff --git a/src/main/java/puregero/multipaper/BungeeCord.java b/src/main/java/puregero/multipaper/BungeeCord.java
+index 4cfbad5085f4ce84ac840e4bc775a73ec604c2a7..8c2428891ce5e7345b721be6fc55ae1879e98d25 100644
+--- a/src/main/java/puregero/multipaper/BungeeCord.java
++++ b/src/main/java/puregero/multipaper/BungeeCord.java
+@@ -3,9 +3,9 @@ package puregero.multipaper;
+ import com.google.common.io.ByteArrayDataOutput;
+ import com.google.common.io.ByteStreams;
+ import io.netty.buffer.Unpooled;
+-import net.minecraft.server.MinecraftKey;
+-import net.minecraft.server.PacketDataSerializer;
+-import net.minecraft.server.PacketPlayOutCustomPayload;
++import net.minecraft.network.PacketDataSerializer;
++import net.minecraft.network.protocol.game.PacketPlayOutCustomPayload;
++import net.minecraft.resources.MinecraftKey;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 1b98b924ec39866fb8e8966ff4a8ee0565019fee..dd28e4186c26b43770ec4f2f7843450992ce4489 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -1,7 +1,24 @@
+ package puregero.multipaper;
+ 
++import net.kyori.adventure.text.Component;
+ import net.md_5.bungee.api.chat.BaseComponent;
+-import net.minecraft.server.*;
++import net.minecraft.SystemUtils;
++import net.minecraft.nbt.NBTCompressedStreamTools;
++import net.minecraft.nbt.NBTTagCompound;
++import net.minecraft.network.chat.ChatMessageType;
++import net.minecraft.network.chat.IChatBaseComponent;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.game.PacketPlayOutChat;
++import net.minecraft.server.dedicated.DedicatedServer;
++import net.minecraft.server.level.EntityPlayer;
++import net.minecraft.server.level.WorldServer;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.player.EntityHuman;
++import net.minecraft.world.level.ChunkCoordIntPair;
++import net.minecraft.world.level.chunk.Chunk;
++import net.minecraft.world.level.saveddata.maps.PersistentIdCounts;
++import net.minecraft.world.level.saveddata.maps.WorldMap;
++import net.minecraft.world.level.storage.WorldPersistentData;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
+@@ -299,6 +316,16 @@ public class MultiPaper {
+         broadcastPacket(packet);
+     }
+ 
++    public static void broadcastPacket(UUID from, Component message) {
++        if (from == null) {
++            from = SystemUtils.getNullUUID();
++        }
++
++        PacketPlayOutChat packet = new PacketPlayOutChat(null, from.equals(SystemUtils.getNullUUID()) ? ChatMessageType.SYSTEM : ChatMessageType.CHAT, SystemUtils.b);
++        packet.adventure$message = message;
++        broadcastPacket(packet);
++    }
++
+     public static void onStart() {
+         try {
+             getConnection().sendStart();
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 59df5d4d6c512c4786af7b051e50e7b5be403259..3ef5aaec633baf912841156968df2ebe61c1cd0f 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -2,7 +2,12 @@ package puregero.multipaper;
+ 
+ import io.netty.buffer.ByteBuf;
+ import io.netty.buffer.Unpooled;
+-import net.minecraft.server.*;
++import net.minecraft.network.PacketDataSerializer;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.game.PacketPlayOutPlayerInfo;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.dedicated.DedicatedServer;
++import net.minecraft.server.level.EntityPlayer;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.bukkit.*;
+diff --git a/src/main/java/puregero/multipaper/PlayerInfoManager.java b/src/main/java/puregero/multipaper/PlayerInfoManager.java
+index 4d9763e0f06e6535a5085b71bf2715054c0f6b81..4b0c670aa1f05f04ae8de8717893d5ebef825242 100644
+--- a/src/main/java/puregero/multipaper/PlayerInfoManager.java
++++ b/src/main/java/puregero/multipaper/PlayerInfoManager.java
+@@ -1,8 +1,8 @@
+ package puregero.multipaper;
+ 
+-import net.minecraft.server.DedicatedServer;
+-import net.minecraft.server.EntityPlayer;
+-import net.minecraft.server.PacketPlayOutPlayerInfo;
++import net.minecraft.network.protocol.game.PacketPlayOutPlayerInfo;
++import net.minecraft.server.dedicated.DedicatedServer;
++import net.minecraft.server.level.EntityPlayer;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
+diff --git a/src/main/java/puregero/multipaper/Zone.java b/src/main/java/puregero/multipaper/Zone.java
+index 0af5b293700418776e4b127146372a6d271dc0fb..0eee94b63f326c8bf90331344e97cbc96a4f9c90 100644
+--- a/src/main/java/puregero/multipaper/Zone.java
++++ b/src/main/java/puregero/multipaper/Zone.java
+@@ -1,6 +1,10 @@
+ package puregero.multipaper;
+ 
+-import net.minecraft.server.*;
++import net.minecraft.server.level.Ticket;
++import net.minecraft.server.level.TicketType;
++import net.minecraft.server.level.WorldServer;
++import net.minecraft.util.ArraySetSorted;
++import net.minecraft.world.level.ChunkCoordIntPair;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
+@@ -147,7 +151,7 @@ public class Zone {
+         Zone zone = new Zone(chunk);
+ 
+         for (Chunk c : zone.chunks) {
+-            net.minecraft.server.Chunk nmsChunk = ((CraftChunk) c).getHandle();
++            net.minecraft.world.level.chunk.Chunk nmsChunk = ((CraftChunk) c).getHandle();
+             MultiPaper.releaseChunk(nmsChunk.getPos(), nmsChunk.world);
+             chunkSaveHandlers.forEach(handler -> handler.accept(c));
+             nmsChunk.world.getChunkProvider().playerChunkMap.saveChunk(nmsChunk);

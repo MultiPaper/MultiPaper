@@ -12,7 +12,7 @@ workdir="$basedir"/Paper/work
 minecraftversion=$(cat "$basedir"/Paper/work/BuildData/info.json | grep minecraftVersion | cut -d '"' -f 4)
 decompiledir=$workdir/Minecraft/$minecraftversion/spigot
 
-nms="net/minecraft/server"
+nms="net/minecraft"
 export MODLOG=""
 cd "$basedir"
 
@@ -26,7 +26,7 @@ function containsElement {
 
 export importedmcdev=""
 function import {
-    if [ -f "$basedir/Paper/Paper-Server/src/main/java/net/minecraft/server/$1.java" ]; then
+    if [ -f "$basedir/Paper/Paper-Server/src/main/java/net/minecraft/$1.java" ]; then
         echo "ALREADY IMPORTED $1"
         return 0
     fi

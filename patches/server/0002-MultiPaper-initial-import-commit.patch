@@ -17,6 +17,27 @@ index 921253a06daa414aed7dc6824effc65db09ea7a5..2d5b2743ab621e19ec67874abbbaec58
          if (delayChunkUnloadsBy > 0) {
              log("Delaying chunk unloads by " + delayChunkUnloadsBy + " seconds");
              delayChunkUnloadsBy *= 20;
+diff --git a/src/main/java/io/papermc/paper/adventure/ChatProcessor.java b/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
+index 472adbd2aa2a9e1d8d481749ba92c3a290a5fa36..a9c4537852baf4833fa1cbedc532e8828896dbdb 100644
+--- a/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
++++ b/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
+@@ -27,6 +27,7 @@ import org.bukkit.event.Event;
+ import org.bukkit.event.HandlerList;
+ import org.bukkit.event.player.AsyncPlayerChatEvent;
+ import org.bukkit.event.player.PlayerChatEvent;
++import puregero.multipaper.MultiPaper;
+ 
+ public final class ChatProcessor {
+     // <-- copied from adventure-text-serializer-legacy
+@@ -169,6 +170,8 @@ public final class ChatProcessor {
+                 recipient.sendMessage(player, message);
+             }
+         }
++
++        MultiPaper.broadcastPacket(event.getPlayer().getUniqueId(), message); // MultiPaper broadcast chat message
+     }
+ 
+     private AsyncChatEvent createAsync(final ChatComposer composer, final Set<Player> recipients, final Component message) {
 diff --git a/src/main/java/net/minecraft/advancements/CriterionProgress.java b/src/main/java/net/minecraft/advancements/CriterionProgress.java
 index cc2d025c899039854fbc500709ec4008c985cd38..642e1d92fc02fe15fe84b1d126028cb46568da3f 100644
 --- a/src/main/java/net/minecraft/advancements/CriterionProgress.java
@@ -220,10 +241,10 @@ index 52bb528e75eb43156ee2bf19877bc051a35bb6e3..e0f6afc17b1a2c71bef8d2bd22ebec88
              DedicatedServer.LOGGER.warn("**** SERVER IS RUNNING IN OFFLINE/INSECURE MODE!");
              DedicatedServer.LOGGER.warn("The server will make no attempt to authenticate usernames. Beware.");
 diff --git a/src/main/java/net/minecraft/server/level/ChunkProviderServer.java b/src/main/java/net/minecraft/server/level/ChunkProviderServer.java
-index e542fe5fb63064e67c7fde8fad614826d6f3344c..ecdde15413cce7e02caed8028bddfd5d94559933 100644
+index e542fe5fb63064e67c7fde8fad614826d6f3344c..ec507f7981c99942b9c1288f2231c4b0b0f61622 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkProviderServer.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkProviderServer.java
-@@ -46,6 +46,7 @@ import net.minecraft.world.level.storage.Convertable;
+@@ -46,11 +46,12 @@ import net.minecraft.world.level.storage.Convertable;
  import net.minecraft.world.level.storage.WorldData;
  import net.minecraft.world.level.storage.WorldPersistentData;
  import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap; // Paper
@@ -231,6 +252,12 @@ index e542fe5fb63064e67c7fde8fad614826d6f3344c..ecdde15413cce7e02caed8028bddfd5d
  
  public class ChunkProviderServer extends IChunkProvider {
  
+     private static final List<ChunkStatus> b = ChunkStatus.a(); public static final List<ChunkStatus> getPossibleChunkStatuses() { return ChunkProviderServer.b; } // Paper - OBFHELPER
+-    private final ChunkMapDistance chunkMapDistance;
++    public final ChunkMapDistance chunkMapDistance; // MultiPaper - make public
+     public final ChunkGenerator chunkGenerator;
+     private final WorldServer world;
+     public final Thread serverThread; // Paper - private -> public
 @@ -693,6 +694,7 @@ public class ChunkProviderServer extends IChunkProvider {
  
      @Override
@@ -300,7 +327,7 @@ index a323b76f68c273a73cb3f20167a668b2100f4944..480a904788a6e3abe471494398ed09a7
          }
          return null;
 diff --git a/src/main/java/net/minecraft/server/level/PlayerChunkMap.java b/src/main/java/net/minecraft/server/level/PlayerChunkMap.java
-index 300884804bf9ac3fba7c30a04d8adf52e3dd2e3e..9b192db10d7fdc5ecf7d8b938e3d93675426fe5f 100644
+index 300884804bf9ac3fba7c30a04d8adf52e3dd2e3e..e5b1d5a566e51dd117ac0d16837282c1b84743b3 100644
 --- a/src/main/java/net/minecraft/server/level/PlayerChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/PlayerChunkMap.java
 @@ -109,6 +109,8 @@ import org.apache.logging.log4j.Logger;
@@ -312,7 +339,7 @@ index 300884804bf9ac3fba7c30a04d8adf52e3dd2e3e..9b192db10d7fdc5ecf7d8b938e3d9367
  
  public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
  
-@@ -922,8 +924,13 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+@@ -922,6 +924,9 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
  
              do {
                  boolean isShuttingDown = world.getMinecraftServer().hasStopped(); // Paper
@@ -321,12 +348,8 @@ index 300884804bf9ac3fba7c30a04d8adf52e3dd2e3e..9b192db10d7fdc5ecf7d8b938e3d9367
 +
                  mutableboolean.setFalse();
                  list.stream().map((playerchunk) -> {
-+                    MultiPaper.releaseChunk(playerchunk.location, playerchunk.getWorld());
-+
                      CompletableFuture completablefuture;
- 
-                     do {
-@@ -1028,6 +1035,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+@@ -1028,6 +1033,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
              poiData, null, com.destroystokyo.paper.io.PrioritizedTaskQueue.LOW_PRIORITY);
  
          if (!chunk.isNeedsSaving()) {
@@ -334,16 +357,7 @@ index 300884804bf9ac3fba7c30a04d8adf52e3dd2e3e..9b192db10d7fdc5ecf7d8b938e3d9367
              return;
          }
  
-@@ -1088,6 +1096,8 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
-                     }
-                     this.autoSaveQueue.remove(playerchunk); // Paper
- 
-+                    MultiPaper.releaseChunk(ichunkaccess.getPos(), this.world); // MultiPaper
-+
-                     try {
-                         this.asyncSave(ichunkaccess); // Paper - async chunk saving
-                     } catch (Throwable ex) {
-@@ -1483,6 +1493,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+@@ -1483,6 +1489,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
          try (co.aikar.timings.Timing ignored = this.world.timings.chunkSave.startTiming()) { // Paper
          this.m.a(ichunkaccess.getPos());
          if (!ichunkaccess.isNeedsSaving()) {
@@ -351,7 +365,7 @@ index 300884804bf9ac3fba7c30a04d8adf52e3dd2e3e..9b192db10d7fdc5ecf7d8b938e3d9367
              return false;
          } else {
              ichunkaccess.setLastSaved(this.world.getTime());
-@@ -1673,6 +1684,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+@@ -1673,6 +1680,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
              }
              return ret;
          }
@@ -359,7 +373,7 @@ index 300884804bf9ac3fba7c30a04d8adf52e3dd2e3e..9b192db10d7fdc5ecf7d8b938e3d9367
          return super.read(chunkcoordintpair);
      }
  
-@@ -1684,6 +1696,12 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+@@ -1684,6 +1692,12 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
                  com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread());
              return;
          }
@@ -372,7 +386,7 @@ index 300884804bf9ac3fba7c30a04d8adf52e3dd2e3e..9b192db10d7fdc5ecf7d8b938e3d9367
          super.write(chunkcoordintpair, nbttagcompound);
      }
      // Paper end
-@@ -1746,6 +1764,8 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+@@ -1746,6 +1760,8 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
              // Paper start - async io
          }
  
@@ -381,14 +395,6 @@ index 300884804bf9ac3fba7c30a04d8adf52e3dd2e3e..9b192db10d7fdc5ecf7d8b938e3d9367
          NBTTagCompound compound = this.readChunkData(chunkPos);
  
          return ChunkRegionLoader.getStatus(compound);
-@@ -1854,6 +1874,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
- 
-     private boolean cannotLoadChunks(EntityPlayer entityplayer) { return this.b(entityplayer); } // Paper - OBFHELPER
-     private boolean b(EntityPlayer entityplayer) {
-+        if (Zone.isBeingSentToAnotherServer(entityplayer.getBukkitEntity())) return true; // MultiPaper
-         return entityplayer.isSpectator() && !this.world.getGameRules().getBoolean(GameRules.SPECTATORS_GENERATE_CHUNKS);
-     }
- 
 diff --git a/src/main/java/net/minecraft/server/level/PlayerInteractManager.java b/src/main/java/net/minecraft/server/level/PlayerInteractManager.java
 index 1511cf54fea53577a2808b5d84417eee834db984..21b33edd0a37dcf9854fb735ea810d8142d7aa2d 100644
 --- a/src/main/java/net/minecraft/server/level/PlayerInteractManager.java
@@ -433,7 +439,7 @@ index 0a698a5a4a6502a488c9afb0ad97165e60030896..5236c1a67bbb917a87969d9d95a540ed
                  if (!this.server.getSpawnAnimals() && (entity instanceof EntityAnimal || entity instanceof EntityWaterAnimal)) {
                      entity.die();
 diff --git a/src/main/java/net/minecraft/server/network/PlayerConnection.java b/src/main/java/net/minecraft/server/network/PlayerConnection.java
-index 4a3f6f26da0d99ee2ff6942c2ff7d0595b53b684..5c17f52103637e7d5400a64b6882472fd061e771 100644
+index 4a3f6f26da0d99ee2ff6942c2ff7d0595b53b684..64375cb8ebb709d1ae6001ab8b133be9bb19aca4 100644
 --- a/src/main/java/net/minecraft/server/network/PlayerConnection.java
 +++ b/src/main/java/net/minecraft/server/network/PlayerConnection.java
 @@ -218,6 +218,7 @@ import org.bukkit.inventory.EquipmentSlot;
@@ -444,7 +450,7 @@ index 4a3f6f26da0d99ee2ff6942c2ff7d0595b53b684..5c17f52103637e7d5400a64b6882472f
  // CraftBukkit end
  
  public class PlayerConnection implements PacketListenerPlayIn {
-@@ -1392,10 +1393,16 @@ public class PlayerConnection implements PacketListenerPlayIn {
+@@ -1392,7 +1393,7 @@ public class PlayerConnection implements PacketListenerPlayIn {
                                  }
  
                                  // Prevent 40 event-calls for less than a single pixel of movement >.>
@@ -453,29 +459,7 @@ index 4a3f6f26da0d99ee2ff6942c2ff7d0595b53b684..5c17f52103637e7d5400a64b6882472f
                                  float deltaAngle = Math.abs(this.lastYaw - to.getYaw()) + Math.abs(this.lastPitch - to.getPitch());
  
                                  if ((delta > 1f / 256 || deltaAngle > 10f) && !this.player.isFrozen()) {
-+                                    // MultiPaper start - Detect chunk movements
-+                                    if ((int) lastPosX >> 4 != (int) to.getX() >> 4 || (int) lastPosZ >> 4 != (int) to.getZ() >> 4) {
-+                                        MultiPaper.isChunkLocked((WorldServer) this.player.world, (int) to.getX() >> 4, (int) to.getZ() >> 4);
-+                                    }
-+                                    // MultiPaper end
-+                                    
-                                     this.lastPosX = to.getX();
-                                     this.lastPosY = to.getY();
-                                     this.lastPosZ = to.getZ();
-@@ -1542,6 +1549,12 @@ public class PlayerConnection implements PacketListenerPlayIn {
-             this.teleportAwait = 0;
-         }
- 
-+        // MultiPaper start - Detect chunk movements
-+        if ((int) lastPosX >> 4 != (int) teleportPos.x >> 4 || (int) lastPosZ >> 4 != (int) teleportPos.z >> 4) {
-+            MultiPaper.isChunkLocked((WorldServer) this.player.world, (int) teleportPos.x >> 4, (int) teleportPos.z >> 4);
-+        }
-+        // MultiPaper end
-+
-         // CraftBukkit start - update last location
-         this.lastPosX = this.teleportPos.x;
-         this.lastPosY = this.teleportPos.y;
-@@ -1792,6 +1805,13 @@ public class PlayerConnection implements PacketListenerPlayIn {
+@@ -1792,6 +1793,13 @@ public class PlayerConnection implements PacketListenerPlayIn {
                      return;
                  }
              }
@@ -489,7 +473,7 @@ index 4a3f6f26da0d99ee2ff6942c2ff7d0595b53b684..5c17f52103637e7d5400a64b6882472f
          }
  
      }
-@@ -2143,6 +2163,7 @@ public class PlayerConnection implements PacketListenerPlayIn {
+@@ -2143,6 +2151,7 @@ public class PlayerConnection implements PacketListenerPlayIn {
                          recipient.sendMessage(PlayerConnection.this.player.getUniqueID(), s);
                      }
                  }
@@ -497,21 +481,8 @@ index 4a3f6f26da0d99ee2ff6942c2ff7d0595b53b684..5c17f52103637e7d5400a64b6882472f
              }
          }
      }
-@@ -2689,6 +2710,12 @@ public class PlayerConnection implements PacketListenerPlayIn {
-                         return;
-                     }
- 
-+                    // MultiPaper start - don't let them click items if they shouldn't be ticked
-+                    if (!MultiPaper.isPlayerSafe(player)) {
-+                        event.setCancelled(true);
-+                    }
-+                    // MultiPaper end
-+
-                     switch (event.getResult()) {
-                         case ALLOW:
-                         case DEFAULT:
 diff --git a/src/main/java/net/minecraft/server/players/JsonList.java b/src/main/java/net/minecraft/server/players/JsonList.java
-index c960852dc60d0598012c5eef0d139fe38bde63fb..bb58172148c8eb836ac17681e0219761bd543552 100644
+index c960852dc60d0598012c5eef0d139fe38bde63fb..f7528c60a36ae1f03896408ee30375c5f711bf8d 100644
 --- a/src/main/java/net/minecraft/server/players/JsonList.java
 +++ b/src/main/java/net/minecraft/server/players/JsonList.java
 @@ -24,6 +24,7 @@ import net.minecraft.SystemUtils;
@@ -531,22 +502,32 @@ index c960852dc60d0598012c5eef0d139fe38bde63fb..bb58172148c8eb836ac17681e0219761
          } catch (Throwable throwable1) {
              throwable = throwable1;
              throw throwable1;
-@@ -184,11 +185,11 @@ public abstract class JsonList<K, V extends JsonListEntry<K>> {
+@@ -183,12 +184,19 @@ public abstract class JsonList<K, V extends JsonListEntry<K>> {
+     }
  
      public void load() throws IOException {
-         if (this.c.exists()) {
+-        if (this.c.exists()) {
 -            BufferedReader bufferedreader = Files.newReader(this.c, StandardCharsets.UTF_8);
++        if (true || this.c.exists()) { // MultiPaper
 +            BufferedReader bufferedreader = null; // Files.newReader(this.c, StandardCharsets.UTF_8); // MultiPaper
              Throwable throwable = null;
- 
+-
++            
++            // MultiPaper start
++            String json = MultiPaper.readJson(this.c.getName());
++            if (json == null || json.isEmpty()) {
++                return;
++            }
++            // MultiPaper end
++            
              try {
 -                JsonArray jsonarray = (JsonArray) JsonList.b.fromJson(bufferedreader, JsonArray.class);
-+                JsonArray jsonarray = JsonList.b.fromJson(MultiPaper.readJson(this.c.getName()), JsonArray.class); // (JsonArray) JsonList.b.fromJson(bufferedreader, JsonArray.class); // MultiPaper
++                JsonArray jsonarray = JsonList.b.fromJson(json, JsonArray.class); // (JsonArray) JsonList.b.fromJson(bufferedreader, JsonArray.class); // MultiPaper
                  com.google.common.base.Preconditions.checkState(jsonarray != null, "The file \"" + this.c.getName() + "\" is either empty or corrupt"); // Paper
  
                  this.d.clear();
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 2df8e914f66176e22aeddf8b94a83af5ea921d88..d17b1ae8d7683c05d94cf74e9041345fca4427c9 100644
+index 2df8e914f66176e22aeddf8b94a83af5ea921d88..a89ed5c21563fa91384e5da37e2b73e4c9de80a5 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -122,6 +122,9 @@ import org.bukkit.event.player.PlayerJoinEvent;
@@ -559,7 +540,21 @@ index 2df8e914f66176e22aeddf8b94a83af5ea921d88..d17b1ae8d7683c05d94cf74e9041345f
  // CraftBukkit end
  
  public abstract class PlayerList {
-@@ -337,13 +340,19 @@ public abstract class PlayerList {
+@@ -283,6 +286,13 @@ public abstract class PlayerList {
+         entityplayer.getRecipeBook().a(entityplayer);
+         this.sendScoreboard(worldserver1.getScoreboard(), entityplayer);
+         this.server.invalidatePingSample();
++        
++        // MultiPaper start - Check if player should move servers
++        if (Zone.checkIfShouldMerge(entityplayer.getBukkitEntity())) {
++            return;
++        }
++        // MultiPaper end
++        
+         // Paper start - async load spawn in chunk
+         WorldServer finalWorldserver = worldserver1;
+         int chunkX = loc.getBlockX() >> 4;
+@@ -337,13 +347,19 @@ public abstract class PlayerList {
          }
          // CraftBukkit start
          chatmessage.a(EnumChatFormat.YELLOW);
@@ -580,7 +575,7 @@ index 2df8e914f66176e22aeddf8b94a83af5ea921d88..d17b1ae8d7683c05d94cf74e9041345f
  
          // Paper start - correctly register player BEFORE PlayerJoinEvent, so the entity is valid and doesn't require tick delay hacks
          entityplayer.supressTrackerForLogin = true;
-@@ -369,6 +378,11 @@ public abstract class PlayerList {
+@@ -369,6 +385,11 @@ public abstract class PlayerList {
          }
          // CraftBukkit end
  
@@ -592,7 +587,7 @@ index 2df8e914f66176e22aeddf8b94a83af5ea921d88..d17b1ae8d7683c05d94cf74e9041345f
          // CraftBukkit start - sendAll above replaced with this loop
          PacketPlayOutPlayerInfo packet = new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, entityplayer);
  
-@@ -376,7 +390,7 @@ public abstract class PlayerList {
+@@ -376,7 +397,7 @@ public abstract class PlayerList {
              EntityPlayer entityplayer1 = (EntityPlayer) this.players.get(i);
  
              if (entityplayer1.getBukkitEntity().canSee(entityplayer.getBukkitEntity())) {
@@ -601,7 +596,7 @@ index 2df8e914f66176e22aeddf8b94a83af5ea921d88..d17b1ae8d7683c05d94cf74e9041345f
              }
  
              if (!entityplayer.getBukkitEntity().canSee(entityplayer1.getBukkitEntity())) {
-@@ -594,9 +608,12 @@ public abstract class PlayerList {
+@@ -594,6 +615,7 @@ public abstract class PlayerList {
          }
  
          PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(cserver.getPlayer(entityplayer), net.kyori.adventure.text.Component.translatable("multiplayer.player.left", net.kyori.adventure.text.format.NamedTextColor.YELLOW, com.destroystokyo.paper.PaperConfig.useDisplayNameInQuit ? entityplayer.getBukkitEntity().displayName() : net.kyori.adventure.text.Component.text(entityplayer.getName())), entityplayer.quitReason); // Paper - quit reason
@@ -609,12 +604,7 @@ index 2df8e914f66176e22aeddf8b94a83af5ea921d88..d17b1ae8d7683c05d94cf74e9041345f
          if (entityplayer.didPlayerJoinEvent) cserver.getPluginManager().callEvent(playerQuitEvent); // Paper - if we disconnected before join ever fired, don't fire quit
          entityplayer.getBukkitEntity().disconnect(playerQuitEvent.getQuitMessage());
  
-+        Zone.onPlayerDisconnect(entityplayer.getBukkitEntity()); // MultiPaper
-+
-         if (server.isMainThread()) entityplayer.playerTick(); // SPIGOT-924 // Paper - don't tick during emergency shutdowns (Watchdog)
-         // CraftBukkit end
- 
-@@ -619,6 +636,9 @@ public abstract class PlayerList {
+@@ -619,6 +641,9 @@ public abstract class PlayerList {
          // Paper end
  
          this.savePlayerFile(entityplayer);
@@ -624,7 +614,7 @@ index 2df8e914f66176e22aeddf8b94a83af5ea921d88..d17b1ae8d7683c05d94cf74e9041345f
          if (entityplayer.isPassenger()) {
              Entity entity = entityplayer.getRootVehicle();
  
-@@ -673,13 +693,13 @@ public abstract class PlayerList {
+@@ -673,13 +698,13 @@ public abstract class PlayerList {
          // Paper end
  
          // CraftBukkit start
@@ -640,7 +630,7 @@ index 2df8e914f66176e22aeddf8b94a83af5ea921d88..d17b1ae8d7683c05d94cf74e9041345f
              } else {
                  entityplayer2.getBukkitEntity().removeDisconnectingPlayer(entityplayer.getBukkitEntity());
              }
-@@ -1037,6 +1057,17 @@ public abstract class PlayerList {
+@@ -1037,6 +1062,17 @@ public abstract class PlayerList {
      }
  
      public void sendAll(Packet<?> packet) {
@@ -658,7 +648,7 @@ index 2df8e914f66176e22aeddf8b94a83af5ea921d88..d17b1ae8d7683c05d94cf74e9041345f
          for (int i = 0; i < this.players.size(); ++i) {
              ((EntityPlayer) this.players.get(i)).playerConnection.sendPacket(packet);
          }
-@@ -1406,6 +1437,7 @@ public abstract class PlayerList {
+@@ -1406,6 +1442,7 @@ public abstract class PlayerList {
  
      public void sendMessage(IChatBaseComponent ichatbasecomponent, ChatMessageType chatmessagetype, UUID uuid) {
          this.server.sendMessage(ichatbasecomponent, uuid);
@@ -714,10 +704,18 @@ index de87ed44e09b61f6d2e6a93d770a7c37b9f95fa1..54c23864ac6c92b64db861ad97de7de2
          } catch (IOException ioexception) {
              ServerStatisticManager.LOGGER.error("Couldn't save stats", ioexception);
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 429f0591c6a55f6c5d08a0755f7d39da676468bc..ba3d0db8b0e2eaac455a913b69104562d59b1e59 100644
+index 429f0591c6a55f6c5d08a0755f7d39da676468bc..d6e95e33d7e11fd4e9846136cd006900d5c79188 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -2684,11 +2684,6 @@ public abstract class Entity implements INamableTileEntity, ICommandListener, ne
+@@ -140,6 +140,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
+ import org.bukkit.event.entity.EntityPoseChangeEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.plugin.PluginManager;
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public abstract class Entity implements INamableTileEntity, ICommandListener, net.minecraft.server.KeyedObject { // Paper
+@@ -2684,11 +2685,6 @@ public abstract class Entity implements INamableTileEntity, ICommandListener, ne
                  // CraftBukkit end
  
                  this.world.getMethodProfiler().exitEnter("reloading");
@@ -729,7 +727,7 @@ index 429f0591c6a55f6c5d08a0755f7d39da676468bc..ba3d0db8b0e2eaac455a913b69104562
                  Entity entity = this.getEntityType().a((World) worldserver);
  
                  if (entity != null) {
-@@ -2702,6 +2697,10 @@ public abstract class Entity implements INamableTileEntity, ICommandListener, ne
+@@ -2702,6 +2698,10 @@ public abstract class Entity implements INamableTileEntity, ICommandListener, ne
                      // CraftBukkit start - Forward the CraftEntity to the new entity
                      this.getBukkitEntity().setHandle(entity);
                      entity.bukkitEntity = this.getBukkitEntity();
@@ -778,7 +776,7 @@ index ce165233739c7b92a76031b949f269bd0a11149c..2660df000cb4007b085b1d1532760638
      // Paper end
  
 diff --git a/src/main/java/net/minecraft/world/entity/player/EntityHuman.java b/src/main/java/net/minecraft/world/entity/player/EntityHuman.java
-index ec0956a98c133bcd3d4f92f696c667eab6ff98f1..914886836cb9ed29dfe844167db4c9267e2c5c34 100644
+index ec0956a98c133bcd3d4f92f696c667eab6ff98f1..93c6bb77f11dd28fc8859461d8f87d96fc461ee0 100644
 --- a/src/main/java/net/minecraft/world/entity/player/EntityHuman.java
 +++ b/src/main/java/net/minecraft/world/entity/player/EntityHuman.java
 @@ -124,8 +124,13 @@ import org.bukkit.event.entity.EntityCombustByEntityEvent;
@@ -795,15 +793,6 @@ index ec0956a98c133bcd3d4f92f696c667eab6ff98f1..914886836cb9ed29dfe844167db4c926
  public abstract class EntityHuman extends EntityLiving {
  
      public static final EntitySize bh = EntitySize.b(0.6F, 1.8F);
-@@ -683,7 +688,7 @@ public abstract class EntityHuman extends EntityLiving {
-             PlayerDropItemEvent event = new PlayerDropItemEvent(player, drop);
-             this.world.getServer().getPluginManager().callEvent(event);
- 
--            if (event.isCancelled()) {
-+            if (event.isCancelled() || !MultiPaper.isPlayerSafe(this)) { // MultiPaper don't drop items if they shouldn't be ticked
-                 org.bukkit.inventory.ItemStack cur = player.getInventory().getItemInHand();
-                 if (flag1 && (cur == null || cur.getAmount() == 0)) {
-                     // The complete stack was dropped
 diff --git a/src/main/java/net/minecraft/world/level/World.java b/src/main/java/net/minecraft/world/level/World.java
 index 78dcba08d6d796d5d97c8304bf1f1e7d1e650d5d..934d6544a24dcd17120fd5f1d136efbc12baceb1 100644
 --- a/src/main/java/net/minecraft/world/level/World.java
@@ -835,7 +824,7 @@ index 78dcba08d6d796d5d97c8304bf1f1e7d1e650d5d..934d6544a24dcd17120fd5f1d136efbc
                      try {
                          gameprofilerfiller.a(() -> {
 diff --git a/src/main/java/net/minecraft/world/level/chunk/Chunk.java b/src/main/java/net/minecraft/world/level/chunk/Chunk.java
-index 34a9f7b2f998f77b1279516cd09397ab6c2ac1cc..d5eb3d7847ddd6c11e13b7976a543a13c65d4ebe 100644
+index 34a9f7b2f998f77b1279516cd09397ab6c2ac1cc..4b51fbc615ef6fd15fb20ab92a32d2a4a77e17c0 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/Chunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/Chunk.java
 @@ -68,6 +68,7 @@ import net.minecraft.world.level.material.FluidTypes;
@@ -846,14 +835,6 @@ index 34a9f7b2f998f77b1279516cd09397ab6c2ac1cc..d5eb3d7847ddd6c11e13b7976a543a13
  
  public class Chunk implements IChunkAccess {
  
-@@ -856,6 +857,7 @@ public class Chunk implements IChunkAccess {
-         this.setNeighbourLoaded(0, 0, this);
-         this.loadedTicketLevel = true;
-         // Paper end - neighbour cache
-+        MultiPaper.lockChunk(this.loc, this.world); // MultiPaper
-         org.bukkit.Server server = this.world.getServer();
-         ((WorldServer)this.world).getChunkProvider().addLoadedChunk(this); // Paper
-         if (server != null) {
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java
 index 4999ba61fb04713ffe3d23c556f732dc4abbf0bc..953d35c758162008e42c8be7bfc9e1050658ea61 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java
@@ -1233,7 +1214,7 @@ index e5549439b3d4d608cf37dd33b6c8c9e10dfe9328..cc78554f3ba05bc7b5072d9f86c21d9e
  
      private net.kyori.adventure.text.Component playerListHeader; // Paper - Adventure
 diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-index 926440e846eff2c1aaa262aa2b3975b7dd225332..adbae37fdd55780cdeaf34e6d2dbb3cf3decea54 100644
+index 926440e846eff2c1aaa262aa2b3975b7dd225332..9685fb2fceb2fc2528a6209fa7e9d6cf7b5b9623 100644
 --- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 +++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 @@ -224,6 +224,7 @@ import org.bukkit.inventory.meta.BookMeta;
@@ -1244,19 +1225,6 @@ index 926440e846eff2c1aaa262aa2b3975b7dd225332..adbae37fdd55780cdeaf34e6d2dbb3cf
  
  public class CraftEventFactory {
      public static final DamageSource MELTING = CraftDamageSource.copyOf(DamageSource.BURN);
-@@ -530,6 +531,12 @@ public class CraftEventFactory {
-         }
-         craftServer.getPluginManager().callEvent(event);
- 
-+        // MultiPaper start - don't interact if they shouldn't be ticked
-+        if (!MultiPaper.isPlayerSafe(who)) {
-+            event.setCancelled(true);
-+        }
-+        // MultiPaper end
-+
-         return event;
-     }
- 
 diff --git a/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java b/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
 index f101ed6c5a5e16e5804b36f1182edca874981831..ad648caa334afb1424705f2630a2b7debcaafdef 100644
 --- a/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
@@ -1317,37 +1285,6 @@ index f101ed6c5a5e16e5804b36f1182edca874981831..ad648caa334afb1424705f2630a2b7de
          File file1 = new File(baseDir, "uid.dat");
          if (file1.exists()) {
              DataInputStream dis = null;
-diff --git a/src/main/java/puregero/multipaper/BungeeCord.java b/src/main/java/puregero/multipaper/BungeeCord.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..4cfbad5085f4ce84ac840e4bc775a73ec604c2a7
---- /dev/null
-+++ b/src/main/java/puregero/multipaper/BungeeCord.java
-@@ -0,0 +1,25 @@
-+package puregero.multipaper;
-+
-+import com.google.common.io.ByteArrayDataOutput;
-+import com.google.common.io.ByteStreams;
-+import io.netty.buffer.Unpooled;
-+import net.minecraft.server.MinecraftKey;
-+import net.minecraft.server.PacketDataSerializer;
-+import net.minecraft.server.PacketPlayOutCustomPayload;
-+import org.apache.logging.log4j.LogManager;
-+import org.apache.logging.log4j.Logger;
-+import org.bukkit.craftbukkit.entity.CraftPlayer;
-+import org.bukkit.entity.Player;
-+
-+public class BungeeCord {
-+    private static final Logger LOGGER = LogManager.getLogger();
-+
-+    public static void connectPlayer(Player p, String server) {
-+        LOGGER.info("Sending " + p.getName() + " to server: " + server);
-+        ByteArrayDataOutput out = ByteStreams.newDataOutput();
-+        out.writeUTF("Connect");
-+        out.writeUTF(server);
-+        PacketPlayOutCustomPayload packet = new PacketPlayOutCustomPayload(new MinecraftKey("bungeecord:main"), new PacketDataSerializer(Unpooled.wrappedBuffer(out.toByteArray())));
-+        ((CraftPlayer) p).getHandle().playerConnection.sendPacket(packet);
-+    }
-+}
 diff --git a/src/main/java/puregero/multipaper/ChunkKey.java b/src/main/java/puregero/multipaper/ChunkKey.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..a905eca60fccc47d9f6c9746e760d4322ca66766
@@ -1425,7 +1362,7 @@ index 0000000000000000000000000000000000000000..3b042efc6942050dc290001eafc0f97f
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalServer.java b/src/main/java/puregero/multipaper/ExternalServer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8943de3e4ee0d3e3d3c91864ebbc4fe58056daa9
+index 0000000000000000000000000000000000000000..3a35379f75384aaf7b31d74ecbd5c801179d980b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServer.java
 @@ -0,0 +1,58 @@
@@ -1472,7 +1409,7 @@ index 0000000000000000000000000000000000000000..8943de3e4ee0d3e3d3c91864ebbc4fe5
 +    }
 +
 +    public boolean isAlive() {
-+        return getLastAlive() > System.currentTimeMillis() - 2500;
++        return getLastAlive() > System.currentTimeMillis() - 2500 && getTps() > 0;
 +    }
 +
 +    public ArrayList<UUID> getPlayers() {
@@ -1489,18 +1426,35 @@ index 0000000000000000000000000000000000000000..8943de3e4ee0d3e3d3c91864ebbc4fe5
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..488cf1a8e75636ac0caf3f993b2b32dd7e688cac
+index 0000000000000000000000000000000000000000..279e5e4d1f96884b23e1646eebbc399e1e47b851
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -0,0 +1,367 @@
+@@ -0,0 +1,392 @@
 +package puregero.multipaper;
 +
++import net.kyori.adventure.text.Component;
 +import net.md_5.bungee.api.chat.BaseComponent;
-+import net.minecraft.server.*;
++import net.minecraft.SystemUtils;
++import net.minecraft.nbt.NBTCompressedStreamTools;
++import net.minecraft.nbt.NBTTagCompound;
++import net.minecraft.network.chat.ChatMessageType;
++import net.minecraft.network.chat.IChatBaseComponent;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.game.PacketPlayOutChat;
++import net.minecraft.server.dedicated.DedicatedServer;
++import net.minecraft.server.level.EntityPlayer;
++import net.minecraft.server.level.WorldServer;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.ChunkCoordIntPair;
++import net.minecraft.world.level.chunk.Chunk;
++import net.minecraft.world.level.saveddata.maps.PersistentIdCounts;
++import net.minecraft.world.level.saveddata.maps.WorldMap;
++import net.minecraft.world.level.storage.WorldPersistentData;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
 +import org.bukkit.Location;
++import org.bukkit.World;
 +import org.bukkit.craftbukkit.CraftWorld;
 +import org.bukkit.craftbukkit.entity.CraftPlayer;
 +import org.bukkit.craftbukkit.util.CraftChatMessage;
@@ -1508,17 +1462,19 @@ index 0000000000000000000000000000000000000000..488cf1a8e75636ac0caf3f993b2b32dd
 +
 +import java.io.*;
 +import java.nio.file.Files;
-+import java.util.HashSet;
 +import java.util.UUID;
++import java.util.concurrent.ExecutionException;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.TimeoutException;
 +
 +public class MultiPaper {
 +
 +    private static final Logger LOGGER = LogManager.getLogger();
 +    private static MultiPaperConnection multiPaperConnection = null;
 +    private static long last10Seconds = System.currentTimeMillis();
-+    private static HashSet<ChunkKey> lockedChunks = new HashSet<>();
++    private static MultiPaperPlugin plugin = null;
 +
-+    private static MultiPaperConnection getConnection() {
++    public static MultiPaperConnection getConnection() {
 +        if (multiPaperConnection == null) {
 +            multiPaperConnection = new MultiPaperConnection();
 +        }
@@ -1527,9 +1483,16 @@ index 0000000000000000000000000000000000000000..488cf1a8e75636ac0caf3f993b2b32dd
 +    }
 +
 +    private static void tick() {
++        if (plugin == null) {
++            plugin = new MultiPaperPlugin();
++            new MultiPaperListener(plugin);
++        }
++        
 +        boolean hasBeen10Seconds = last10Seconds < System.currentTimeMillis() - 10 * 1000;
 +
 +        if (hasBeen10Seconds) last10Seconds = System.currentTimeMillis();
++        
++        checkIfPlayersNeedToBeMoved();
 +
 +        Bukkit.getWorlds().forEach(world -> {
 +            WorldPersistentData persistentData = ((CraftWorld) world).getHandle().getWorldPersistentData();
@@ -1541,6 +1504,18 @@ index 0000000000000000000000000000000000000000..488cf1a8e75636ac0caf3f993b2b32dd
 +        });
 +    }
 +
++    private static void checkIfPlayersNeedToBeMoved() {
++        for (Player player : Bukkit.getOnlinePlayers()) {
++            if (player.getLastLogin() < System.currentTimeMillis() - 5 * 1000L) {
++                String server = Zone.getServer(player.getLocation());
++
++                if (server != null) {
++                    Zone.doMerge(player, server);
++                }
++            }
++        }
++    }
++
 +    public static NBTTagCompound readChunk(ChunkCoordIntPair chunkcoordintpair, WorldServer worldServer) throws IOException {
 +        return readRegionFileNBT(worldServer, "region", chunkcoordintpair);
 +    }
@@ -1550,7 +1525,19 @@ index 0000000000000000000000000000000000000000..488cf1a8e75636ac0caf3f993b2b32dd
 +    }
 +
 +    public static DataInput readRegionFile(String world, String path, int cx, int cz) throws IOException {
-+        return getConnection().readChunk(world, path, cx, cz).join();
++        while (true) {
++            try {
++                return getConnection().readChunk(world, path, cx, cz).get(15, TimeUnit.SECONDS);
++            } catch (InterruptedException | ExecutionException e) {
++                throw new IOException(e);
++            } catch (TimeoutException e) {
++                if (DedicatedServer.getServer().hasStopped()) {
++                    LOGGER.info("No response for readRegionFile " + world + "," + path + "," + cx + "," + cz + ", but server has stopped, aborting operation.");
++                    return null;
++                }
++                LOGGER.info("No response for readRegionFile " + world + "," + path + "," + cx + "," + cz + ", resending...");
++            }
++        }
 +    }
 +
 +    public static void writeRegionFile(String world, String path, int cx, int cz, byte[] bytes) throws IOException {
@@ -1619,40 +1606,16 @@ index 0000000000000000000000000000000000000000..488cf1a8e75636ac0caf3f993b2b32dd
 +        getConnection().writeUid(world, data);
 +    }
 +
-+    public static void lockChunk(ChunkCoordIntPair chunkcoordintpair, WorldServer worldServer) {
++    public static void willSaveChunk(World world, int cx, int cz) {
 +        try {
-+            if (!Zone.shouldLockChunk(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z)) {
-+                return;
-+            }
-+
-+            getConnection().lockChunk(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z).thenAccept(holder -> {
-+                if (!Zone.shouldLockChunk(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z)) {
-+                    releaseChunk(chunkcoordintpair, worldServer);
-+                    return;
-+                }
-+
-+                lockedChunks.add(new ChunkKey(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z));
-+
-+                new Thread(() -> {
-+                    if (holder != null) {
-+                        Zone.doMerge(worldServer.getWorld().getChunkAt(chunkcoordintpair.x, chunkcoordintpair.z), holder);
-+                    } else {
-+                        Zone.checkIfShouldMerge(worldServer.getWorld().getChunkAt(chunkcoordintpair.x, chunkcoordintpair.z));
-+                    }
-+                }).start();
-+            });
++            getConnection().willSaveChunk(world.getName(), cx, cz);
 +        } catch (IOException e) {
 +            e.printStackTrace();
 +        }
 +    }
-+    
-+    public static void releaseChunk(ChunkCoordIntPair chunkcoordintpair, WorldServer worldServer) {
-+        try {
-+            lockedChunks.remove(new ChunkKey(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z));
-+            getConnection().releaseChunk(worldServer.worldDataServer.getName(), chunkcoordintpair.x, chunkcoordintpair.z);
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
++
++    public static void willSaveChunk(org.bukkit.Chunk chunk) {
++        willSaveChunk(chunk.getWorld(), chunk.getX(), chunk.getZ());
 +    }
 +
 +    public static void notifyChunkNotSaving(ChunkCoordIntPair chunkcoordintpair, WorldServer worldServer) {
@@ -1748,6 +1711,16 @@ index 0000000000000000000000000000000000000000..488cf1a8e75636ac0caf3f993b2b32dd
 +        broadcastPacket(packet);
 +    }
 +
++    public static void broadcastPacket(UUID from, Component message) {
++        if (from == null) {
++            from = SystemUtils.getNullUUID();
++        }
++
++        PacketPlayOutChat packet = new PacketPlayOutChat(null, from.equals(SystemUtils.getNullUUID()) ? ChatMessageType.SYSTEM : ChatMessageType.CHAT, SystemUtils.b);
++        packet.adventure$message = message;
++        broadcastPacket(packet);
++    }
++
 +    public static void onStart() {
 +        try {
 +            getConnection().sendStart();
@@ -1757,6 +1730,11 @@ index 0000000000000000000000000000000000000000..488cf1a8e75636ac0caf3f993b2b32dd
 +    }
 +
 +    public static byte[] readData(String path) {
++        if (path.contains("raids.dat")) {
++            // Don't load raids from dist
++            return null;
++        }
++        
 +        try {
 +            return getConnection().readData(path).join();
 +        } catch (IOException e) {
@@ -1801,45 +1779,24 @@ index 0000000000000000000000000000000000000000..488cf1a8e75636ac0caf3f993b2b32dd
 +        return multiPaperConnection.playerLocations.get(uuid);
 +    }
 +
-+    private static int chunkDistance(Entity entity1, Entity entity2) {
-+        return Math.max(Math.abs(entity1.chunkX - entity2.chunkX), Math.abs(entity1.chunkZ - entity2.chunkZ));
++    public static int chunkDistance(Entity entity1, Entity entity2) {
++        return chunkDistance(entity1.chunkX, entity1.chunkZ, entity2.chunkX, entity2.chunkZ);
 +    }
 +
-+    private static int chunkDistance(Entity entity, Chunk chunk) {
-+        return Math.max(Math.abs(entity.chunkX - chunk.getPos().x), Math.abs(entity.chunkZ - chunk.getPos().z));
-+    }
-+    
-+    public static boolean isPlayerSafe(EntityHuman player) {
-+        if (!(player instanceof EntityPlayer)) {
-+            return true;
-+        }
-+        
-+        return !Zone.isBeingSentToAnotherServer(((EntityPlayer) player).getBukkitEntity()) && isChunkLocked((WorldServer) player.world, player.chunkX, player.chunkZ);
++    public static int chunkDistance(Location loc1, Location loc2) {
++        return chunkDistance(loc1.getBlockX() >> 4, loc1.getBlockZ() >> 4, loc2.getBlockX() >> 4, loc2.getBlockZ() >> 4);
 +    }
 +
-+    public static boolean isChunkLocked(WorldServer world, int chunkX, int chunkZ) {
-+        boolean isLocked = lockedChunks.contains(new ChunkKey(world.worldDataServer.getName(), chunkX, chunkZ));
-+        
-+        if (isLocked) {
-+            return true;
-+        }
-+        
-+        if (world.isChunkLoaded(chunkX, chunkZ)) {
-+            // The chunk is loaded, so why isn't it locked?
-+            lockChunk(new ChunkCoordIntPair(chunkX, chunkZ), world);
-+        }
-+        
-+        return false;
++    public static int chunkDistance(Entity entity, Chunk chunk) {
++        return chunkDistance(entity.chunkX, entity.chunkZ, chunk.getPos().x, chunk.getPos().z);
++    }
++
++    public static int chunkDistance(int cx1, int cz1, int cx2, int cz2) {
++        return Math.max(Math.abs(cx1 - cx2), Math.abs(cz1 - cz2));
 +    }
 +
 +    public static boolean shouldTickEntity(WorldServer worldServer, Entity entity) {
-+        for (EntityPlayer player : worldServer.players) {
-+            if (isPlayerSafe(player) && player.shouldTickEntities && chunkDistance(player, entity) <= Bukkit.getViewDistance()) {
-+                return true;
-+            }
-+        }
-+
-+        return false;
++        return shouldTickChunk(worldServer, entity.getCurrentChunk());
 +    }
 +
 +    public static boolean shouldTickChunk(WorldServer worldServer, Chunk chunk) {
@@ -1847,13 +1804,18 @@ index 0000000000000000000000000000000000000000..488cf1a8e75636ac0caf3f993b2b32dd
 +            return false;
 +        }
 +
++        boolean playerNearby = false;
++        
 +        for (EntityPlayer player : worldServer.players) {
-+            if (isPlayerSafe(player) && player.shouldTickEntities && chunkDistance(player, chunk) <= Bukkit.getViewDistance()) {
-+                return true;
++            if (chunkDistance(player, chunk) <= Bukkit.getViewDistance() * 2) {
++                playerNearby = true;
++                if (player.shouldTickEntities) {
++                    return true;
++                }
 +            }
 +        }
 +
-+        return false;
++        return !playerNearby;
 +    }
 +
 +    public static void setPlayerShouldTickEntities(Player player, boolean shouldTickEntities) {
@@ -1862,15 +1824,20 @@ index 0000000000000000000000000000000000000000..488cf1a8e75636ac0caf3f993b2b32dd
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..37b3cb2fa82dbb65188c866e5c1ae19c9ac7c1ea
+index 0000000000000000000000000000000000000000..426b80b4113c87e5d138736b337a1ba8db0b84f9
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -0,0 +1,760 @@
+@@ -0,0 +1,708 @@
 +package puregero.multipaper;
 +
 +import io.netty.buffer.ByteBuf;
 +import io.netty.buffer.Unpooled;
-+import net.minecraft.server.*;
++import net.minecraft.network.PacketDataSerializer;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.game.PacketPlayOutPlayerInfo;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.dedicated.DedicatedServer;
++import net.minecraft.server.level.EntityPlayer;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.*;
@@ -1902,34 +1869,20 @@ index 0000000000000000000000000000000000000000..37b3cb2fa82dbb65188c866e5c1ae19c
 +    private HashMap<Integer, Request> callbacks = new HashMap<>();
 +    private HashMap<String, ExternalServer> serversMap = new HashMap<>();
 +    private String myName = null;
++    private WriterWorkerThread writer = new WriterWorkerThread(() -> socket);
 +    public HashMap<UUID, Location> playerLocations = new HashMap<>();
 +
 +    public MultiPaperConnection() {
++        super("MultiPaperConnection Thread");
 +        start();
 +    }
 +
-+    public void send(byte[] bytes, int id, @Nullable Consumer<DataInputStream> callback) throws IOException {
-+        while (true) {
-+            try {
-+                synchronized (socket) {
-+                    if (callback != null) {
-+                        callbacks.put(id, new Request(bytes, callback));
-+                    }
-+                    socket.getOutputStream().write(bytes);
-+                    return;
-+                }
-+            } catch (Exception e) {
-+                if (socket != null) {
-+                    e.printStackTrace();
-+                }
-+            }
-+
-+            try {
-+                Thread.sleep(1000);
-+            } catch (InterruptedException e) {
-+                throw new IOException(e);
-+            }
++    public void send(byte[] bytes, int id, @Nullable Consumer<DataInputStream> callback) {
++        Request request = new Request(bytes, callback);
++        if (callback != null) {
++            callbacks.put(id, request);
 +        }
++        writer.write(request);
 +    }
 +
 +    public DataOutputSender buffer(int id) throws IOException {
@@ -1956,16 +1909,18 @@ index 0000000000000000000000000000000000000000..37b3cb2fa82dbb65188c866e5c1ae19c
 +            LOGGER.info("Connecting to " + server + "...");
 +            String[] serverParts = server.split(":");
 +            try (Socket socket = new Socket(serverParts[0], Integer.parseInt(serverParts[1]))) {
++                DataOutputStream out = new DataOutputStream(socket.getOutputStream());
++                out.writeUTF(myName = MultiPaper.getBungeeCordName());
++                
 +                this.socket = socket;
 +                LOGGER.info("Connected to " + server);
 +
 +                synchronized (socket) {
-+                    DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-+                    out.writeUTF(myName = MultiPaper.getBungeeCordName());
-+
 +                    // Resend requests on this new socket
 +                    for (Request request : callbacks.values()) {
-+                        socket.getOutputStream().write(request.getData());
++                        if (request.setLastSocket(socket)) {
++                            socket.getOutputStream().write(request.getData());
++                        }
 +                    }
 +                }
 +
@@ -2175,7 +2130,8 @@ index 0000000000000000000000000000000000000000..37b3cb2fa82dbb65188c866e5c1ae19c
 +            out.writeUTF("playerList");
 +            out.writeDouble(20);
 +            out.writeInt(0);
-+        } else {
++            out.send(null);
++        } else if (!MinecraftServer.getServer().isStopped()) {
 +            Collection<? extends Player> players = Bukkit.getOnlinePlayers();
 +            out.writeUTF("playerList");
 +            out.writeDouble(MinecraftServer.getServer().recentTps[0]);
@@ -2190,8 +2146,8 @@ index 0000000000000000000000000000000000000000..37b3cb2fa82dbb65188c866e5c1ae19c
 +                out.writeFloat(player.getLocation().getYaw());
 +                out.writeFloat(player.getLocation().getPitch());
 +            }
++            out.send(null);
 +        }
-+        out.send(null);
 +
 +        sendLoadedChunkList();
 +    }
@@ -2208,7 +2164,7 @@ index 0000000000000000000000000000000000000000..37b3cb2fa82dbb65188c866e5c1ae19c
 +    }
 +
 +    public void start(DataInputStream in, DataOutputSender out) throws IOException {
-+        if (DedicatedServer.getServer() != null) {
++        if (DedicatedServer.getServer() != null && DedicatedServer.getServer().getPlayerList() != null) {
 +            MultiPaper.broadcastPacket(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, DedicatedServer.getServer().getPlayerList().players.toArray(new EntityPlayer[0])));
 +        }
 +    }
@@ -2238,32 +2194,6 @@ index 0000000000000000000000000000000000000000..37b3cb2fa82dbb65188c866e5c1ae19c
 +        out.writeInt(cx);
 +        out.writeInt(cz);
 +        out.send(callback);
-+
-+        new Thread(() -> {
-+            int i = 0;
-+            while (!hasReturned.get()) {
-+                if (++i % 15 == 0) {
-+                    if (DedicatedServer.getServer().hasStopped()) {
-+                        LOGGER.info("No response for readChunk " + world + "," + path + "," + cx + "," + cz + ", but server has stopped, aborting operation.");
-+                        future.complete(null);
-+                        return;
-+                    }
-+                    LOGGER.info("No response for readChunk " + world + "," + path + "," + cx + "," + cz + ", resending...");
-+                    try {
-+                        out.send(callback);
-+                    } catch (IOException e) {
-+                        e.printStackTrace();
-+                        return;
-+                    }
-+                }
-+                try {
-+                    Thread.sleep(1000);
-+                } catch (InterruptedException e) {
-+                    e.printStackTrace();
-+                    return;
-+                }
-+            }
-+        }).start();
 +
 +        return future;
 +    }
@@ -2423,29 +2353,9 @@ index 0000000000000000000000000000000000000000..37b3cb2fa82dbb65188c866e5c1ae19c
 +        out.send(null);
 +    }
 +
-+    public CompletableFuture<String> lockChunk(String world, int cx, int cz) throws IOException {
-+        CompletableFuture<String> future = new CompletableFuture<>();
-+
++    public void willSaveChunk(String world, int cx, int cz) throws IOException {
 +        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("lockChunk");
-+        out.writeUTF(world);
-+        out.writeInt(cx);
-+        out.writeInt(cz);
-+        out.send(in -> {
-+            try {
-+                String holder = in.readUTF();
-+                future.complete(holder.isEmpty() ? null : holder);
-+            } catch (IOException e) {
-+                e.printStackTrace();
-+            }
-+        });
-+
-+        return future;
-+    }
-+
-+    public void releaseChunk(String world, int cx, int cz) throws IOException {
-+        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("releaseChunk");
++        out.writeUTF("willSaveChunk");
 +        out.writeUTF(world);
 +        out.writeInt(cx);
 +        out.writeInt(cz);
@@ -2626,17 +2536,234 @@ index 0000000000000000000000000000000000000000..37b3cb2fa82dbb65188c866e5c1ae19c
 +        return myName;
 +    }
 +}
+diff --git a/src/main/java/puregero/multipaper/MultiPaperListener.java b/src/main/java/puregero/multipaper/MultiPaperListener.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e928cae02d9f3327b998a2e98effb71cea5d0efa
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperListener.java
+@@ -0,0 +1,76 @@
++package puregero.multipaper;
++
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.entity.Player;
++import org.bukkit.event.EventHandler;
++import org.bukkit.event.EventPriority;
++import org.bukkit.event.Listener;
++import org.bukkit.event.entity.EntityPortalEvent;
++import org.bukkit.event.player.PlayerKickEvent;
++import org.bukkit.event.player.PlayerQuitEvent;
++import org.bukkit.event.player.PlayerTeleportEvent;
++import org.bukkit.plugin.Plugin;
++
++import java.util.Arrays;
++import java.util.HashSet;
++import java.util.List;
++
++public class MultiPaperListener implements Listener {
++    private static final Logger LOGGER = LogManager.getLogger();
++
++    private final Plugin plugin;
++
++    public MultiPaperListener(Plugin plugin) {
++        this.plugin = plugin;
++        Bukkit.getPluginManager().registerEvents(this, plugin);
++    }
++
++    private HashSet<Player> kickedPlayers = new HashSet<>();
++    
++    @EventHandler(priority = EventPriority.LOWEST)
++    public void onPlayerQuit(PlayerQuitEvent e) {
++        if (!kickedPlayers.remove(e.getPlayer())) {
++            willSaveChunks(e.getPlayer());
++        }
++    }
++
++    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
++    public void onPlayerQuit(PlayerKickEvent e) {
++        willSaveChunks(e.getPlayer());
++        kickedPlayers.add(e.getPlayer());
++    }
++
++    /**
++     * Mark the loaded chunks around the player as will be saved
++     * @param player Player to mark the chunks around
++     */
++    private void willSaveChunks(Player player) {
++        Zone zone = new Zone(player.getWorld(), player.getLocation().getBlockX() >> 4, player.getLocation().getBlockZ() >> 4);
++        zone.forEach(MultiPaper::willSaveChunk);
++    }
++    
++    private static final List<PlayerTeleportEvent.TeleportCause> teleportCauseCanMoveServers = Arrays.asList(
++            PlayerTeleportEvent.TeleportCause.COMMAND,
++            PlayerTeleportEvent.TeleportCause.PLUGIN,
++            PlayerTeleportEvent.TeleportCause.SPECTATE
++    );
++    
++    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
++    public void onTeleport(PlayerTeleportEvent e) {
++        if ((e.getTo().getWorld() != e.getFrom().getWorld() || e.getTo().distanceSquared(e.getFrom()) > 16 * 16)
++                && teleportCauseCanMoveServers.contains(e.getCause())) {
++            Bukkit.getScheduler().runTaskLater(plugin, () -> Zone.checkIfShouldMerge(e.getPlayer()), 0);
++        }
++    }
++    
++    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
++    public void onEntityPortal(EntityPortalEvent e) {
++        String server = Zone.getServer(e.getTo());
++        if (server != null) {
++            LOGGER.info("Disabling EntityPortalEvent{" + e.getEntity() + "," + e.getFrom() + " -> " + e.getTo() + "} as the other side is within " + server + "'s zone");
++            e.setCancelled(true);
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/MultiPaperPlugin.java b/src/main/java/puregero/multipaper/MultiPaperPlugin.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..0d5a221f54bb25dbf7ddedb30979576bf5204754
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperPlugin.java
+@@ -0,0 +1,129 @@
++package puregero.multipaper;
++
++import org.bukkit.Bukkit;
++import org.bukkit.Server;
++import org.bukkit.command.Command;
++import org.bukkit.command.CommandSender;
++import org.bukkit.configuration.file.FileConfiguration;
++import org.bukkit.generator.ChunkGenerator;
++import org.bukkit.plugin.Plugin;
++import org.bukkit.plugin.PluginDescriptionFile;
++import org.bukkit.plugin.PluginLoader;
++import org.bukkit.plugin.java.JavaPluginLoader;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
++
++import java.io.File;
++import java.io.InputStream;
++import java.util.List;
++import java.util.logging.Logger;
++
++public class MultiPaperPlugin implements Plugin {
++    
++    private JavaPluginLoader loader = new JavaPluginLoader(Bukkit.getServer());
++
++    @Override
++    public @NotNull File getDataFolder() {
++        return null;
++    }
++
++    @Override
++    public @NotNull PluginDescriptionFile getDescription() {
++        return new PluginDescriptionFile(getName(), Bukkit.getVersion(), getClass().getName());
++    }
++
++    @Override
++    public @NotNull FileConfiguration getConfig() {
++        return null;
++    }
++
++    @Override
++    public @Nullable InputStream getResource(@NotNull String filename) {
++        return null;
++    }
++
++    @Override
++    public void saveConfig() {
++
++    }
++
++    @Override
++    public void saveDefaultConfig() {
++
++    }
++
++    @Override
++    public void saveResource(@NotNull String resourcePath, boolean replace) {
++
++    }
++
++    @Override
++    public void reloadConfig() {
++
++    }
++
++    @Override
++    public @NotNull PluginLoader getPluginLoader() {
++        return loader;
++    }
++
++    @Override
++    public @NotNull Server getServer() {
++        return null;
++    }
++
++    @Override
++    public boolean isEnabled() {
++        return true;
++    }
++
++    @Override
++    public void onDisable() {
++
++    }
++
++    @Override
++    public void onLoad() {
++
++    }
++
++    @Override
++    public void onEnable() {
++        
++    }
++
++    @Override
++    public boolean isNaggable() {
++        return false;
++    }
++
++    @Override
++    public void setNaggable(boolean canNag) {
++
++    }
++
++    @Override
++    public @Nullable ChunkGenerator getDefaultWorldGenerator(@NotNull String worldName, @Nullable String id) {
++        return null;
++    }
++
++    @Override
++    public @NotNull Logger getLogger() {
++        return null;
++    }
++
++    @Override
++    public @NotNull String getName() {
++        return "MultiPaper";
++    }
++
++    @Override
++    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
++        return false;
++    }
++
++    @Override
++    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
++        return null;
++    }
++}
 diff --git a/src/main/java/puregero/multipaper/PlayerInfoManager.java b/src/main/java/puregero/multipaper/PlayerInfoManager.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e976c9f81faa553d37c3f17ea2407162c92d5e3d
+index 0000000000000000000000000000000000000000..4b0c670aa1f05f04ae8de8717893d5ebef825242
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/PlayerInfoManager.java
 @@ -0,0 +1,62 @@
 +package puregero.multipaper;
 +
-+import net.minecraft.server.DedicatedServer;
-+import net.minecraft.server.EntityPlayer;
-+import net.minecraft.server.PacketPlayOutPlayerInfo;
++import net.minecraft.network.protocol.game.PacketPlayOutPlayerInfo;
++import net.minecraft.server.dedicated.DedicatedServer;
++import net.minecraft.server.level.EntityPlayer;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
@@ -2657,7 +2784,7 @@ index 0000000000000000000000000000000000000000..e976c9f81faa553d37c3f17ea2407162
 +
 +            if (packet.getAction() == PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER) {
 +                playerInfos.put(uuid, info);
-+                return;
++                continue;
 +            }
 +
 +            if (packet.getAction() == PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER) {
@@ -2667,13 +2794,13 @@ index 0000000000000000000000000000000000000000..e976c9f81faa553d37c3f17ea2407162
 +                }
 +
 +                playerInfos.remove(uuid);
-+                return;
++                continue;
 +            }
 +
 +            PacketPlayOutPlayerInfo.PlayerInfoData infoData = playerInfos.get(uuid);
 +
 +            if (infoData == null) {
-+                return;
++                continue;
 +            }
 +
 +            if (info.b != 0) {
@@ -2696,16 +2823,18 @@ index 0000000000000000000000000000000000000000..e976c9f81faa553d37c3f17ea2407162
 +}
 diff --git a/src/main/java/puregero/multipaper/Request.java b/src/main/java/puregero/multipaper/Request.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..19b017cb8118b72d06c7016605cf17bb9dcad131
+index 0000000000000000000000000000000000000000..47f33a3aee0b5332bd4a3819d2fbe5ed23a07109
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/Request.java
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,42 @@
 +package puregero.multipaper;
 +
 +import java.io.DataInputStream;
++import java.net.Socket;
 +import java.util.function.Consumer;
 +
 +public class Request {
++    private Socket lastSocket;
 +    private final byte[] data;
 +    private final Consumer<DataInputStream> callback;
 +    private final long time = System.currentTimeMillis();
@@ -2725,6 +2854,19 @@ index 0000000000000000000000000000000000000000..19b017cb8118b72d06c7016605cf17bb
 +
 +    public long getTime() {
 +        return time;
++    }
++
++    /**
++     * @return True if the socket is not the same as the last socket, false
++     * otherwise
++     */
++    public synchronized boolean setLastSocket(Socket socket) {
++        if (socket == lastSocket) {
++            return false;
++        }
++        
++        lastSocket = socket;
++        return true;
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/ServersCommand.java b/src/main/java/puregero/multipaper/ServersCommand.java
@@ -2777,12 +2919,13 @@ index 0000000000000000000000000000000000000000..c6f77bfe0b0d11c4e312d73aa5021ebe
 +}
 diff --git a/src/main/java/puregero/multipaper/ShutdownHandler.java b/src/main/java/puregero/multipaper/ShutdownHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..bab74c4a99e7dc4b488c62b204c8441e6369aebb
+index 0000000000000000000000000000000000000000..1bb2afccaeff7644026846f0ba3cda25062ee945
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ShutdownHandler.java
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,63 @@
 +package puregero.multipaper;
 +
++import net.minecraft.server.MinecraftServer;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
@@ -2797,47 +2940,38 @@ index 0000000000000000000000000000000000000000..bab74c4a99e7dc4b488c62b204c8441e
 +    private static final Logger LOGGER = LogManager.getLogger();
 +
 +    public static void onStop() {
++        markServerAsOffline();
++        savePlayers();
 +        movePlayersToDifferentServer();
++    }
++
++    private static void markServerAsOffline() {
++        MultiPaper.sendTickTime(-1);
++    }
++
++    private static void savePlayers() {
++        if (MinecraftServer.getServer().getPlayerList() != null) {
++            MinecraftServer.getServer().getPlayerList().savePlayers();
++        }
 +    }
 +
 +    private static void movePlayersToDifferentServer() {
 +        HashSet<Player> moved = new HashSet<>();
-+        int tries = 0;
-+        do {
-+            moved.clear();
 +
-+            if (tries++ > 10) {
-+                LOGGER.warn("Given up sending players to another server, disconnecting them instead");
++        for (Player player : Bukkit.getOnlinePlayers()) {
++            if (moved.contains(player)) {
++                continue;
++            }
++
++            String server = randomServer();
++
++            if (server == null) {
++                LOGGER.info("No other servers are online, disconnecting players instead");
 +                return;
 +            }
 +
-+            for (Player player : Bukkit.getOnlinePlayers()) {
-+                if (moved.contains(player) || ((CraftPlayer) player).getHandle().playerConnection.isDisconnected()) {
-+                    continue;
-+                }
-+
-+                String server = randomServer();
-+
-+                if (server == null) {
-+                    LOGGER.info("No other servers are online, disconnecting players instead");
-+                    return;
-+                }
-+
-+                moved.addAll(Zone.doMerge(player.getChunk(), server));
-+            }
-+
-+            LOGGER.info("Moving players to different servers... (" + moved.size() + " players to go)");
-+
-+            if (!moved.isEmpty()) {
-+                // Wait for players to get moved
-+                try {
-+                    Thread.sleep(2500);
-+                } catch (InterruptedException e) {
-+                    e.printStackTrace();
-+                    return;
-+                }
-+            }
-+        } while (!moved.isEmpty());
++            moved.addAll(Zone.doMerge(player, server));
++        }
 +    }
 +
 +    private static String randomServer() {
@@ -2852,35 +2986,113 @@ index 0000000000000000000000000000000000000000..bab74c4a99e7dc4b488c62b204c8441e
 +        return servers.isEmpty() ? null : servers.get((int) (Math.random() * servers.size()));
 +    }
 +}
-diff --git a/src/main/java/puregero/multipaper/Zone.java b/src/main/java/puregero/multipaper/Zone.java
+diff --git a/src/main/java/puregero/multipaper/WriterWorkerThread.java b/src/main/java/puregero/multipaper/WriterWorkerThread.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ab8cf248ff8496e37f11ba49481e41118c2bf381
+index 0000000000000000000000000000000000000000..310dd44d77fdb51e8feea6b3d80b32ebb5dd8d29
 --- /dev/null
-+++ b/src/main/java/puregero/multipaper/Zone.java
-@@ -0,0 +1,223 @@
++++ b/src/main/java/puregero/multipaper/WriterWorkerThread.java
+@@ -0,0 +1,76 @@
 +package puregero.multipaper;
 +
-+import net.minecraft.server.WorldServer;
++import java.net.Socket;
++import java.net.SocketException;
++import java.util.LinkedList;
++import java.util.Queue;
++import java.util.function.Supplier;
++
++public class WriterWorkerThread extends Thread {
++
++    private static final int MAX_QUEUE_SIZE = 16;
++    
++    private final Supplier<Socket> socketSupplier;
++    private final Queue<Request> queue = new LinkedList<>();
++
++    public WriterWorkerThread(Supplier<Socket> socketSupplier) {
++        super("WriterWorkerThread");
++        this.socketSupplier = socketSupplier;
++        start();
++    }
++    
++    public void write(Request request) {
++        while (true) {
++            synchronized (queue) {
++                // MultiPaperConnection gets priority in the queue, it mustn't block otherwise the connection can stall
++                if (queue.size() < MAX_QUEUE_SIZE || Thread.currentThread() instanceof MultiPaperConnection) {
++                    queue.add(request);
++                    queue.notify();
++                    return;
++                }
++            }
++
++            try {
++                Thread.sleep(100);
++            } catch (InterruptedException e) {
++                e.printStackTrace();
++                return;
++            }
++        }
++    }
++    
++    public void run() {
++        Request toWrite;
++        
++        while (true) {
++            synchronized (queue) {
++                while (queue.isEmpty()) {
++                    try {
++                        queue.wait();
++                    } catch (InterruptedException e) {
++                        e.printStackTrace();
++                        return;
++                    }
++                }
++
++                toWrite = queue.poll();
++            }
++
++            try {
++                Socket socket = socketSupplier.get();
++
++                if (toWrite.setLastSocket(socket)) {
++                    synchronized (socket) {
++                        socket.getOutputStream().write(toWrite.getData());
++                        socket.getOutputStream().flush();
++                    }
++                }
++            } catch (NullPointerException | SocketException e) {
++                // Ignored
++            } catch (Exception e) {
++                e.printStackTrace();
++            }
++        }
++    }
++    
++}
+diff --git a/src/main/java/puregero/multipaper/Zone.java b/src/main/java/puregero/multipaper/Zone.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..794f61347671df8edb2fe2fac6673172890b1ef6
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/Zone.java
+@@ -0,0 +1,181 @@
++package puregero.multipaper;
++
++import net.kyori.adventure.text.Component;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
 +import org.bukkit.Chunk;
 +import org.bukkit.Location;
 +import org.bukkit.World;
-+import org.bukkit.craftbukkit.CraftChunk;
 +import org.bukkit.craftbukkit.entity.CraftPlayer;
 +import org.bukkit.craftbukkit.scheduler.CraftScheduler;
 +import org.bukkit.entity.Player;
++import org.jetbrains.annotations.NotNull;
 +
 +import java.util.*;
 +import java.util.function.Consumer;
 +
-+public class Zone {
++public class Zone implements Iterable<Chunk> {
 +    private static final Logger LOGGER = LogManager.getLogger();
-+    private static final int SHOULD_MERGE_CHUNK_LIMIT = 15;
-+
-+    private static HashSet<Player> beingSentToAnotherServer = new HashSet<>();
-+    private static HashMap<Player, Zone> zonesToUnload = new HashMap<>();
 +
 +    private static List<Consumer<Chunk>> chunkSaveHandlers = new ArrayList<>();
 +
@@ -2888,80 +3100,60 @@ index 0000000000000000000000000000000000000000..ab8cf248ff8496e37f11ba49481e4111
 +        chunkSaveHandlers.add(handler);
 +    }
 +
-+    public static boolean shouldLockChunk(String world, int cx, int cz) {
-+        for (Player player : Bukkit.getWorld(world).getPlayers()) {
-+            if (!beingSentToAnotherServer.contains(player) &&
-+                    Math.abs((player.getLocation().getBlockX() >> 4) - cx) <= Bukkit.getViewDistance() + 6 &&
-+                    Math.abs((player.getLocation().getBlockZ() >> 4) - cz) <= Bukkit.getViewDistance() + 6) {
-+                return true;
-+            }
-+        }
++    public static Collection<Player> doMerge(Player centerPlayer, String server) {
++        HashSet<Player> players = new HashSet<>();
 +
-+        return false;
-+    }
++        recursivelyAddPlayersInSameZone(players, centerPlayer);
++        
++        LOGGER.info("Merging " + players.size() + " players with server " + server);
 +
-+    public static boolean isBeingSentToAnotherServer(Player player) {
-+        return beingSentToAnotherServer.contains(player);
-+    }
-+
-+    public static Collection<Player> doMerge(Chunk chunk, String server) {
-+        Zone zone = new Zone(chunk);
-+
-+        if (zone.players.size() > 0) {
-+            return doMerge(chunk, zone, server);
-+        }
-+
-+        return zone.players;
-+    }
-+
-+    private static Collection<Player> doMerge(Chunk chunk, Zone zone1, String server) {
-+        LOGGER.info("Merging " + zone1.players.size() + " players and " + zone1.chunks.size() + " chunks with server " + server);
-+
-+        HashSet<Player> toSend = new HashSet<>();
-+        for (Player player : zone1.players) {
-+            if (beingSentToAnotherServer.add(player)) {
-+                zonesToUnload.put(player, zone1);
-+                toSend.add(player);
-+            }
-+        }
-+
-+        try {
-+            Thread.sleep(50);
-+        } catch (InterruptedException e) {
-+            e.printStackTrace();
-+        }
-+
-+        Zone zone = new Zone(chunk);
-+
-+        for (Chunk c : zone.chunks) {
-+            net.minecraft.server.Chunk nmsChunk = ((CraftChunk) c).getHandle();
-+            MultiPaper.releaseChunk(nmsChunk.getPos(), nmsChunk.world);
-+            chunkSaveHandlers.forEach(handler -> handler.accept(c));
-+            nmsChunk.world.getChunkProvider().playerChunkMap.saveChunk(nmsChunk);
-+        }
-+
-+        WorldServer worldServer = ((CraftChunk) chunk).getHandle().world;
-+        if (worldServer.getMinecraftServer().hasStopped()) {
-+            LOGGER.info("Server is stopping, flushing chunk writes");
-+            worldServer.asyncChunkTaskManager.flush();
-+        }
-+
-+        for (Player player : toSend) {
++        for (Player player : players) {
 +            ((CraftPlayer) player).getHandle().isBeingSentToAnotherServer = true;
-+            BungeeCord.connectPlayer(player, server);
++            player.kick(Component.text("sendto:" + server));
++
++            if (player.getLocation().isChunkLoaded()) {
++                // Attempt to unload the player's chunk first to make teleporting faster
++                Chunk c = player.getChunk();
++                ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(c::unload, 0, "Unload Chunk");
++            }
 +        }
 +
-+        ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> zone.chunks.forEach(Chunk::unload), 0, "Unload Chunks");
-+
-+        return toSend;
++        return players;
++    }
++    
++    public static boolean inSameZone(Location location1, Location location2) {
++        return MultiPaper.chunkDistance(location1, location2) <= (12 + Bukkit.getViewDistance()) * 2;
 +    }
 +
-+    public static void checkIfShouldMerge(Chunk chunk) {
++    public static String getServer(Location location) {
++        for (ExternalServer server : MultiPaper.getConnection().getServersMap().values()) {
++            if (server.isAlive() && !server.isMe()) {
++                for (UUID uuid : server.getPlayers()) {
++                    Location loc = MultiPaper.getConnection().playerLocations.get(uuid);
++                    if (Bukkit.getPlayer(uuid) == null && loc != null && loc.getWorld() == location.getWorld()
++                            && Zone.inSameZone(loc, location)) {
++                        return server.getName();
++                    }
++                }
++            }
++        }
++        
++        return null;
++    }
++
++    public static boolean checkIfShouldMerge(Player player) {
++        String serverAtLocation = getServer(player.getLocation());
++        
++        if (serverAtLocation != null) {
++            Zone.doMerge(player, serverAtLocation);
++            return true;
++        }
++        
 +        ExternalServer serverTo = MultiPaper.getMe();
 +
 +        // Find server with lowest average tick time
 +        for (ExternalServer server : MultiPaper.getServers()) {
-+            if (server.getAverageTickTime() < serverTo.getAverageTickTime() - 20 &&
++            if (server.getAverageTickTime() < serverTo.getAverageTickTime() - 2 &&
 +                    server.isAlive()) {
 +                serverTo = server;
 +            }
@@ -2969,79 +3161,50 @@ index 0000000000000000000000000000000000000000..ab8cf248ff8496e37f11ba49481e4111
 +
 +        if (serverTo.isMe()) {
 +            // Can't merge with yourself
-+            return;
++            return false;
 +        }
-+
-+        Zone zone = new Zone(chunk, SHOULD_MERGE_CHUNK_LIMIT);
-+
-+        if (zone.chunks.size() >= SHOULD_MERGE_CHUNK_LIMIT) {
-+            // Too many chunks loaded, probably not worth merging
-+            return;
++        
++        HashSet<Player> players = new HashSet<>();
++        
++        recursivelyAddPlayersInSameZone(players, player);
++        
++        if (players.size() == 1) {
++            Zone.doMerge(player, serverTo.getName());
++            return true;
 +        }
-+
-+        if (zone.players.isEmpty()) {
-+            // No one to merge
-+            return;
-+        }
-+
-+        HashSet<Player> nearbyPlayers = new HashSet<>();
-+        for (Player player : chunk.getWorld().getPlayers()) {
-+            if (!zone.players.contains(player) &&
-+                    Math.abs(player.getChunk().getX() - chunk.getX()) < Bukkit.getViewDistance() * 5 &&
-+                    Math.abs(player.getChunk().getZ() - chunk.getZ()) < Bukkit.getViewDistance() * 5) {
-+                nearbyPlayers.add(player);
-+            }
-+        }
-+
-+        if (!nearbyPlayers.isEmpty()) {
-+            // There are nearby players on this server, this will probably mean
-+            // that if we merge with another server, we might end up merging
-+            // back very soon
-+            return;
-+        }
-+
-+        Zone.doMerge(chunk, zone, serverTo.getName());
++        
++        return false;
 +    }
 +
-+    public static void onPlayerDisconnect(Player player) {
-+        Location location = player.getLocation();
-+        String name = player.getName();
-+        ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
-+            beingSentToAnotherServer.remove(player);
-+
-+            Zone zone = zonesToUnload.remove(player);
-+            if (zone != null) {
-+                Zone zone2 = new Zone(location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4);
-+
-+                zone.chunks.forEach(zone2::mapChunks);
-+
-+                if (zone2.players.isEmpty()) {
-+                    LOGGER.info(name + " has left: Unloading zone with " + zone2.chunks.size() + " loaded chunks");
-+                    zone2.chunks.forEach(Chunk::unload);
++    private static void recursivelyAddPlayersInSameZone(HashSet<Player> players, Player player) {
++        if (players.add(player)) {
++            for (Player p : player.getWorld().getPlayers()) {
++                if (p != player && inSameZone(p.getLocation(), player.getLocation())) {
++                    recursivelyAddPlayersInSameZone(players, p);
 +                }
 +            }
-+        }, 1, "Remove player from beingSentToAnotherServer");
++        }
 +    }
 +
 +    private final HashSet<Chunk> chunks = new HashSet<>();
 +    private final HashSet<Player> players = new HashSet<>();
 +    private final int chunkLimit;
 +
-+    private Zone(Chunk chunk) {
++    public Zone(Chunk chunk) {
 +        this(chunk, Integer.MAX_VALUE);
 +    }
 +
-+    private Zone(Chunk chunk, int chunkLimit) {
++    public Zone(Chunk chunk, int chunkLimit) {
 +        this.chunkLimit = chunkLimit;
 +        mapChunks(chunk);
 +        mapPlayers(chunk.getWorld());
 +    }
 +
-+    private Zone(World world, int cx, int cz) {
++    public Zone(World world, int cx, int cz) {
 +        this(world, cx, cz, Integer.MAX_VALUE);
 +    }
 +
-+    private Zone(World world, int cx, int cz, int chunkLimit) {
++    public Zone(World world, int cx, int cz, int chunkLimit) {
 +        this.chunkLimit = chunkLimit;
 +        mapChunks(world, cx, cz);
 +        mapPlayers(world);
@@ -3064,11 +3227,16 @@ index 0000000000000000000000000000000000000000..ab8cf248ff8496e37f11ba49481e4111
 +    }
 +
 +    private void mapChunks(World world, int cx, int cz) {
-+        for (int dx = -2; dx <= 2; dx ++) {
-+            for (int dz = -2; dz <= 2; dz ++) {
++        if (world == null) {
++            return;
++        }
++        
++        for (int dx = -4; dx <= 4; dx ++) {
++            for (int dz = -4; dz <= 4; dz ++) {
 +                if (world.isChunkLoaded(cx + dx, cz + dz)) {
 +                    mapChunks(world.getChunkAt(cx + dx, cz + dz));
 +                }
++                
 +            }
 +        }
 +    }
@@ -3079,5 +3247,11 @@ index 0000000000000000000000000000000000000000..ab8cf248ff8496e37f11ba49481e4111
 +                players.add(player);
 +            }
 +        }
++    }
++
++    @NotNull
++    @Override
++    public Iterator<Chunk> iterator() {
++        return chunks.iterator();
 +    }
 +}

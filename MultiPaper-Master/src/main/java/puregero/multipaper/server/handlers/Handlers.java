@@ -36,6 +36,7 @@ public class Handlers {
         handlers.put("playerList", new PlayerListHandler());
         handlers.put("start", new StartHandler());
         handlers.put("loadedChunkList", new LoadedChunkListHandler());
+        handlers.put("playerUpdate", new PlayerUpdateHandler());
     }
 
     public static Handler get(String handler) {

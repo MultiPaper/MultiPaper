@@ -22,8 +22,7 @@ public class ReadChunkHandler implements Handler {
             try {
                 long t = System.currentTimeMillis();
                 while (ChunkLock.isBeingWritten(world, cx, cz) != null && !connection.getBungeeCordName().equals(ChunkLock.isBeingWritten(world, cx, cz))) {
-                    System.out.println("Waiting for chunk to be written (" + world + "," + cx + "," + cz + ")");
-                    if (t < System.currentTimeMillis() - 10 * 1000) {
+                    if (t < System.currentTimeMillis() - 20 * 1000) {
                         new IllegalStateException("Timed out while waiting for chunk to be written (" + world + "," + cx + "," + cz + ")").printStackTrace();
                         break;
                     }

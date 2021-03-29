@@ -46,4 +46,8 @@ public class Player {
         out.writeFloat(yaw);
         out.writeFloat(pitch);
     }
+
+    public UUID getUuid() {
+        return uuid;
+    }
 }

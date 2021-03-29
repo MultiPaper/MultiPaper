@@ -12,7 +12,7 @@ public class ChunkLock {
     }
 
     public static String isBeingWritten(String world, int cx, int cz) {
-        if (removeOnWrite.containsKey(key(world, cx, cz)) && removeOnWrite.get(key(world, cx, cz)) > System.currentTimeMillis() - 30*1000) {
+        if (removeOnWrite.containsKey(key(world, cx, cz)) && removeOnWrite.get(key(world, cx, cz)) > System.currentTimeMillis() - 60*1000) {
             return removeOnWriter.get(key(world, cx, cz));
         }
 

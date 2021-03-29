@@ -37,7 +37,7 @@ public class WriteTickTimeHandler implements Handler {
                     broadcast.close();
                 }
 
-                if (lastPlayerList < System.currentTimeMillis() - 1000 || connection.getTps() == -1) {
+                if (lastPlayerList < System.currentTimeMillis() - 2500 || connection.getTps() == -1) {
                     lastPlayerList = System.currentTimeMillis();
 
                     DataOutputStream broadcast = connection.broadcastAll();

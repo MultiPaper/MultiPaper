@@ -1,10 +1,11 @@
 package puregero.multipaper.server.locks;
 
-import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class StatsLock {
 
-    private static HashMap<String, String> locks = new HashMap<>();
+    private static Map<String, String> locks = new ConcurrentHashMap<>();
 
     public static String getLockHolder(String uuid) {
         return locks.get(uuid);

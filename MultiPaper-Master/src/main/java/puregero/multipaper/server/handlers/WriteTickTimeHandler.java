@@ -8,10 +8,11 @@ import puregero.multipaper.server.Worker;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class WriteTickTimeHandler implements Handler {
-    private HashMap<String, Long> lastUpdates = new HashMap<>();
+    private Map<String, Long> lastUpdates = new ConcurrentHashMap<>();
     private long lastPlayerList = System.currentTimeMillis();
 
     @Override

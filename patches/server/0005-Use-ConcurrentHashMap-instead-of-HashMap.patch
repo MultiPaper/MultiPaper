@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 5 Apr 2021 12:34:23 +1000
+Subject: [PATCH] Use ConcurrentHashMap instead of HashMap
+
+
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 620bf76ce64b85c5341090c8cf9e3b70a74ad051..2ed46d0e5f2d579402c0ca9537f98c3bbd51a903 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -11,8 +11,6 @@ import net.minecraft.server.level.EntityPlayer;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.bukkit.*;
+-import org.bukkit.Chunk;
+-import org.bukkit.World;
+ import org.bukkit.craftbukkit.CraftWorld;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
+ import org.bukkit.craftbukkit.scheduler.CraftScheduler;
+@@ -26,7 +24,7 @@ import java.nio.charset.StandardCharsets;
+ import java.nio.file.Files;
+ import java.util.*;
+ import java.util.concurrent.CompletableFuture;
+-import java.util.concurrent.atomic.AtomicBoolean;
++import java.util.concurrent.ConcurrentHashMap;
+ import java.util.function.Consumer;
+ import java.util.zip.DeflaterOutputStream;
+ import java.util.zip.InflaterInputStream;
+@@ -36,11 +34,11 @@ public class MultiPaperConnection extends Thread {
+     private static final Logger LOGGER = LogManager.getLogger();
+ 
+     private Socket socket;
+-    private HashMap<Integer, Request> callbacks = new HashMap<>();
+-    private HashMap<String, ExternalServer> serversMap = new HashMap<>();
++    private Map<Integer, Request> callbacks = new ConcurrentHashMap<>();
++    private Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
+     private String myName = null;
+     private WriterWorkerThread writer = new WriterWorkerThread(() -> socket);
+-    public HashMap<UUID, Location> playerLocations = new HashMap<>();
++    public Map<UUID, Location> playerLocations = new ConcurrentHashMap<>();
+ 
+     public MultiPaperConnection() {
+         super("MultiPaperConnection Thread");
+@@ -364,12 +362,8 @@ public class MultiPaperConnection extends Thread {
+     public CompletableFuture<DataInputStream> readChunk(String world, String path, int cx, int cz) throws IOException {
+         CompletableFuture<DataInputStream> future = new CompletableFuture<>();
+ 
+-        AtomicBoolean hasReturned = new AtomicBoolean(false);
+-
+         Consumer<DataInputStream> callback = in -> {
+             try {
+-                hasReturned.set(true);
+-
+                 byte[] data = new byte[in.readInt()];
+                 in.readFully(data);
+ 
+@@ -735,7 +729,7 @@ public class MultiPaperConnection extends Thread {
+         out.send(null);
+     }
+ 
+-    public HashMap<String, ExternalServer> getServersMap() {
++    public Map<String, ExternalServer> getServersMap() {
+         return serversMap;
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaperListener.java b/src/main/java/puregero/multipaper/MultiPaperListener.java
+index 50922eb0f6fd59c1c73d3294c1895ce58c6956c8..d7d0be3a7417e6a114c699bae615f54b39ac00e8 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperListener.java
++++ b/src/main/java/puregero/multipaper/MultiPaperListener.java
+@@ -45,7 +45,7 @@ public class MultiPaperListener implements Listener {
+     }
+ 
+     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+-    public void onPlayerQuit(PlayerKickEvent e) {
++    public void onPlayerKick(PlayerKickEvent e) {
+         willSaveChunks(e.getPlayer());
+         kickedPlayers.add(e.getPlayer());
+     }

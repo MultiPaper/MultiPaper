@@ -5,10 +5,8 @@ import puregero.multipaper.server.handlers.Handlers;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 public class ServerConnection extends Thread {
@@ -17,7 +15,7 @@ public class ServerConnection extends Thread {
     private String name;
     private long lastPing = System.currentTimeMillis();
     private CircularTimer timer = new CircularTimer();
-    private HashMap<Integer, Consumer<DataInputStream>> callbacks = new HashMap<>();
+    private Map<Integer, Consumer<DataInputStream>> callbacks = new ConcurrentHashMap<>();
     private List<Player> players = new ArrayList<>();
     private double tps;
 
@@ -27,7 +25,7 @@ public class ServerConnection extends Thread {
      * This connection map may include dead servers! Check if a server is alive
      * with `connections` before trying to send any data!
      */
-    private static HashMap<String, ServerConnection> connectionMap = new HashMap<>();
+    private static Map<String, ServerConnection> connectionMap = new ConcurrentHashMap<>();
 
     private static List<ServerConnection> connections = new ArrayList<>();
 

@@ -2,7 +2,9 @@ package puregero.multipaper.server.handlers;
 
 import puregero.multipaper.server.DataOutputSender;
 import puregero.multipaper.server.ServerConnection;
+import puregero.multipaper.server.Worker;
 import puregero.multipaper.server.handlers.Handler;
+import puregero.multipaper.server.locks.PlayerLock;
 import puregero.multipaper.server.locks.StatsLock;
 
 import java.io.DataInputStream;
@@ -13,6 +15,6 @@ public class ReleaseStatsHandler implements Handler {
     public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
         String uuid = in.readUTF();
 
-        StatsLock.release(connection.getBungeeCordName(), uuid);
+        Worker.runAsync(() -> StatsLock.release(connection.getBungeeCordName(), uuid));
     }
 }

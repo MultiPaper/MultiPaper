@@ -99,7 +99,7 @@ index 9929c2541a055efdf7d0735d440ba1e94c575900..5115038dd22c3d06341894c385e070d3
          return serversMap;
      }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperListener.java b/src/main/java/puregero/multipaper/MultiPaperListener.java
-index e928cae02d9f3327b998a2e98effb71cea5d0efa..50922eb0f6fd59c1c73d3294c1895ce58c6956c8 100644
+index e928cae02d9f3327b998a2e98effb71cea5d0efa..d28da67c071ed1c9916df365362fb055f381138f 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperListener.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperListener.java
 @@ -3,11 +3,13 @@ package puregero.multipaper;
@@ -140,7 +140,7 @@ index e928cae02d9f3327b998a2e98effb71cea5d0efa..50922eb0f6fd59c1c73d3294c1895ce5
          Zone zone = new Zone(player.getWorld(), player.getLocation().getBlockX() >> 4, player.getLocation().getBlockZ() >> 4);
 -        zone.forEach(MultiPaper::willSaveChunk);
 +        zone.forEach(chunk -> {
-+            if (chunk.isLoaded() && ((CraftChunk) chunk).getHandle().isNeedsSaving()) {
++            if (chunk.isLoaded() && ((CraftChunk) chunk).getHandle().isUnsaved()) {
 +                MultiPaper.willSaveChunk(chunk);
 +            }
 +        });
@@ -161,7 +161,7 @@ index e928cae02d9f3327b998a2e98effb71cea5d0efa..50922eb0f6fd59c1c73d3294c1895ce5
      }
      
 diff --git a/src/main/java/puregero/multipaper/Zone.java b/src/main/java/puregero/multipaper/Zone.java
-index 794f61347671df8edb2fe2fac6673172890b1ef6..cc548cc592aefcee3579594297267f40c428e50d 100644
+index 794f61347671df8edb2fe2fac6673172890b1ef6..02d883863d57775db9d0aa344a1175a1b77c0fc3 100644
 --- a/src/main/java/puregero/multipaper/Zone.java
 +++ b/src/main/java/puregero/multipaper/Zone.java
 @@ -7,6 +7,7 @@ import org.bukkit.Bukkit;
@@ -177,7 +177,7 @@ index 794f61347671df8edb2fe2fac6673172890b1ef6..cc548cc592aefcee3579594297267f40
          for (Player player : players) {
              ((CraftPlayer) player).getHandle().isBeingSentToAnotherServer = true;
 +            LOGGER.info("Sending " + player.getName() + " to server " + server + ". Does the chunk they're in need saving? "
-+                    + (player.getLocation().isChunkLoaded() && ((CraftChunk) player.getChunk()).getHandle().isNeedsSaving()));
++                    + (player.getLocation().isChunkLoaded() && ((CraftChunk) player.getChunk()).getHandle().isUnsaved()));
              player.kick(Component.text("sendto:" + server));
  
              if (player.getLocation().isChunkLoaded()) {

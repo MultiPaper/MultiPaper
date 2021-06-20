@@ -27,9 +27,6 @@ cd "$basedir/Paper/"
 
 ./gradlew applyPatches
 
-# Reset the mcdev-imports
-# git checkout build-data/mcdev-imports.txt
-
 cd "Paper-Server"
 mcVer=$(mvn -o org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=minecraft_version | sed -n -e '/^\[.*\]/ !{ /^[0-9]/ { p; q } }')
 
@@ -40,7 +37,7 @@ echo "$tag" > "$basedir"/current-paper
 
 "$basedir"/scripts/generatesources.sh
 
-cd Paper/
+cd "$basedir/Paper/"
 
 function tag {
 (
@@ -65,3 +62,5 @@ tag Paper-Server $forcetag
 pushRepo Paper-API $PAPER_API_REPO $tag
 pushRepo Paper-Server $PAPER_SERVER_REPO $tag
 
+# Reset the mcdev-imports
+git checkout build-data/mcdev-imports.txt

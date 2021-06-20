@@ -5,10 +5,10 @@ Subject: [PATCH] MultiPaper initial import commit
 
 
 diff --git a/src/main/java/com/destroystokyo/paper/PaperWorldConfig.java b/src/main/java/com/destroystokyo/paper/PaperWorldConfig.java
-index 5c91c007691efeea1d4383efcd1ca06990d0660c..89b10c86d7b07e503f69ae2334c6fc029de4dfd4 100644
+index 26e18a08a7f0bd704ff3055ce3a7814191450c85..e04573d6564e4200192b3115a6ccc08cee9d8ac6 100644
 --- a/src/main/java/com/destroystokyo/paper/PaperWorldConfig.java
 +++ b/src/main/java/com/destroystokyo/paper/PaperWorldConfig.java
-@@ -672,7 +672,7 @@ public class PaperWorldConfig {
+@@ -690,7 +690,7 @@ public class PaperWorldConfig {
  
      public long delayChunkUnloadsBy;
      private void delayChunkUnloadsBy() {
@@ -18,7 +18,7 @@ index 5c91c007691efeea1d4383efcd1ca06990d0660c..89b10c86d7b07e503f69ae2334c6fc02
              log("Delaying chunk unloads by " + delayChunkUnloadsBy + " seconds");
              delayChunkUnloadsBy *= 20;
 diff --git a/src/main/java/io/papermc/paper/adventure/ChatProcessor.java b/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
-index 1fcb01abc93c3c6ad172f209f55421d8b98629d5..a3a191c5ad092cb6b1782dc9c4ad635cd99820c2 100644
+index eb0053850f53ceb60eb1ae3ac0e34034648fe1eb..d7ffacd252564332b2aa8facef42040cae3f71d8 100644
 --- a/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
 +++ b/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
 @@ -30,6 +30,7 @@ import org.bukkit.event.Event;
@@ -29,152 +29,30 @@ index 1fcb01abc93c3c6ad172f209f55421d8b98629d5..a3a191c5ad092cb6b1782dc9c4ad635c
  
  public final class ChatProcessor {
      // <-- copied from adventure-text-serializer-legacy
-@@ -172,6 +173,8 @@ public final class ChatProcessor {
-                 recipient.sendMessage(player, renderer.render(player, displayName, message, recipient), MessageType.CHAT);
+@@ -181,6 +182,8 @@ public final class ChatProcessor {
+                 viewer.sendMessage(player, renderer.render(player, displayName, message, viewer), MessageType.CHAT);
              }
          }
 +
 +        MultiPaper.broadcastPacket(event.getPlayer().getUniqueId(), renderer.render(player, displayName, message, player)); // MultiPaper broadcast chat message
      }
  
-     private AsyncChatEvent createAsync(final ChatRenderer renderer, final Set<Player> recipients, final Set<Audience> viewers, final Component message) {
-diff --git a/src/main/java/net/minecraft/advancements/CriterionProgress.java b/src/main/java/net/minecraft/advancements/CriterionProgress.java
-index cc2d025c899039854fbc500709ec4008c985cd38..642e1d92fc02fe15fe84b1d126028cb46568da3f 100644
---- a/src/main/java/net/minecraft/advancements/CriterionProgress.java
-+++ b/src/main/java/net/minecraft/advancements/CriterionProgress.java
-@@ -45,7 +45,11 @@ public class CriterionProgress {
-     }
- 
-     public JsonElement e() {
--        return (JsonElement) (this.b != null ? new JsonPrimitive(CriterionProgress.a.format(this.b)) : JsonNull.INSTANCE);
-+        try {
-+            return (JsonElement) (this.b != null ? new JsonPrimitive(CriterionProgress.a.format(this.b)) : JsonNull.INSTANCE);
-+        } catch (Exception e) {
-+            return JsonNull.INSTANCE;
-+        }
-     }
- 
-     public static CriterionProgress b(PacketDataSerializer packetdataserializer) {
-diff --git a/src/main/java/net/minecraft/network/protocol/game/PacketPlayInSpectate.java b/src/main/java/net/minecraft/network/protocol/game/PacketPlayInSpectate.java
-index c2a94249292df63f8b1c2ca3afe302fcc35ff831..4e76f8b93424883de1ccc94814f381d1a6063af8 100644
---- a/src/main/java/net/minecraft/network/protocol/game/PacketPlayInSpectate.java
-+++ b/src/main/java/net/minecraft/network/protocol/game/PacketPlayInSpectate.java
-@@ -36,4 +36,10 @@ public class PacketPlayInSpectate implements Packet<PacketListenerPlayIn> {
-     public Entity a(WorldServer worldserver) {
-         return worldserver.getEntity(this.a);
-     }
-+    
-+    // MultiPaper start - Expose uuid
-+    public UUID getUUID() {
-+        return a;
-+    }
-+    // MultiPaper end
- }
-diff --git a/src/main/java/net/minecraft/network/protocol/game/PacketPlayOutPlayerInfo.java b/src/main/java/net/minecraft/network/protocol/game/PacketPlayOutPlayerInfo.java
-index 2758cf87fe5cb89c101f2495783c72a2fe4ad632..053ecfdd16b1bcf1423ea7735b4fe3255c05b05c 100644
---- a/src/main/java/net/minecraft/network/protocol/game/PacketPlayOutPlayerInfo.java
-+++ b/src/main/java/net/minecraft/network/protocol/game/PacketPlayOutPlayerInfo.java
-@@ -46,6 +46,26 @@ public class PacketPlayOutPlayerInfo implements Packet<PacketListenerPlayOut> {
- 
-     }
- 
-+    // MultiPaper start
-+    public PacketPlayOutPlayerInfo(Iterable<PlayerInfoData> iterable) {
-+        this.a = EnumPlayerInfoAction.ADD_PLAYER;
-+
-+        Iterator<PlayerInfoData> iterator = iterable.iterator();
-+
-+        while (iterator.hasNext()) {
-+            this.b.add(iterator.next());
-+        }
-+    }
-+
-+   public PacketPlayOutPlayerInfo.EnumPlayerInfoAction getAction() {
-+        return a;
-+    }
-+
-+    public List<PacketPlayOutPlayerInfo.PlayerInfoData> getPlayerInfoDatas() {
-+        return b;
-+    }
-+    // MultiPaper end
-+
-     @Override
-     public void a(PacketDataSerializer packetdataserializer) throws IOException {
-         this.a = (PacketPlayOutPlayerInfo.EnumPlayerInfoAction) packetdataserializer.a(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.class);
-@@ -174,10 +194,12 @@ public class PacketPlayOutPlayerInfo implements Packet<PacketListenerPlayOut> {
- 
-     public class PlayerInfoData {
- 
--        private final int b;
--        private final EnumGamemode c;
--        private final GameProfile d;
--        private final IChatBaseComponent e;
-+        // MultiPaper start - make not final and public
-+        public int b;
-+        public EnumGamemode c;
-+        public GameProfile d;
-+        public IChatBaseComponent e;
-+        // MultiPaper end
- 
-         public PlayerInfoData(GameProfile gameprofile, int i, EnumGamemode enumgamemode, @Nullable IChatBaseComponent ichatbasecomponent) {
-             this.d = gameprofile;
-diff --git a/src/main/java/net/minecraft/server/AdvancementDataPlayer.java b/src/main/java/net/minecraft/server/AdvancementDataPlayer.java
-index dfdbc028f68ced197ad179248ed3b1e9d70ba057..686d0a5fc0f07f6fb34267a72705ad4133f699c4 100644
---- a/src/main/java/net/minecraft/server/AdvancementDataPlayer.java
-+++ b/src/main/java/net/minecraft/server/AdvancementDataPlayer.java
-@@ -52,6 +52,7 @@ import net.minecraft.world.level.GameRules;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
- import io.papermc.paper.adventure.PaperAdventure; // Paper
-+import puregero.multipaper.MultiPaper;
- 
- public class AdvancementDataPlayer {
- 
-@@ -159,9 +160,15 @@ public class AdvancementDataPlayer {
-     }
- 
-     private void d(AdvancementDataWorld advancementdataworld) {
--        if (this.f.isFile()) {
-+        String json = null;
-+        try {
-+            json = MultiPaper.readAdvancements(player.getUniqueIDString());
-+        } catch (IOException e1) {
-+            e1.printStackTrace();
-+        }
-+        if ((json != null && !json.isEmpty()) || this.f.isFile()) {
-             try {
--                JsonReader jsonreader = new JsonReader(new StringReader(Files.toString(this.f, StandardCharsets.UTF_8)));
-+                JsonReader jsonreader = new JsonReader(new StringReader(json));
-                 Throwable throwable = null;
- 
-                 try {
-@@ -249,6 +256,12 @@ public class AdvancementDataPlayer {
-         jsonelement.getAsJsonObject().addProperty("DataVersion", SharedConstants.getGameVersion().getWorldVersion());
- 
-         try {
-+            // MultiPaper start
-+            if (true) {
-+                MultiPaper.writeAdvancements(player.getUniqueIDString(), AdvancementDataPlayer.b.toJson(jsonelement));
-+                return;
-+            }
-+            // MultiPaper end
-             FileOutputStream fileoutputstream = new FileOutputStream(this.f);
-             Throwable throwable = null;
- 
+     private AsyncChatEvent createAsync(final ChatRenderer renderer, final Set<Audience> viewers, final Component message) {
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index bf80e870e6a2a6fe1d4ae1bea355bcd7a0735d3b..1f9f4d85372eb1d4272374c6c2b26c77eb65c6a1 100644
+index 3bf39c2d2aa3fc4fd0815dacea57e4899ec0da0e..36759054f7fceaad5566d48d573ef8eb13c19b54 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -183,6 +183,8 @@ import co.aikar.timings.MinecraftTimings; // Paper
+@@ -190,6 +190,9 @@ import org.bukkit.event.server.ServerLoadEvent;
+ import co.aikar.timings.MinecraftTimings; // Paper
  import org.spigotmc.SlackActivityAccountant; // Spigot
- import io.papermc.paper.util.PaperJvmChecker; // Paper
- import io.papermc.paper.event.server.ServerResourcesReloadedEvent; // Paper
+ 
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.ShutdownHandler;
++
+ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements SnooperPopulator, CommandSource, AutoCloseable {
  
- public abstract class MinecraftServer extends IAsyncTaskHandlerReentrant<TickTask> implements IMojangStatistics, ICommandListener, AutoCloseable {
- 
-@@ -896,6 +898,7 @@ public abstract class MinecraftServer extends IAsyncTaskHandlerReentrant<TickTas
+     private static MinecraftServer SERVER; // Paper
+@@ -946,6 +949,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          // CraftBukkit end
          MinecraftServer.LOGGER.info("Stopping server");
          MinecraftTimings.stopServer(); // Paper
@@ -182,190 +60,128 @@ index bf80e870e6a2a6fe1d4ae1bea355bcd7a0735d3b..1f9f4d85372eb1d4272374c6c2b26c77
          // CraftBukkit start
          if (this.server != null) {
              this.server.disablePlugins();
-@@ -1414,6 +1417,7 @@ public abstract class MinecraftServer extends IAsyncTaskHandlerReentrant<TickTas
-         tickTimes60s.add(this.ticks, l);
+@@ -1475,6 +1479,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         tickTimes60s.add(this.tickCount, l);
          // Paper end
  
 +        MultiPaper.sendTickTime(i1 - i); // MultiPaper
-         this.circularTimer.a(i1 - i);
-         this.methodProfiler.exit();
+         this.frameTimer.logFrameDuration(i1 - i);
+         this.profiler.pop();
          org.spigotmc.WatchdogThread.tick(); // Spigot
-diff --git a/src/main/java/net/minecraft/server/commands/CommandReload.java b/src/main/java/net/minecraft/server/commands/CommandReload.java
-index 2c66816f7930e90559feaf4c5b0790d3358882b7..01ff3713aff19b231b616376fb41c011b74eefdf 100644
---- a/src/main/java/net/minecraft/server/commands/CommandReload.java
-+++ b/src/main/java/net/minecraft/server/commands/CommandReload.java
-@@ -12,14 +12,13 @@ import net.minecraft.server.packs.repository.ResourcePackRepository;
- import net.minecraft.world.level.storage.SaveData;
+diff --git a/src/main/java/net/minecraft/server/PlayerAdvancements.java b/src/main/java/net/minecraft/server/PlayerAdvancements.java
+index 7d6dc0a8ee35274052b122bbc446bc54750de0a6..04f196390a3dd4b8193b9220887093fa3ebaf52a 100644
+--- a/src/main/java/net/minecraft/server/PlayerAdvancements.java
++++ b/src/main/java/net/minecraft/server/PlayerAdvancements.java
+@@ -52,6 +52,8 @@ import net.minecraft.world.level.GameRules;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
--import io.papermc.paper.event.server.ServerResourcesReloadedEvent; // Paper
  
- public class CommandReload {
++import puregero.multipaper.MultiPaper;
++
+ public class PlayerAdvancements {
  
      private static final Logger LOGGER = LogManager.getLogger();
- 
-     public static void a(Collection<String> collection, CommandListenerWrapper commandlistenerwrapper) {
--        commandlistenerwrapper.getServer().reloadServerResources(collection, ServerResourcesReloadedEvent.Cause.COMMAND).exceptionally((throwable) -> { // Paper
-+        commandlistenerwrapper.getServer().a(collection).exceptionally((throwable) -> {
-             CommandReload.LOGGER.warn("Failed to execute reload", throwable);
-             commandlistenerwrapper.sendFailureMessage(new ChatMessage("commands.reload.failure"));
-             return null;
-@@ -49,7 +48,7 @@ public class CommandReload {
-         SaveData savedata = minecraftserver.getSaveData();
-         Collection<String> collection = resourcepackrepository.d();
-         Collection<String> collection1 = a(resourcepackrepository, savedata, collection);
--        minecraftserver.reloadServerResources(collection1, ServerResourcesReloadedEvent.Cause.PLUGIN); // Paper
-+        minecraftserver.a(collection1);
+@@ -156,9 +158,15 @@ public class PlayerAdvancements {
      }
-     // CraftBukkit end
  
+     private void load(ServerAdvancementManager advancementLoader) {
+-        if (this.file.isFile()) {
++        String json = null;
++        try {
++            json = MultiPaper.readAdvancements(player.getUniqueIDString());
++        } catch (IOException e1) {
++            e1.printStackTrace();
++        }
++        if ((json != null && !json.isEmpty()) || this.file.isFile()) {
+             try {
+-                JsonReader jsonreader = new JsonReader(new StringReader(Files.toString(this.file, StandardCharsets.UTF_8)));
++                JsonReader jsonreader = new JsonReader(new StringReader(json));
+ 
+                 try {
+                     jsonreader.setLenient(false);
+@@ -239,7 +247,18 @@ public class PlayerAdvancements {
+         jsonelement.getAsJsonObject().addProperty("DataVersion", SharedConstants.getCurrentVersion().getWorldVersion());
+ 
+         try {
++<<<<<<< HEAD
+             FileOutputStream fileoutputstream = new FileOutputStream(this.file);
++=======
++            // MultiPaper start
++            if (true) {
++                MultiPaper.writeAdvancements(player.getUniqueIDString(), AdvancementDataPlayer.b.toJson(jsonelement));
++                return;
++            }
++            // MultiPaper end
++            FileOutputStream fileoutputstream = new FileOutputStream(this.f);
++            Throwable throwable = null;
++>>>>>>> MultiPaper initial import commit
+ 
+             try {
+                 OutputStreamWriter outputstreamwriter = new OutputStreamWriter(fileoutputstream, Charsets.UTF_8.newEncoder());
 diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
-index 1929b992be3aeaa37c7b04c458f0ee41a60c692e..117b2ac1f5f011aaf834cb21d0b15e13525dad26 100644
+index eeefbb86cb88bd1b132bb6e22b4a4572cfb5e22c..961ebbd8433e4974e8e9334e4d3c64c0188bde97 100644
 --- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
 +++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
-@@ -69,6 +69,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
+@@ -70,6 +70,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
  import org.bukkit.event.server.ServerCommandEvent;
  import org.bukkit.craftbukkit.util.Waitable;
  import org.bukkit.event.server.RemoteServerCommandEvent;
 +import puregero.multipaper.MultiPaper;
  // CraftBukkit end
  
- public class DedicatedServer extends MinecraftServer implements IMinecraftServer {
-@@ -270,6 +271,8 @@ public class DedicatedServer extends MinecraftServer implements IMinecraftServer
+ public class DedicatedServer extends MinecraftServer implements ServerInterface {
+@@ -275,6 +276,8 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
          server.enablePlugins(org.bukkit.plugin.PluginLoadOrder.STARTUP);
          // CraftBukkit end
  
 +        MultiPaper.onStart(); // MultiPaper
-+
-         if (!this.getOnlineMode()) {
++        
+         if (!this.usesAuthentication()) {
              DedicatedServer.LOGGER.warn("**** SERVER IS RUNNING IN OFFLINE/INSECURE MODE!");
              DedicatedServer.LOGGER.warn("The server will make no attempt to authenticate usernames. Beware.");
-diff --git a/src/main/java/net/minecraft/server/level/ChunkProviderServer.java b/src/main/java/net/minecraft/server/level/ChunkProviderServer.java
-index 4a71f9a8a57ed123b31c725a8bd5f94ab0e2174d..b1f6b0c78d0fbf57dfc3b555b618b22b1535d7b0 100644
---- a/src/main/java/net/minecraft/server/level/ChunkProviderServer.java
-+++ b/src/main/java/net/minecraft/server/level/ChunkProviderServer.java
-@@ -46,11 +46,12 @@ import net.minecraft.world.level.storage.Convertable;
- import net.minecraft.world.level.storage.WorldData;
- import net.minecraft.world.level.storage.WorldPersistentData;
- import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap; // Paper
-+import puregero.multipaper.MultiPaper;
- 
- public class ChunkProviderServer extends IChunkProvider {
- 
-     private static final List<ChunkStatus> b = ChunkStatus.a(); public static final List<ChunkStatus> getPossibleChunkStatuses() { return ChunkProviderServer.b; } // Paper - OBFHELPER
--    private final ChunkMapDistance chunkMapDistance;
-+    public final ChunkMapDistance chunkMapDistance; // MultiPaper - make public
-     public final ChunkGenerator chunkGenerator;
-     private final WorldServer world;
-     public final Thread serverThread; // Paper - private -> public
-@@ -693,6 +694,7 @@ public class ChunkProviderServer extends IChunkProvider {
- 
-     @Override
-     public boolean a(BlockPosition blockposition) {
-+        if (!MultiPaper.shouldTickChunk(world, world.getChunkIfLoaded(blockposition))) return false;
-         // Paper start - optimize is ticking ready type functions
-         // is ticking ready
-         PlayerChunk playerChunk = this.getChunk(MCUtil.getCoordinateKey(blockposition));
-@@ -862,6 +864,8 @@ public class ChunkProviderServer extends IChunkProvider {
-                         Chunk chunk = (Chunk) optional1.get();
-                         ChunkCoordIntPair chunkcoordintpair = playerchunk.i();
- 
-+                        if (!MultiPaper.shouldTickChunk(this.world, chunk)) return; // MultiPaper - Should we tick this chunk?
-+
-                         if (!this.playerChunkMap.isOutsideOfRange(playerchunk, chunkcoordintpair, false)) { // Paper - optimise isOutsideOfRange
-                             chunk.setInhabitedTime(chunk.getInhabitedTime() + j);
-                             if (flag1 && (this.allowMonsters || this.allowAnimals) && this.world.getWorldBorder().isInBounds(chunk.getPos()) && !this.playerChunkMap.isOutsideOfRange(playerchunk, chunkcoordintpair, true)) { // Spigot // Paper - optimise isOutsideOfRange
-diff --git a/src/main/java/net/minecraft/server/level/EntityPlayer.java b/src/main/java/net/minecraft/server/level/EntityPlayer.java
-index 75bcfb3a2b4a104aeebb2fe3298714b2e5b569d2..eb902ee31aa2952bf258fd74fd4819b99ad8c9cc 100644
---- a/src/main/java/net/minecraft/server/level/EntityPlayer.java
-+++ b/src/main/java/net/minecraft/server/level/EntityPlayer.java
-@@ -239,6 +239,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
-     public final int[] mobCounts = new int[ENUMCREATURETYPE_TOTAL_ENUMS]; // Paper
-     public final com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<EntityPlayer> cachedSingleMobDistanceMap;
-     // Paper end
-+    public boolean isBeingSentToAnotherServer = false; // MultiPaper
- 
-     // CraftBukkit start
-     public String displayName;
-@@ -250,6 +251,7 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
-     public int newTotalExp = 0;
-     public boolean keepLevel = false;
-     public double maxHealthCache;
-+    public boolean shouldTickEntities = true; // MultiPaper
-     public boolean joining = true;
-     public boolean sentListPacket = false;
-     public boolean supressTrackerForLogin = false; // Paper
-@@ -417,6 +419,8 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
-             this.ci = new Vec3D(nbttagcompound1.getDouble("x"), nbttagcompound1.getDouble("y"), nbttagcompound1.getDouble("z"));
-         }
- 
-+        this.isBeingSentToAnotherServer = nbttagcompound.getBoolean("isBeingSentToAnotherServer"); // MultiPaper
-+
-         this.cd = nbttagcompound.getBoolean("seenCredits");
-         if (nbttagcompound.hasKeyOfType("recipeBook", 10)) {
-             this.recipeBook.a(nbttagcompound.getCompound("recipeBook"), this.server.getCraftingManager());
-@@ -480,6 +484,8 @@ public class EntityPlayer extends EntityHuman implements ICrafting {
-             }
-         }
- 
-+        nbttagcompound.setBoolean("isBeingSentToAnotherServer", this.isBeingSentToAnotherServer); // MultiPaper
-+
-         if (persistVehicle && entity1 != null && entity != this && entity.hasSinglePlayerPassenger()) {
-             // CraftBukkit end
-             NBTTagCompound nbttagcompound2 = new NBTTagCompound();
-diff --git a/src/main/java/net/minecraft/server/level/PlayerChunk.java b/src/main/java/net/minecraft/server/level/PlayerChunk.java
-index a323b76f68c273a73cb3f20167a668b2100f4944..480a904788a6e3abe471494398ed09a79c7e6157 100644
---- a/src/main/java/net/minecraft/server/level/PlayerChunk.java
-+++ b/src/main/java/net/minecraft/server/level/PlayerChunk.java
-@@ -97,7 +97,7 @@ public class PlayerChunk {
-         // it's important that we use getChunkAtIfLoadedImmediately to mirror the chunk sending logic used
-         // in Chunk's neighbour callback
-         Chunk ret = this.chunkMap.world.getChunkProvider().getChunkAtIfLoadedImmediately(this.location.x, this.location.z);
--        if (ret != null && ret.areNeighboursLoaded(1)) {
-+        if (ret != null) { // MultiPaper somehow checking for neighbours breaks it
-             return ret;
-         }
-         return null;
-diff --git a/src/main/java/net/minecraft/server/level/PlayerChunkMap.java b/src/main/java/net/minecraft/server/level/PlayerChunkMap.java
-index 6835401bd7863bbd655502547a9fd4ae0f298da1..6c9aa7d2334f46a2774a773d2a51f66554f7e082 100644
---- a/src/main/java/net/minecraft/server/level/PlayerChunkMap.java
-+++ b/src/main/java/net/minecraft/server/level/PlayerChunkMap.java
-@@ -109,6 +109,8 @@ import org.apache.logging.log4j.Logger;
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index 7f7bc04a30a0422b2d589adb488082c0aa5326dc..e269f5b17859c1de6ad6ecbcf5fd222aa020c568 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -104,6 +104,11 @@ import org.apache.logging.log4j.Logger;
  
  import org.bukkit.entity.Player; // CraftBukkit
- import org.spigotmc.AsyncCatcher;
+ 
++// MultiPaper start
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.Zone;
++// MultiPaper end
++
+ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
- public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
- 
-@@ -922,6 +924,9 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+     private static final byte CHUNK_TYPE_REPLACEABLE = -1;
+@@ -954,6 +959,9 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
  
              do {
-                 boolean isShuttingDown = world.getMinecraftServer().hasStopped(); // Paper
+                 boolean isShuttingDown = level.getServer().hasStopped(); // Paper
 +
-+                if (!isShuttingDown) new Exception("PlayerChunkMap.save has been called even though the server isn't shutting down!").printStackTrace(); // MultiPaper
-+
++                if (!isShuttingDown) new Exception("ChunkMap.saveAllChunks has been called even though the server isn't shutting down!").printStackTrace(); // MultiPaper
++                
                  mutableboolean.setFalse();
                  list.stream().map((playerchunk) -> {
                      CompletableFuture completablefuture;
-@@ -1028,6 +1033,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+@@ -1063,6 +1071,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              poiData, null, com.destroystokyo.paper.io.PrioritizedTaskQueue.LOW_PRIORITY);
  
-         if (!chunk.isNeedsSaving()) {
+         if (!chunk.isUnsaved()) {
 +            MultiPaper.notifyChunkNotSaving(chunk.getPos(), this.world);
              return;
          }
  
-@@ -1491,6 +1497,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
-         try (co.aikar.timings.Timing ignored = this.world.timings.chunkSave.startTiming()) { // Paper
-         this.m.a(ichunkaccess.getPos());
-         if (!ichunkaccess.isNeedsSaving()) {
+@@ -1485,6 +1494,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         try (co.aikar.timings.Timing ignored = this.level.timings.chunkSave.startTiming()) { // Paper
+         this.poiManager.flush(chunk.getPos());
+         if (!chunk.isUnsaved()) {
 +            MultiPaper.notifyChunkNotSaving(ichunkaccess.getPos(), this.world);
              return false;
          } else {
-             ichunkaccess.setLastSaved(this.world.getTime());
-@@ -1681,6 +1688,7 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+             chunk.setLastSaved(this.level.getGameTime()); // Paper - track save time
+@@ -1672,6 +1682,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              }
              return ret;
          }
@@ -373,7 +189,7 @@ index 6835401bd7863bbd655502547a9fd4ae0f298da1..6c9aa7d2334f46a2774a773d2a51f665
          return super.read(chunkcoordintpair);
      }
  
-@@ -1692,6 +1700,12 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
+@@ -1683,6 +1694,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                  com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread());
              return;
          }
@@ -386,71 +202,147 @@ index 6835401bd7863bbd655502547a9fd4ae0f298da1..6c9aa7d2334f46a2774a773d2a51f665
          super.write(chunkcoordintpair, nbttagcompound);
      }
      // Paper end
-@@ -1754,6 +1768,8 @@ public class PlayerChunkMap extends IChunkLoader implements PlayerChunk.d {
-             // Paper start - async io
+@@ -1726,6 +1743,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+             return status;
          }
  
 +        if (true) return null; // MultiPaper - Don't load chunk status from the disk
 +
-         NBTTagCompound compound = this.readChunkData(chunkPos);
+         this.readChunk(chunkPos);
  
-         return ChunkRegionLoader.getStatus(compound);
-diff --git a/src/main/java/net/minecraft/server/level/PlayerInteractManager.java b/src/main/java/net/minecraft/server/level/PlayerInteractManager.java
-index 87722285690d9d3370610e2a2eb809e0d1f497c9..dc9d839dffe53c28e22faedd85bbcf5eaedce628 100644
---- a/src/main/java/net/minecraft/server/level/PlayerInteractManager.java
-+++ b/src/main/java/net/minecraft/server/level/PlayerInteractManager.java
-@@ -82,7 +82,7 @@ public class PlayerInteractManager {
-         this.gamemode = enumgamemode;
-         enumgamemode.a(this.player.abilities);
-         this.player.updateAbilities();
--        this.player.server.getPlayerList().sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.UPDATE_GAME_MODE, new EntityPlayer[]{this.player}), this.player); // CraftBukkit
-+        this.player.server.getPlayerList().sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.UPDATE_GAME_MODE, new EntityPlayer[]{this.player})); // CraftBukkit // MultiPaper - original sendAll
-         this.world.everyoneSleeping();
-     }
+         return regionFile.getStatusIfCached(chunkPos.x, chunkPos.z);
+diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+index 82d3cfb2d346a8b929e9469ae09369f6a639f81d..0ad49b556f0ddbcf2854cadae5f7aa406b5f3b45 100644
+--- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
++++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+@@ -46,11 +46,12 @@ import net.minecraft.world.level.storage.DimensionDataStorage;
+ import net.minecraft.world.level.storage.LevelData;
+ import net.minecraft.world.level.storage.LevelStorageSource;
+ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap; // Paper
++import puregero.multipaper.MultiPaper;
  
-diff --git a/src/main/java/net/minecraft/server/level/WorldServer.java b/src/main/java/net/minecraft/server/level/WorldServer.java
-index f68a252378a94c8fcab622d2d89d738aceab45a4..623ee89761cc83e582bdee135248a217afe3a11a 100644
---- a/src/main/java/net/minecraft/server/level/WorldServer.java
-+++ b/src/main/java/net/minecraft/server/level/WorldServer.java
-@@ -167,6 +167,7 @@ import org.bukkit.event.entity.CreatureSpawnEvent;
+ public class ServerChunkCache extends ChunkSource {
+ 
+     public static final List<ChunkStatus> CHUNK_STATUSES = ChunkStatus.getStatusList();
+-    private final DistanceManager distanceManager;
++    public final DistanceManager distanceManager; // MultiPaper - make public
+     public final ChunkGenerator generator;
+     final ServerLevel level;
+     public final Thread mainThread;
+@@ -840,6 +841,8 @@ public class ServerChunkCache extends ChunkSource {
+                     this.level.getProfiler().push("broadcast");
+                     LevelChunk chunk = (LevelChunk) optional.get();
+ 
++                    if (!MultiPaper.shouldTickChunk(this.world, chunk)) return; // MultiPaper - Should we tick this chunk?
++
+                     this.level.timings.broadcastChunkUpdates.startTiming(); // Paper - timings
+                     playerchunk.broadcastChanges(chunk);
+                     this.level.timings.broadcastChunkUpdates.stopTiming(); // Paper - timings
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index b3312fa2fd218ffcfaa61d98584003c97fbda4ce..39e4e2ec68a5e9f96d9e00ecdedf732d7b146baf 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -164,6 +164,7 @@ import org.bukkit.event.entity.CreatureSpawnEvent;
  import org.bukkit.event.server.MapInitializeEvent;
  import org.bukkit.event.weather.LightningStrikeEvent;
  import org.bukkit.event.world.TimeSkipEvent;
 +import puregero.multipaper.MultiPaper;
  // CraftBukkit end
  
- public class WorldServer extends World implements GeneratorAccessSeed {
-@@ -326,7 +327,7 @@ public class WorldServer extends World implements GeneratorAccessSeed {
-         convertable = convertable_conversionsession;
-         uuid = WorldUUID.getUUID(convertable_conversionsession.folder.toFile());
-         // CraftBukkit end
+ public class ServerLevel extends net.minecraft.world.level.Level implements WorldGenLevel {
+@@ -327,7 +328,7 @@ public class ServerLevel extends net.minecraft.world.level.Level implements Worl
+         };
+         registryblocks = Registry.FLUID;
+         Objects.requireNonNull(registryblocks);
 -        if (com.destroystokyo.paper.PaperConfig.useOptimizedTickList) {
 +        if (com.destroystokyo.paper.PaperConfig.useOptimizedTickList && false) { // MultiPaper disable
-             this.nextTickListBlock = new com.destroystokyo.paper.server.ticklist.PaperTickList<>(this, (block) -> {
-                 return block == null || block.getBlockData().isAir();
-             }, IRegistry.BLOCK::getKey, this::b, "Blocks"); // Paper - Timings
-@@ -617,6 +618,8 @@ public class WorldServer extends World implements GeneratorAccessSeed {
-                 Entity entity = (Entity) entry.getValue();
-                 Entity entity1 = entity.getVehicle();
+             this.blockTicks = new com.destroystokyo.paper.server.ticklist.PaperTickList<>(this, predicate, Registry.BLOCK::getKey, this::tickBlock, "Blocks"); // Paper - Timings
+             this.liquidTicks = new com.destroystokyo.paper.server.ticklist.PaperTickList<>(this, predicate2, Registry.FLUID::getKey, this::tickLiquid, "Fluids"); // Paper timings
+         } else {
+@@ -617,6 +618,7 @@ public class ServerLevel extends net.minecraft.world.level.Level implements Worl
  
+             org.spigotmc.ActivationRange.activateEntities(this); // Spigot
+             timings.entityTick.startTiming(); // Spigot
++<<<<<<< HEAD
+             this.entityTickList.forEach((entity) -> {
+                 if (!entity.isRemoved()) {
+                     if (false && this.shouldDiscardEntity(entity)) { // CraftBukkit - We prevent spawning in general, so this butchering is not needed
+@@ -631,6 +633,24 @@ public class ServerLevel extends net.minecraft.world.level.Level implements Worl
+                             if (!entity1.isRemoved() && entity1.hasPassenger(entity)) {
+                                 return;
+                             }
++=======
++            while (objectiterator.hasNext()) {
++                Entry<Entity> entry = (Entry) objectiterator.next();
++                Entity entity = (Entity) entry.getValue();
++                Entity entity1 = entity.getVehicle();
++
 +                if (!MultiPaper.shouldTickEntity(this, entity)) continue; // MultiPaper - Should we tick this entity?
 +
-                 /* CraftBukkit start - We prevent spawning in general, so this butchering is not needed
-                 if (!this.server.getSpawnAnimals() && (entity instanceof EntityAnimal || entity instanceof EntityWaterAnimal)) {
-                     entity.die();
-diff --git a/src/main/java/net/minecraft/server/network/PlayerConnection.java b/src/main/java/net/minecraft/server/network/PlayerConnection.java
-index 4001078e2a408dfd5a93c21f55a58c1fde32abbb..e6c4865bac678190ef88d547678504620af1d7f7 100644
---- a/src/main/java/net/minecraft/server/network/PlayerConnection.java
-+++ b/src/main/java/net/minecraft/server/network/PlayerConnection.java
-@@ -220,6 +220,7 @@ import org.bukkit.inventory.InventoryView;
++                /* CraftBukkit start - We prevent spawning in general, so this butchering is not needed
++                if (!this.server.getSpawnAnimals() && (entity instanceof EntityAnimal || entity instanceof EntityWaterAnimal)) {
++                    entity.die();
++                }
++
++                if (!this.server.getSpawnNPCs() && entity instanceof NPC) {
++                    entity.die();
++                }
++                // CraftBukkit end */
++>>>>>>> MultiPaper initial import commit
+ 
+                             entity.stopRiding();
+                         }
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 181ab56448796a617f30f1b9e0fec8917b5d8e07..658d6d93b88e030b481f8daee73439708ca9e53e 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -234,6 +234,7 @@ public class ServerPlayer extends Player {
+     public final int[] mobCounts = new int[ENUMCREATURETYPE_TOTAL_ENUMS]; // Paper
+     public final com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> cachedSingleMobDistanceMap;
+     // Paper end
++    public boolean isBeingSentToAnotherServer = false; // MultiPaper
+ 
+     // CraftBukkit start
+     public String displayName;
+@@ -245,6 +246,7 @@ public class ServerPlayer extends Player {
+     public int newTotalExp = 0;
+     public boolean keepLevel = false;
+     public double maxHealthCache;
++    public boolean shouldTickEntities = true; // MultiPaper
+     public boolean joining = true;
+     public boolean sentListPacket = false;
+     public boolean supressTrackerForLogin = false; // Paper
+@@ -447,6 +449,8 @@ public class ServerPlayer extends Player {
+             this.enteredNetherPosition = new Vec3(nbttagcompound1.getDouble("x"), nbttagcompound1.getDouble("y"), nbttagcompound1.getDouble("z"));
+         }
+ 
++        this.isBeingSentToAnotherServer = nbttagcompound.getBoolean("isBeingSentToAnotherServer"); // MultiPaper
++        
+         this.seenCredits = nbt.getBoolean("seenCredits");
+         if (nbt.contains("recipeBook", 10)) {
+             this.recipeBook.fromNbt(nbt.getCompound("recipeBook"), this.server.getRecipeManager());
+@@ -509,6 +513,8 @@ public class ServerPlayer extends Player {
+             }
+         }
+ 
++        nbttagcompound.setBoolean("isBeingSentToAnotherServer", this.isBeingSentToAnotherServer); // MultiPaper
++        
+         if (persistVehicle && entity1 != null && entity != this && entity.hasExactlyOnePlayerPassenger()) {
+             // CraftBukkit end
+             CompoundTag nbttagcompound2 = new CompoundTag();
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 7d2ac8aa97805e8b022d3982b1332c5055fc8b90..17c50ef8a6fc302c4dff4cad118e8a18ce07d3ec 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -215,6 +215,7 @@ import org.bukkit.inventory.InventoryView;
  import org.bukkit.inventory.SmithingInventory;
  import org.bukkit.util.NumberConversions;
  import co.aikar.timings.MinecraftTimings; // Paper
 +import puregero.multipaper.MultiPaper;
  // CraftBukkit end
  
- public class PlayerConnection implements PacketListenerPlayIn {
-@@ -1407,7 +1408,7 @@ public class PlayerConnection implements PacketListenerPlayIn {
+ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
+@@ -1423,7 +1424,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
                                  }
  
                                  // Prevent 40 event-calls for less than a single pixel of movement >.>
@@ -458,8 +350,8 @@ index 4001078e2a408dfd5a93c21f55a58c1fde32abbb..e6c4865bac678190ef88d54767850462
 +                                double delta = Math.pow(this.lastPosX - to.getX(), 2) + Math.pow(this.lastPosY - to.getY(), 2) + Math.pow(this.lastPosZ - to.getX(), 2);
                                  float deltaAngle = Math.abs(this.lastYaw - to.getYaw()) + Math.abs(this.lastPitch - to.getPitch());
  
-                                 if ((delta > 1f / 256 || deltaAngle > 10f) && !this.player.isFrozen()) {
-@@ -1808,6 +1809,13 @@ public class PlayerConnection implements PacketListenerPlayIn {
+                                 if ((delta > 1f / 256 || deltaAngle > 10f) && !this.player.isImmobile()) {
+@@ -1837,6 +1838,13 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
                      return;
                  }
              }
@@ -473,64 +365,19 @@ index 4001078e2a408dfd5a93c21f55a58c1fde32abbb..e6c4865bac678190ef88d54767850462
          }
  
      }
-@@ -2160,6 +2168,7 @@ public class PlayerConnection implements PacketListenerPlayIn {
-                         recipient.sendMessage(PlayerConnection.this.player.getUniqueID(), s);
+@@ -2160,6 +2168,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+                         recipient.sendMessage(ServerGamePacketListenerImpl.this.player.getUUID(), s);
                      }
                  }
 +                MultiPaper.broadcastPacket(PlayerConnection.this.player.getUniqueID(), s); // MultiPaper
              }
          }
      }
-diff --git a/src/main/java/net/minecraft/server/players/JsonList.java b/src/main/java/net/minecraft/server/players/JsonList.java
-index c960852dc60d0598012c5eef0d139fe38bde63fb..f7528c60a36ae1f03896408ee30375c5f711bf8d 100644
---- a/src/main/java/net/minecraft/server/players/JsonList.java
-+++ b/src/main/java/net/minecraft/server/players/JsonList.java
-@@ -24,6 +24,7 @@ import net.minecraft.SystemUtils;
- import net.minecraft.util.ChatDeserializer;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
-+import puregero.multipaper.MultiPaper;
- 
- public abstract class JsonList<K, V extends JsonListEntry<K>> {
- 
-@@ -161,7 +162,7 @@ public abstract class JsonList<K, V extends JsonListEntry<K>> {
-         Throwable throwable = null;
- 
-         try {
--            JsonList.b.toJson(jsonarray, bufferedwriter);
-+            MultiPaper.writeJson(this.c.getName(), JsonList.b.toJson(jsonarray)); // JsonList.b.toJson(jsonarray, bufferedwriter); // MultiPaper
-         } catch (Throwable throwable1) {
-             throwable = throwable1;
-             throw throwable1;
-@@ -183,12 +184,19 @@ public abstract class JsonList<K, V extends JsonListEntry<K>> {
-     }
- 
-     public void load() throws IOException {
--        if (this.c.exists()) {
--            BufferedReader bufferedreader = Files.newReader(this.c, StandardCharsets.UTF_8);
-+        if (true || this.c.exists()) { // MultiPaper
-+            BufferedReader bufferedreader = null; // Files.newReader(this.c, StandardCharsets.UTF_8); // MultiPaper
-             Throwable throwable = null;
--
-+            
-+            // MultiPaper start
-+            String json = MultiPaper.readJson(this.c.getName());
-+            if (json == null || json.isEmpty()) {
-+                return;
-+            }
-+            // MultiPaper end
-+            
-             try {
--                JsonArray jsonarray = (JsonArray) JsonList.b.fromJson(bufferedreader, JsonArray.class);
-+                JsonArray jsonarray = JsonList.b.fromJson(json, JsonArray.class); // (JsonArray) JsonList.b.fromJson(bufferedreader, JsonArray.class); // MultiPaper
-                 com.google.common.base.Preconditions.checkState(jsonarray != null, "The file \"" + this.c.getName() + "\" is either empty or corrupt"); // Paper
- 
-                 this.d.clear();
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 90776231b1faffb11e4394f555f336ca248e3004..809e7de2d70c9bd69c7171645b8842445e9c8352 100644
+index d76d8d8db7921d16f87dd162ccd115e351cde106..8d9265c599569fda3db74b9f544c3afc9c0d8888 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
-@@ -122,6 +122,9 @@ import org.bukkit.event.player.PlayerJoinEvent;
+@@ -116,6 +116,9 @@ import org.bukkit.event.player.PlayerJoinEvent;
  import org.bukkit.event.player.PlayerLoginEvent;
  import org.bukkit.event.player.PlayerQuitEvent;
  import org.bukkit.event.player.PlayerRespawnEvent;
@@ -540,42 +387,42 @@ index 90776231b1faffb11e4394f555f336ca248e3004..809e7de2d70c9bd69c7171645b884244
  // CraftBukkit end
  
  public abstract class PlayerList {
-@@ -283,6 +286,13 @@ public abstract class PlayerList {
-         entityplayer.getRecipeBook().a(entityplayer);
-         this.sendScoreboard(worldserver1.getScoreboard(), entityplayer);
-         this.server.invalidatePingSample();
-+        
+@@ -277,6 +280,13 @@ public abstract class PlayerList {
+         player.getRecipeBook().sendInitialRecipeBook(player);
+         this.updateEntireScoreboard(worldserver1.getScoreboard(), player);
+         this.server.invalidateStatus();
++
 +        // MultiPaper start - Check if player should move servers
-+        if (Zone.checkIfShouldMerge(entityplayer.getBukkitEntity())) {
++        if (Zone.checkIfShouldMerge(player.getBukkitEntity())) {
 +            return;
 +        }
 +        // MultiPaper end
-+        
++
          // Paper start - async load spawn in chunk
-         WorldServer finalWorldserver = worldserver1;
+         ServerLevel finalWorldserver = worldserver1;
          int chunkX = loc.getBlockX() >> 4;
-@@ -337,13 +347,19 @@ public abstract class PlayerList {
+@@ -332,13 +342,19 @@ public abstract class PlayerList {
          }
          // CraftBukkit start
-         chatmessage.a(EnumChatFormat.YELLOW);
+         chatmessage.withStyle(ChatFormatting.YELLOW);
 +        // MultiPaper start
-+        if (entityplayer.isBeingSentToAnotherServer) {
-+            entityplayer.isBeingSentToAnotherServer = false;
++        if (player.isBeingSentToAnotherServer) {
++            player.isBeingSentToAnotherServer = false;
 +            chatmessage = null;
 +        }
 +        // MultiPaper end
-         IChatBaseComponent joinMessage = chatmessage; // Paper - Adventure
+         Component joinMessage = chatmessage; // Paper - Adventure
  
-         playerconnection.a(entityplayer.locX(), entityplayer.locY(), entityplayer.locZ(), entityplayer.yaw, entityplayer.pitch);
-         this.players.add(entityplayer);
-         this.playersByName.put(entityplayer.getName().toLowerCase(java.util.Locale.ROOT), entityplayer); // Spigot
-         this.j.put(entityplayer.getUniqueID(), entityplayer);
+         playerconnection.teleport(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
+         this.players.add(player);
+         this.playersByName.put(player.getScoreboardName().toLowerCase(java.util.Locale.ROOT), player); // Spigot
+         this.playersByUUID.put(player.getUUID(), player);
 -        // this.sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, new EntityPlayer[]{entityplayer})); // CraftBukkit - replaced with loop below
-+        this.sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, new EntityPlayer[]{entityplayer})); // MultiPaper - Keep original sendAll
++        this.sendAll(new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.ADD_PLAYER, new ServerPlayer[]{player})); // CraftBukkit - replaced with loop below // MultiPaper - Keep original sendAll
  
          // Paper start - correctly register player BEFORE PlayerJoinEvent, so the entity is valid and doesn't require tick delay hacks
-         entityplayer.supressTrackerForLogin = true;
-@@ -369,6 +385,11 @@ public abstract class PlayerList {
+         player.supressTrackerForLogin = true;
+@@ -364,6 +380,11 @@ public abstract class PlayerList {
          }
          // CraftBukkit end
  
@@ -585,91 +432,134 @@ index 90776231b1faffb11e4394f555f336ca248e3004..809e7de2d70c9bd69c7171645b884244
 +        PlayerInfoManager.send(entityplayer); // MultiPaper
 +
          // CraftBukkit start - sendAll above replaced with this loop
-         PacketPlayOutPlayerInfo packet = new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.ADD_PLAYER, entityplayer);
+         ClientboundPlayerInfoPacket packet = new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.ADD_PLAYER, player);
  
-@@ -376,7 +397,7 @@ public abstract class PlayerList {
-             EntityPlayer entityplayer1 = (EntityPlayer) this.players.get(i);
+@@ -371,7 +392,7 @@ public abstract class PlayerList {
+             ServerPlayer entityplayer1 = (ServerPlayer) this.players.get(i);
  
-             if (entityplayer1.getBukkitEntity().canSee(entityplayer.getBukkitEntity())) {
--                entityplayer1.playerConnection.sendPacket(packet);
-+                // entityplayer1.playerConnection.sendPacket(packet); // MultiPaper - Keep original sendAll
+             if (entityplayer1.getBukkitEntity().canSee(player.getBukkitEntity())) {
+-                entityplayer1.connection.send(packet);
++                // entityplayer1.connection.send(packet); // MultiPaper - Keep original sendAll
              }
  
-             if (!entityplayer.getBukkitEntity().canSee(entityplayer1.getBukkitEntity())) {
-@@ -594,6 +615,7 @@ public abstract class PlayerList {
+             if (!player.getBukkitEntity().canSee(entityplayer1.getBukkitEntity())) {
+@@ -590,6 +611,7 @@ public abstract class PlayerList {
          }
  
-         PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(cserver.getPlayer(entityplayer), net.kyori.adventure.text.Component.translatable("multiplayer.player.left", net.kyori.adventure.text.format.NamedTextColor.YELLOW, com.destroystokyo.paper.PaperConfig.useDisplayNameInQuit ? entityplayer.getBukkitEntity().displayName() : net.kyori.adventure.text.Component.text(entityplayer.getName())), entityplayer.quitReason); // Paper - quit reason
+         PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(this.cserver.getPlayer(entityplayer), net.kyori.adventure.text.Component.translatable("multiplayer.player.left", net.kyori.adventure.text.format.NamedTextColor.YELLOW, com.destroystokyo.paper.PaperConfig.useDisplayNameInQuit ? entityplayer.getBukkitEntity().displayName() : net.kyori.adventure.text.Component.text(entityplayer.getScoreboardName())), entityplayer.quitReason); // Paper - quit reason
 +        if (entityplayer.isBeingSentToAnotherServer) playerQuitEvent.setQuitMessage(null); // MultiPaper - No quit message if they're going to another server
-         if (entityplayer.didPlayerJoinEvent) cserver.getPluginManager().callEvent(playerQuitEvent); // Paper - if we disconnected before join ever fired, don't fire quit
+         if (entityplayer.didPlayerJoinEvent) this.cserver.getPluginManager().callEvent(playerQuitEvent); // Paper - if we disconnected before join ever fired, don't fire quit
          entityplayer.getBukkitEntity().disconnect(playerQuitEvent.getQuitMessage());
  
-@@ -619,6 +641,9 @@ public abstract class PlayerList {
+@@ -615,6 +637,9 @@ public abstract class PlayerList {
          // Paper end
  
-         this.savePlayerFile(entityplayer);
+         this.save(entityplayer);
 +        MultiPaper.releasePlayer(entityplayer.getUniqueIDString()); // MultiPaper
 +        MultiPaper.releaseAdvancements(entityplayer.getUniqueIDString()); // MultiPaper
 +        MultiPaper.releaseStats(entityplayer.getUniqueIDString()); // MultiPaper
          if (entityplayer.isPassenger()) {
              Entity entity = entityplayer.getRootVehicle();
  
-@@ -673,13 +698,13 @@ public abstract class PlayerList {
+@@ -661,13 +686,13 @@ public abstract class PlayerList {
          // Paper end
  
          // CraftBukkit start
 -        // this.sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER, new EntityPlayer[]{entityplayer}));
-+        this.sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER, new EntityPlayer[]{entityplayer})); // MultiPaper - Keep original sendAll
-         PacketPlayOutPlayerInfo packet = new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.REMOVE_PLAYER, entityplayer);
-         for (int i = 0; i < players.size(); i++) {
-             EntityPlayer entityplayer2 = (EntityPlayer) this.players.get(i);
++        this.sendAll(new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.REMOVE_PLAYER, new EntityPlayer[]{entityplayer})); // MultiPaper - Keep original sendAll
+         ClientboundPlayerInfoPacket packet = new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.REMOVE_PLAYER, entityplayer);
+         for (int i = 0; i < this.players.size(); i++) {
+             ServerPlayer entityplayer2 = (ServerPlayer) this.players.get(i);
  
              if (entityplayer2.getBukkitEntity().canSee(entityplayer.getBukkitEntity())) {
--                entityplayer2.playerConnection.sendPacket(packet);
-+                // entityplayer2.playerConnection.sendPacket(packet);
+-                entityplayer2.connection.send(packet);
++                // entityplayer2.connection.send(packet); // MultiPaper - Keep original sendAll
              } else {
                  entityplayer2.getBukkitEntity().removeDisconnectingPlayer(entityplayer.getBukkitEntity());
              }
-@@ -1045,6 +1070,17 @@ public abstract class PlayerList {
+@@ -1015,6 +1040,17 @@ public abstract class PlayerList {
      }
  
-     public void sendAll(Packet<?> packet) {
-+        // MultiPaper start - Intercept PacketPlayOutPlayerInfo packet
-+        if (packet instanceof PacketPlayOutPlayerInfo) {
+     public void broadcastAll(Packet<?> packet) {
++        // MultiPaper start - Intercept ClientboundPlayerInfoPacket packet
++        if (packet instanceof ClientboundPlayerInfoPacket) {
 +            MultiPaper.broadcastPacket(packet);
 +        }
 +
-+        sendAllNoIntercept(packet);
++        broadcastAllNoIntercept(packet);
 +    }
 +
-+    public void sendAllNoIntercept(Packet<?> packet) {
++    public void broadcastAllNoIntercept(Packet<?> packet) {
 +        // MultiPaper end
 +
-         for (int i = 0; i < this.players.size(); ++i) {
-             ((EntityPlayer) this.players.get(i)).playerConnection.sendPacket(packet);
-         }
-@@ -1414,6 +1450,7 @@ public abstract class PlayerList {
+         Iterator iterator = this.players.iterator();
  
-     public void sendMessage(IChatBaseComponent ichatbasecomponent, ChatMessageType chatmessagetype, UUID uuid) {
-         this.server.sendMessage(ichatbasecomponent, uuid);
-+        MultiPaper.broadcastPacket(new PacketPlayOutChat(CraftChatMessage.fixComponent(ichatbasecomponent), chatmessagetype, uuid)); // MultiPaper
-         // CraftBukkit start - we run this through our processor first so we can get web links etc
-         this.sendAll(new PacketPlayOutChat(CraftChatMessage.fixComponent(ichatbasecomponent), chatmessagetype, uuid));
-         // CraftBukkit end
-diff --git a/src/main/java/net/minecraft/stats/ServerStatisticManager.java b/src/main/java/net/minecraft/stats/ServerStatisticManager.java
-index 1efab34e03199879f5e0dcee0ff79ce2c23c73bc..04e0043dc3bba5904d5768f434b53591b61fe3fc 100644
---- a/src/main/java/net/minecraft/stats/ServerStatisticManager.java
-+++ b/src/main/java/net/minecraft/stats/ServerStatisticManager.java
-@@ -35,6 +35,7 @@ import net.minecraft.world.entity.player.EntityHuman;
+         while (iterator.hasNext()) {
+@@ -1384,6 +1420,7 @@ public abstract class PlayerList {
+ 
+     public void broadcastMessage(Component message, ChatType type, UUID sender) {
+         this.server.sendMessage(message, sender);
++        MultiPaper.broadcastPacket(new PacketPlayOutChat(CraftChatMessage.fixComponent(messages), type, sender)); // MultiPaper
+         Iterator iterator = this.players.iterator();
+ 
+         while (iterator.hasNext()) {
+diff --git a/src/main/java/net/minecraft/server/players/StoredUserList.java b/src/main/java/net/minecraft/server/players/StoredUserList.java
+index 9152c6c9e7e5c8fdb9183c2b4f088a810621b333..8d6f203d4caee6fc03f070aedd1864d80b20618c 100644
+--- a/src/main/java/net/minecraft/server/players/StoredUserList.java
++++ b/src/main/java/net/minecraft/server/players/StoredUserList.java
+@@ -26,6 +26,7 @@ import net.minecraft.Util;
+ import net.minecraft.util.GsonHelper;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
+ 
+@@ -162,7 +163,7 @@ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
+         BufferedWriter bufferedwriter = Files.newWriter(this.file, StandardCharsets.UTF_8);
+ 
+         try {
+-            StoredUserList.GSON.toJson(jsonarray, bufferedwriter);
++            MultiPaper.writeJson(this.file.getName(), StoredUserList.GSON.toJson(jsonarray)); // StoredUserList.GSON.toJson(jsonarray, bufferedwriter); // MultiPaper
+         } catch (Throwable throwable) {
+             if (bufferedwriter != null) {
+                 try {
+@@ -182,11 +183,18 @@ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
+     }
+ 
+     public void load() throws IOException {
+-        if (this.file.exists()) {
+-            BufferedReader bufferedreader = Files.newReader(this.file, StandardCharsets.UTF_8);
++        if (true || this.file.exists()) {
++            BufferedReader bufferedreader = null; // Files.newReader(this.file, StandardCharsets.UTF_8); // MultiPaper
++            
++            // MultiPaper start
++            String json = MultiPaper.readJson(this.file.getName());
++            if (json == null || json.isEmpty()) {
++                return;
++            }
++            // MultiPaper end
+ 
+             try {
+-                JsonArray jsonarray = (JsonArray) StoredUserList.GSON.fromJson(bufferedreader, JsonArray.class);
++                JsonArray jsonarray = (JsonArray) StoredUserList.GSON.fromJson(json, JsonArray.class); // StoredUserList.GSON.fromJson(bufferedreader, JsonArray.class); // MultiPaper
+                 com.google.common.base.Preconditions.checkState(jsonarray != null, "The file \"" + this.file.getName() + "\" is either empty or corrupt"); // Paper
+ 
+                 this.map.clear();
+diff --git a/src/main/java/net/minecraft/stats/ServerStatsCounter.java b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
+index 9f3355dbbbab1ab88cf2b7034130c2888e38d7a7..17650b6af16dcc46e0b66ec8027dacb3c0e3a0f7 100644
+--- a/src/main/java/net/minecraft/stats/ServerStatsCounter.java
++++ b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
+@@ -36,6 +36,7 @@ import net.minecraft.world.entity.player.Player;
  import org.apache.commons.io.FileUtils;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.MultiPaper;
  
- public class ServerStatisticManager extends StatisticManager {
+ public class ServerStatsCounter extends StatsCounter {
  
-@@ -54,6 +55,21 @@ public class ServerStatisticManager extends StatisticManager {
-             this.a.put( wrapper, entry.getValue().intValue() );
+@@ -54,6 +55,21 @@ public class ServerStatsCounter extends StatsCounter {
+             this.stats.put( wrapper, entry.getValue().intValue() );
          }
          // Spigot end
 +        // MultiPaper start
@@ -689,59 +579,59 @@ index 1efab34e03199879f5e0dcee0ff79ce2c23c73bc..04e0043dc3bba5904d5768f434b53591
 +        // MultiPaper end
          if (file.isFile()) {
              try {
-                 this.a(minecraftserver.getDataFixer(), FileUtils.readFileToString(file));
-@@ -69,6 +85,12 @@ public class ServerStatisticManager extends StatisticManager {
+                 this.parseLocal(server.getFixerUpper(), FileUtils.readFileToString(file));
+@@ -69,6 +85,12 @@ public class ServerStatsCounter extends StatsCounter {
      public void save() {
          if ( org.spigotmc.SpigotConfig.disableStatSaving ) return; // Spigot
          try {
 +            // MultiPaper start
 +            if (true) {
-+                MultiPaper.writeStats(this.d.getName().split("\\.")[0], this.b());
++                MultiPaper.writeStats(this.file.getName().split("\\.")[0], this.toJson());
 +                return;
 +            }
 +            // MultiPaper end
-             FileUtils.writeStringToFile(this.d, this.b());
+             FileUtils.writeStringToFile(this.file, this.toJson());
          } catch (IOException ioexception) {
-             ServerStatisticManager.LOGGER.error("Couldn't save stats", ioexception);
+             ServerStatsCounter.LOGGER.error("Couldn't save stats", ioexception);
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 8ef41182056052686055b7eb88ab19c161e84ed4..d648457f275dbb71965062309948377d86e71fb4 100644
+index af90013d48e2dd827e045e2fc0f7f5be0dbaa33f..15c740b67bc5de2a5bbca2d5956340f5e19ca244 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -140,6 +140,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
+@@ -147,6 +147,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
  import org.bukkit.event.entity.EntityPoseChangeEvent;
  import org.bukkit.event.player.PlayerTeleportEvent;
  import org.bukkit.plugin.PluginManager;
 +import puregero.multipaper.MultiPaper;
  // CraftBukkit end
  
- public abstract class Entity implements INamableTileEntity, ICommandListener, net.minecraft.server.KeyedObject { // Paper
-@@ -2716,11 +2717,6 @@ public abstract class Entity implements INamableTileEntity, ICommandListener, ne
+ public abstract class Entity implements Nameable, EntityAccess, CommandSource, net.minecraft.server.KeyedObject { // Paper
+@@ -2982,11 +2983,6 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
                  // CraftBukkit end
  
-                 this.world.getMethodProfiler().exitEnter("reloading");
+                 this.level.getProfiler().popPush("reloading");
 -                // Paper start - Change lead drop timing to prevent dupe
--                if (this instanceof EntityInsentient) {
--                    ((EntityInsentient) this).unleash(true, true); // Paper drop lead
+-                if (this instanceof Mob) {
+-                    ((Mob) this).dropLeash(true, true); // Paper drop lead
 -                }
 -                // Paper end
-                 Entity entity = this.getEntityType().a((World) worldserver);
+                 Entity entity = this.getType().create((Level) worldserver);
  
                  if (entity != null) {
-@@ -2734,6 +2730,10 @@ public abstract class Entity implements INamableTileEntity, ICommandListener, ne
+@@ -3000,6 +2996,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
                      // CraftBukkit start - Forward the CraftEntity to the new entity
                      this.getBukkitEntity().setHandle(entity);
                      entity.bukkitEntity = this.getBukkitEntity();
 +
-+                    if (this instanceof EntityInsentient) {
-+                        ((EntityInsentient) this).unleash(true, true); // Paper drop lead
++                    if (this instanceof Mob) {
++                        ((Mob) this).dropLeash(true, true); // Paper drop lead
 +                    }
                      // CraftBukkit end
                  }
  
-diff --git a/src/main/java/net/minecraft/world/entity/ai/village/poi/VillagePlace.java b/src/main/java/net/minecraft/world/entity/ai/village/poi/VillagePlace.java
-index ce165233739c7b92a76031b949f269bd0a11149c..2660df000cb4007b085b1d15327606382f53005e 100644
---- a/src/main/java/net/minecraft/world/entity/ai/village/poi/VillagePlace.java
-+++ b/src/main/java/net/minecraft/world/entity/ai/village/poi/VillagePlace.java
+diff --git a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
+index 6c3455823f996e0421975b7f4a00f4e333e9f514..f4877977eea4481ce883f6394d025dde9d253d51 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
++++ b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
 @@ -6,6 +6,8 @@ import it.unimi.dsi.fastutil.longs.Long2ByteMap;
  import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
  import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -751,7 +641,7 @@ index ce165233739c7b92a76031b949f269bd0a11149c..2660df000cb4007b085b1d1532760638
  import java.io.File;
  import java.util.Collections;
  import java.util.Comparator;
-@@ -297,7 +299,10 @@ public class VillagePlace extends RegionFileSection<VillagePlaceSection> {
+@@ -292,7 +294,10 @@ public class PoiManager extends SectionStorage<PoiSection> {
              }
              return ret;
          }
@@ -763,7 +653,7 @@ index ce165233739c7b92a76031b949f269bd0a11149c..2660df000cb4007b085b1d1532760638
      }
  
      @Override
-@@ -308,7 +313,10 @@ public class VillagePlace extends RegionFileSection<VillagePlaceSection> {
+@@ -303,7 +308,10 @@ public class PoiManager extends SectionStorage<PoiSection> {
                  com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread());
              return;
          }
@@ -775,37 +665,34 @@ index ce165233739c7b92a76031b949f269bd0a11149c..2660df000cb4007b085b1d1532760638
      }
      // Paper end
  
-diff --git a/src/main/java/net/minecraft/world/entity/player/EntityHuman.java b/src/main/java/net/minecraft/world/entity/player/EntityHuman.java
-index c39c50e53549e9cb9d3520bc7e8b7e89cfa20163..26bf157c948efc9ca45807da2cddd7de1625dbef 100644
---- a/src/main/java/net/minecraft/world/entity/player/EntityHuman.java
-+++ b/src/main/java/net/minecraft/world/entity/player/EntityHuman.java
-@@ -124,8 +124,13 @@ import org.bukkit.event.entity.EntityCombustByEntityEvent;
+diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
+index d286d88a3c3f93dbfa92de9421e320c92cd96350..34da23baafa5f4584461dbbbc8e5004fe820fc8e 100644
+--- a/src/main/java/net/minecraft/world/entity/player/Player.java
++++ b/src/main/java/net/minecraft/world/entity/player/Player.java
+@@ -124,6 +124,7 @@ import org.bukkit.event.entity.EntityCombustByEntityEvent;
  import org.bukkit.event.entity.EntityExhaustionEvent;
  import org.bukkit.event.player.PlayerDropItemEvent;
  import org.bukkit.event.player.PlayerVelocityEvent;
 +import org.bukkit.util.Vector;
  // CraftBukkit end
  
+ public abstract class Player extends LivingEntity {
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index 870ff060e34de4ec49ad5496e79c2bd543297c41..aabc338374feed6f152a554aaecca687fc77029d 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -100,6 +100,10 @@ import org.bukkit.event.block.BlockPhysicsEvent;
+ import org.bukkit.event.world.GenericGameEvent;
+ // CraftBukkit end
+ 
 +// MultiPaper start
 +import puregero.multipaper.MultiPaper;
 +// MultiPaper end
 +
- public abstract class EntityHuman extends EntityLiving {
+ public abstract class Level implements LevelAccessor, AutoCloseable {
  
-     public static final EntitySize bh = EntitySize.b(0.6F, 1.8F);
-diff --git a/src/main/java/net/minecraft/world/level/World.java b/src/main/java/net/minecraft/world/level/World.java
-index f7f593a9e58b537109fa6ca1c783f6614f4bfad5..e1366ad875c5fc13dc0029ed73b025578adc1807 100644
---- a/src/main/java/net/minecraft/world/level/World.java
-+++ b/src/main/java/net/minecraft/world/level/World.java
-@@ -91,6 +91,7 @@ import org.bukkit.craftbukkit.block.CapturedBlockState;
- import org.bukkit.craftbukkit.block.CraftBlockState;
- import org.bukkit.craftbukkit.block.data.CraftBlockData;
- import org.bukkit.event.block.BlockPhysicsEvent;
-+import puregero.multipaper.MultiPaper;
- // CraftBukkit end
- 
- public abstract class World implements GeneratorAccess, AutoCloseable {
-@@ -259,7 +260,7 @@ public abstract class World implements GeneratorAccess, AutoCloseable {
+     protected static final Logger LOGGER = LogManager.getLogger();
+@@ -265,7 +269,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
          });
          // CraftBukkit end
          timings = new co.aikar.timings.WorldTimingsHandler(this); // Paper - code below can generate new world and access timings
@@ -813,43 +700,42 @@ index f7f593a9e58b537109fa6ca1c783f6614f4bfad5..e1366ad875c5fc13dc0029ed73b02557
 +        this.keepSpawnInMemory = false; // this.paperConfig.keepSpawnInMemory; // Paper // MultiPaper - default to false
          this.entityLimiter = new org.spigotmc.TickLimiter(spigotConfig.entityMaxTickTime);
          this.tileLimiter = new org.spigotmc.TickLimiter(spigotConfig.tileMaxTickTime);
-     }
-@@ -863,6 +864,8 @@ public abstract class World implements GeneratorAccess, AutoCloseable {
-             if (!tileentity.isRemoved() && tileentity.hasWorld()) {
-                 BlockPosition blockposition = tileentity.getPosition();
- 
-+                if (!MultiPaper.shouldTickChunk((WorldServer) this, getChunkIfLoaded(blockposition))) continue; // MultiPaper - Don't tick this tile entity rn
-+
-                 Chunk chunk; PlayerChunk playerChunk; if ((chunk = tileentity.getCurrentChunk()) != null && (playerChunk = chunk.playerChunk) != null && playerChunk.isTickingReady() && this.getWorldBorder().isInBounds(blockposition)) { // Paper - optimized tick ready check by inlining ChunkProviderServer.a(BlockPosition). Chunk lookup is no longer required and we can use the PlayerChunk directly available through the tile entity
-                     try {
-                         gameprofilerfiller.a(() -> {
-diff --git a/src/main/java/net/minecraft/world/level/chunk/Chunk.java b/src/main/java/net/minecraft/world/level/chunk/Chunk.java
-index 0727b12b5ff146b4efa9204bf4f495f2f1aa20b9..83847cf966aaadc0d9746443903935a32e9ddecf 100644
---- a/src/main/java/net/minecraft/world/level/chunk/Chunk.java
-+++ b/src/main/java/net/minecraft/world/level/chunk/Chunk.java
-@@ -68,6 +68,7 @@ import net.minecraft.world.level.material.FluidTypes;
- import net.minecraft.world.phys.AxisAlignedBB;
+         this.chunkPacketBlockController = this.paperConfig.antiXray ?
+@@ -840,6 +844,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+                 toRemove.add(tickingblockentity); // Paper - use removeAll
+                 // Spigot end
+             } else {
++                if (!MultiPaper.shouldTickChunk((ServerLevel) this, getChunkIfLoaded(tickingblockentity.getPosition()))) continue; // MultiPaper - Don't tick this tile entity rn
+                 tickingblockentity.tick();
+             }
+         }
+diff --git a/src/main/java/net/minecraft/world/level/chunk/ProtoChunk.java b/src/main/java/net/minecraft/world/level/chunk/ProtoChunk.java
+index f0c537e1d6b32ecde52b3d456f0f3889ff554824..5d292ca81c5d7f516a1902b3a8d9271f4b83b055 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/ProtoChunk.java
++++ b/src/main/java/net/minecraft/world/level/chunk/ProtoChunk.java
+@@ -37,6 +37,7 @@ import net.minecraft.world.level.material.FluidState;
+ import net.minecraft.world.level.material.Fluids;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.MultiPaper;
  
- public class Chunk implements IChunkAccess {
- 
+ public class ProtoChunk implements ChunkAccess {
+     private static final Logger LOGGER = LogManager.getLogger();
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java
-index 1b0535ba211904b2384cc80c02c21ed1a606e752..97a30122b4b7bc6866b7ecb92b271c9967e27351 100644
+index c22391a0d4b7db49bd3994b0887939a7d8019391..f857c2ca9e803adafde5a9b56b784d15aafca730 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java
-@@ -89,6 +89,9 @@ public class RegionFile implements AutoCloseable {
-             ((java.nio.Buffer) this.h).limit(1024); // CraftBukkit - decompile error
-             ((java.nio.Buffer) this.g).position(4096); // CraftBukkit - decompile error
-             this.i = this.g.asIntBuffer();
+@@ -97,6 +97,9 @@ public class RegionFile implements AutoCloseable {
+             ((java.nio.Buffer) this.offsets).limit(1024); // CraftBukkit - decompile error
+             ((java.nio.Buffer) this.header).position(4096); // CraftBukkit - decompile error
+             this.timestamps = this.header.asIntBuffer();
 +            // MultiPaper start
-+            this.dataFile = null;
++            this.file = null;
 +            /*
-             if (flag) {
-                 this.dataFile = FileChannel.open(path, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.DSYNC);
+             if (dsync) {
+                 this.file = FileChannel.open(file, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE, StandardOpenOption.DSYNC);
              } else {
-@@ -136,6 +139,8 @@ public class RegionFile implements AutoCloseable {
+@@ -144,6 +147,8 @@ public class RegionFile implements AutoCloseable {
                      }
                  }
              }
@@ -858,15 +744,22 @@ index 1b0535ba211904b2384cc80c02c21ed1a606e752..97a30122b4b7bc6866b7ecb92b271c99
  
          }
      }
-@@ -404,6 +409,7 @@ public class RegionFile implements AutoCloseable {
+@@ -422,8 +427,14 @@ public class RegionFile implements AutoCloseable {
+         return this.offsets.get(RegionFile.getOffsetIndex(pos));
      }
  
-     public boolean chunkExists(ChunkCoordIntPair chunkcoordintpair) {
++<<<<<<< HEAD
+     public boolean hasChunk(ChunkPos pos) {
+         return this.getOffset(pos) != 0;
++=======
++    public boolean chunkExists(ChunkCoordIntPair chunkcoordintpair) {
 +        if (true) return true;
-         return this.getOffset(chunkcoordintpair) != 0;
++        return this.getOffset(chunkcoordintpair) != 0;
++>>>>>>> MultiPaper initial import commit
      }
  
-@@ -413,6 +419,12 @@ public class RegionFile implements AutoCloseable {
+     private static int getChunkLocation(int x, int z) { return (x & 31) + (z & 31) * 32; } // Paper - OBFHELPER - sort of, mirror of logic below
+@@ -432,6 +443,12 @@ public class RegionFile implements AutoCloseable {
      }
  
      public void close() throws IOException {
@@ -879,78 +772,116 @@ index 1b0535ba211904b2384cc80c02c21ed1a606e752..97a30122b4b7bc6866b7ecb92b271c99
          // Paper start - Prevent regionfiles from being closed during use
          this.fileLock.lock();
          synchronized (this) {
-diff --git a/src/main/java/net/minecraft/world/level/saveddata/PersistentBase.java b/src/main/java/net/minecraft/world/level/saveddata/PersistentBase.java
-index f02840e04fa1644901292b3ec67720cb64c2931d..e4d8ca21e6eb5d6aee4f1e210b722f59510d7b47 100644
---- a/src/main/java/net/minecraft/world/level/saveddata/PersistentBase.java
-+++ b/src/main/java/net/minecraft/world/level/saveddata/PersistentBase.java
-@@ -7,6 +7,7 @@ import net.minecraft.nbt.NBTCompressedStreamTools;
- import net.minecraft.nbt.NBTTagCompound;
+diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+index c8ed0673ff819cb88d0ee6f53f2a2b9b46b203d4..975e537ecdd1bdb0352413e272f1f86c3a666372 100644
+--- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
++++ b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+@@ -7,6 +7,7 @@ import java.io.File;
+ import java.io.FileInputStream;
+ import java.io.IOException;
+ import java.io.PushbackInputStream;
++import java.util.Iterator;
+ import java.util.Map;
+ import java.util.function.Function;
+ import java.util.function.Supplier;
+@@ -19,6 +20,7 @@ import net.minecraft.util.datafix.DataFixTypes;
+ import net.minecraft.world.level.saveddata.SavedData;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.MultiPaper;
  
- public abstract class PersistentBase {
- 
-@@ -46,7 +47,8 @@ public abstract class PersistentBase {
-             nbttagcompound.setInt("DataVersion", SharedConstants.getGameVersion().getWorldVersion());
- 
-             try {
--                NBTCompressedStreamTools.a(nbttagcompound, file);
-+                MultiPaper.writeData(file.getPath(), nbttagcompound); // MultiPaper
-+                // NBTCompressedStreamTools.a(nbttagcompound, file); // MultiPaper
-             } catch (IOException ioexception) {
-                 PersistentBase.LOGGER.error("Could not save data {}", this, ioexception);
+ public class DimensionDataStorage {
+     private static final Logger LOGGER = LogManager.getLogger();
+@@ -61,8 +63,11 @@ public class DimensionDataStorage {
+     private <T extends SavedData> T readSavedData(Function<CompoundTag, T> function, String id) {
+         try {
+             File file = this.getDataFile(id);
+-            if (file.exists()) {
++            if (true || file.exists()) { // MultiPaper - Always run
+                 CompoundTag compoundTag = this.readTagFromDisk(id, SharedConstants.getCurrentVersion().getWorldVersion());
++
++                if (compoundTag == null) return null; // MultiPaper
++
+                 return function.apply(compoundTag.getCompound("data"));
              }
-diff --git a/src/main/java/net/minecraft/world/level/storage/Convertable.java b/src/main/java/net/minecraft/world/level/storage/Convertable.java
-index fcc6a3251f02822c1caba37bb884049c774b0252..b53f125c6f95b2d72cccd9dda26a3c2cb95fb990 100644
---- a/src/main/java/net/minecraft/world/level/storage/Convertable.java
-+++ b/src/main/java/net/minecraft/world/level/storage/Convertable.java
-@@ -46,6 +46,7 @@ import net.minecraft.world.level.levelgen.GeneratorSettingBase;
- import net.minecraft.world.level.levelgen.GeneratorSettings;
+         } catch (Exception var5) {
+@@ -78,7 +83,14 @@ public class DimensionDataStorage {
+ 
+     public CompoundTag readTagFromDisk(String id, int dataVersion) throws IOException {
+         File file = this.getDataFile(id);
+-        FileInputStream fileInputStream = new FileInputStream(file);
++        // MultiPaper start
++        byte[] data = MultiPaper.readData(file.getPath());
++        if (data == null || data.length == 0) {
++            return null;
++        }
++        // FileInputStream fileInputStream = new FileInputStream(file);
++        ByteArrayInputStream fileInputStream = new ByteArrayInputStream(data);
++        // MultiPaper end
+ 
+         CompoundTag var8;
+         try {
+@@ -160,4 +172,10 @@ public class DimensionDataStorage {
+ 
+         });
+     }
++
++    // MultiPaper start - save a PersistentBase
++    public void save(PersistentBase persistentbase) {
++        persistentbase.a(this.a(persistentbase.getId()));
++    }
++    // MultiPaper end
+ }
+diff --git a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
+index 5d5d9e812d7774dd0704f3d9d2e1289d546b26c9..ddc05e67dc373999aa864582738023fc18356892 100644
+--- a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
++++ b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
+@@ -60,6 +60,7 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+ import net.minecraft.world.level.levelgen.WorldGenSettings;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.MultiPaper;
  
- // CraftBukkit start
- import net.minecraft.world.level.dimension.WorldDimension;
-@@ -141,7 +142,7 @@ public class Convertable {
+ public class LevelStorageSource {
+ 
+@@ -190,7 +191,7 @@ public class LevelStorageSource {
          } else {
              File file1 = new File(file, "level.dat");
  
 -            if (file1.exists()) {
 +            if (true || file1.exists()) { // MultiPaper
-                 T t0 = bifunction.apply(file1, this.f);
+                 T t0 = levelDataParser.apply(file1, this.fixerUpper);
  
                  if (t0 != null) {
-@@ -157,7 +158,7 @@ public class Convertable {
+@@ -206,7 +207,7 @@ public class LevelStorageSource {
      @Nullable
-     private static DataPackConfiguration b(File file, DataFixer datafixer) {
+     private static DataPackConfig getDataPacks(File file, DataFixer datafixer) {
          try {
--            NBTTagCompound nbttagcompound = NBTCompressedStreamTools.a(file);
-+            NBTTagCompound nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NBTCompressedStreamTools.a(file); // MultiPaper
-             NBTTagCompound nbttagcompound1 = nbttagcompound.getCompound("Data");
+-            CompoundTag nbttagcompound = NbtIo.readCompressed(file);
++            CompoundTag nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NbtIo.readCompressed(file); // MultiPaper
+             CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
  
              nbttagcompound1.remove("Player");
-@@ -174,7 +175,7 @@ public class Convertable {
-     private static BiFunction<File, DataFixer, WorldDataServer> b(DynamicOps<NBTBase> dynamicops, DataPackConfiguration datapackconfiguration) {
+@@ -223,7 +224,7 @@ public class LevelStorageSource {
+     static BiFunction<File, DataFixer, PrimaryLevelData> getLevelData(DynamicOps<Tag> dynamicops, DataPackConfig datapackconfiguration) {
          return (file, datafixer) -> {
              try {
--                NBTTagCompound nbttagcompound = NBTCompressedStreamTools.a(file);
-+                NBTTagCompound nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NBTCompressedStreamTools.a(file); // MultiPaper
-                 NBTTagCompound nbttagcompound1 = nbttagcompound.getCompound("Data");
-                 NBTTagCompound nbttagcompound2 = nbttagcompound1.hasKeyOfType("Player", 10) ? nbttagcompound1.getCompound("Player") : null;
+-                CompoundTag nbttagcompound = NbtIo.readCompressed(file);
++                CompoundTag nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NbtIo.readCompressed(file); // MultiPaper
+                 CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
+                 CompoundTag nbttagcompound2 = nbttagcompound1.contains("Player", 10) ? nbttagcompound1.getCompound("Player") : null;
  
-@@ -196,7 +197,7 @@ public class Convertable {
-     private BiFunction<File, DataFixer, WorldInfo> a(File file, boolean flag) {
+@@ -245,7 +246,7 @@ public class LevelStorageSource {
+     BiFunction<File, DataFixer, LevelSummary> levelSummaryReader(File file, boolean locked) {
          return (file1, datafixer) -> {
              try {
--                NBTTagCompound nbttagcompound = NBTCompressedStreamTools.a(file1);
-+                NBTTagCompound nbttagcompound = MultiPaper.readLevel(file.getName()); // NBTCompressedStreamTools.a(file1); // MultiPaper
-                 NBTTagCompound nbttagcompound1 = nbttagcompound.getCompound("Data");
+-                CompoundTag nbttagcompound = NbtIo.readCompressed(file1);
++                CompoundTag nbttagcompound = MultiPaper.readLevel(file.getName()); // NbtIo.readCompressed(file1); // MultiPaper
+                 CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
  
                  nbttagcompound1.remove("Player");
-@@ -325,6 +326,13 @@ public class Convertable {
-             nbttagcompound2.set("Data", nbttagcompound1);
+@@ -396,6 +397,13 @@ public class LevelStorageSource {
+             nbttagcompound2.put("Data", nbttagcompound1);
  
              try {
 +                // MultiPaper start
@@ -962,147 +893,78 @@ index fcc6a3251f02822c1caba37bb884049c774b0252..b53f125c6f95b2d72cccd9dda26a3c2c
 +
                  File file1 = File.createTempFile("level", ".dat", file);
  
-                 NBTCompressedStreamTools.a(nbttagcompound2, file1);
-diff --git a/src/main/java/net/minecraft/world/level/storage/WorldNBTStorage.java b/src/main/java/net/minecraft/world/level/storage/WorldNBTStorage.java
-index 4d30ca69dd303f1d76c8e6292021deda97851773..b5a6be103da15d13add1701e243dd885500db1ae 100644
---- a/src/main/java/net/minecraft/world/level/storage/WorldNBTStorage.java
-+++ b/src/main/java/net/minecraft/world/level/storage/WorldNBTStorage.java
-@@ -17,6 +17,7 @@ import java.io.FileInputStream;
+                 NbtIo.writeCompressed(nbttagcompound2, file1);
+diff --git a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
+index 6727468946ea5f60bd80549f827a7c2b9a42b98b..864ac275677636d9a496315fc064e36c44575174 100644
+--- a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
++++ b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
+@@ -17,6 +17,7 @@ import org.apache.logging.log4j.Logger;
+ import java.io.FileInputStream;
  import java.io.InputStream;
- import net.minecraft.server.level.EntityPlayer;
  import org.bukkit.craftbukkit.entity.CraftPlayer;
 +import puregero.multipaper.MultiPaper;
  // CraftBukkit end
  
- public class WorldNBTStorage {
-@@ -35,6 +36,14 @@ public class WorldNBTStorage {
+ public class PlayerDataStorage {
+@@ -35,6 +36,14 @@ public class PlayerDataStorage {
          if (org.spigotmc.SpigotConfig.disablePlayerDataSaving) return; // Spigot
          try {
-             NBTTagCompound nbttagcompound = entityhuman.save(new NBTTagCompound());
+             CompoundTag nbttagcompound = player.saveWithoutId(new CompoundTag());
 +
 +            // MultiPaper start
 +            if (true) {
-+                MultiPaper.writePlayer(entityhuman.getUniqueIDString(), nbttagcompound);
++                MultiPaper.writePlayer(player.getStringUUID(), nbttagcompound);
 +                return;
 +            }
 +            // MultiPaper end
 +
-             File file = File.createTempFile(entityhuman.getUniqueIDString() + "-", ".dat", this.playerDir);
+             File file = File.createTempFile(player.getStringUUID() + "-", ".dat", this.playerDir);
  
-             NBTCompressedStreamTools.a(nbttagcompound, file);
-@@ -53,6 +62,9 @@ public class WorldNBTStorage {
-         NBTTagCompound nbttagcompound = null;
+             NbtIo.writeCompressed(nbttagcompound, file);
+@@ -53,6 +62,9 @@ public class PlayerDataStorage {
+         CompoundTag nbttagcompound = null;
  
          try {
-+            nbttagcompound = MultiPaper.readPlayer(entityhuman.getUniqueIDString()); // MultiPaper
++            nbttagcompound = MultiPaper.readPlayer(player.getStringUUID()); // MultiPaper
 +
 +            if (false) { // MultiPaper
-             File file = new File(this.playerDir, entityhuman.getUniqueIDString() + ".dat");
+             File file = new File(this.playerDir, player.getStringUUID() + ".dat");
              // Spigot Start
              boolean usingWrongFile = false;
-@@ -76,12 +88,14 @@ public class WorldNBTStorage {
+@@ -76,12 +88,14 @@ public class PlayerDataStorage {
                  file.renameTo( new File( file.getPath() + ".offline-read" ) );
              }
              // Spigot End
 +            } // MultiPaper
          } catch (Exception exception) {
-             WorldNBTStorage.LOGGER.warn("Failed to load player data for {}", entityhuman.getDisplayName().getString());
+             PlayerDataStorage.LOGGER.warn("Failed to load player data for {}", player.getName().getString());
          }
  
          if (nbttagcompound != null) {
              // CraftBukkit start
 +            /* // MultiPlayer
-             if (entityhuman instanceof EntityPlayer) {
-                 CraftPlayer player = (CraftPlayer) entityhuman.getBukkitEntity();
+             if (player instanceof ServerPlayer) {
+                 CraftPlayer player1 = (CraftPlayer) player.getBukkitEntity();
                  // Only update first played if it is older than the one we have
-@@ -91,6 +105,7 @@ public class WorldNBTStorage {
+@@ -91,6 +105,7 @@ public class PlayerDataStorage {
                  }
              }
              // CraftBukkit end
 +            */ // MultiPlayer
-             int i = nbttagcompound.hasKeyOfType("DataVersion", 3) ? nbttagcompound.getInt("DataVersion") : -1;
+             int i = nbttagcompound.contains("DataVersion", 3) ? nbttagcompound.getInt("DataVersion") : -1;
  
-             entityhuman.load(GameProfileSerializer.a(this.a, DataFixTypes.PLAYER, nbttagcompound, i));
-@@ -102,6 +117,8 @@ public class WorldNBTStorage {
+             player.load(NbtUtils.update(this.fixerUpper, DataFixTypes.PLAYER, nbttagcompound, i));
+@@ -102,6 +117,8 @@ public class PlayerDataStorage {
      // CraftBukkit start
-     public NBTTagCompound getPlayerData(String s) {
+     public CompoundTag getPlayerData(String s) {
          try {
 +            if (true) return MultiPaper.readPlayer(s); // MultiPaper
 +
              File file1 = new File(this.playerDir, s + ".dat");
  
              if (file1.exists()) {
-diff --git a/src/main/java/net/minecraft/world/level/storage/WorldPersistentData.java b/src/main/java/net/minecraft/world/level/storage/WorldPersistentData.java
-index d61960d80599dc5e7b70cc990e4b0b174eb6e34e..a7227f9203dd1e6b36e24c1fee814a212debc4be 100644
---- a/src/main/java/net/minecraft/world/level/storage/WorldPersistentData.java
-+++ b/src/main/java/net/minecraft/world/level/storage/WorldPersistentData.java
-@@ -2,13 +2,8 @@ package net.minecraft.world.level.storage;
- 
- import com.google.common.collect.Maps;
- import com.mojang.datafixers.DataFixer;
--import java.io.DataInput;
--import java.io.DataInputStream;
--import java.io.File;
--import java.io.FileInputStream;
--import java.io.IOException;
--import java.io.InputStream;
--import java.io.PushbackInputStream;
-+
-+import java.io.*;
- import java.util.Iterator;
- import java.util.Map;
- import java.util.function.Supplier;
-@@ -21,6 +16,7 @@ import net.minecraft.util.datafix.DataFixTypes;
- import net.minecraft.world.level.saveddata.PersistentBase;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
-+import puregero.multipaper.MultiPaper;
- 
- public class WorldPersistentData {
- 
-@@ -68,10 +64,12 @@ public class WorldPersistentData {
-         try {
-             File file = this.a(s);
- 
--            if (file.exists()) {
-+            if (true || file.exists()) { // MultiPaper - Always run
-                 T t0 = supplier.get(); // Paper - decompile fix
-                 NBTTagCompound nbttagcompound = this.a(s, SharedConstants.getGameVersion().getWorldVersion());
- 
-+                if (nbttagcompound == null) return null; // MultiPaper
-+
-                 t0.a(nbttagcompound.getCompound("data"));
-                 return t0;
-             }
-@@ -88,7 +86,14 @@ public class WorldPersistentData {
- 
-     public NBTTagCompound a(String s, int i) throws IOException {
-         File file = this.a(s);
--        FileInputStream fileinputstream = new FileInputStream(file);
-+        // MultiPaper start
-+        byte[] data = MultiPaper.readData(file.getPath());
-+        if (data == null || data.length == 0) {
-+            return null;
-+        }
-+        // FileInputStream fileinputstream = new FileInputStream(file);
-+        ByteArrayInputStream fileinputstream = new ByteArrayInputStream(data);
-+        // MultiPaper end
-         Throwable throwable = null;
- 
-         Object object;
-@@ -202,4 +207,10 @@ public class WorldPersistentData {
-         }
- 
-     }
-+
-+    // MultiPaper start - save a PersistentBase
-+    public void save(PersistentBase persistentbase) {
-+        persistentbase.a(this.a(persistentbase.getId()));
-+    }
-+    // MultiPaper end
- }
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index cebecee640ed5a7fc2b978e00ff7eb012228267d..3a1c937fad15dcd0649a663bfb2d23ead5cb9c5b 100644
+index 8a98bd1018afd934696fedbed24e271ab6b75f51..3b8f476e9291517a5888ca54560b90529c51f46a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 @@ -225,6 +225,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -1113,7 +975,7 @@ index cebecee640ed5a7fc2b978e00ff7eb012228267d..3a1c937fad15dcd0649a663bfb2d23ea
  
  import javax.annotation.Nullable; // Paper
  import javax.annotation.Nonnull; // Paper
-@@ -1588,6 +1589,12 @@ public final class CraftServer implements Server {
+@@ -1586,6 +1587,12 @@ public final class CraftServer implements Server {
  
          message = broadcastMessageEvent.message(); // Paper - Adventure
  
@@ -1126,33 +988,33 @@ index cebecee640ed5a7fc2b978e00ff7eb012228267d..3a1c937fad15dcd0649a663bfb2d23ea
          for (CommandSender recipient : recipients) {
              recipient.sendMessage(message);
          }
-@@ -2378,6 +2385,8 @@ public final class CraftServer implements Server {
+@@ -2375,6 +2382,8 @@ public final class CraftServer implements Server {
  
          @Override
          public void broadcast(BaseComponent component) {
 +            MultiPaper.broadcastPacket(null, component); // MultiPaper
-+
-             for (Player player : getOnlinePlayers()) {
++            
+             for (Player player : CraftServer.this.getOnlinePlayers()) {
                  player.spigot().sendMessage(component);
              }
-@@ -2385,6 +2394,8 @@ public final class CraftServer implements Server {
+@@ -2382,6 +2391,8 @@ public final class CraftServer implements Server {
  
          @Override
          public void broadcast(BaseComponent... components) {
 +            MultiPaper.broadcastPacket(null, components); // MultiPaper
 +
-             for (Player player : getOnlinePlayers()) {
+             for (Player player : CraftServer.this.getOnlinePlayers()) {
                  player.spigot().sendMessage(components);
              }
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index 02198dbe9e80c2990e8a09b2b763748dae727a03..ece518c7a5702357a1b36f6a9b25b1a88fdd8b3f 100644
+index 3403b75c8311f1e52a0533363c5f0307442f8a15..7aeb758b9c8c4119a92a9cb75cb0a4c0c0553052 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-@@ -516,6 +516,7 @@ public class CraftWorld implements World {
+@@ -521,6 +521,7 @@ public class CraftWorld implements World {
          org.spigotmc.AsyncCatcher.catchOp("chunk unload"); // Spigot
-         if (isChunkLoaded(x, z)) {
-             world.getChunkProvider().removeTicket(TicketType.PLUGIN, new ChunkCoordIntPair(x, z), 0, Unit.INSTANCE); // Paper
-+            world.getChunkProvider().removeTicket(TicketType.PLAYER, new ChunkCoordIntPair(x, z), 0, new ChunkCoordIntPair(x, z)); // MultiPaper
+         if (this.isChunkLoaded(x, z)) {
+             this.world.getChunkSource().removeRegionTicket(TicketType.PLUGIN, new ChunkPos(x, z), 0, Unit.INSTANCE); // Paper
++            this.world.getChunkSource().removeRegionTicket(TicketType.PLAYER, new ChunkPos(x, z), 0, new ChunkPos(x, z)); // MultiPaper
          }
  
          return true;
@@ -1190,43 +1052,43 @@ index 2fd69c0f915f1c3cb1c410d5dab0498f05d5c888..9b803b658153d31b1b8f8a3e74570c77
          return knownCommands;
      }
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index cfe6898dc373fe55a08acf5c90e200061aa7d0fc..3467f3a630654aada55d943dd07e65ffa0cba6b7 100644
+index 76e2ae09855e0efaaa0856d2f49e4968adbccbdc..ac39f6506ba57f8df15045abb808d0bddd088c39 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-@@ -426,11 +426,14 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -427,11 +427,14 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
              name = getName();
          }
-         getHandle().listName = name.equals(getName()) ? null : CraftChatMessage.fromStringOrNull(name);
--        for (EntityPlayer player : (List<EntityPlayer>) server.getHandle().players) {
+         this.getHandle().listName = name.equals(getName()) ? null : CraftChatMessage.fromStringOrNull(name);
+-        for (ServerPlayer player : (List<ServerPlayer>) server.getHandle().players) {
 -            if (player.getBukkitEntity().canSee(this)) {
--                player.playerConnection.sendPacket(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.UPDATE_DISPLAY_NAME, getHandle()));
+-                player.connection.send(new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.UPDATE_DISPLAY_NAME, this.getHandle()));
 -            }
 -        }
 +        // MultiPaper start - Use sendAll
 +        getHandle().getMinecraftServer().getPlayerList().sendAll(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.UPDATE_DISPLAY_NAME, getHandle()));
-+        // for (EntityPlayer player : (List<EntityPlayer>) server.getHandle().players) {
-+        //    if (player.getBukkitEntity().canSee(this)) {
-+        //        player.playerConnection.sendPacket(new PacketPlayOutPlayerInfo(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.UPDATE_DISPLAY_NAME, getHandle()));
-+        //    }
++        // for (ServerPlayer player : (List<ServerPlayer>) server.getHandle().players) {
++        //     if (player.getBukkitEntity().canSee(this)) {
++        //         player.connection.send(new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.UPDATE_DISPLAY_NAME, this.getHandle()));
++        //     }
 +        // }
 +        // MultiPaper end
      }
  
      private net.kyori.adventure.text.Component playerListHeader; // Paper - Adventure
 diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-index a678277416cd71e01cd6980bcfaf9a9803e7ea17..b616b37f2ee422f4915585a91b5f340e3de4e4aa 100644
+index a59a449c0a7b76527f009031aee2d11d6b43cadf..a4725a948b22a497d737d12fb297955f58cc5b9a 100644
 --- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
 +++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
-@@ -231,6 +231,7 @@ import org.bukkit.inventory.meta.BookMeta;
+@@ -216,6 +216,7 @@ import org.bukkit.inventory.meta.BookMeta;
  import org.bukkit.potion.PotionEffect;
  
  import org.bukkit.event.entity.SpawnerSpawnEvent; // Spigot
 +import puregero.multipaper.MultiPaper;
  
  public class CraftEventFactory {
-     public static final DamageSource MELTING = CraftDamageSource.copyOf(DamageSource.BURN);
+     public static final DamageSource MELTING = CraftDamageSource.copyOf(DamageSource.ON_FIRE);
 diff --git a/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java b/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
-index f101ed6c5a5e16e5804b36f1182edca874981831..ad648caa334afb1424705f2630a2b7debcaafdef 100644
+index 738100ffa60647790f0921cf31d5bbc2714e27dd..9c33b240d4bb01ad9eed9e5ba17458fd1374e4bf 100644
 --- a/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
 +++ b/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
 @@ -1,14 +1,10 @@

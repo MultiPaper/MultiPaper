@@ -19,16 +19,19 @@ if [[ "$1" == up* ]]; then
     )
 fi
 
+# Add out mcdev-imports
+"$basedir"/scripts/generateimportmcdev.sh
+
 paperVer=$(gethead Paper)
 cd "$basedir/Paper/"
 
 ./gradlew applyPatches
 
+# Reset the mcdev-imports
+git checkout build-data/mcdev-imports.txt
+
 cd "Paper-Server"
 mcVer=$(mvn -o org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=minecraft_version | sed -n -e '/^\[.*\]/ !{ /^[0-9]/ { p; q } }')
-
-basedir
-. "$basedir"/scripts/importmcdev.sh
 
 minecraftversion=$(cat "$basedir"/Paper/work/BuildData/info.json | grep minecraftVersion | cut -d '"' -f 4)
 version=$(echo -e "Paper: $paperVer\nmc-dev:$importedmcdev")

@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 21 Jun 2021 00:20:17 +1000
+Subject: [PATCH] Add entities region file
+
+
+diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/IOWorker.java b/src/main/java/net/minecraft/world/level/chunk/storage/IOWorker.java
+index ed4539f25dbd5b1c5c48b70a8d1e9f63fff5d964..b663a79d450849d981ae33d1d9f3ad2c6a2c55d1 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/storage/IOWorker.java
++++ b/src/main/java/net/minecraft/world/level/chunk/storage/IOWorker.java
+@@ -21,6 +21,7 @@ import net.minecraft.util.thread.StrictQueue;
+ import net.minecraft.world.level.ChunkPos;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class IOWorker implements AutoCloseable {
+     private static final Logger LOGGER = LogManager.getLogger();
+@@ -66,7 +67,7 @@ public class IOWorker implements AutoCloseable {
+                 return Either.left(pendingStore.data);
+             } else {
+                 try {
+-                    CompoundTag compoundTag = this.storage.read(pos);
++                    CompoundTag compoundTag = MultiPaper.readRegionFileNBT(storage.getFolder(), pos); // this.storage.read(pos); // MultiPaper
+                     return Either.left(compoundTag);
+                 } catch (Exception var4) {
+                     LOGGER.warn("Failed to read chunk {}", pos, var4);
+@@ -125,7 +126,7 @@ public class IOWorker implements AutoCloseable {
+ 
+     private void runStore(ChunkPos pos, IOWorker.PendingStore result) {
+         try {
+-            this.storage.write(pos, result.data);
++            MultiPaper.writeRegionFileNBT(storage.getFolder(), pos, result.data); // this.storage.write(pos, result.data); // MultiPaper
+             result.result.complete((Void)null);
+         } catch (Exception var4) {
+             LOGGER.error("Failed to store chunk {}", pos, var4);
+diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
+index 6496108953effae82391b5c1ea6fdec8482731cd..807de17c6a3411b6480a57228e3049d92d1cc486 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
++++ b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
+@@ -29,6 +29,12 @@ public class RegionFileStorage implements AutoCloseable {
+         this.folder = directory;
+         this.sync = dsync;
+     }
++    
++    // MultiPaper start
++    public File getFolder() {
++        return folder;
++    }
++    // MultiPaper end
+ 
+     // Paper start
+     public static ChunkPos getRegionFileCoordinates(File file) {
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index db7e67d501bd5da7b358b2eaab0ee0c8816b9c00..f34262fee6a8a4e0a1b89ae3fab1f3e1217eeac0 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -116,14 +116,37 @@ public class MultiPaper {
+         getConnection().writeChunk(world, path, cx, cz, bytes);
+     }
+ 
++    public static CompoundTag readRegionFileNBT(File path, ChunkPos chunkPos) throws IOException {
++        return readRegionFileNBT(getWorld(path), path.getName(), chunkPos.x, chunkPos.z);
++    }
++
+     public static CompoundTag readRegionFileNBT(ServerLevel serverLevel, String path, ChunkPos chunkPos) throws IOException {
+-        DataInput in = readRegionFile(serverLevel.convertable.getLevelId(), path, chunkPos.x, chunkPos.z);
++        return readRegionFileNBT(serverLevel.convertable.getLevelId(), path, chunkPos.x, chunkPos.z);
++    }
++
++    public static CompoundTag readRegionFileNBT(String world, String path, int cx, int cz) throws IOException {
++        DataInput in = readRegionFile(world, path, cx, cz);
+ 
+         return in == null ? null : NbtIo.read(in);
+     }
+ 
++    public static void writeRegionFileNBT(File path, ChunkPos chunkPos, CompoundTag compoundTag) throws IOException {
++        writeRegionFileNBT(getWorld(path), path.getName(), chunkPos.x, chunkPos.z, compoundTag);
++    }
++
+     public static void writeRegionFileNBT(ServerLevel serverLevel, String path, ChunkPos chunkPos, CompoundTag compoundTag) throws IOException {
+-        writeRegionFile(serverLevel.convertable.getLevelId(), path, chunkPos.x, chunkPos.z, nbtToBytes(compoundTag));
++        writeRegionFileNBT(serverLevel.convertable.getLevelId(), path, chunkPos.x, chunkPos.z, compoundTag);
++    }
++
++    public static void writeRegionFileNBT(String world, String path, int cx, int cz, CompoundTag compoundTag) throws IOException {
++        writeRegionFile(world, path, cx, cz, nbtToBytes(compoundTag));
++    }
++
++    private static String getWorld(File path) {
++        do {
++            path = path.getParentFile();
++        } while (path.getName().startsWith("DIM"));
++        return path.getName();
+     }
+ 
+     public static CompoundTag readLevel(String world) throws IOException {

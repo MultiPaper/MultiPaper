@@ -16,7 +16,7 @@ MultiPaper syncs between servers:
   
 MultiPaper requires:
   * A BungeeCord proxy (forks such as Waterfall also work)
-  * A MultiPaper-Master (found in `MultiPaper-Master/target`)
+  * A MultiPaper-Master (found in `MultiPaper-Master/build/libs`)
     * Runs as either a standalone server
     * Or as a BungeeCord plugin
   * MultiPaper
@@ -63,7 +63,9 @@ MultiPaper uses the same paperclip jar system that Paper uses.
 You can also [build it yourself](https://github.com/PureGero/MultiPaper#building)
 
 ## Building
-Build the multipaper jars with: `./gradlew build`
+1. Patch paper with: `./gradlew applyPatches`
+2. Build the multipaper jars with: `./gradlew reobfJar`
+3. Get the jar from `MultiPaper-Master/build/libs`
 
 ## Tasks
 

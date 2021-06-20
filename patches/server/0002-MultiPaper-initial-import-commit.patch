@@ -38,6 +38,110 @@ index eb0053850f53ceb60eb1ae3ac0e34034648fe1eb..d7ffacd252564332b2aa8facef42040c
      }
  
      private AsyncChatEvent createAsync(final ChatRenderer renderer, final Set<Audience> viewers, final Component message) {
+diff --git a/src/main/java/net/minecraft/advancements/CriterionProgress.java b/src/main/java/net/minecraft/advancements/CriterionProgress.java
+index 322f0fd9eff00085c2e9765395c7dcdef8bc9e12..6503e0c6007174d983ab69149230d2a1910421d2 100644
+--- a/src/main/java/net/minecraft/advancements/CriterionProgress.java
++++ b/src/main/java/net/minecraft/advancements/CriterionProgress.java
+@@ -43,7 +43,11 @@ public class CriterionProgress {
+     }
+ 
+     public JsonElement serializeToJson() {
+-        return (JsonElement)(this.obtained != null ? new JsonPrimitive(DATE_FORMAT.format(this.obtained)) : JsonNull.INSTANCE);
++        try {
++            return (JsonElement)(this.obtained != null ? new JsonPrimitive(DATE_FORMAT.format(this.obtained)) : JsonNull.INSTANCE);
++        } catch (Exception e) {
++            return JsonNull.INSTANCE;
++        }
+     }
+ 
+     public static CriterionProgress fromNetwork(FriendlyByteBuf buf) {
+diff --git a/src/main/java/net/minecraft/network/protocol/game/ClientboundPlayerInfoPacket.java b/src/main/java/net/minecraft/network/protocol/game/ClientboundPlayerInfoPacket.java
+index 420cc7ab5f7245f31dd5b333eacf4e306fc6e7c1..feb99e1b386445c2a2ebd46931da852f3a673219 100644
+--- a/src/main/java/net/minecraft/network/protocol/game/ClientboundPlayerInfoPacket.java
++++ b/src/main/java/net/minecraft/network/protocol/game/ClientboundPlayerInfoPacket.java
+@@ -62,6 +62,49 @@ public class ClientboundPlayerInfoPacket implements Packet<ClientGamePacketListe
+         return this.action;
+     }
+ 
++    // MultiPaper start
++    public PacketPlayOutPlayerInfo(Iterable<PlayerUpdate> iterable) {
++        this.action = EnumPlayerInfoAction.ADD_PLAYER;
++
++        Iterator<PlayerUpdate> iterator = iterable.iterator();
++
++        while (iterator.hasNext()) {
++            this.entries.add(iterator.next());
++        }
++    }
++
++    public List<ClientboundPlayerInfoPacket.PlayerUpdate> getPlayerUpdates() {
++        return entries;
++    }
++    // MultiPaper end
++
++    @Override
++    public void a(PacketDataSerializer packetdataserializer) throws IOException {
++        this.a = (PacketPlayOutPlayerInfo.EnumPlayerInfoAction) packetdataserializer.a(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.class);
++        int i = packetdataserializer.i();
++
++        for (int j = 0; j < i; ++j) {
++            GameProfile gameprofile = null;
++            int k = 0;
++            EnumGamemode enumgamemode = null;
++            IChatBaseComponent ichatbasecomponent = null;
++
++            switch (this.a) {
++                case ADD_PLAYER:
++                    gameprofile = new GameProfile(packetdataserializer.k(), packetdataserializer.e(16));
++                    int l = packetdataserializer.i();
++
++                    for (int i1 = 0; i1 < l; ++i1) {
++                        String s = packetdataserializer.e(32767);
++                        String s1 = packetdataserializer.e(32767);
++
++                        if (packetdataserializer.readBoolean()) {
++                            gameprofile.getProperties().put(s, new Property(s, s1, packetdataserializer.e(32767)));
++                        } else {
++                            gameprofile.getProperties().put(s, new Property(s, s1));
++                        }
++                    }
++
+     @Nullable
+     static Component readDisplayName(FriendlyByteBuf buf) {
+         return buf.readBoolean() ? buf.readComponent() : null;
+@@ -186,11 +229,13 @@ public class ClientboundPlayerInfoPacket implements Packet<ClientGamePacketListe
+     }
+ 
+     public static class PlayerUpdate {
+-        private final int latency;
+-        private final GameType gameMode;
+-        private final GameProfile profile;
++        // MultiPaper start - make not final and public
++        public int latency;
++        public GameType gameMode;
++        public GameProfile profile;
+         @Nullable
+-        private final Component displayName;
++        public Component displayName;
++        // MultiPaper end
+ 
+         public PlayerUpdate(GameProfile profile, int latency, @Nullable GameType gameMode, @Nullable Component displayName) {
+             this.profile = profile;
+diff --git a/src/main/java/net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java b/src/main/java/net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java
+index 4d36dcce588a503ba879528d98241ee86f70d48c..3dcd095be2eae5e531b1c41fdfc898196ee2b6a4 100644
+--- a/src/main/java/net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java
++++ b/src/main/java/net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java
+@@ -32,4 +32,10 @@ public class ServerboundTeleportToEntityPacket implements Packet<ServerGamePacke
+     public Entity getEntity(ServerLevel world) {
+         return world.getEntity(this.uuid);
+     }
++    
++    // MultiPaper start - Expose uuid
++    public UUID getUUID() {
++        return a;
++    }
++    // MultiPaper end
+ }
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
 index 3bf39c2d2aa3fc4fd0815dacea57e4899ec0da0e..36759054f7fceaad5566d48d573ef8eb13c19b54 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
@@ -772,6 +876,26 @@ index c22391a0d4b7db49bd3994b0887939a7d8019391..f857c2ca9e803adafde5a9b56b784d15
          // Paper start - Prevent regionfiles from being closed during use
          this.fileLock.lock();
          synchronized (this) {
+diff --git a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
+index 5d60a4ebbd039077c4d2458ac8d8110097eb74a3..ebb867b3d7f0969308b0c408729dc4e7336cb567 100644
+--- a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
++++ b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
+@@ -7,6 +7,7 @@ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.nbt.NbtIo;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public abstract class SavedData {
+     private static final Logger LOGGER = LogManager.getLogger();
+@@ -33,6 +34,7 @@ public abstract class SavedData {
+             compoundTag.putInt("DataVersion", SharedConstants.getCurrentVersion().getWorldVersion());
+ 
+             try {
++                MultiPaper.writeData(file.getPath(), compoundTag); // MultiPaper
+                 NbtIo.writeCompressed(compoundTag, file);
+             } catch (IOException var4) {
+                 LOGGER.error("Could not save data {}", this, var4);
 diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
 index c8ed0673ff819cb88d0ee6f53f2a2b9b46b203d4..975e537ecdd1bdb0352413e272f1f86c3a666372 100644
 --- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
@@ -3117,105 +3241,3 @@ index 0000000000000000000000000000000000000000..794f61347671df8edb2fe2fac6673172
 +        return chunks.iterator();
 +    }
 +}
-diff --git a/src/main/java/net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java b/src/main/java/net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java
-index c2a94249292df63f8b1c2ca3afe302fcc35ff831..4e76f8b93424883de1ccc94814f381d1a6063af8 100644
---- a/src/main/java/net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java
-+++ b/src/main/java/net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java
-@@ -36,4 +36,10 @@ public class PacketPlayInSpectate implements Packet<PacketListenerPlayIn> {
-     public Entity a(WorldServer worldserver) {
-         return worldserver.getEntity(this.a);
-     }
-+    
-+    // MultiPaper start - Expose uuid
-+    public UUID getUUID() {
-+        return a;
-+    }
-+    // MultiPaper end
- }
-diff --git a/src/main/java/net/minecraft/network/protocol/game/ClientboundPlayerInfoPacket.java b/src/main/java/net/minecraft/network/protocol/game/ClientboundPlayerInfoPacket.java
-index 2758cf87fe5cb89c101f2495783c72a2fe4ad632..053ecfdd16b1bcf1423ea7735b4fe3255c05b05c 100644
---- a/src/main/java/net/minecraft/network/protocol/game/ClientboundPlayerInfoPacket.java
-+++ b/src/main/java/net/minecraft/network/protocol/game/ClientboundPlayerInfoPacket.java
-@@ -46,6 +46,26 @@ public class PacketPlayOutPlayerInfo implements Packet<PacketListenerPlayOut> {
- 
-     }
- 
-+    // MultiPaper start
-+    public PacketPlayOutPlayerInfo(Iterable<PlayerInfoData> iterable) {
-+        this.a = EnumPlayerInfoAction.ADD_PLAYER;
-+
-+        Iterator<PlayerInfoData> iterator = iterable.iterator();
-+
-+        while (iterator.hasNext()) {
-+            this.b.add(iterator.next());
-+        }
-+    }
-+
-+   public PacketPlayOutPlayerInfo.EnumPlayerInfoAction getAction() {
-+        return a;
-+    }
-+
-+    public List<PacketPlayOutPlayerInfo.PlayerInfoData> getPlayerInfoDatas() {
-+        return b;
-+    }
-+    // MultiPaper end
-+
-     @Override
-     public void a(PacketDataSerializer packetdataserializer) throws IOException {
-         this.a = (PacketPlayOutPlayerInfo.EnumPlayerInfoAction) packetdataserializer.a(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.class);
-@@ -174,10 +194,12 @@ public class PacketPlayOutPlayerInfo implements Packet<PacketListenerPlayOut> {
- 
-     public class PlayerInfoData {
- 
--        private final int b;
--        private final EnumGamemode c;
--        private final GameProfile d;
--        private final IChatBaseComponent e;
-+        // MultiPaper start - make not final and public
-+        public int b;
-+        public EnumGamemode c;
-+        public GameProfile d;
-+        public IChatBaseComponent e;
-+        // MultiPaper end
- 
-         public PlayerInfoData(GameProfile gameprofile, int i, EnumGamemode enumgamemode, @Nullable IChatBaseComponent ichatbasecomponent) {
-             this.d = gameprofile;
-diff --git a/src/main/java/net/minecraft/advancements/CriterionProgress.java b/src/main/java/net/minecraft/advancements/CriterionProgress.java
-index cc2d025c899039854fbc500709ec4008c985cd38..642e1d92fc02fe15fe84b1d126028cb46568da3f 100644
---- a/src/main/java/net/minecraft/advancements/CriterionProgress.java
-+++ b/src/main/java/net/minecraft/advancements/CriterionProgress.java
-@@ -45,7 +45,11 @@ public class CriterionProgress {
-     }
- 
-     public JsonElement e() {
--        return (JsonElement) (this.b != null ? new JsonPrimitive(CriterionProgress.a.format(this.b)) : JsonNull.INSTANCE);
-+        try {
-+            return (JsonElement) (this.b != null ? new JsonPrimitive(CriterionProgress.a.format(this.b)) : JsonNull.INSTANCE);
-+        } catch (Exception e) {
-+            return JsonNull.INSTANCE;
-+        }
-     }
- 
-     public static CriterionProgress b(PacketDataSerializer packetdataserializer) {
-diff --git a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
-index f02840e04fa1644901292b3ec67720cb64c2931d..e4d8ca21e6eb5d6aee4f1e210b722f59510d7b47 100644
---- a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
-+++ b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
-@@ -7,6 +7,7 @@ import net.minecraft.nbt.NBTCompressedStreamTools;
- import net.minecraft.nbt.NBTTagCompound;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
-+import puregero.multipaper.MultiPaper;
- 
- public abstract class PersistentBase {
- 
-@@ -46,7 +47,8 @@ public abstract class PersistentBase {
-             nbttagcompound.setInt("DataVersion", SharedConstants.getGameVersion().getWorldVersion());
- 
-             try {
--                NBTCompressedStreamTools.a(nbttagcompound, file);
-+                MultiPaper.writeData(file.getPath(), nbttagcompound); // MultiPaper
-+                // NBTCompressedStreamTools.a(nbttagcompound, file); // MultiPaper
-             } catch (IOException ioexception) {
-                 PersistentBase.LOGGER.error("Could not save data {}", this, ioexception);
-             }

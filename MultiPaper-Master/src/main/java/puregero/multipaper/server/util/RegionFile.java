@@ -250,6 +250,24 @@ public class RegionFile {
         }
     }
 
+    public synchronized void clear(int x, int z) throws IOException {
+        if (outOfBounds(x, z)) {
+            return;
+        }
+        
+        int offset = getOffset(x, z);
+
+        if (offset != 0) {
+            int sectorNumber = offset >> 8;
+            int sectorsAllocated = offset & 0xFF;
+            setOffset(x, z, 0);
+            setTimestamp(x, z, (int) (System.currentTimeMillis() / 1000L));
+            for (int i = 0; i < sectorsAllocated; ++i) {
+                sectorFree.set(sectorNumber + i, true);
+            }
+        }
+    }
+
     public DataOutputStream getChunkDataOutputStream(int x, int z) {
         if (outOfBounds(x, z)) return null;
 
@@ -275,8 +293,13 @@ public class RegionFile {
     }
 
     /* write a chunk at (x,z) with length bytes of data to disk */
-    protected synchronized void write(int x, int z, byte[] data, int length) {
+    protected synchronized void write(int x, int z, byte[] data, int length) {        
         try {
+            if (length == 0) {
+                clear(x, z);
+                return;
+            }
+            
             int offset = getOffset(x, z);
             int sectorNumber = offset >> 8;
             int sectorsAllocated = offset & 0xFF;

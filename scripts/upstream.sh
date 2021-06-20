@@ -28,7 +28,7 @@ cd "$basedir/Paper/"
 ./gradlew applyPatches
 
 # Reset the mcdev-imports
-git checkout build-data/mcdev-imports.txt
+# git checkout build-data/mcdev-imports.txt
 
 cd "Paper-Server"
 mcVer=$(mvn -o org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=minecraft_version | sed -n -e '/^\[.*\]/ !{ /^[0-9]/ { p; q } }')

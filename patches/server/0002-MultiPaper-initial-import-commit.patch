@@ -3117,3 +3117,105 @@ index 0000000000000000000000000000000000000000..794f61347671df8edb2fe2fac6673172
 +        return chunks.iterator();
 +    }
 +}
+diff --git a/src/main/java/net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java b/src/main/java/net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java
+index c2a94249292df63f8b1c2ca3afe302fcc35ff831..4e76f8b93424883de1ccc94814f381d1a6063af8 100644
+--- a/src/main/java/net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java
++++ b/src/main/java/net/minecraft/network/protocol/game/ServerboundTeleportToEntityPacket.java
+@@ -36,4 +36,10 @@ public class PacketPlayInSpectate implements Packet<PacketListenerPlayIn> {
+     public Entity a(WorldServer worldserver) {
+         return worldserver.getEntity(this.a);
+     }
++    
++    // MultiPaper start - Expose uuid
++    public UUID getUUID() {
++        return a;
++    }
++    // MultiPaper end
+ }
+diff --git a/src/main/java/net/minecraft/network/protocol/game/ClientboundPlayerInfoPacket.java b/src/main/java/net/minecraft/network/protocol/game/ClientboundPlayerInfoPacket.java
+index 2758cf87fe5cb89c101f2495783c72a2fe4ad632..053ecfdd16b1bcf1423ea7735b4fe3255c05b05c 100644
+--- a/src/main/java/net/minecraft/network/protocol/game/ClientboundPlayerInfoPacket.java
++++ b/src/main/java/net/minecraft/network/protocol/game/ClientboundPlayerInfoPacket.java
+@@ -46,6 +46,26 @@ public class PacketPlayOutPlayerInfo implements Packet<PacketListenerPlayOut> {
+ 
+     }
+ 
++    // MultiPaper start
++    public PacketPlayOutPlayerInfo(Iterable<PlayerInfoData> iterable) {
++        this.a = EnumPlayerInfoAction.ADD_PLAYER;
++
++        Iterator<PlayerInfoData> iterator = iterable.iterator();
++
++        while (iterator.hasNext()) {
++            this.b.add(iterator.next());
++        }
++    }
++
++   public PacketPlayOutPlayerInfo.EnumPlayerInfoAction getAction() {
++        return a;
++    }
++
++    public List<PacketPlayOutPlayerInfo.PlayerInfoData> getPlayerInfoDatas() {
++        return b;
++    }
++    // MultiPaper end
++
+     @Override
+     public void a(PacketDataSerializer packetdataserializer) throws IOException {
+         this.a = (PacketPlayOutPlayerInfo.EnumPlayerInfoAction) packetdataserializer.a(PacketPlayOutPlayerInfo.EnumPlayerInfoAction.class);
+@@ -174,10 +194,12 @@ public class PacketPlayOutPlayerInfo implements Packet<PacketListenerPlayOut> {
+ 
+     public class PlayerInfoData {
+ 
+-        private final int b;
+-        private final EnumGamemode c;
+-        private final GameProfile d;
+-        private final IChatBaseComponent e;
++        // MultiPaper start - make not final and public
++        public int b;
++        public EnumGamemode c;
++        public GameProfile d;
++        public IChatBaseComponent e;
++        // MultiPaper end
+ 
+         public PlayerInfoData(GameProfile gameprofile, int i, EnumGamemode enumgamemode, @Nullable IChatBaseComponent ichatbasecomponent) {
+             this.d = gameprofile;
+diff --git a/src/main/java/net/minecraft/advancements/CriterionProgress.java b/src/main/java/net/minecraft/advancements/CriterionProgress.java
+index cc2d025c899039854fbc500709ec4008c985cd38..642e1d92fc02fe15fe84b1d126028cb46568da3f 100644
+--- a/src/main/java/net/minecraft/advancements/CriterionProgress.java
++++ b/src/main/java/net/minecraft/advancements/CriterionProgress.java
+@@ -45,7 +45,11 @@ public class CriterionProgress {
+     }
+ 
+     public JsonElement e() {
+-        return (JsonElement) (this.b != null ? new JsonPrimitive(CriterionProgress.a.format(this.b)) : JsonNull.INSTANCE);
++        try {
++            return (JsonElement) (this.b != null ? new JsonPrimitive(CriterionProgress.a.format(this.b)) : JsonNull.INSTANCE);
++        } catch (Exception e) {
++            return JsonNull.INSTANCE;
++        }
+     }
+ 
+     public static CriterionProgress b(PacketDataSerializer packetdataserializer) {
+diff --git a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
+index f02840e04fa1644901292b3ec67720cb64c2931d..e4d8ca21e6eb5d6aee4f1e210b722f59510d7b47 100644
+--- a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
++++ b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
+@@ -7,6 +7,7 @@ import net.minecraft.nbt.NBTCompressedStreamTools;
+ import net.minecraft.nbt.NBTTagCompound;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public abstract class PersistentBase {
+ 
+@@ -46,7 +47,8 @@ public abstract class PersistentBase {
+             nbttagcompound.setInt("DataVersion", SharedConstants.getGameVersion().getWorldVersion());
+ 
+             try {
+-                NBTCompressedStreamTools.a(nbttagcompound, file);
++                MultiPaper.writeData(file.getPath(), nbttagcompound); // MultiPaper
++                // NBTCompressedStreamTools.a(nbttagcompound, file); // MultiPaper
+             } catch (IOException ioexception) {
+                 PersistentBase.LOGGER.error("Could not save data {}", this, ioexception);
+             }

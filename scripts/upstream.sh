@@ -19,6 +19,10 @@ if [[ "$1" == up* ]]; then
     )
 fi
 
+# Copy out Paper-MojangAPI
+rm -rf Paper-MojangAPI/src
+cp -r Paper/Paper-MojangAPI/src Paper-MojangAPI/
+
 # Add out mcdev-imports
 "$basedir"/scripts/generateimportmcdev.sh
 

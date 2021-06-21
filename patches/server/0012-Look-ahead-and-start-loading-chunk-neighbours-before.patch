@@ -1,0 +1,116 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 22 Jun 2021 00:01:38 +1000
+Subject: [PATCH] Look ahead and start loading chunk neighbours before
+ requested
+
+
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index c80ec6e813e26b500fc70bb0000eca7bca5ac1bf..b3b9b01b87c44503684000473c635e8d3e3d4a44 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -30,10 +30,10 @@ import org.bukkit.entity.Player;
+ import java.io.*;
+ import java.nio.file.Files;
+ import java.util.ConcurrentModificationException;
++import java.util.HashMap;
+ import java.util.UUID;
+-import java.util.concurrent.ExecutionException;
+-import java.util.concurrent.TimeUnit;
+-import java.util.concurrent.TimeoutException;
++import java.util.concurrent.*;
++import java.util.zip.InflaterInputStream;
+ 
+ public class MultiPaper {
+ 
+@@ -98,10 +98,27 @@ public class MultiPaper {
+         writeRegionFileNBT(serverLevel, "region", chunkPos, compoundTag);
+     }
+ 
++    private static final ConcurrentHashMap<String, CompletableFuture<byte[]>> regionFileLookAhead = new ConcurrentHashMap<>();
++    private static long lastRegionFileLookAheadClear = 0;
+     public static DataInput readRegionFile(String world, String path, int cx, int cz) throws IOException {
+         while (true) {
++            if (lastRegionFileLookAheadClear < System.currentTimeMillis() - 15 * 1000) {
++                regionFileLookAhead.clear();
++                lastRegionFileLookAheadClear = System.currentTimeMillis();
++            }
++                
+             try {
+-                return getConnection().readChunk(world, path, cx, cz).get(15, TimeUnit.SECONDS);
++                CompletableFuture<byte[]> future = lookAhead(world, path, cx, cz);
++                for (int x = -2; x <= 2; x ++) {
++                    for (int z = -2; z <= 2; z ++) {
++                        int fx = x;
++                        int fz = z;
++                        CompletableFuture.supplyAsync(() -> lookAhead(world, path, cx + fx, cz + fz));
++                    }
++                }
++                
++                byte[] data = future.get(15, TimeUnit.SECONDS);
++                return data == null || data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data)));
+             } catch (InterruptedException | ExecutionException e) {
+                 throw new IOException(e);
+             } catch (TimeoutException e) {
+@@ -114,6 +131,14 @@ public class MultiPaper {
+         }
+     }
+ 
++    private static CompletableFuture<byte[]> lookAhead(String world, String path, int cx, int cz) {
++        return regionFileLookAhead.computeIfAbsent(key(world, path, cx, cz), key -> getConnection().readChunk(world, path, cx, cz));
++    }
++
++    private static String key(String world, String path, int cx, int cz) {
++        return world + "." + path + "." + cx + "." + cz;
++    }
++
+     public static void writeRegionFile(String world, String path, int cx, int cz, byte[] bytes) throws IOException {
+         getConnection().writeChunk(world, path, cx, cz, bytes);
+     }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 9bd199b767d7677990e97c3a9c9da5a9a37b7cc1..33f4b1a97b030f7fa4e313864163b89429da4d3e 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -362,27 +362,31 @@ public class MultiPaperConnection extends Thread {
+         }
+     }
+ 
+-    public CompletableFuture<DataInputStream> readChunk(String world, String path, int cx, int cz) throws IOException {
+-        CompletableFuture<DataInputStream> future = new CompletableFuture<>();
++    public CompletableFuture<byte[]> readChunk(String world, String path, int cx, int cz) {
++        CompletableFuture<byte[]> future = new CompletableFuture<>();
+ 
+         Consumer<DataInputStream> callback = in -> {
+             try {
+                 byte[] data = new byte[in.readInt()];
+                 in.readFully(data);
+ 
+-                future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
++                future.complete(data);
+             } catch (IOException e) {
+                 e.printStackTrace();
+             }
+         };
+-
+-        DataOutputSender out = new DataOutputSender(this);
+-        out.writeUTF("readChunk");
+-        out.writeUTF(world);
+-        out.writeUTF(path);
+-        out.writeInt(cx);
+-        out.writeInt(cz);
+-        out.send(callback);
++        
++        try {
++            DataOutputSender out = new DataOutputSender(this);
++            out.writeUTF("readChunk");
++            out.writeUTF(world);
++            out.writeUTF(path);
++            out.writeInt(cx);
++            out.writeInt(cz);
++            out.send(callback);
++        } catch (IOException e) {
++            return CompletableFuture.failedFuture(e);
++        }
+ 
+         return future;
+     }

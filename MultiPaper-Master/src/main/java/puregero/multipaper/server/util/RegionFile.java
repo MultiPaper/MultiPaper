@@ -95,7 +95,7 @@ public class RegionFile {
 
             file = new RandomAccessFile(path, "rw");
 
-            if (file.length() < SECTOR_BYTES) {
+            if (file.length() < SECTOR_BYTES * 2) {
                 /* we need to write the chunk offset table */
                 for (int i = 0; i < SECTOR_INTS; ++i) {
                     file.writeInt(0);

@@ -826,7 +826,7 @@ index c22391a0d4b7db49bd3994b0887939a7d8019391..8c0f8ae828bfb66b642f518aa2f2ae8e
          this.fileLock.lock();
          synchronized (this) {
 diff --git a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
-index 5d60a4ebbd039077c4d2458ac8d8110097eb74a3..ebb867b3d7f0969308b0c408729dc4e7336cb567 100644
+index 5d60a4ebbd039077c4d2458ac8d8110097eb74a3..9f1d30c55e3d59c879be9aaf69edfb6533af06e8 100644
 --- a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
 +++ b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
 @@ -7,6 +7,7 @@ import net.minecraft.nbt.CompoundTag;
@@ -837,16 +837,17 @@ index 5d60a4ebbd039077c4d2458ac8d8110097eb74a3..ebb867b3d7f0969308b0c408729dc4e7
  
  public abstract class SavedData {
      private static final Logger LOGGER = LogManager.getLogger();
-@@ -33,6 +34,7 @@ public abstract class SavedData {
+@@ -33,7 +34,7 @@ public abstract class SavedData {
              compoundTag.putInt("DataVersion", SharedConstants.getCurrentVersion().getWorldVersion());
  
              try {
-+                MultiPaper.writeData(file.getPath(), compoundTag); // MultiPaper
-                 NbtIo.writeCompressed(compoundTag, file);
+-                NbtIo.writeCompressed(compoundTag, file);
++                MultiPaper.writeData(file.getPath(), compoundTag); // NbtIo.writeCompressed(compoundTag, file); // MultiPaper
              } catch (IOException var4) {
                  LOGGER.error("Could not save data {}", this, var4);
+             }
 diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
-index c8ed0673ff819cb88d0ee6f53f2a2b9b46b203d4..4bd811e396c48508cf0710d5ff13f4b658513da4 100644
+index c8ed0673ff819cb88d0ee6f53f2a2b9b46b203d4..998bedc9a09331a8d7b02a19578f969d52595a6d 100644
 --- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
 +++ b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
 @@ -2,11 +2,9 @@ package net.minecraft.world.level.storage;
@@ -907,8 +908,8 @@ index c8ed0673ff819cb88d0ee6f53f2a2b9b46b203d4..4bd811e396c48508cf0710d5ff13f4b6
      }
 +
 +    // MultiPaper start - save a PersistentBase
-+    public void save(SavedData savedData) {
-+        savedData.save(this.getDataFile(savedData.toString()));
++    public void save(String id, SavedData savedData) {
++        savedData.save(this.getDataFile(id));
 +    }
 +    // MultiPaper end
  }
@@ -1368,7 +1369,7 @@ index 0000000000000000000000000000000000000000..3a35379f75384aaf7b31d74ecbd5c801
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f625de2de4d9b37c265a54ba80d5c4a6a1d00ecd
+index 0000000000000000000000000000000000000000..72206f67e0df06d986b3c2cebf9a292e5756fc25
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -0,0 +1,391 @@
@@ -1437,9 +1438,9 @@ index 0000000000000000000000000000000000000000..f625de2de4d9b37c265a54ba80d5c4a6
 +
 +        Bukkit.getWorlds().forEach(world -> {
 +            DimensionDataStorage persistentData = ((CraftWorld) world).getHandle().getDataStorage();
-+            persistentData.cache.values().forEach(value -> {
++            persistentData.cache.forEach((key, value) -> {
 +                if (value != null && (value instanceof MapIndex || (value instanceof MapItemSavedData && hasBeen10Seconds))) {
-+                    persistentData.save(value);
++                    persistentData.save(key, value);
 +                }
 +            });
 +        });

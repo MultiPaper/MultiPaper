@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 24 Jun 2021 11:47:32 +1000
+Subject: [PATCH] Let /tp <player> work across servers
+
+
+diff --git a/src/main/java/puregero/multipaper/MultiPaperListener.java b/src/main/java/puregero/multipaper/MultiPaperListener.java
+index 6c8f6473096faf5d4c07a778eed66e4210902e6a..feae797af47e23520456d2322d1026be36955f42 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperListener.java
++++ b/src/main/java/puregero/multipaper/MultiPaperListener.java
+@@ -1,23 +1,24 @@
+ package puregero.multipaper;
+ 
++import net.minecraft.server.commands.TeleportCommand;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
++import org.bukkit.ChatColor;
++import org.bukkit.Location;
+ import org.bukkit.craftbukkit.CraftChunk;
+ import org.bukkit.entity.Player;
+ import org.bukkit.event.EventHandler;
+ import org.bukkit.event.EventPriority;
+ import org.bukkit.event.Listener;
+ import org.bukkit.event.entity.EntityPortalEvent;
+-import org.bukkit.event.player.PlayerJoinEvent;
+-import org.bukkit.event.player.PlayerKickEvent;
+-import org.bukkit.event.player.PlayerQuitEvent;
+-import org.bukkit.event.player.PlayerTeleportEvent;
++import org.bukkit.event.player.*;
+ import org.bukkit.plugin.Plugin;
+ 
+ import java.util.Arrays;
+ import java.util.HashSet;
+ import java.util.List;
++import java.util.UUID;
+ 
+ public class MultiPaperListener implements Listener {
+     private static final Logger LOGGER = LogManager.getLogger();
+@@ -89,4 +90,24 @@ public class MultiPaperListener implements Listener {
+             e.setCancelled(true);
+         }
+     }
++    
++    @EventHandler(ignoreCancelled = true)
++    public void onCommand(PlayerCommandPreprocessEvent e) {
++        if (e.getMessage().startsWith("/tp") || e.getMessage().startsWith("/minecraft:tp")) {
++            String[] args = e.getMessage().split(" ");
++            if (args.length == 2) {
++                if (Bukkit.getPlayerExact(args[1]) == null) {
++                    UUID uuid = PlayerInfoManager.getUUID(args[1]);
++                    if (uuid != null) {
++                        Location location = MultiPaper.getPlayerLocation(uuid);
++                        if (location != null) {
++                            e.getPlayer().teleportAsync(location);
++                            e.getPlayer().sendMessage(ChatColor.GREEN + "Teleported to " + args[1]);
++                            e.setCancelled(true);
++                        }
++                    }
++                }
++            }
++        }
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/PlayerInfoManager.java b/src/main/java/puregero/multipaper/PlayerInfoManager.java
+index 5bd73d6c1bce7c5db5379138676fc3ac0be31f65..841491ca037e1ad838f6375e08dec14ff7801aa8 100644
+--- a/src/main/java/puregero/multipaper/PlayerInfoManager.java
++++ b/src/main/java/puregero/multipaper/PlayerInfoManager.java
+@@ -17,6 +17,15 @@ public class PlayerInfoManager {
+ 
+     private static HashMap<UUID, ClientboundPlayerInfoPacket.PlayerUpdate> playerInfos = new HashMap<>();
+ 
++    public static UUID getUUID(String name) {
++        for (ClientboundPlayerInfoPacket.PlayerUpdate update : playerInfos.values()) {
++            if (name.equalsIgnoreCase(update.getProfile().getName())) {
++                return update.getProfile().getId();
++            }
++        }
++        return null;
++    }
++    
+     public static void handle(ClientboundPlayerInfoPacket packet) {
+         for (ClientboundPlayerInfoPacket.PlayerUpdate info : packet.getPlayerUpdates()) {
+             UUID uuid = info.getProfile().getId();

@@ -1045,18 +1045,27 @@ index 6727468946ea5f60bd80549f827a7c2b9a42b98b..864ac275677636d9a496315fc064e36c
  
              if (file1.exists()) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index a00def58337357f26800ecfce8d68cbc63ddaa9c..e332a76211d0ce4feea074b158e6308ac2c16b3f 100644
+index 6f2d71a2133b51a1d768906f9e5d38d918f5fe85..f68b7a062987bc40c77a689afae42e57fde87d3c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -225,6 +225,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
- import org.yaml.snakeyaml.error.MarkedYAMLException;
+@@ -226,6 +226,8 @@ import org.yaml.snakeyaml.error.MarkedYAMLException;
  
  import net.md_5.bungee.api.chat.BaseComponent; // Spigot
-+import puregero.multipaper.MultiPaper;
  
++import puregero.multipaper.MultiPaper; // MultiPaper
++
  import javax.annotation.Nullable; // Paper
  import javax.annotation.Nonnull; // Paper
-@@ -1582,6 +1583,12 @@ public final class CraftServer implements Server {
+ 
+@@ -955,6 +957,7 @@ public final class CraftServer implements Server {
+         this.loadPlugins();
+         this.enablePlugins(PluginLoadOrder.STARTUP);
+         this.enablePlugins(PluginLoadOrder.POSTWORLD);
++        MultiPaper.serverReloaded(); // MultiPaper
+         this.getPluginManager().callEvent(new ServerLoadEvent(ServerLoadEvent.LoadType.RELOAD));
+         org.spigotmc.WatchdogThread.hasStarted = true; // Paper - Disable watchdog early timeout on reload
+     }
+@@ -1582,6 +1585,12 @@ public final class CraftServer implements Server {
  
          message = broadcastMessageEvent.message(); // Paper - Adventure
  
@@ -1069,7 +1078,7 @@ index a00def58337357f26800ecfce8d68cbc63ddaa9c..e332a76211d0ce4feea074b158e6308a
          for (CommandSender recipient : recipients) {
              recipient.sendMessage(message);
          }
-@@ -2371,6 +2378,8 @@ public final class CraftServer implements Server {
+@@ -2371,6 +2380,8 @@ public final class CraftServer implements Server {
  
          @Override
          public void broadcast(BaseComponent component) {
@@ -1078,7 +1087,7 @@ index a00def58337357f26800ecfce8d68cbc63ddaa9c..e332a76211d0ce4feea074b158e6308a
              for (Player player : CraftServer.this.getOnlinePlayers()) {
                  player.spigot().sendMessage(component);
              }
-@@ -2378,6 +2387,8 @@ public final class CraftServer implements Server {
+@@ -2378,6 +2389,8 @@ public final class CraftServer implements Server {
  
          @Override
          public void broadcast(BaseComponent... components) {
@@ -1369,10 +1378,10 @@ index 0000000000000000000000000000000000000000..3a35379f75384aaf7b31d74ecbd5c801
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..515c2d123698733cb585db07749fc2d1433ed42e
+index 0000000000000000000000000000000000000000..b066156b6908c988850990737cca8124452520ea
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -0,0 +1,393 @@
+@@ -0,0 +1,398 @@
 +package puregero.multipaper;
 +
 +import net.kyori.adventure.text.Component;
@@ -1422,6 +1431,11 @@ index 0000000000000000000000000000000000000000..515c2d123698733cb585db07749fc2d1
 +        }
 +
 +        return multiPaperConnection;
++    }
++    
++    public static void serverReloaded() {
++        plugin = new MultiPaperPlugin();
++        new MultiPaperListener(plugin);
 +    }
 +
 +    private static void tick() {
@@ -2483,7 +2497,7 @@ index 0000000000000000000000000000000000000000..ce3b0ef0554681fb287c3b1fd8f92b5c
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperListener.java b/src/main/java/puregero/multipaper/MultiPaperListener.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e928cae02d9f3327b998a2e98effb71cea5d0efa
+index 0000000000000000000000000000000000000000..0588ba8600036534fbc2bfd3aab8f2279fb39eb5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperListener.java
 @@ -0,0 +1,76 @@
@@ -2509,14 +2523,14 @@ index 0000000000000000000000000000000000000000..e928cae02d9f3327b998a2e98effb71c
 +public class MultiPaperListener implements Listener {
 +    private static final Logger LOGGER = LogManager.getLogger();
 +
++    private static HashSet<Player> kickedPlayers = new HashSet<>();
++
 +    private final Plugin plugin;
 +
 +    public MultiPaperListener(Plugin plugin) {
 +        this.plugin = plugin;
 +        Bukkit.getPluginManager().registerEvents(this, plugin);
 +    }
-+
-+    private HashSet<Player> kickedPlayers = new HashSet<>();
 +    
 +    @EventHandler(priority = EventPriority.LOWEST)
 +    public void onPlayerQuit(PlayerQuitEvent e) {

@@ -62,9 +62,21 @@ public class RegionFileCache {
             return file;
         }
     }
+    
+    private static File getFileForRegionFile(File regionDir, int chunkX, int chunkZ) {
+        return new File(regionDir, "r." + (chunkX >> 5) + "." + (chunkZ >> 5) + ".mca");
+    }
+
+    public static synchronized RegionFile getRegionFileIfExists(File regionDir, int chunkX, int chunkZ) {
+        if (getFileForRegionFile(regionDir, chunkX, chunkZ).isFile()) {
+            return getRegionFile(regionDir, chunkX, chunkZ);
+        } else {
+            return null;
+        }
+    }
 
     public static synchronized RegionFile getRegionFile(File regionDir, int chunkX, int chunkZ) {
-        File file = new File(regionDir, "r." + (chunkX >> 5) + "." + (chunkZ >> 5) + ".mca");
+        File file = getFileForRegionFile(regionDir, chunkX, chunkZ);
 
         file = canonical(file);
 
@@ -111,7 +123,11 @@ public class RegionFileCache {
 
     public static DataInputStream getChunkDataInputStream(File basePath, int chunkX, int chunkZ) {
         RegionFile r = getRegionFile(basePath, chunkX, chunkZ);
-        return r.getChunkDataInputStream(chunkX & 31, chunkZ & 31);
+        if (r != null) {
+            return r.getChunkDataInputStream(chunkX & 31, chunkZ & 31);
+        } else {
+            return null;
+        }
     }
 
     public static DataOutputStream getChunkDataOutputStream(File basePath, int chunkX, int chunkZ) {
@@ -120,8 +136,12 @@ public class RegionFileCache {
     }
 
     public static byte[] getChunkDeflatedData(File basePath, int chunkX, int chunkZ) {
-        RegionFile r = getRegionFile(basePath, chunkX, chunkZ);
-        return r.getDeflatedBytes(chunkX & 31, chunkZ & 31);
+        RegionFile r = getRegionFileIfExists(basePath, chunkX, chunkZ);
+        if (r != null) {
+            return r.getDeflatedBytes(chunkX & 31, chunkZ & 31);
+        } else {
+            return null;
+        }
     }
 
     public static void putChunkDeflatedData(File basePath, int chunkX, int chunkZ, byte[] data) {

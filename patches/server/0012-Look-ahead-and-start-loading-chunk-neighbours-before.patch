@@ -6,44 +6,54 @@ Subject: [PATCH] Look ahead and start loading chunk neighbours before
 
 
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 1452a7a92ffe76bdcb814fd7c2c8bd2462e06852..2ce535621e0915d72d8c4392c07287025113c105 100644
+index 1452a7a92ffe76bdcb814fd7c2c8bd2462e06852..61d9968e54556c779c2c0be5f5367ea4ed64f878 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -30,10 +30,10 @@ import org.bukkit.entity.Player;
+@@ -29,11 +29,9 @@ import org.bukkit.entity.Player;
+ 
  import java.io.*;
  import java.nio.file.Files;
- import java.util.ConcurrentModificationException;
-+import java.util.HashMap;
- import java.util.UUID;
+-import java.util.ConcurrentModificationException;
+-import java.util.UUID;
 -import java.util.concurrent.ExecutionException;
 -import java.util.concurrent.TimeUnit;
 -import java.util.concurrent.TimeoutException;
++import java.util.*;
 +import java.util.concurrent.*;
 +import java.util.zip.InflaterInputStream;
  
  public class MultiPaper {
  
-@@ -103,10 +103,27 @@ public class MultiPaper {
+@@ -103,10 +101,35 @@ public class MultiPaper {
          writeRegionFileNBT(serverLevel, "region", chunkPos, compoundTag);
      }
  
+-    public static DataInput readRegionFile(String world, String path, int cx, int cz) throws IOException {
 +    private static final ConcurrentHashMap<String, CompletableFuture<byte[]>> regionFileLookAhead = new ConcurrentHashMap<>();
++    private static final List<String> lookAheadPaths = Arrays.asList("region", "poi", "entities");
 +    private static long lastRegionFileLookAheadClear = 0;
-     public static DataInput readRegionFile(String world, String path, int cx, int cz) throws IOException {
++    public static DataInput readRegionFile(String world, String path, int cx, int cz) throws IOException {        
          while (true) {
-+            if (lastRegionFileLookAheadClear < System.currentTimeMillis() - 15 * 1000) {
-+                regionFileLookAhead.clear();
-+                lastRegionFileLookAheadClear = System.currentTimeMillis();
-+            }
-+                
              try {
 -                return getConnection().readChunk(world, path, cx, cz).get(15, TimeUnit.SECONDS);
-+                CompletableFuture<byte[]> future = lookAhead(world, path, cx, cz);
-+                for (int x = -1; x <= 1; x ++) {
-+                    for (int z = -1; z <= 1; z ++) {
-+                        int fx = x;
-+                        int fz = z;
-+                        CompletableFuture.supplyAsync(() -> lookAhead(world, path, cx + fx, cz + fz));
++                CompletableFuture<byte[]> future;
++                if (!lookAheadPaths.contains(path)) {
++                    // Don't look ahead
++                    future = getConnection().readChunk(world, path, cx, cz);
++                } else {
++                    // Look ahead
++                    if (lastRegionFileLookAheadClear < System.currentTimeMillis() - 15 * 1000) {
++                        regionFileLookAhead.clear();
++                        lastRegionFileLookAheadClear = System.currentTimeMillis();
++                    }
++
++                    future = lookAhead(world, path, cx, cz);
++                    for (int x = -1; x <= 1; x++) {
++                        for (int z = -1; z <= 1; z++) {
++                            int fx = x;
++                            int fz = z;
++                            CompletableFuture.supplyAsync(() -> lookAhead(world, path, cx + fx, cz + fz));
++                        }
 +                    }
 +                }
 +                
@@ -52,7 +62,7 @@ index 1452a7a92ffe76bdcb814fd7c2c8bd2462e06852..2ce535621e0915d72d8c4392c0728702
              } catch (InterruptedException | ExecutionException e) {
                  throw new IOException(e);
              } catch (TimeoutException e) {
-@@ -119,6 +136,14 @@ public class MultiPaper {
+@@ -119,7 +142,16 @@ public class MultiPaper {
          }
      }
  
@@ -65,8 +75,18 @@ index 1452a7a92ffe76bdcb814fd7c2c8bd2462e06852..2ce535621e0915d72d8c4392c0728702
 +    }
 +
      public static void writeRegionFile(String world, String path, int cx, int cz, byte[] bytes) throws IOException {
++        regionFileLookAhead.remove(key(world, path, cx, cz));
          getConnection().writeChunk(world, path, cx, cz, bytes);
      }
+ 
+@@ -222,6 +254,7 @@ public class MultiPaper {
+ 
+     public static void notifyChunkNotSaving(ChunkPos chunkPos, ServerLevel serverLevel) {
+         try {
++            lookAheadPaths.forEach(path -> regionFileLookAhead.remove(key(serverLevel.convertable.getLevelId(), path, chunkPos.x, chunkPos.z)));
+             getConnection().notifyChunkNotSaving(serverLevel.convertable.getLevelId(), chunkPos.x, chunkPos.z);
+         } catch (IOException e) {
+             e.printStackTrace();
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 index 9bd199b767d7677990e97c3a9c9da5a9a37b7cc1..33f4b1a97b030f7fa4e313864163b89429da4d3e 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java

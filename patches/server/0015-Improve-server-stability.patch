@@ -1,0 +1,133 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 6 Jul 2021 18:14:56 +1000
+Subject: [PATCH] Improve server stability
+
+
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index a2e6b0a7687a044517c0e1a236a399eff143df7d..b5be246c7ffd9774f3a5c05159f5bdb08e3cb20c 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -950,6 +950,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         MinecraftServer.LOGGER.info("Stopping server");
+         MinecraftTimings.stopServer(); // Paper
+         ShutdownHandler.onStop(); // MultiPaper
++        MultiPaper.onStop();
+         // CraftBukkit start
+         if (this.server != null) {
+             this.server.disablePlugins();
+diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+index 9fe60d058ea1702930981dbd06093dc594e6bf8e..9d10d9bc6dae44e7f90f3a892928d259790cc5fe 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
++++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+@@ -176,13 +176,13 @@ public class ChunkHolder {
+     private void recalcNeighborPriority() {
+         neighborPriority = -1;
+         if (!neighborPriorities.isEmpty()) {
+-            synchronized (neighborPriorities) {
++//            synchronized (neighborPriorities) { // MultiPaper - useless synchronize block
+                 for (Integer neighbor : neighborPriorities.values()) {
+                     if (neighbor < neighborPriority || neighborPriority == -1) {
+                         neighborPriority = neighbor;
+                     }
+                 }
+-            }
++//            } // MultiPaper - useless synchronize block
+         }
+     }
+     private void checkPriority() {
+diff --git a/src/main/java/org/spigotmc/WatchdogThread.java b/src/main/java/org/spigotmc/WatchdogThread.java
+index dcfbe77bdb25d9c58ffb7b75c48bdb580bc0de47..cf5e2b622ec7079cc9e2e3d22b6d17f238e4c1d2 100644
+--- a/src/main/java/org/spigotmc/WatchdogThread.java
++++ b/src/main/java/org/spigotmc/WatchdogThread.java
+@@ -175,7 +175,7 @@ public class WatchdogThread extends Thread
+         }
+     }
+ 
+-    private static void dumpThread(ThreadInfo thread, Logger log)
++    public static void dumpThread(ThreadInfo thread, Logger log)
+     {
+         log.log( Level.SEVERE, "------------------------------" );
+         //
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index bbebab57723555befe1523376b98c28b641842ab..e7f5d5e9e7143c3f28d82517ed55075939efc01a 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -168,11 +168,7 @@ public class MultiPaper {
+     private static final ConcurrentHashMap<String, CompletableFuture<byte[]>> regionFileLookAhead = new ConcurrentHashMap<>();
+     private static final List<String> lookAheadPaths = Arrays.asList("region", "poi", "entities");
+     private static long lastRegionFileLookAheadClear = 0;
+-    public static DataInput readRegionFile(String world, String path, int cx, int cz) throws IOException {      
+-        if (DedicatedServer.getServer().hasStopped()) {
+-            LOGGER.info("Attempted to readRegionFile " + world + "," + path + "," + cx + "," + cz + ", but server has stopped, aborting operation.");
+-            return null;
+-        }
++    public static DataInput readRegionFile(String world, String path, int cx, int cz) throws IOException {     
+         while (true) {
+             try {
+                 CompletableFuture<byte[]> future;
+@@ -201,10 +197,10 @@ public class MultiPaper {
+             } catch (InterruptedException | ExecutionException e) {
+                 throw new IOException(e);
+             } catch (TimeoutException e) {
+-                if (DedicatedServer.getServer().hasStopped()) {
+-                    LOGGER.info("No response for readRegionFile " + world + "," + path + "," + cx + "," + cz + ", but server has stopped, aborting operation.");
+-                    return null;
+-                }
++//                if (DedicatedServer.getServer().hasStopped()) {
++//                    LOGGER.info("No response for readRegionFile " + world + "," + path + "," + cx + "," + cz + ", but server has stopped, aborting operation.");
++//                    return null;
++//                }
+                 LOGGER.info("No response for readRegionFile " + world + "," + path + "," + cx + "," + cz + ", resending...");
+             }
+         }
+@@ -535,4 +531,34 @@ public class MultiPaper {
+     public static void setPlayerShouldTickEntities(Player player, boolean shouldTickEntities) {
+         ((CraftPlayer) player).getHandle().shouldTickEntities = shouldTickEntities;
+     }
++
++    private static Thread stoppingThread;
++    public static void onStop() {
++        stoppingThread = Thread.currentThread();
++        new Thread(() -> {
++            int i = 0;
++            long t = System.currentTimeMillis();
++            while (stoppingThread.isAlive()) {
++                int j = (int) ((System.currentTimeMillis() - t) / 10000);
++                if (i != j) {
++                    LOGGER.fatal("Server has taken too long to restart (" + (System.currentTimeMillis() - t) / 1000 + " seconds)");
++                    System.err.println("Stack:");
++                    for (StackTraceElement e : stoppingThread.getStackTrace()) {
++                        System.err.println("\t" + e);
++                    }
++                }
++                if (System.currentTimeMillis() > t + 60000) {
++                    LOGGER.info("Server has stopped unsuccessfully");
++                    return;
++                }
++                try {
++                    Thread.sleep(100);
++                } catch (InterruptedException e) {
++                    e.printStackTrace();
++                    return;
++                }
++            }
++            LOGGER.info("Server stopped successfully");
++        }).start();
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/Zone.java b/src/main/java/puregero/multipaper/Zone.java
+index fbaf86b7492afe171f5c11fe37f0dd3cc2f1b8e9..82a085d2aa10f714853643813ac6eeb981bf9696 100644
+--- a/src/main/java/puregero/multipaper/Zone.java
++++ b/src/main/java/puregero/multipaper/Zone.java
+@@ -180,7 +180,9 @@ public class Zone implements Iterable<Chunk> {
+ 
+     private void mapPlayers(World world) {
+         for (Player player : world.getPlayers()) {
+-            if (chunks.contains(player.getChunk())) {
++            int cx = player.getLocation().getBlockX() >> 4;
++            int cz = player.getLocation().getBlockZ() >> 4;
++            if (world.isChunkLoaded(cx, cz) && chunks.contains(player.getChunk())) {
+                 players.add(player);
+             }
+         }

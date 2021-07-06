@@ -6,7 +6,7 @@ Subject: [PATCH] Look ahead and start loading chunk neighbours before
 
 
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 1452a7a92ffe76bdcb814fd7c2c8bd2462e06852..61d9968e54556c779c2c0be5f5367ea4ed64f878 100644
+index 01ae5bd905de2d2508cdacfdbcc186e2daebf62e..f1ba403f897d7cff56b37dd3b46f026b551ce9ec 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -29,11 +29,9 @@ import org.bukkit.entity.Player;
@@ -24,7 +24,7 @@ index 1452a7a92ffe76bdcb814fd7c2c8bd2462e06852..61d9968e54556c779c2c0be5f5367ea4
  
  public class MultiPaper {
  
-@@ -103,10 +101,35 @@ public class MultiPaper {
+@@ -103,14 +101,39 @@ public class MultiPaper {
          writeRegionFileNBT(serverLevel, "region", chunkPos, compoundTag);
      }
  
@@ -32,7 +32,11 @@ index 1452a7a92ffe76bdcb814fd7c2c8bd2462e06852..61d9968e54556c779c2c0be5f5367ea4
 +    private static final ConcurrentHashMap<String, CompletableFuture<byte[]>> regionFileLookAhead = new ConcurrentHashMap<>();
 +    private static final List<String> lookAheadPaths = Arrays.asList("region", "poi", "entities");
 +    private static long lastRegionFileLookAheadClear = 0;
-+    public static DataInput readRegionFile(String world, String path, int cx, int cz) throws IOException {        
++    public static DataInput readRegionFile(String world, String path, int cx, int cz) throws IOException {      
+         if (DedicatedServer.getServer().hasStopped()) {
+             LOGGER.info("Attempted to readRegionFile " + world + "," + path + "," + cx + "," + cz + ", but server has stopped, aborting operation.");
+             return null;
+         }
          while (true) {
              try {
 -                return getConnection().readChunk(world, path, cx, cz).get(15, TimeUnit.SECONDS);
@@ -62,7 +66,7 @@ index 1452a7a92ffe76bdcb814fd7c2c8bd2462e06852..61d9968e54556c779c2c0be5f5367ea4
              } catch (InterruptedException | ExecutionException e) {
                  throw new IOException(e);
              } catch (TimeoutException e) {
-@@ -119,7 +142,16 @@ public class MultiPaper {
+@@ -123,7 +146,16 @@ public class MultiPaper {
          }
      }
  
@@ -79,7 +83,7 @@ index 1452a7a92ffe76bdcb814fd7c2c8bd2462e06852..61d9968e54556c779c2c0be5f5367ea4
          getConnection().writeChunk(world, path, cx, cz, bytes);
      }
  
-@@ -222,6 +254,7 @@ public class MultiPaper {
+@@ -226,6 +258,7 @@ public class MultiPaper {
  
      public static void notifyChunkNotSaving(ChunkPos chunkPos, ServerLevel serverLevel) {
          try {

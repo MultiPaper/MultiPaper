@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 9 Jul 2021 13:53:43 +1000
+Subject: [PATCH] Ensure shulker bounding box is updated
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 7a4baa03b2cdbacc340048a37e3bd54abb0ee03a..b44c2363f97c2ea5e0e25122ea00fbaec8029a17 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -593,7 +593,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+     }
+ 
+     public void setPos(double x, double y, double z) {
+-        this.setPosRaw(x, y, z);
++        this.setPosRaw(x, y, z, true); // Paper - force bounding box update
+         // this.setBoundingBox(this.makeBoundingBox()); // Paper - move into setPositionRaw
+     }
+ 
+@@ -3797,11 +3797,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+             }
+         }
+         // Paper end - fix MC-4
+-        // Paper start - never allow AABB to become desynced from position
+-        // hanging has its own special logic
+-        if (!(this instanceof net.minecraft.world.entity.decoration.HangingEntity) && (this.position.x != x || this.position.y != y || this.position.z != z)) {
+-            this.setBoundingBox(this.dimensions.makeBoundingBox(x, y, z));
+-        }
++        // Paper start
++        this.setPosRaw(x, y, z, false);
++    }
++    public final void setPosRaw(double x, double y, double z, boolean forceBoundingBoxUpdate) {
+         // Paper end
+         if (this.position.x != x || this.position.y != y || this.position.z != z) {
+             this.position = new Vec3(x, y, z);
+@@ -3821,6 +3820,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+             }
+         }
+ 
++        // Paper start - never allow AABB to become desynced from position
++        // hanging has its own special logic
++        if (!(this instanceof net.minecraft.world.entity.decoration.HangingEntity) && (forceBoundingBoxUpdate || this.position.x != x || this.position.y != y || this.position.z != z)) {
++            this.setBoundingBox(this.makeBoundingBox());
++        }
++        // Paper end
+     }
+ 
+     public void checkDespawn() {}

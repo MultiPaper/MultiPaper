@@ -67,6 +67,9 @@ You can also [build it yourself](https://github.com/PureGero/MultiPaper#building
 2. Build the multipaper jars with: `./gradlew reobfJar`
 3. Get the jar from `MultiPaper-Master/build/libs`
 
+## Publishing to maven local
+Publish to your local maven repository with: `./gradlew publishToMavenLocal`
+
 ## Tasks
 
 ```

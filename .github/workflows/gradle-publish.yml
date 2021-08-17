@@ -1,34 +1,38 @@
-name: Build Paper
-on: [push, pull_request]
+name: Build main
+
+on: [push]
 
 jobs:
-    build:
-        runs-on: ubuntu-latest
-        strategy:
-            matrix:
-                java: [11]
-            fail-fast: true
-        steps:
-            - uses: actions/checkout@v2
-            - name: JDK ${{ matrix.java }}
-              uses: actions/setup-java@v2
-              with:
-                  java-version: ${{ matrix.java }}
-                  distribution: 'adopt'
-            - name: Cache gradle
-              uses: actions/cache@v2
-              with:
-                  path: |
-                    ~/.gradle/caches
-                    ~/.gradle/jdks
-                    ~/.gradle/native
-                    ~/.gradle/wrapper
-                  key: ${{ runner.os }}-paper-2-${{ hashFiles('**/*.gradle*', 'gradle/**', 'gradle.properties') }}
-                  restore-keys: ${{ runner.os }}-paper-2
-            - name: Patch and build
-              run: |
-                  git config --global user.email "itsbitcraft@gmail.com"
-                  git config --global user.name "Lexivale"
-                  ./gradlew applyPatches --stacktrace
-                  ./gradlew build --stacktrace
-                  ./gradlew publishToMavenLocal
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        java: [11]
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up JDK ${{ matrix.java }}
+      uses: actions/setup-java@v1
+      with:
+        java-version: ${{ matrix.java }}
+
+    - uses: actions/cache@v2
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-maven-
+
+    - name: Patch MultiPaper
+      run: |
+        git config --global user.email "you@example.com"
+        git config --global user.name "Your Name"
+        git submodule update --init --recursive
+        ./multipaper jar
+        
+    - uses: actions/upload-artifact@v2
+      with:
+        name: MultiPaper-JDK${{ matrix.java }}
+        path: multipaper-paperclip.jar

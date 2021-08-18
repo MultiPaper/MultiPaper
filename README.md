@@ -63,6 +63,13 @@ MultiPaper uses the same paperclip jar system that Paper uses.
 You can also [build it yourself](https://github.com/PureGero/MultiPaper#building)
 
 ## Building
+Requirements:
+- You need `git` installed, with a configured user name and email. 
+   On windows you need to run from git bash.
+- You need `maven` installed
+- You need `jdk` 16+ installed to compile (and `jre` 16+ to run)
+
+Build instructions:
 1. Patch paper with: `./gradlew applyPatches`
 2. Build the multipaper jar with: `./gradlew paperclipJar`
 3. Get the multipaper jar from `build/libs`

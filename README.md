@@ -10,16 +10,16 @@ to the least busiest server when they first join.
 
 MultiPaper syncs between servers:
   
-  * OP-list, whitelist and banlist
-  * Playerdata, statistics and advancements
-  * Chunks, POIs, level.dat and maps
+  * OP-list, whitelist, and banlist
+  * Playerdata, statistics, and advancements
+  * Chunks, POIs, entities, level.dat, and maps
   
 MultiPaper requires:
   * A BungeeCord proxy (forks such as Waterfall also work)
   * A MultiPaper-Master (found in `MultiPaper-Master/build/libs`)
     * Runs as either a standalone server
     * Or as a BungeeCord plugin
-  * MultiPaper
+  * MultiPaper (a fork of Paper)
   
 How it works:
   * Swaps players between servers to ensure chunks are only loaded on one server
@@ -33,7 +33,7 @@ Setting up MultiPaper
     * BungeeCord plugin: Set the port in `plugins/MultiPaperProxy/config.yml`
   * In each MultiPaper server:
     * Put the name of the server used in BungeeCord into `bungeecordname.txt`
-    * Put the address of the MultiPaper-Master into `multipaperserver.txt`
+    * Put the address and port of the MultiPaper-Master into `multipaperserver.txt`
   
 Using MultiPaper with plugins
 ------
@@ -63,9 +63,18 @@ MultiPaper uses the same paperclip jar system that Paper uses.
 You can also [build it yourself](https://github.com/PureGero/MultiPaper#building)
 
 ## Building
+Requirements:
+- You need `git` installed, with a configured user name and email. 
+   On windows you need to run from git bash.
+- You need `maven` installed
+- You need `jdk` 16+ installed to compile (and `jre` 16+ to run)
+
+Build instructions:
 1. Patch paper with: `./gradlew applyPatches`
-2. Build the multipaper jars with: `./gradlew reobfJar`
-3. Get the jar from `MultiPaper-Master/build/libs`
+2. Build the multipaper jar with: `./gradlew paperclipJar`
+3. Get the multipaper jar from `build/libs`
+4. Build the multipaper-master jar with: `cd MultiPaper-Master && mvn`
+5. Get the multipaper-master jar from `MultiPaper-Master/build/libs`
 
 ## Publishing to maven local
 Publish to your local maven repository with: `./gradlew publishToMavenLocal`
@@ -75,15 +84,15 @@ Publish to your local maven repository with: `./gradlew publishToMavenLocal`
 ```
 Paperweight tasks
 -----------------
-applyPatches
-cleanCache - Delete the project setup cache and task outputs.
-patchPaperApi
-patchPaperServer
-rebuildPaperApi
-rebuildPaperServer
-rebuildPatches
-runDev - Spin up a non-shaded non-remapped test server
-runShadow - Spin up a test server from the shadowJar archiveFile
+./gradlew applyPatches
+./gradlew cleanCache - Delete the project setup cache and task outputs.
+./gradlew patchPaperApi
+./gradlew patchPaperServer
+./gradlew rebuildPaperApi
+./gradlew rebuildPaperServer
+./gradlew rebuildPatches
+./gradlew runDev - Spin up a non-shaded non-remapped test server
+./gradlew runShadow - Spin up a test server from the shadowJar archiveFile
 ```
 
 ### Note

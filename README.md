@@ -32,8 +32,10 @@ Setting up MultiPaper
     * Standalone: `java -jar multipaper-master.jar <port>`
     * BungeeCord plugin: Set the port in `plugins/MultiPaperProxy/config.yml`
   * In each MultiPaper server:
-    * Put the name of the server used in BungeeCord into `bungeecordname.txt`
+    * Put the name of the server used in BungeeCord's config.yml into `bungeecordname.txt`
+      * eg. `survival1`
     * Put the address and port of the MultiPaper-Master into `multipaperserver.txt`
+      * eg. `localhost:35353`
   
 Using MultiPaper with plugins
 ------

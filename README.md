@@ -73,8 +73,8 @@ Build instructions:
 1. Patch paper with: `./gradlew applyPatches`
 2. Build the multipaper jar with: `./gradlew paperclipJar`
 3. Get the multipaper jar from `build/libs`
-4. Build the multipaper-master jar with: `cd MultiPaper-Master && mvn`
-5. Get the multipaper-master jar from `MultiPaper-Master/build/libs`
+4. Build the multipaper-master jar with: `cd MultiPaper-Master && mvn package`
+5. Get the multipaper-master jar from `MultiPaper-Master/target`
 
 ## Publishing to maven local
 Publish to your local maven repository with: `./gradlew publishToMavenLocal`

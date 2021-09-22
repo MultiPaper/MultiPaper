@@ -1,0 +1,54 @@
+name: Update Upstream
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # Once a day at 6pm AEST
+  workflow_dispatch: # on button click
+
+jobs:
+  upstream:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Git Repository
+        uses: actions/checkout@v2
+      - name: Validate Gradle wrapper
+        uses: gradle/wrapper-validation-action@v1
+      - name: Cache Gradle
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/gradle.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - name: Set up JDK
+        uses: actions/setup-java@v2.3.0
+        with:
+          distribution: 'temurin'
+          java-version: '16'
+      - name: Configure Git User Details
+        run: git config --global user.email "actions@github.com" && git config --global user.name "Github Actions"
+      - name: Update Upstream Commit Hash
+        run: ./gradlew paperRefLatest --stacktrace
+      - name: Apply Patches
+        run: ./gradlew applyPatches --stacktrace
+      - name: Build Paperclip jar
+        run: ./gradlew paperclipJar --stacktrace
+      - name: Rebuild Patches
+        run: ./gradlew rebuildPatches --stacktrace
+      - name: Upload Paperclip jar
+        uses: actions/upload-artifact@v2
+        with:
+          name: multipaper.jar
+          path: build/libs/*.jar
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v3
+        with:
+          commit-message: Update Upstream
+          branch: update-upstream
+          delete-branch: true
+          title: 'Update Upstream'
+          body: ''

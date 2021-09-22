@@ -1,3 +1,4 @@
+import io.papermc.paperweight.util.*
 import io.papermc.paperweight.util.constants.*
 
 plugins {
@@ -66,6 +67,37 @@ paperweight {
 
             serverPatchDir.set(layout.projectDirectory.dir("patches/server"))
             serverOutputDir.set(layout.projectDirectory.dir("MultiPaper-Server"))
+        }
+    }
+    
+    tasks.register("paperRefLatest") {
+        // Update the paperRef in gradle.properties to be the latest commit
+        val tempDir = layout.cacheDir("paperRefLatest");
+        val file = "gradle.properties";
+        
+        doFirst {
+            data class GithubCommit(
+                    val sha: String
+            )
+
+            val paperLatestCommitJson = layout.cache.resolve("paperLatestCommit.json");
+            download.get().download("https://api.github.com/repos/PaperMC/Paper/commits/master", paperLatestCommitJson);
+            val paperLatestCommit = gson.fromJson<paper.libs.com.google.gson.JsonObject>(paperLatestCommitJson)["sha"].asString;
+
+            copy {
+                from(file)
+                into(tempDir)
+                filter { line: String ->
+                    line.replace("paperRef = .*".toRegex(), "paperRef = $paperLatestCommit")
+                }
+            }
+        }
+
+        doLast {
+            copy {
+                from(tempDir.file("gradle.properties"))
+                into(project.file(file).parent)
+            }
         }
     }
 }

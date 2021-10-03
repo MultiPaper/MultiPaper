@@ -913,7 +913,7 @@ index c8ed0673ff819cb88d0ee6f53f2a2b9b46b203d4..998bedc9a09331a8d7b02a19578f969d
 +    // MultiPaper end
  }
 diff --git a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
-index b794c02ea36bdc901b1f6a160095abb3fcfe9b60..aa8135c5fd9bc1466c7d1e4e46e09ceb2cd2db38 100644
+index b794c02ea36bdc901b1f6a160095abb3fcfe9b60..205f342a4840d61a642b8eae834f41cccb77e43d 100644
 --- a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
 +++ b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
 @@ -61,6 +61,7 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
@@ -933,34 +933,37 @@ index b794c02ea36bdc901b1f6a160095abb3fcfe9b60..aa8135c5fd9bc1466c7d1e4e46e09ceb
                  T t0 = levelDataParser.apply(file1, this.fixerUpper);
  
                  if (t0 != null) {
-@@ -214,7 +215,7 @@ public class LevelStorageSource {
+@@ -214,7 +215,8 @@ public class LevelStorageSource {
      @Nullable
      private static DataPackConfig getDataPacks(File file, DataFixer datafixer) {
          try {
 -            CompoundTag nbttagcompound = NbtIo.readCompressed(file);
 +            CompoundTag nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NbtIo.readCompressed(file); // MultiPaper
++            if (nbttagcompound == null) return null;
              CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
  
              nbttagcompound1.remove("Player");
-@@ -231,7 +232,7 @@ public class LevelStorageSource {
+@@ -231,7 +233,8 @@ public class LevelStorageSource {
      static BiFunction<File, DataFixer, PrimaryLevelData> getLevelData(DynamicOps<Tag> dynamicops, DataPackConfig datapackconfiguration) {
          return (file, datafixer) -> {
              try {
 -                CompoundTag nbttagcompound = NbtIo.readCompressed(file);
 +                CompoundTag nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NbtIo.readCompressed(file); // MultiPaper
++                if (nbttagcompound == null) return null;
                  CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
                  CompoundTag nbttagcompound2 = nbttagcompound1.contains("Player", 10) ? nbttagcompound1.getCompound("Player") : null;
  
-@@ -253,7 +254,7 @@ public class LevelStorageSource {
+@@ -253,7 +256,8 @@ public class LevelStorageSource {
      BiFunction<File, DataFixer, LevelSummary> levelSummaryReader(File file, boolean locked) {
          return (file1, datafixer) -> {
              try {
 -                CompoundTag nbttagcompound = NbtIo.readCompressed(file1);
 +                CompoundTag nbttagcompound = MultiPaper.readLevel(file.getName()); // NbtIo.readCompressed(file1); // MultiPaper
++                if (nbttagcompound == null) return null;
                  CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
  
                  nbttagcompound1.remove("Player");
-@@ -410,6 +411,13 @@ public class LevelStorageSource {
+@@ -410,6 +414,13 @@ public class LevelStorageSource {
              nbttagcompound2.put("Data", nbttagcompound1);
  
              try {
@@ -1177,7 +1180,7 @@ index 2b2654ec04e8abca9db09d6257edf11099bb0d9b..9c8c8de64f4bf7bf0ec320ee8f187de6
  public class CraftEventFactory {
      public static final DamageSource MELTING = CraftDamageSource.copyOf(DamageSource.ON_FIRE);
 diff --git a/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java b/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
-index 738100ffa60647790f0921cf31d5bbc2714e27dd..9c33b240d4bb01ad9eed9e5ba17458fd1374e4bf 100644
+index 738100ffa60647790f0921cf31d5bbc2714e27dd..6632c54a8373d6c328400591af15b1aa89a3a8c9 100644
 --- a/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
 +++ b/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
 @@ -1,14 +1,10 @@
@@ -1197,7 +1200,7 @@ index 738100ffa60647790f0921cf31d5bbc2714e27dd..9c33b240d4bb01ad9eed9e5ba17458fd
  
  public final class WorldUUID {
  
-@@ -18,6 +14,38 @@ public final class WorldUUID {
+@@ -18,6 +14,40 @@ public final class WorldUUID {
      }
  
      public static UUID getUUID(File baseDir) {
@@ -1205,7 +1208,9 @@ index 738100ffa60647790f0921cf31d5bbc2714e27dd..9c33b240d4bb01ad9eed9e5ba17458fd
 +        DataInputStream dis = null;
 +        try {
 +            dis = MultiPaper.readUid(baseDir.getName());
-+            return new UUID(dis.readLong(), dis.readLong());
++            if (dis != null) {
++                return new UUID(dis.readLong(), dis.readLong());
++            }
 +        } catch (IOException ex) {
 +            LOGGER.warn("Failed to read " + baseDir.getName() + "'s uid.dat, generating new random UUID", ex);
 +        } finally {

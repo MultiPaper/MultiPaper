@@ -18,7 +18,9 @@ public class WriteUidHandler implements Handler {
 
         Worker.runAsync(() -> {
             try {
-                Files.write(new File(world, "uid.dat").toPath(), data);
+                File worldDir = new File(world);
+                if (!worldDir.exists()) worldDir.mkdirs();
+                Files.write(new File(worldDir, "uid.dat").toPath(), data);
                 out.writeUTF("uidWritten");
                 out.send();
             } catch (IOException e) {

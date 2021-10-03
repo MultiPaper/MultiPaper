@@ -18,7 +18,9 @@ public class WriteLevelHandler implements Handler {
 
         Worker.runAsync(() -> {
             try {
-                Files.write(new File(world, "level.dat").toPath(), data);
+                File worldDir = new File(world);
+                if (!worldDir.exists()) worldDir.mkdirs();
+                Files.write(new File(worldDir, "level.dat").toPath(), data);
                 out.writeUTF("levelWritten");
                 out.send();
             } catch (IOException e) {

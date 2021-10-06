@@ -8,6 +8,7 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 
 public class ReadJsonHandler implements Handler {
     @Override
@@ -16,11 +17,17 @@ public class ReadJsonHandler implements Handler {
 
         Worker.runAsync(() -> {
             try {
-                byte[] b = Files.readAllBytes(new File(file).toPath());
-                out.writeUTF("jsonData");
-                out.writeInt(b.length);
-                out.write(b);
-                out.send();
+                try{
+                    byte[] b = Files.readAllBytes(new File(file).toPath());
+                    out.writeUTF("jsonData");
+                    out.writeInt(b.length);
+                    out.write(b);
+                    out.send();
+                } catch (NoSuchFileException e) {
+                    out.writeUTF("levelData");
+                    out.writeInt(0);
+                    out.send();
+                }
             } catch (IOException e) {
                 e.printStackTrace();
             }

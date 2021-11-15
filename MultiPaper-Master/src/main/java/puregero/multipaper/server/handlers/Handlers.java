@@ -26,6 +26,7 @@ public class Handlers {
         handlers.put("readData", new ReadDataHandler());
         handlers.put("writeData", new WriteDataHandler());
         handlers.put("start", new StartHandler());
+        handlers.put("getEntityCounterStartValue", new GetEntityCounterStartValue());
     }
 
     public static Handler get(String handler) {

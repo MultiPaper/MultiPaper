@@ -210,7 +210,7 @@ index c8f9aea3915ec94a915e1003931c6ef460b79f40..e3d29fd5be7d86d4c3127573160ce02a
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 2f940113bb7da19b4e5c71e61e74814a2b4acbad..5bd01086dcb7e485894ba7baa9d3ca001efb3df8 100644
+index 2f940113bb7da19b4e5c71e61e74814a2b4acbad..aeeffab321999a6e0c03dafc8dfd04effa3948f1 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -9,6 +9,7 @@ import java.net.Socket;
@@ -221,7 +221,22 @@ index 2f940113bb7da19b4e5c71e61e74814a2b4acbad..5bd01086dcb7e485894ba7baa9d3ca00
  import java.util.concurrent.ConcurrentHashMap;
  import java.util.function.Consumer;
  
-@@ -119,10 +120,39 @@ public class MultiPaperConnection extends Thread {
+@@ -27,6 +28,14 @@ public class MultiPaperConnection extends Thread {
+     }
+ 
+     public void send(byte[] bytes, int id, @Nullable Consumer<DataInputStream> callback) {
++        while (socket == null) {
++            // Wait for socket to connect
++            try {
++                Thread.sleep(10);
++            } catch (InterruptedException e) {
++                e.printStackTrace();
++            }
++        }
+         Request request = new Request(bytes, callback);
+         if (callback != null) {
+             callbacks.put(id, request);
+@@ -119,10 +128,31 @@ public class MultiPaperConnection extends Thread {
          server.setLastAlive(System.currentTimeMillis());
      }
  
@@ -247,14 +262,6 @@ index 2f940113bb7da19b4e5c71e61e74814a2b4acbad..5bd01086dcb7e485894ba7baa9d3ca00
      }
 +
 +    public void sendStart(int port) throws IOException {
-+        while (socket == null) {
-+            // Wait for socket to connect
-+            try {
-+                Thread.sleep(10);
-+            } catch (InterruptedException e) {
-+                e.printStackTrace();
-+            }
-+        }
 +        DataOutputSender out = new DataOutputSender(this);
 +        out.writeUTF("start");
 +        out.writeInt(port);

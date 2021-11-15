@@ -1,9 +1,7 @@
 package puregero.multipaper.server.bungee;
 
-import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.config.ServerInfo;
 import net.md_5.bungee.api.event.ServerConnectEvent;
-import net.md_5.bungee.api.event.ServerKickEvent;
 import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.config.Configuration;
@@ -80,17 +78,6 @@ public class MultiPaperProxy extends Plugin implements Listener {
                     event.setTarget(bestServer);
                 }
             }
-        }
-    }
-    
-    @EventHandler
-    public void onServerKick(ServerKickEvent event) {
-        String kickReason = BaseComponent.toPlainText(event.getKickReasonComponent());
-        if (kickReason.startsWith("sendto:")) {
-            String sendTo = kickReason.substring("sendto:".length());
-            getLogger().info(event.getKickReason() + " - Sending " + event.getPlayer().getName() + " to " + sendTo + " (" + getProxy().getServerInfo(sendTo) + ")");
-            event.setCancelServer(getProxy().getServerInfo(sendTo));
-            event.setCancelled(true);
         }
     }
 

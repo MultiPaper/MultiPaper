@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paul Sauve <paul@technove.co>
+Date: Sat, 31 Oct 2020 18:51:38 -0500
+Subject: [PATCH] Simpler ShapelessRecipes comparison for Vanilla
+
+Paper added a fancy sorting comparison due to Bukkit recipes breaking
+the vanilla one, however this is far more advanced than what you need
+for all the vanilla recipes.
+
+Airplane
+Copyright (C) 2020 Technove LLC
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+diff --git a/src/main/java/net/minecraft/world/item/crafting/ShapelessRecipe.java b/src/main/java/net/minecraft/world/item/crafting/ShapelessRecipe.java
+index 6b960f0a31175bcfd8d477ee5b3c4d783303cdd5..3a81d3a58b937c9800cd0be738439cff0ba28ce9 100644
+--- a/src/main/java/net/minecraft/world/item/crafting/ShapelessRecipe.java
++++ b/src/main/java/net/minecraft/world/item/crafting/ShapelessRecipe.java
+@@ -25,8 +25,13 @@ public class ShapelessRecipe implements CraftingRecipe {
+     final String group;
+     final ItemStack result;
+     final NonNullList<Ingredient> ingredients;
++    private final boolean isBukkit; // Airplane
+ 
++    // Airplane start
+     public ShapelessRecipe(ResourceLocation id, String group, ItemStack output, NonNullList<Ingredient> input) {
++        this(id, group, output, input, false);
++    }
++    public ShapelessRecipe(ResourceLocation id, String group, ItemStack output, NonNullList<Ingredient> input, boolean isBukkit) { this.isBukkit = isBukkit; // Airplane end
+         this.id = id;
+         this.group = group;
+         this.result = output;
+@@ -73,6 +78,28 @@ public class ShapelessRecipe implements CraftingRecipe {
+     }
+ 
+     public boolean matches(CraftingContainer inventory, Level world) {
++        // Airplane start
++        if (!this.isBukkit) {
++            java.util.List<Ingredient> ingredients = com.google.common.collect.Lists.newArrayList(this.ingredients.toArray(new Ingredient[0]));
++
++            inventory: for (int index = 0; index < inventory.getContainerSize(); index++) {
++                ItemStack itemStack = inventory.getItem(index);
++
++                if (!itemStack.isEmpty()) {
++                    for (int i = 0; i < ingredients.size(); i++) {
++                        if (ingredients.get(i).test(itemStack)) {
++                            ingredients.remove(i);
++                            continue inventory;
++                        }
++                    }
++                    return false;
++                }
++            }
++
++            return ingredients.isEmpty();
++        }
++        // Airplane end
++
+         StackedContents autorecipestackmanager = new StackedContents();
+         int i = 0;
+ 
+diff --git a/src/main/java/org/bukkit/craftbukkit/inventory/CraftShapelessRecipe.java b/src/main/java/org/bukkit/craftbukkit/inventory/CraftShapelessRecipe.java
+index 0b3b46348ac9195bff1492ffc11fcbff7d3f5c6f..4010052c53f3a2831b4d5aa1c041d85897856acb 100644
+--- a/src/main/java/org/bukkit/craftbukkit/inventory/CraftShapelessRecipe.java
++++ b/src/main/java/org/bukkit/craftbukkit/inventory/CraftShapelessRecipe.java
+@@ -43,6 +43,6 @@ public class CraftShapelessRecipe extends ShapelessRecipe implements CraftRecipe
+             data.set(i, toNMS(ingred.get(i), true));
+         }
+ 
+-        MinecraftServer.getServer().getRecipeManager().addRecipe(new net.minecraft.world.item.crafting.ShapelessRecipe(CraftNamespacedKey.toMinecraft(this.getKey()), this.getGroup(), CraftItemStack.asNMSCopy(this.getResult()), data));
++        MinecraftServer.getServer().getRecipeManager().addRecipe(new net.minecraft.world.item.crafting.ShapelessRecipe(CraftNamespacedKey.toMinecraft(this.getKey()), this.getGroup(), CraftItemStack.asNMSCopy(this.getResult()), data, true));
+     }
+ }

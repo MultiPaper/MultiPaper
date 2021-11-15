@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paul <paul@technove.co>
+Date: Tue, 29 Jun 2021 02:24:23 -0500
+Subject: [PATCH] Skip cloning loot parameters
+
+Small improvement in CPU, much larger improvement in allocations. As a
+new loot context is created every time a player moves (along with a lot
+of other times) the constant cloning churns out a lot of useless
+objects.
+
+diff --git a/src/main/java/net/minecraft/world/level/storage/loot/LootContext.java b/src/main/java/net/minecraft/world/level/storage/loot/LootContext.java
+index 05b64f2730bfe836bd1d72dcfccd9f536908a099..39e941a6a315e2a9fc0f47eb39ef9d2b58069f90 100644
+--- a/src/main/java/net/minecraft/world/level/storage/loot/LootContext.java
++++ b/src/main/java/net/minecraft/world/level/storage/loot/LootContext.java
+@@ -41,8 +41,10 @@ public class LootContext {
+         this.level = world;
+         this.lootTables = tableGetter;
+         this.conditions = conditionGetter;
+-        this.params = ImmutableMap.copyOf(parameters);
+-        this.dynamicDrops = ImmutableMap.copyOf(drops);
++        // Airplane start - use unmodifiable maps instead of immutable ones to skip the copy
++        this.params = java.util.Collections.unmodifiableMap(parameters);
++        this.dynamicDrops = java.util.Collections.unmodifiableMap(drops);
++        // Airplane end
+     }
+ 
+     public boolean hasParam(LootContextParam<?> parameter) {

@@ -1,0 +1,72 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paul <paul@technove.co>
+Date: Fri, 2 Jul 2021 18:25:18 -0500
+Subject: [PATCH] Reduce entity allocations
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 83c026a699ad0dfe95f1a370667eb9e9040207dc..bb50f5593b90652563460f0d15a06616c689c7f0 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -340,6 +340,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+     // Spigot end
+     // Airplane start
+     public int activatedPriority = gg.airplane.AirplaneConfig.maximumActivationPrio; // golf score
++    public final BlockPos.MutableBlockPos cachedBlockPos = new BlockPos.MutableBlockPos(); // used where needed
+     // Airplane end
+ 
+     public float getBukkitYaw() {
+@@ -2466,9 +2467,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+ 
+             // Paper start
+             return io.papermc.paper.util.CollisionUtil.getCollisionsForBlocksOrWorldBorder(this.level, this, axisalignedbb, null,
+-                false, false, false, true, (iblockdata, blockposition) -> {
+-                    return iblockdata.isSuffocating(this.level, blockposition);
+-            });
++                false, false, false, true, this.level.isAlmostSuffocating); // Airplane - don't allocate lambda here
+             // Paper end
+         }
+     }
+diff --git a/src/main/java/net/minecraft/world/entity/ai/attributes/AttributeMap.java b/src/main/java/net/minecraft/world/entity/ai/attributes/AttributeMap.java
+index 9cbfda029782385d1a7987f5be46d450bd8a758e..d3e97858dacc850012e5585ac44a1aeafc82b8f4 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/attributes/AttributeMap.java
++++ b/src/main/java/net/minecraft/world/entity/ai/attributes/AttributeMap.java
+@@ -22,9 +22,11 @@ public class AttributeMap {
+     private final Map<Attribute, AttributeInstance> attributes = Maps.newHashMap();
+     private final Set<AttributeInstance> dirtyAttributes = Sets.newHashSet();
+     private final AttributeSupplier supplier;
++    private final java.util.function.Function<Attribute, AttributeInstance> createInstance; // Airplane
+ 
+     public AttributeMap(AttributeSupplier defaultAttributes) {
+         this.supplier = defaultAttributes;
++        this.createInstance = attribute -> this.supplier.createInstance(this::onAttributeModified, attribute); // Airplane
+     }
+ 
+     private void onAttributeModified(AttributeInstance instance) {
+@@ -44,11 +46,10 @@ public class AttributeMap {
+         }).collect(Collectors.toList());
+     }
+ 
++
+     @Nullable
+     public AttributeInstance getInstance(Attribute attribute) {
+-        return this.attributes.computeIfAbsent(attribute, (attributex) -> {
+-            return this.supplier.createInstance(this::onAttributeModified, attributex);
+-        });
++        return this.attributes.computeIfAbsent(attribute, this.createInstance); // Airplane - cache lambda, as for some reason java allocates it anyways
+     }
+ 
+     public boolean hasAttribute(Attribute attribute) {
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index 36a25a1e7b5aa6c605100febcf5acccf6e5a3c3c..ed4e80895d21c266df7ff83243b4c3bc76c760ab 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -176,6 +176,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+     public final Map<Explosion.CacheKey, Float> explosionDensityCache = new HashMap<>(); // Paper - Optimize explosions
+     public java.util.ArrayDeque<net.minecraft.world.level.block.RedstoneTorchBlock.Toggle> redstoneUpdateInfos; // Paper - Move from Map in BlockRedstoneTorch to here
+ 
++    public final java.util.function.BiPredicate<BlockState, BlockPos> isAlmostSuffocating = (iblockdata, blockposition) -> iblockdata.isSuffocating(this, blockposition); // Airplane - move here, no allocs
++
+     // Paper start - fix and optimise world upgrading
+     // copied from below
+     public static ResourceKey<DimensionType> getDimensionKey(DimensionType manager) {

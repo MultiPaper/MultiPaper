@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paul Sauve <paul@technove.co>
+Date: Sat, 13 Mar 2021 15:05:28 -0600
+Subject: [PATCH] Early return optimization for target finding
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/ai/targeting/TargetingConditions.java b/src/main/java/net/minecraft/world/entity/ai/targeting/TargetingConditions.java
+index 3ee691d4caccbc1b3e0f52decb41d436ac0d08ec..8a0aea6b28295e03aaac1768336b1bc36d9ad9e9 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/targeting/TargetingConditions.java
++++ b/src/main/java/net/minecraft/world/entity/ai/targeting/TargetingConditions.java
+@@ -74,9 +74,18 @@ public class TargetingConditions {
+                 }
+ 
+                 if (this.range > 0.0D) {
+-                    double d = this.testInvisible ? targetEntity.getVisibilityPercent(baseEntity) : 1.0D;
+-                    double e = Math.max((this.useFollowRange ? this.getFollowRange(baseEntity) : this.range) * d, 2.0D); // Paper
++                    // Airplane start - check range before getting visibility
++                    // d = invisibility percent, e = follow range adjusted for invisibility, f = distance
+                     double f = baseEntity.distanceToSqr(targetEntity.getX(), targetEntity.getY(), targetEntity.getZ());
++                    double followRangeRaw = this.useFollowRange ? this.getFollowRange(baseEntity) : this.range;
++
++                    if (f > followRangeRaw * followRangeRaw) { // the actual follow range will always be this value or smaller, so if the distance is larger then it never will return true after getting invis
++                        return false;
++                    }
++
++                    double d = this.testInvisible ? targetEntity.getVisibilityPercent(baseEntity) : 1.0D;
++                    double e = Math.max((followRangeRaw) * d, 2.0D); // Paper
++                    // Airplane end
+                     if (f > e * e) {
+                         return false;
+                     }

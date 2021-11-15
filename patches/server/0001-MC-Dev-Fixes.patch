@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Initial Source <auto@mated.null>
+Date: Fri, 16 Jul 2021 17:11:36 -0500
+Subject: [PATCH] MC-Dev Fixes
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/ai/Brain.java b/src/main/java/net/minecraft/world/entity/ai/Brain.java
+index 75022e5888de2730bb29d1e7535ddc63e2c5f713..a7c71fc4e49079d11b9a0537a4f6d20bbbba815b 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/Brain.java
++++ b/src/main/java/net/minecraft/world/entity/ai/Brain.java
+@@ -76,15 +76,15 @@ public class Brain<E extends LivingEntity> {
+ 
+             @Override
+             public <T> DataResult<Brain<E>> decode(DynamicOps<T> dynamicOps, MapLike<T> mapLike) {
+-                MutableObject<DataResult<Builder<Brain.MemoryValue<?>>>> mutableObject = new MutableObject<>(DataResult.success(ImmutableList.builder()));
++                MutableObject<DataResult<Builder<Brain.MemoryValue<?>>>> mutableObject2 = new MutableObject<>(DataResult.success(ImmutableList.builder())); // Airplane - compile error due to decompiler
+                 mapLike.entries().forEach((pair) -> {
+                     DataResult<MemoryModuleType<?>> dataResult = Registry.MEMORY_MODULE_TYPE.parse(dynamicOps, pair.getFirst());
+                     DataResult<? extends Brain.MemoryValue<?>> dataResult2 = dataResult.flatMap((memoryModuleType) -> {
+                         return this.captureRead(memoryModuleType, dynamicOps, (T)pair.getSecond());
+                     });
+-                    mutableObject.setValue(mutableObject.getValue().apply2(Builder::add, dataResult2));
++                    mutableObject2.setValue(mutableObject2.getValue().apply2(Builder::add, dataResult2)); // Airplane - compile error due to decompiler
+                 });
+-                ImmutableList<Brain.MemoryValue<?>> immutableList = mutableObject.getValue().resultOrPartial(Brain.LOGGER::error).map(Builder::build).orElseGet(ImmutableList::of);
++                ImmutableList<Brain.MemoryValue<?>> immutableList = mutableObject2.getValue().resultOrPartial(Brain.LOGGER::error).map(Builder::build).orElseGet(ImmutableList::of); // Airplane - compile error due to decompiler
+                 return DataResult.success(new Brain<>(memoryModules, sensors, immutableList, mutableObject::getValue));
+             }
+ 
+@@ -174,7 +174,7 @@ public class Brain<E extends LivingEntity> {
+     }
+ 
+     public <U> Optional<U> getMemory(MemoryModuleType<U> type) {
+-        return this.memories.get(type).map(ExpirableValue::getValue);
++        return (Optional<U>) this.memories.get(type).map(ExpirableValue::getValue); // Airplane - compile fix
+     }
+ 
+     public <U> long getTimeUntilExpiry(MemoryModuleType<U> type) {
+@@ -465,7 +465,7 @@ public class Brain<E extends LivingEntity> {
+         private final Optional<? extends ExpirableValue<U>> value;
+ 
+         static <U> Brain.MemoryValue<U> createUnchecked(MemoryModuleType<U> type, Optional<? extends ExpirableValue<?>> data) {
+-            return new Brain.MemoryValue<>(type, data);
++            return new Brain.MemoryValue<>(type, (Optional) data); // Airplane - compile fix
+         }
+ 
+         MemoryValue(MemoryModuleType<U> type, Optional<? extends ExpirableValue<U>> data) {
+diff --git a/src/main/java/net/minecraft/world/entity/monster/hoglin/Hoglin.java b/src/main/java/net/minecraft/world/entity/monster/hoglin/Hoglin.java
+index c5b9c0c650df5f4b7e3d2a431dc900e210104dea..ee0981d2a99c0cebc0a53ac02d2dc5a551b2f7f0 100644
+--- a/src/main/java/net/minecraft/world/entity/monster/hoglin/Hoglin.java
++++ b/src/main/java/net/minecraft/world/entity/monster/hoglin/Hoglin.java
+@@ -123,7 +123,7 @@ public class Hoglin extends Animal implements Enemy, HoglinBase {
+ 
+     @Override
+     public Brain<Hoglin> getBrain() {
+-        return super.getBrain();
++        return (Brain<Hoglin>) super.getBrain(); // Airplane - decompile fix
+     }
+ 
+     @Override

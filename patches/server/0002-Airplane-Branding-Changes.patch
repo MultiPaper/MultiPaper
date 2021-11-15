@@ -1,0 +1,284 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paul Sauve <paul@technove.co>
+Date: Wed, 3 Feb 2021 21:36:16 -0600
+Subject: [PATCH] Airplane Branding Changes
+
+Airplane
+Copyright (C) 2020 Technove LLC
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+diff --git a/build.gradle.kts b/build.gradle.kts
+index e067c69fea1dec79ef8e97cad1c74020b6a3a235..e498b1711316f50f59054bf3f926909abd04772b 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -22,8 +22,8 @@ repositories {
+ }
+ 
+ dependencies {
+-    implementation(project(":Paper-API"))
+-    implementation(project(":Paper-MojangAPI"))
++    implementation(project(":Airplane-API")) // Airplane // Paper
++    implementation("io.papermc.paper:paper-mojangapi:1.17.1-R0.1-SNAPSHOT") // Airplane
+     // Paper start
+     implementation("org.jline:jline-terminal-jansi:3.21.0")
+     implementation("net.minecrell:terminalconsoleappender:1.3.0")
+@@ -75,6 +75,7 @@ tasks.jar {
+             "Main-Class" to "org.bukkit.craftbukkit.Main",
+             "Implementation-Title" to "CraftBukkit",
+             "Implementation-Version" to "git-Paper-$implementationVersion",
++            "Implementation-Version" to "git-Airplane-$implementationVersion", // Airplane
+             "Implementation-Vendor" to date, // Paper
+             "Specification-Title" to "Bukkit",
+             "Specification-Version" to project.version,
+@@ -133,6 +134,22 @@ relocation {
+     }
+ }
+ 
++val generateReobfMappings = rootProject.tasks.named<io.papermc.paperweight.tasks.GenerateReobfMappings>("generateReobfMappings")
++
++val patchReobfMappings by tasks.registering<io.papermc.paperweight.tasks.PatchMappings> {
++    inputMappings.set(generateReobfMappings.flatMap { it.reobfMappings })
++    patch.set(rootProject.layout.cache.resolve("paperweight/upstreams/paper/build-data/reobf-mappings-patch.tiny"))
++
++    fromNamespace.set(io.papermc.paperweight.util.constants.DEOBF_NAMESPACE)
++    toNamespace.set(io.papermc.paperweight.util.constants.SPIGOT_NAMESPACE)
++
++    outputMappings.set(layout.cache.resolve("paperweight/mappings/reobf-patched.tiny"))
++}
++
++tasks.reobfJar {
++    mappingsFile.set(patchReobfMappings.flatMap { it.outputMappings })
++}
++
+ val generatePom = tasks.named<GenerateMavenPom>("generatePomFileForMavenPublication")
+ 
+ tasks.shadowJar {
+diff --git a/src/main/java/com/destroystokyo/paper/Metrics.java b/src/main/java/com/destroystokyo/paper/Metrics.java
+index 218f5bafeed8551b55b91c7fccaf6935c8b631ca..f5d01bce4d5547b4aeca96b7962b2090f47ea541 100644
+--- a/src/main/java/com/destroystokyo/paper/Metrics.java
++++ b/src/main/java/com/destroystokyo/paper/Metrics.java
+@@ -593,7 +593,7 @@ public class Metrics {
+             boolean logFailedRequests = config.getBoolean("logFailedRequests", false);
+             // Only start Metrics, if it's enabled in the config
+             if (config.getBoolean("enabled", true)) {
+-                Metrics metrics = new Metrics("Paper", serverUUID, logFailedRequests, Bukkit.getLogger());
++                Metrics metrics = new Metrics("Airplane", serverUUID, logFailedRequests, Bukkit.getLogger()); // Tuinity - we have our own bstats page // Airplane
+ 
+                 metrics.addCustomChart(new Metrics.SimplePie("minecraft_version", () -> {
+                     String minecraftVersion = Bukkit.getVersion();
+@@ -603,7 +603,7 @@ public class Metrics {
+ 
+                 metrics.addCustomChart(new Metrics.SingleLineChart("players", () -> Bukkit.getOnlinePlayers().size()));
+                 metrics.addCustomChart(new Metrics.SimplePie("online_mode", () -> Bukkit.getOnlineMode() ? "online" : "offline"));
+-                metrics.addCustomChart(new Metrics.SimplePie("paper_version", () -> (Metrics.class.getPackage().getImplementationVersion() != null) ? Metrics.class.getPackage().getImplementationVersion() : "unknown"));
++                metrics.addCustomChart(new Metrics.SimplePie("airplane_version", () -> (Metrics.class.getPackage().getImplementationVersion() != null) ? Metrics.class.getPackage().getImplementationVersion() : "unknown")); // Tuinity - we have our own bstats page // Airplane
+ 
+                 metrics.addCustomChart(new Metrics.DrilldownPie("java_version", () -> {
+                     Map<String, Map<String, Integer>> map = new HashMap<>();
+diff --git a/src/main/java/gg/airplane/AirplaneVersionFetcher.java b/src/main/java/gg/airplane/AirplaneVersionFetcher.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e79ec7919e6cf160fec1cb981d85f0f33c316b41
+--- /dev/null
++++ b/src/main/java/gg/airplane/AirplaneVersionFetcher.java
+@@ -0,0 +1,137 @@
++package gg.airplane;
++
++import com.destroystokyo.paper.VersionHistoryManager;
++import com.destroystokyo.paper.util.VersionFetcher;
++import com.google.gson.Gson;
++import com.google.gson.JsonObject;
++import net.kyori.adventure.text.Component;
++import net.kyori.adventure.text.JoinConfiguration;
++import net.kyori.adventure.text.format.NamedTextColor;
++import net.kyori.adventure.text.format.TextDecoration;
++import org.bukkit.craftbukkit.CraftServer;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
++
++import java.io.IOException;
++import java.net.URI;
++import java.net.http.HttpClient;
++import java.net.http.HttpRequest;
++import java.net.http.HttpResponse;
++import java.nio.charset.StandardCharsets;
++import java.util.concurrent.TimeUnit;
++import java.util.logging.Level;
++import java.util.logging.Logger;
++
++import static net.kyori.adventure.text.Component.text;
++import static net.kyori.adventure.text.format.NamedTextColor.GREEN;
++import static net.kyori.adventure.text.format.NamedTextColor.RED;
++
++public class AirplaneVersionFetcher implements VersionFetcher {
++
++    private static final Logger LOGGER = Logger.getLogger("AirplaneVersionFetcher");
++    private static final HttpClient client = HttpClient.newHttpClient();
++
++    private static final URI JENKINS_URI = URI.create("https://ci.tivy.ca/job/Airplane-1.17/lastSuccessfulBuild/buildNumber");
++    private static final String GITHUB_FORMAT = "https://api.github.com/repos/TECHNOVE/Airplane/compare/ver/1.17...%s";
++
++    private static final HttpResponse.BodyHandler<JsonObject> JSON_OBJECT_BODY_HANDLER = responseInfo -> HttpResponse.BodySubscribers.mapping(
++            HttpResponse.BodySubscribers.ofString(StandardCharsets.UTF_8),
++            string -> new Gson().fromJson(string, JsonObject.class)
++    );
++
++    @Override
++    public long getCacheTime() {
++        return TimeUnit.MINUTES.toMillis(30);
++    }
++
++    @Override
++    public @NotNull Component getVersionMessage(final @NotNull String serverVersion) {
++        final String[] parts = CraftServer.class.getPackage().getImplementationVersion().split("-");
++        @NotNull Component component;
++
++        if (parts.length != 3) {
++            component = text("Unknown server version.", RED);
++        } else {
++            final String versionString = parts[2];
++
++            try {
++                component = this.fetchJenkinsVersion(Integer.parseInt(versionString));
++            } catch (NumberFormatException e) {
++                component = this.fetchGithubVersion(versionString.substring(1, versionString.length() - 1));
++            }
++        }
++
++        final @Nullable Component history = this.getHistory();
++        return history != null ? Component.join(JoinConfiguration.noSeparators(), component, Component.newline(), this.getHistory()) : component;
++    }
++
++    private @NotNull Component fetchJenkinsVersion(final int versionNumber) {
++        final HttpRequest request = HttpRequest.newBuilder(JENKINS_URI).build();
++        try {
++            final HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
++            if (response.statusCode() != 200) {
++                return text("Received invalid status code (" + response.statusCode() + ") from server.", RED);
++            }
++
++            int latestVersionNumber;
++            try {
++                latestVersionNumber = Integer.parseInt(response.body());
++            } catch (NumberFormatException e) {
++                LOGGER.log(Level.WARNING, "Received invalid response from Jenkins \"" + response.body() + "\".");
++                return text("Received invalid response from server.", RED);
++            }
++
++            final int versionDiff = latestVersionNumber - versionNumber;
++            return this.getResponseMessage(versionDiff);
++        } catch (IOException | InterruptedException e) {
++            LOGGER.log(Level.WARNING, "Failed to look up version from Jenkins", e);
++            return text("Failed to retrieve version from server.", RED);
++        }
++    }
++
++    // Based off code contributed by Techcable <Techcable@outlook.com> in Paper/GH-65
++    private @NotNull Component fetchGithubVersion(final @NotNull String hash) {
++        final URI uri = URI.create(String.format(GITHUB_FORMAT, hash));
++        final HttpRequest request = HttpRequest.newBuilder(uri).build();
++        try {
++            final HttpResponse<JsonObject> response = client.send(request, JSON_OBJECT_BODY_HANDLER);
++            if (response.statusCode() != 200) {
++                return text("Received invalid status code (" + response.statusCode() + ") from server.", RED);
++            }
++
++            final JsonObject obj = response.body();
++            final int versionDiff = obj.get("behind_by").getAsInt();
++
++            return this.getResponseMessage(versionDiff);
++        } catch (IOException | InterruptedException e) {
++            LOGGER.log(Level.WARNING, "Failed to look up version from GitHub", e);
++            return text("Failed to retrieve version from server.", RED);
++        }
++    }
++
++    private @NotNull Component getResponseMessage(final int versionDiff) {
++        return switch (Math.max(-1, Math.min(1, versionDiff))) {
++            case -1 ->
++                text("You are running an unsupported version of Airplane.", RED);
++            case 0 ->
++                text("You are on the latest version!", GREEN);
++            default ->
++                text("You are running " + versionDiff + " version" + (versionDiff == 1 ? "" : "s") + " beyond. " +
++                    "Please update your server when possible to maintain stability, security, and receive the latest optimizations.", RED);
++        };
++    }
++
++    private @Nullable Component getHistory() {
++        final VersionHistoryManager.VersionData data = VersionHistoryManager.INSTANCE.getVersionData();
++        if (data == null) {
++            return null;
++        }
++
++        final String oldVersion = data.getOldVersion();
++        if (oldVersion == null) {
++            return null;
++        }
++
++        return Component.text("Previous version: " + oldVersion, NamedTextColor.GRAY, TextDecoration.ITALIC);
++    }
++}
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index d981d83add398d1f46d80ae9a983a526afd71ab2..62e8a8842c2f28490890ac060636a65b0c728d1c 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -1726,7 +1726,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+ 
+     @DontObfuscate
+     public String getServerModName() {
+-        return "Paper"; // Paper - Paper > // Spigot - Spigot > // CraftBukkit - cb > vanilla!
++        return "Airplane"; // Airplane // Paper - Paper > // Spigot - Spigot > // CraftBukkit - cb > vanilla!
+     }
+ 
+     public SystemReport fillSystemReport(SystemReport details) {
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 99a94898316b0601f55b333c15a9926eae24f8a2..7979d74732f71ad3033b5854e5975e56f818e350 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -251,7 +251,7 @@ import javax.annotation.Nullable; // Paper
+ import javax.annotation.Nonnull; // Paper
+ 
+ public final class CraftServer implements Server {
+-    private final String serverName = "Paper"; // Paper
++    private final String serverName = "Airplane"; // Paper // Airplane
+     private final String serverVersion;
+     private final String bukkitVersion = Versioning.getBukkitVersion();
+     private final Logger logger = Logger.getLogger("Minecraft");
+diff --git a/src/main/java/org/bukkit/craftbukkit/util/CraftMagicNumbers.java b/src/main/java/org/bukkit/craftbukkit/util/CraftMagicNumbers.java
+index c6bd1c1f973157c1d8a56e8297729cb896785dd6..bb4ce5c8451a90efd1fa5c301ac4a09c8941529a 100644
+--- a/src/main/java/org/bukkit/craftbukkit/util/CraftMagicNumbers.java
++++ b/src/main/java/org/bukkit/craftbukkit/util/CraftMagicNumbers.java
+@@ -394,7 +394,7 @@ public final class CraftMagicNumbers implements UnsafeValues {
+ 
+     @Override
+     public com.destroystokyo.paper.util.VersionFetcher getVersionFetcher() {
+-        return new com.destroystokyo.paper.PaperVersionFetcher();
++        return new gg.airplane.AirplaneVersionFetcher(); // Airplane
+     }
+ 
+     @Override
+diff --git a/src/main/java/org/bukkit/craftbukkit/util/Versioning.java b/src/main/java/org/bukkit/craftbukkit/util/Versioning.java
+index 774556a62eb240da42e84db4502e2ed43495be17..1788d79ea489e446d3d9f541693d4ba3dfc26015 100644
+--- a/src/main/java/org/bukkit/craftbukkit/util/Versioning.java
++++ b/src/main/java/org/bukkit/craftbukkit/util/Versioning.java
+@@ -11,7 +11,7 @@ public final class Versioning {
+     public static String getBukkitVersion() {
+         String result = "Unknown-Version";
+ 
+-        InputStream stream = Bukkit.class.getClassLoader().getResourceAsStream("META-INF/maven/io.papermc.paper/paper-api/pom.properties");
++        InputStream stream = Bukkit.class.getClassLoader().getResourceAsStream("META-INF/maven/gg.airplane/airplane-api/pom.properties"); // Tuinity // Airplane
+         Properties properties = new Properties();
+ 
+         if (stream != null) {

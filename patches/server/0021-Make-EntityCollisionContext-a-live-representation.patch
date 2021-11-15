@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paul Sauve <paul@technove.co>
+Date: Sun, 9 May 2021 18:35:05 -0500
+Subject: [PATCH] Make EntityCollisionContext a live representation
+
+While Context is in the name, it is not used as a context. Instead it is
+always created, use temporarily, then thrown away. This means having a
+lot of fields to initialize and make space for is useless. I cannot find
+anywhere in the codebase where this is used as a context which may be
+saved for later, so this should be safe assuming plugins don't use it
+for some strange reason.
+
+diff --git a/src/main/java/net/minecraft/world/phys/shapes/EntityCollisionContext.java b/src/main/java/net/minecraft/world/phys/shapes/EntityCollisionContext.java
+index fcb7bd9f3b6b6ada0f2e5692bce32ab76b8798a7..61c2096f2c034dbc3ad33b193b058c7d0d05e909 100644
+--- a/src/main/java/net/minecraft/world/phys/shapes/EntityCollisionContext.java
++++ b/src/main/java/net/minecraft/world/phys/shapes/EntityCollisionContext.java
+@@ -22,55 +22,82 @@ public class EntityCollisionContext implements CollisionContext {
+             return defaultValue;
+         }
+     };
+-    private final boolean descending;
+-    private final double entityBottom;
+-    private final ItemStack heldItem;
+-    private final ItemStack footItem;
+-    private final Predicate<Fluid> canStandOnFluid;
+-    private final Optional<Entity> entity;
++    // Airplane start - remove these and pray no plugin uses them
++    //private final boolean descending;
++    //private final double entityBottom;
++    //private final ItemStack heldItem;
++    //private final ItemStack footItem;
++    //private final Predicate<Fluid> canStandOnFluid;
++    // Airplane end
++    private final @org.jetbrains.annotations.Nullable Entity entity; // Airplane
+ 
+     protected EntityCollisionContext(boolean descending, double minY, ItemStack boots, ItemStack heldItem, Predicate<Fluid> walkOnFluidPredicate, Optional<Entity> entity) {
+-        this.descending = descending;
+-        this.entityBottom = minY;
+-        this.footItem = boots;
+-        this.heldItem = heldItem;
+-        this.canStandOnFluid = walkOnFluidPredicate;
+-        this.entity = entity;
++        // Airplane start
++        //this.descending = descending;
++        //this.entityBottom = minY;
++        //this.footItem = boots;
++        //this.heldItem = heldItem;
++        ///this.canStandOnFluid = walkOnFluidPredicate;
++        this.entity = entity.orElse(null);
++        // Airplane end
+     }
+ 
+     @Deprecated
+     protected EntityCollisionContext(Entity entity) {
++        // Airplane start - remove unneeded things
++        /*
+         this(entity.isDescending(), entity.getY(), entity instanceof LivingEntity ? ((LivingEntity)entity).getItemBySlot(EquipmentSlot.FEET) : ItemStack.EMPTY, entity instanceof LivingEntity ? ((LivingEntity)entity).getMainHandItem() : ItemStack.EMPTY, entity instanceof LivingEntity ? ((LivingEntity)entity)::canStandOnFluid : (fluid) -> {
+             return false;
+         }, Optional.of(entity));
++         */
++        this.entity = entity;
++        // Airplane end
+     }
+ 
+     @Override
+     public boolean hasItemOnFeet(Item item) {
+-        return this.footItem.is(item);
++        // Airplane start
++        Entity entity = this.entity;
++        if (entity instanceof LivingEntity livingEntity) {
++            return livingEntity.getItemBySlot(EquipmentSlot.FEET).is(item);
++        }
++        return ItemStack.EMPTY.is(item);
++        // Airplane end
+     }
+ 
+     @Override
+     public boolean isHoldingItem(Item item) {
+-        return this.heldItem.is(item);
++        // Airplane start
++        Entity entity = this.entity;
++        if (entity instanceof LivingEntity livingEntity) {
++            return livingEntity.getMainHandItem().is(item);
++        }
++        return ItemStack.EMPTY.is(item);
++        // Airplane end
+     }
+ 
+     @Override
+     public boolean canStandOnFluid(FluidState state, FlowingFluid fluid) {
+-        return this.canStandOnFluid.test(fluid) && !state.getType().isSame(fluid);
++        // Airplane start
++        Entity entity = this.entity;
++        if (entity instanceof LivingEntity livingEntity) {
++            return livingEntity.canStandOnFluid(fluid) && !state.getType().isSame(fluid);
++        }
++        return false;
++        // Airplane end
+     }
+ 
+     @Override
+     public boolean isDescending() {
+-        return this.descending;
++        return this.entity != null && this.entity.isDescending(); // Airplane
+     }
+ 
+     @Override
+     public boolean isAbove(VoxelShape shape, BlockPos pos, boolean defaultValue) {
+-        return this.entityBottom > (double)pos.getY() + shape.max(Direction.Axis.Y) - (double)1.0E-5F;
++        return (this.entity == null ? -Double.MAX_VALUE : entity.getY()) > (double)pos.getY() + shape.max(Direction.Axis.Y) - (double)1.0E-5F; // Airplane
+     }
+ 
+     public Optional<Entity> getEntity() {
+-        return this.entity;
++        return Optional.ofNullable(this.entity); // Airplane
+     }
+ }

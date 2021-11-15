@@ -1,0 +1,181 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paul Sauve <paul@technove.co>
+Date: Tue, 22 Jun 2021 14:49:50 -0500
+Subject: [PATCH] Use aging cache for biome temperatures
+
+
+diff --git a/src/main/java/gg/airplane/structs/Long2FloatAgingCache.java b/src/main/java/gg/airplane/structs/Long2FloatAgingCache.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..a7f297ebb569f7c1f205e967ca485be70013a714
+--- /dev/null
++++ b/src/main/java/gg/airplane/structs/Long2FloatAgingCache.java
+@@ -0,0 +1,119 @@
++package gg.airplane.structs;
++
++import it.unimi.dsi.fastutil.HashCommon;
++
++/**
++ * A replacement for the cache used in Biome.
++ */
++public class Long2FloatAgingCache {
++
++    private static class AgingEntry {
++        private long data;
++        private float value;
++        private int uses = 0;
++        private int age = 0;
++
++        private AgingEntry(long data, float value) {
++            this.data = data;
++            this.value = value;
++        }
++
++        public void replace(long data, float flag) {
++            this.data = data;
++            this.value = flag;
++        }
++
++        public int getValue() {
++            return this.uses - (this.age >> 1); // age isn't as important as uses
++        }
++
++        public void incrementUses() {
++            this.uses = this.uses + 1 & Integer.MAX_VALUE;
++        }
++
++        public void incrementAge() {
++            this.age = this.age + 1 & Integer.MAX_VALUE;
++        }
++    }
++
++    private final AgingEntry[] entries;
++    private final int mask;
++    private final int maxDistance; // the most amount of entries to check for a value
++
++    public Long2FloatAgingCache(int size) {
++        int arraySize = HashCommon.nextPowerOfTwo(size);
++        this.entries = new AgingEntry[arraySize];
++        this.mask = arraySize - 1;
++        this.maxDistance = Math.min(arraySize, 4);
++    }
++
++    public float getValue(long data) {
++        AgingEntry curr;
++        int pos;
++
++        if ((curr = this.entries[pos = HashCommon.mix(HashCommon.long2int(data)) & this.mask]) == null) {
++            return Float.NaN;
++        } else if (data == curr.data) {
++            curr.incrementUses();
++            return curr.value;
++        }
++
++        int checked = 1; // start at 1 because we already checked the first spot above
++
++        while ((curr = this.entries[pos = (pos + 1) & this.mask]) != null) {
++            if (data == curr.data) {
++                curr.incrementUses();
++                return curr.value;
++            } else if (++checked >= this.maxDistance) {
++                break;
++            }
++        }
++
++        return Float.NaN;
++    }
++
++    public void putValue(long data, float value) {
++        AgingEntry curr;
++        int pos;
++
++        if ((curr = this.entries[pos = HashCommon.mix(HashCommon.long2int(data)) & this.mask]) == null) {
++            this.entries[pos] = new AgingEntry(data, value); // add
++            return;
++        } else if (data == curr.data) {
++            curr.incrementUses();
++            return;
++        }
++
++        int checked = 1; // start at 1 because we already checked the first spot above
++
++        while ((curr = this.entries[pos = (pos + 1) & this.mask]) != null) {
++            if (data == curr.data) {
++                curr.incrementUses();
++                return;
++            } else if (++checked >= this.maxDistance) {
++                this.forceAdd(data, value);
++                return;
++            }
++        }
++
++        this.entries[pos] = new AgingEntry(data, value); // add
++    }
++
++    private void forceAdd(long data, float value) {
++        int expectedPos = HashCommon.mix(HashCommon.long2int(data)) & this.mask;
++        AgingEntry entryToRemove = this.entries[expectedPos];
++
++        for (int i = expectedPos + 1; i < expectedPos + this.maxDistance; i++) {
++            int pos = i & this.mask;
++            AgingEntry entry = this.entries[pos];
++            if (entry.getValue() < entryToRemove.getValue()) {
++                entryToRemove = entry;
++            }
++
++            entry.incrementAge(); // use this as a mechanism to age the other entries
++        }
++
++        // remove the least used/oldest entry
++        entryToRemove.replace(data, value);
++    }
++}
+diff --git a/src/main/java/net/minecraft/world/level/biome/Biome.java b/src/main/java/net/minecraft/world/level/biome/Biome.java
+index 2b814006fa30dd233dcb345d1d20ce3bf6469053..b5c6b0bc307aef2835761cfa50413cebfd624795 100644
+--- a/src/main/java/net/minecraft/world/level/biome/Biome.java
++++ b/src/main/java/net/minecraft/world/level/biome/Biome.java
+@@ -104,8 +104,10 @@ public final class Biome {
+     private final float scale;
+     private final Biome.BiomeCategory biomeCategory;
+     private final BiomeSpecialEffects specialEffects;
+-    private final ThreadLocal<Long2FloatLinkedOpenHashMap> temperatureCache = ThreadLocal.withInitial(() -> {
++    // Airplane start - use our cache
++    private final ThreadLocal<gg.airplane.structs.Long2FloatAgingCache> temperatureCache = ThreadLocal.withInitial(() -> {
+         return Util.make(() -> {
++            /*
+             Long2FloatLinkedOpenHashMap long2FloatLinkedOpenHashMap = new Long2FloatLinkedOpenHashMap(1024, 0.25F) {
+                 @Override
+                 protected void rehash(int i) {
+@@ -113,6 +115,10 @@ public final class Biome {
+             };
+             long2FloatLinkedOpenHashMap.defaultReturnValue(Float.NaN);
+             return long2FloatLinkedOpenHashMap;
++
++             */
++            return new gg.airplane.structs.Long2FloatAgingCache(TEMPERATURE_CACHE_SIZE);
++            // Airplane end
+         });
+     });
+ 
+@@ -154,17 +160,15 @@ public final class Biome {
+ 
+     public final float getTemperature(BlockPos blockPos) {
+         long l = blockPos.asLong();
+-        Long2FloatLinkedOpenHashMap long2FloatLinkedOpenHashMap = this.temperatureCache.get();
+-        float f = long2FloatLinkedOpenHashMap.get(l);
++        // Airplane start
++        gg.airplane.structs.Long2FloatAgingCache cache = this.temperatureCache.get();
++        float f = cache.getValue(l);
+         if (!Float.isNaN(f)) {
+             return f;
+         } else {
+             float g = this.getHeightAdjustedTemperature(blockPos);
+-            if (long2FloatLinkedOpenHashMap.size() == 1024) {
+-                long2FloatLinkedOpenHashMap.removeFirstFloat();
+-            }
+-
+-            long2FloatLinkedOpenHashMap.put(l, g);
++            cache.putValue(l, g);
++            // Airplane end
+             return g;
+         }
+     }

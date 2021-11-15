@@ -13,6 +13,6 @@ public class ChunkNotSavingHandler implements Handler {
         String world = in.readUTF();
         int cx = in.readInt();
         int cz = in.readInt();
-        ChunkLock.chunkWritten(world, cx, cz);
+        ChunkLock.chunkWritten(connection, world, cx, cz);
     }
 }

@@ -1,29 +1,38 @@
 MultiPaper
 ==
 
-Paper fork that enables a server admin to run a single world across multiple
-servers. Multiple MultiPaper servers sit behind a BungeeCord proxy and use a
+[Airplane](https://github.com/TECHNOVE/Airplane) fork
+that enables a server admin to run a single world across multiple
+servers. Multiple MultiPaper servers run the same work and use a
 MultiPaper-Master to coordinate with eachother and store server data. While the
-MultiPaper-Master can be run as a standalone server, it is usually run as a
+MultiPaper-Master is usually run as a standalone server, it can also be run as a
 BungeeCord plugin, which has some benefits including being able to send players
 to the least busiest server when they first join.
 
-MultiPaper syncs between servers:
-  
-  * OP-list, whitelist, and banlist
-  * Playerdata, statistics, and advancements
-  * Chunks, POIs, entities, level.dat, and maps
-  
-MultiPaper requires:
-  * A BungeeCord proxy (forks such as Waterfall also work)
-  * A MultiPaper-Master (found in `MultiPaper-Master/build/libs`)
-    * Runs as either a standalone server
-    * Or as a BungeeCord plugin
-  * MultiPaper (a fork of Paper)
-  
-How it works:
-  * Swaps players between servers to ensure chunks are only loaded on one server
-    at a time
+MultiPaper 2.0:
+
+- Works like a CDN
+    - Each server caches chunks that are needed by the players it's serving
+    - The servers also work together to ensure every chunk gets ticked
+    - Does not need BungeeCord, just a way to distribute players evenly across
+      the server
+
+- Master server
+    - Stores the world and data on it
+    - Coordinates the servers
+        - Decides who gets to tick the chunk (first in first served basis)
+    - Prevents conflicts
+        - Ensures there's no conflicting entity ids
+        - Syncs map and other data between the servers
+    - Runs as a standalone process
+        - For convenience, it can also run as a BungeeCord plugin
+
+- Every server has a copy of every player on the server
+    - Players that are on different servers are SharedPlayers
+- SharedPlayers do not load chunks, but can receive packets if there's another
+  player nearby to load the chunks, and forwards these packets to the
+  SharedPlayer's server so that they are sent to the real player
+- Servers do not send packets for chunks that they are not ticking
   
 Setting up MultiPaper
 ------

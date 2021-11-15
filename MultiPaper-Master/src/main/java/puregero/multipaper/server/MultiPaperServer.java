@@ -6,9 +6,6 @@ import java.util.ArrayList;
 
 public class MultiPaperServer extends Thread {
     public static final int DEFAULT_PORT = 35353;
-    private static final int WORKER_COUNT = 64;
-
-    private final ArrayList<Worker> workers = new ArrayList<>();
 
     public static void main(String[] args) throws IOException {
         int port = DEFAULT_PORT;
@@ -31,10 +28,6 @@ public class MultiPaperServer extends Thread {
         serverSocket = new ServerSocket(port);
 
         System.out.println("[MultiPaperServer] Listening on " + serverSocket.getLocalSocketAddress());
-
-        for (int i = 0; i < WORKER_COUNT; i++) {
-            workers.add(new Worker());
-        }
     }
 
     public void run() {
@@ -53,7 +46,5 @@ public class MultiPaperServer extends Thread {
         } catch (Exception e) {
             e.printStackTrace();
         }
-
-        workers.forEach(Thread::interrupt);
     }
 }

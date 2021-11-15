@@ -3,6 +3,7 @@ package puregero.multipaper.server;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public class Scheduler extends Thread {
     private static final List<ScheduledTask> tasks = new ArrayList<>();
@@ -36,7 +37,7 @@ public class Scheduler extends Thread {
                     ScheduledTask task = iterator.next();
 
                     if (task.getTime() < System.currentTimeMillis()) {
-                        Worker.runAsync(task);
+                        CompletableFuture.runAsync(task);
                         iterator.remove();
                     } else if (task.getTime() < nextRun) {
                         nextRun = task.getTime();

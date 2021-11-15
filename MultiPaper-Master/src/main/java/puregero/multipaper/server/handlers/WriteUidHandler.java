@@ -2,7 +2,6 @@ package puregero.multipaper.server.handlers;
 
 import puregero.multipaper.server.DataOutputSender;
 import puregero.multipaper.server.ServerConnection;
-import puregero.multipaper.server.Worker;
 
 import java.io.DataInputStream;
 import java.io.File;
@@ -16,16 +15,14 @@ public class WriteUidHandler implements Handler {
         byte[] data = new byte[in.readInt()];
         in.readFully(data);
 
-        Worker.runAsync(() -> {
-            try {
-                File worldDir = new File(world);
-                if (!worldDir.exists()) worldDir.mkdirs();
-                Files.write(new File(worldDir, "uid.dat").toPath(), data);
-                out.writeUTF("uidWritten");
-                out.send();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        });
+        try {
+            File worldDir = new File(world);
+            if (!worldDir.exists()) worldDir.mkdirs();
+            Files.write(new File(worldDir, "uid.dat").toPath(), data);
+            out.writeUTF("uidWritten");
+            out.send();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }

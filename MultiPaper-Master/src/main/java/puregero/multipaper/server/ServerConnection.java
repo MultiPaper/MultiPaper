@@ -5,6 +5,7 @@ import puregero.multipaper.server.handlers.Handlers;
 
 import java.io.*;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -176,5 +177,9 @@ public class ServerConnection extends Thread {
         }
         
         this.tps = tps;
+    }
+
+    public SocketAddress getAddress() {
+        return socket.getRemoteSocketAddress();
     }
 }

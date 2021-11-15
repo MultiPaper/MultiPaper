@@ -28,10 +28,10 @@ MultiPaper 2.0:
         - For convenience, it can also run as a BungeeCord plugin
 
 - Every server has a copy of every player on the server
-    - Players that are on different servers are SharedPlayers
-- SharedPlayers do not load chunks, but can receive packets if there's another
+    - Players that are on different servers are ExternalPlayers
+- ExternalPlayers do not load chunks, but can receive packets if there's another
   player nearby to load the chunks, and forwards these packets to the
-  SharedPlayer's server so that they are sent to the real player
+  ExternalPlayer's server so that they are sent to the real player
 - Servers do not send packets for chunks that they are not ticking
   
 Setting up MultiPaper
@@ -42,6 +42,7 @@ Setting up MultiPaper
     * BungeeCord plugin: Set the port in `plugins/MultiPaperProxy/config.yml`
   * In each MultiPaper server:
     * Put the name of the server used in BungeeCord's config.yml into `bungeecordname.txt`
+      * If you're not using BungeeCord, just make it some unique identifier
       * eg. `survival1`
     * Put the address and port of the MultiPaper-Master into `multipaperserver.txt`
       * eg. `localhost:35353`

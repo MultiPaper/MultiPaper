@@ -54,10 +54,10 @@ index 0000000000000000000000000000000000000000..3b042efc6942050dc290001eafc0f97f
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalServer.java b/src/main/java/puregero/multipaper/ExternalServer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..823434c834a24c30309bb5d014b5e68d527f3a9d
+index 0000000000000000000000000000000000000000..35b8352a2c798c70cfebeddd2a95dc8edf1d21d9
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServer.java
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,50 @@
 +package puregero.multipaper;
 +
 +public class ExternalServer {
@@ -66,7 +66,6 @@ index 0000000000000000000000000000000000000000..823434c834a24c30309bb5d014b5e68d
 +    private int averageTickTime;
 +    private double tps;
 +    private long lastAlive;
-+    private int playerCount;
 +
 +    public ExternalServer(String name, boolean me) {
 +        this.name = name;
@@ -111,10 +110,10 @@ index 0000000000000000000000000000000000000000..823434c834a24c30309bb5d014b5e68d
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..46f4302d3c5deecff994af5562cf27032d67bfa0
+index 0000000000000000000000000000000000000000..7a6b980502593afd47de458ed2b443160dfb5754
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,33 @@
 +package puregero.multipaper;
 +
 +import java.io.File;
@@ -132,25 +131,32 @@ index 0000000000000000000000000000000000000000..46f4302d3c5deecff994af5562cf2703
 +        return multiPaperConnection;
 +    }
 +
-+    public static String getBungeeCordName() throws IOException {
-+        File file = new File("bungeecordname.txt");
-+        if (!file.isFile()) {
-+            Files.write(file.toPath(), ("server" + Double.toString(Math.random()).substring(2, 7)).getBytes());
++    private static String bungeeCordName = null;
++    public static String getBungeeCordName() {
++        if (bungeeCordName == null) {
++            try {
++                File file = new File("bungeecordname.txt");
++                if (!file.isFile()) {
++                    Files.write(file.toPath(), ("server" + Double.toString(Math.random()).substring(2, 7)).getBytes());
++                }
++                bungeeCordName = new String(Files.readAllBytes(file.toPath())).trim();
++            } catch (IOException e) {
++                throw new RuntimeException(e);
++            }
 +        }
-+        return new String(Files.readAllBytes(file.toPath())).trim();
++        return bungeeCordName;
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b2186335946e8ed51a8d11b971b9a7ecbea40dc0
+index 0000000000000000000000000000000000000000..4c3b5986e4c29663e193987d24cc2f88d309b30d
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,121 @@
 +package puregero.multipaper;
 +
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
-+import org.bukkit.Location;
 +
 +import javax.annotation.Nullable;
 +import java.io.*;
@@ -158,19 +164,17 @@ index 0000000000000000000000000000000000000000..b2186335946e8ed51a8d11b971b9a7ec
 +import java.net.SocketException;
 +import java.nio.file.Files;
 +import java.util.Map;
-+import java.util.UUID;
 +import java.util.concurrent.ConcurrentHashMap;
 +import java.util.function.Consumer;
 +
 +public class MultiPaperConnection extends Thread {
 +
-+    private static final Logger LOGGER = LogManager.getLogger();
++    private static final Logger LOGGER = LogManager.getLogger(MultiPaperConnection.class.getSimpleName());
 +
 +    private Socket socket;
 +    private final Map<Integer, Request> callbacks = new ConcurrentHashMap<>();
 +    private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
 +    private String myName = null;
-+    public Map<UUID, Location> playerLocations = new ConcurrentHashMap<>();
 +
 +    public MultiPaperConnection() {
 +        super("MultiPaperConnection Thread");
@@ -262,10 +266,6 @@ index 0000000000000000000000000000000000000000..b2186335946e8ed51a8d11b971b9a7ec
 +
 +    public Map<String, ExternalServer> getServersMap() {
 +        return serversMap;
-+    }
-+
-+    public String getBungeeCordName() {
-+        return myName;
 +    }
 +
 +    public void serverInfo(DataInputStream in, DataOutputSender out) throws IOException {

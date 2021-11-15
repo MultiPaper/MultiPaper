@@ -1,0 +1,263 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 15 Nov 2021 13:27:45 +1000
+Subject: [PATCH] Add peer-to-peer connection
+
+
+diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+index e2901132b78126c0a4eb04363dfe6a0dccd1313f..bb373dba9d6a655a49a195dbf4d34cf37cd5b844 100644
+--- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -71,6 +71,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
+ import org.bukkit.event.server.ServerCommandEvent;
+ import org.bukkit.craftbukkit.util.Waitable;
+ import org.bukkit.event.server.RemoteServerCommandEvent;
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public class DedicatedServer extends MinecraftServer implements ServerInterface {
+@@ -290,6 +291,8 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+         server.enablePlugins(org.bukkit.plugin.PluginLoadOrder.STARTUP);
+         // CraftBukkit end
+ 
++        MultiPaper.onStart(); // MultiPaper
++
+         if (!this.usesAuthentication()) {
+             DedicatedServer.LOGGER.warn("**** SERVER IS RUNNING IN OFFLINE/INSECURE MODE!");
+             DedicatedServer.LOGGER.warn("The server will make no attempt to authenticate usernames. Beware.");
+diff --git a/src/main/java/puregero/multipaper/ExternalServer.java b/src/main/java/puregero/multipaper/ExternalServer.java
+index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354304819b1 100644
+--- a/src/main/java/puregero/multipaper/ExternalServer.java
++++ b/src/main/java/puregero/multipaper/ExternalServer.java
+@@ -6,6 +6,7 @@ public class ExternalServer {
+     private int averageTickTime;
+     private double tps;
+     private long lastAlive;
++    private ExternalServerConnection connection;
+ 
+     public ExternalServer(String name, boolean me) {
+         this.name = name;
+@@ -47,4 +48,12 @@ public class ExternalServer {
+     public void setTps(double tps) {
+         this.tps = tps;
+     }
++
++    public void setConnection(ExternalServerConnection connection) {
++        this.connection = connection;
++    }
++
++    public ExternalServerConnection getConnection() {
++        return connection;
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..73c721e4e11c8a0f13f1af8e5e289531da38a56d
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+@@ -0,0 +1,80 @@
++package puregero.multipaper;
++
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++
++import java.io.*;
++import java.net.Socket;
++
++public class ExternalServerConnection extends Thread implements Closeable {
++
++    private static final Logger LOGGER = LogManager.getLogger(ExternalServerConnection.class.getSimpleName());
++
++    private Socket socket;
++    private ExternalServer externalServer = null;
++
++    public ExternalServerConnection(Socket socket) {
++        this.socket = socket;
++        start();
++    }
++
++    public int getPort() {
++        return socket.getLocalPort();
++    }
++
++    @Override
++    public void close() throws IOException {
++        socket.close();
++    }
++
++    @Override
++    public void run() {
++        try {
++            PacketBuffer buffer = new PacketBuffer(socket);
++            buffer.writeUTF("hello");
++            buffer.writeUTF(MultiPaper.getBungeeCordName());
++            buffer.close();
++
++            DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
++            while (!socket.isClosed()) {
++                String message = in.readUTF();
++
++                if (message.equals("hello")) {
++                    String name = in.readUTF();
++                    LOGGER.info("Connected to external server " + name);
++                    externalServer = MultiPaper.getConnection().getServersMap().computeIfAbsent(name, key -> new ExternalServer(key, key.equals(MultiPaper.getBungeeCordName())));
++                    externalServer.setConnection(this);
++                }
++            }
++        } catch (EOFException e) {
++            // Ignore
++        } catch (Exception e) {
++            if (!socket.isClosed()) {
++                e.printStackTrace();
++            }
++        }
++
++        try {
++            socket.close();
++        } catch (Exception e) {
++            // Ignore
++        }
++    }
++
++    private static class PacketBuffer extends DataOutputStream {
++        private final Socket socket;
++
++        public PacketBuffer(Socket socket) {
++            super(new ByteArrayOutputStream());
++
++            this.socket = socket;
++        }
++
++        @Override
++        public void close() throws IOException {
++            synchronized (socket) {
++                socket.getOutputStream().write(((ByteArrayOutputStream) out).toByteArray());
++            }
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/ExternalServerSocket.java b/src/main/java/puregero/multipaper/ExternalServerSocket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..87a0ea1ce48d9543007558df2e5326aba123e745
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/ExternalServerSocket.java
+@@ -0,0 +1,41 @@
++package puregero.multipaper;
++
++import java.io.Closeable;
++import java.io.IOException;
++import java.net.ServerSocket;
++
++public class ExternalServerSocket extends Thread implements Closeable {
++
++    private final ServerSocket socket;
++
++    public ExternalServerSocket() {
++        try {
++            socket = new ServerSocket(0);
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
++        start();
++    }
++
++    public int getPort() {
++        return socket.getLocalPort();
++    }
++
++    @Override
++    public void close() throws IOException {
++        socket.close();
++    }
++
++    @Override
++    public void run() {
++        try {
++            while (true) {
++                new ExternalServerConnection(socket.accept());
++            }
++        } catch (Exception e) {
++            if (!socket.isClosed()) {
++                e.printStackTrace();
++            }
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index c8f9aea3915ec94a915e1003931c6ef460b79f40..e3d29fd5be7d86d4c3127573160ce02a6666e66b 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -6,6 +6,7 @@ import java.nio.file.Files;
+ 
+ public class MultiPaper {
+     private static MultiPaperConnection multiPaperConnection = null;
++    private static ExternalServerSocket externalServerSocket = null;
+ 
+     public static MultiPaperConnection getConnection() {
+         if (multiPaperConnection == null) {
+@@ -38,4 +39,13 @@ public class MultiPaper {
+             e.printStackTrace();
+         }
+     }
++
++    public static void onStart() {
++        try {
++            externalServerSocket = new ExternalServerSocket();
++            getConnection().sendStart(externalServerSocket.getPort());
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 2f940113bb7da19b4e5c71e61e74814a2b4acbad..5bd01086dcb7e485894ba7baa9d3ca001efb3df8 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -9,6 +9,7 @@ import java.net.Socket;
+ import java.net.SocketException;
+ import java.nio.file.Files;
+ import java.util.Map;
++import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.ConcurrentHashMap;
+ import java.util.function.Consumer;
+ 
+@@ -119,10 +120,39 @@ public class MultiPaperConnection extends Thread {
+         server.setLastAlive(System.currentTimeMillis());
+     }
+ 
++    public void start(DataInputStream in, DataOutputSender out) throws IOException {
++        String address = in.readUTF();
++        int port = in.readInt();
++        CompletableFuture.runAsync(() -> {
++            try {
++                LOGGER.info("Connecting to external server " + address + ":" + port + "...");
++                Socket socket = new Socket(address, port);
++                new ExternalServerConnection(socket);
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++    }
++
+     public void writeTickTime(long time) throws IOException {
+         DataOutputSender out = new DataOutputSender(this);
+         out.writeUTF("writeTickTime");
+         out.writeLong(time);
+         out.send(null);
+     }
++
++    public void sendStart(int port) throws IOException {
++        while (socket == null) {
++            // Wait for socket to connect
++            try {
++                Thread.sleep(10);
++            } catch (InterruptedException e) {
++                e.printStackTrace();
++            }
++        }
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("start");
++        out.writeInt(port);
++        out.send(null);
++    }
+ }

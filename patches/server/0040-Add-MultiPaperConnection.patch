@@ -1,0 +1,324 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 15 Nov 2021 13:01:36 +1000
+Subject: [PATCH] Add MultiPaperConnection
+
+
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index 92d9a61a63807c1be44846ab4ae9008ee8fc80b3..0793fc66c3510f7865fb658d3e5a08e89623297e 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -188,6 +188,7 @@ import org.bukkit.event.server.ServerLoadEvent;
+ 
+ import co.aikar.timings.MinecraftTimings; // Paper
+ import org.spigotmc.SlackActivityAccountant; // Spigot
++import puregero.multipaper.MultiPaper;
+ 
+ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements SnooperPopulator, CommandSource, AutoCloseable {
+ 
+diff --git a/src/main/java/puregero/multipaper/DataOutputSender.java b/src/main/java/puregero/multipaper/DataOutputSender.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..3b042efc6942050dc290001eafc0f97f0917ce82
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/DataOutputSender.java
+@@ -0,0 +1,30 @@
++package puregero.multipaper;
++
++import javax.annotation.Nullable;
++import java.io.*;
++import java.util.function.Consumer;
++
++public class DataOutputSender extends DataOutputStream {
++    private final MultiPaperConnection connection;
++    private final int id;
++
++    public DataOutputSender(MultiPaperConnection connection) throws IOException {
++        this(connection, (int) (Math.random() * Integer.MAX_VALUE));
++    }
++
++    public DataOutputSender(MultiPaperConnection connection, int id) throws IOException {
++        super(new ByteArrayOutputStream());
++        this.connection = connection;
++        this.id = id;
++
++        writeInt(id);
++    }
++
++    public void send(@Nullable Consumer<DataInputStream> callback) throws IOException {
++        connection.send(((ByteArrayOutputStream) out).toByteArray(), id, callback);
++    }
++
++    public int getId() {
++        return id;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/ExternalServer.java b/src/main/java/puregero/multipaper/ExternalServer.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..823434c834a24c30309bb5d014b5e68d527f3a9d
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/ExternalServer.java
+@@ -0,0 +1,51 @@
++package puregero.multipaper;
++
++public class ExternalServer {
++    private final String name;
++    private final boolean me;
++    private int averageTickTime;
++    private double tps;
++    private long lastAlive;
++    private int playerCount;
++
++    public ExternalServer(String name, boolean me) {
++        this.name = name;
++        this.me = me;
++    }
++
++    public int getAverageTickTime() {
++        return averageTickTime;
++    }
++
++    public void setAverageTickTime(int averageTickTime) {
++        this.averageTickTime = averageTickTime;
++    }
++
++    public long getLastAlive() {
++        return lastAlive;
++    }
++
++    public void setLastAlive(long lastAlive) {
++        this.lastAlive = lastAlive;
++    }
++
++    public String getName() {
++        return name;
++    }
++
++    public boolean isMe() {
++        return me;
++    }
++
++    public boolean isAlive() {
++        return getLastAlive() > System.currentTimeMillis() - 2500 && getTps() > 0;
++    }
++
++    public double getTps() {
++        return tps;
++    }
++
++    public void setTps(double tps) {
++        this.tps = tps;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..46f4302d3c5deecff994af5562cf27032d67bfa0
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -0,0 +1,25 @@
++package puregero.multipaper;
++
++import java.io.File;
++import java.io.IOException;
++import java.nio.file.Files;
++
++public class MultiPaper {
++    private static MultiPaperConnection multiPaperConnection = null;
++
++    public static MultiPaperConnection getConnection() {
++        if (multiPaperConnection == null) {
++            multiPaperConnection = new MultiPaperConnection();
++        }
++
++        return multiPaperConnection;
++    }
++
++    public static String getBungeeCordName() throws IOException {
++        File file = new File("bungeecordname.txt");
++        if (!file.isFile()) {
++            Files.write(file.toPath(), ("server" + Double.toString(Math.random()).substring(2, 7)).getBytes());
++        }
++        return new String(Files.readAllBytes(file.toPath())).trim();
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..b2186335946e8ed51a8d11b971b9a7ecbea40dc0
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -0,0 +1,128 @@
++package puregero.multipaper;
++
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Location;
++
++import javax.annotation.Nullable;
++import java.io.*;
++import java.net.Socket;
++import java.net.SocketException;
++import java.nio.file.Files;
++import java.util.Map;
++import java.util.UUID;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.function.Consumer;
++
++public class MultiPaperConnection extends Thread {
++
++    private static final Logger LOGGER = LogManager.getLogger();
++
++    private Socket socket;
++    private final Map<Integer, Request> callbacks = new ConcurrentHashMap<>();
++    private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
++    private String myName = null;
++    public Map<UUID, Location> playerLocations = new ConcurrentHashMap<>();
++
++    public MultiPaperConnection() {
++        super("MultiPaperConnection Thread");
++        start();
++    }
++
++    public void send(byte[] bytes, int id, @Nullable Consumer<DataInputStream> callback) {
++        Request request = new Request(bytes, callback);
++        if (callback != null) {
++            callbacks.put(id, request);
++        }
++        synchronized (socket) {
++            try {
++                socket.getOutputStream().write(bytes);
++                socket.getOutputStream().flush();
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        }
++    }
++
++    public DataOutputSender buffer(int id) throws IOException {
++        return new DataOutputSender(this, id);
++    }
++
++    private static String getServer() {
++        try {
++            File file = new File("multipaperserver.txt");
++            if (!file.isFile()) {
++                Files.write(file.toPath(), ("localhost:35353").getBytes());
++            }
++            return new String(Files.readAllBytes(file.toPath())).trim();
++        } catch (IOException e) {
++            e.printStackTrace();
++            return "localhost:35353";
++        }
++    }
++
++    @Override
++    public void run() {
++        while (true) {
++            String server = getServer();
++            LOGGER.info("Connecting to " + server + "...");
++            String[] serverParts = server.split(":");
++            try (Socket socket = new Socket(serverParts[0], Integer.parseInt(serverParts[1]))) {
++                DataOutputStream out = new DataOutputStream(socket.getOutputStream());
++                out.writeUTF(myName = MultiPaper.getBungeeCordName());
++
++                this.socket = socket;
++                LOGGER.info("Connected to " + server);
++
++                synchronized (socket) {
++                    // Resend requests on this new socket
++                    for (Request request : callbacks.values()) {
++                        if (request.setLastSocket(socket)) {
++                            socket.getOutputStream().write(request.getData());
++                        }
++                    }
++                }
++
++                DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
++                while (!socket.isClosed()) {
++                    int id = in.readInt();
++                    String command = in.readUTF();
++
++                    Request request = callbacks.remove(id);
++
++                    if (request != null) {
++                        request.getCallback().accept(in);
++                        continue;
++                    }
++
++                    // Run command(DataInputStream in);
++                    this.getClass().getMethod(command, DataInputStream.class, DataOutputSender.class).invoke(this, in, buffer(id));
++                }
++            } catch (EOFException | SocketException e) {
++                // Ignored
++            } catch (Exception e) {
++                e.printStackTrace();
++            }
++            try {
++                Thread.sleep(1000);
++            } catch (InterruptedException e) {
++                e.printStackTrace();
++                return;
++            }
++        }
++    }
++
++    public Map<String, ExternalServer> getServersMap() {
++        return serversMap;
++    }
++
++    public String getBungeeCordName() {
++        return myName;
++    }
++
++    public void serverInfo(DataInputStream in, DataOutputSender out) throws IOException {
++        ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
++        server.setAverageTickTime(in.readInt());
++        server.setLastAlive(System.currentTimeMillis());
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/Request.java b/src/main/java/puregero/multipaper/Request.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..d4df56fe94bfffbf6c8b8134640da308d49edd0d
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/Request.java
+@@ -0,0 +1,42 @@
++package puregero.multipaper;
++
++import java.io.DataInputStream;
++import java.net.Socket;
++import java.util.function.Consumer;
++
++public class Request {
++    private Socket lastSocket;
++    private final byte[] data;
++    private final Consumer<DataInputStream> callback;
++    private final long time = System.currentTimeMillis();
++
++    public Request(byte[] data, Consumer<DataInputStream> callback) {
++        this.data = data;
++        this.callback = callback;
++    }
++
++    public byte[] getData() {
++        return data;
++    }
++
++    public Consumer<DataInputStream> getCallback() {
++        return callback;
++    }
++
++    public long getTime() {
++        return time;
++    }
++
++    /**
++     * @return True if the socket is not the same as the last socket, false
++     * otherwise
++     */
++    public synchronized boolean setLastSocket(Socket socket) {
++        if (socket == lastSocket) {
++            return false;
++        }
++
++        lastSocket = socket;
++        return true;
++    }
++}

@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 15 Nov 2021 13:02:02 +1000
+Subject: [PATCH] Add sendTickTime
+
+
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index 0793fc66c3510f7865fb658d3e5a08e89623297e..ae7613f92c1122fd4ff7009a002c5d95c93b06c1 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -1553,6 +1553,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         tickTimes60s.add(this.tickCount, l);
+         // Paper end
+ 
++        MultiPaper.sendTickTime(i1 - i); // MultiPaper
+         this.frameTimer.logFrameDuration(i1 - i);
+         this.profiler.pop();
+         org.spigotmc.WatchdogThread.tick(); // Spigot
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 46f4302d3c5deecff994af5562cf27032d67bfa0..bfc2665007ab6f5db9d6573e8103b1d65053a9e9 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -22,4 +22,12 @@ public class MultiPaper {
+         }
+         return new String(Files.readAllBytes(file.toPath())).trim();
+     }
++
++    public static void sendTickTime(long time) {
++        try {
++            getConnection().writeTickTime(time);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index b2186335946e8ed51a8d11b971b9a7ecbea40dc0..2aa0c2965ab7c49620505590bbecf561cb82ed2c 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -125,4 +125,11 @@ public class MultiPaperConnection extends Thread {
+         server.setAverageTickTime(in.readInt());
+         server.setLastAlive(System.currentTimeMillis());
+     }
++
++    public void writeTickTime(long time) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeTickTime");
++        out.writeLong(time);
++        out.send(null);
++    }
+ }

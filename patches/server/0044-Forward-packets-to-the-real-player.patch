@@ -1,0 +1,92 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 16 Nov 2021 01:58:28 +1000
+Subject: [PATCH] Forward packets to the real player
+
+
+diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
+index d40a2249a87b4c6eeb3484156d64e2e44df11c75..6eaf6c2f02bce163bf79adcbcc560df887bc4be0 100644
+--- a/src/main/java/puregero/multipaper/ExternalPlayer.java
++++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
+@@ -46,7 +46,13 @@ public class ExternalPlayer extends ServerPlayer {
+ 
+         @Override
+         public void send(Packet<?> packet, @Nullable GenericFutureListener<? extends Future<? super Void>> callback) {
+-
++            LOGGER.info("Forwarding packet " + packet);
++            externalServerConnection.sendPacket(ExternalPlayer.this, packet);
+         }
+     }
++
++    @Override
++    public boolean broadcastToPlayer(ServerPlayer spectator) {
++        return false;
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+index 51e02f826928b382a2fab4bbc1b38e005855b952..41d5c072a8b7cd3c571bdbd05148243491761dda 100644
+--- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
++++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+@@ -1,6 +1,13 @@
+ package puregero.multipaper;
+ 
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import net.minecraft.network.ConnectionProtocol;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
+ import net.minecraft.server.dedicated.DedicatedServer;
++import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.entity.Entity;
+ import org.apache.logging.log4j.LogManager;
+@@ -87,6 +94,21 @@ public class ExternalServerConnection extends Thread implements Closeable {
+                     if (id != -1) {
+                         LOGGER.warn("Tried to move a non-existant player with entity id of " + id);
+                     }
++                } else if (message.equals("sendPacket")) {
++                    int id = in.readInt();
++                    int length = in.readInt();
++                    byte[] bytes = new byte[length];
++                    in.readFully(bytes);
++                    ByteBuf buf = Unpooled.wrappedBuffer(bytes);
++                    FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++                    int packetId = friendlyByteBuf.readVarInt();
++                    Packet<?> packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++                    for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
++                        if (player.getId() == id) {
++                            player.connection.send(packet);
++                            break;
++                        }
++                    }
+                 }
+             }
+         } catch (EOFException e) {
+@@ -153,6 +175,26 @@ public class ExternalServerConnection extends Thread implements Closeable {
+         }
+     }
+ 
++    public void sendPacket(ExternalPlayer player, Packet<?> packet) {
++        try {
++            PacketBuffer buffer = new PacketBuffer(socket);
++            buffer.writeUTF("sendPacket");
++            buffer.writeInt(player.getId());
++            ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
++            Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
++            ByteBuf buf = Unpooled.buffer();
++            FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++            friendlyByteBuf.writeVarInt(id);
++            packet.write(friendlyByteBuf);
++            byte[] bytes = buf.array();
++            buffer.writeInt(bytes.length);
++            buffer.write(bytes);
++            buffer.close();
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
+     private static class PacketBuffer extends DataOutputStream {
+         private final Socket socket;
+ 

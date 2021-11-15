@@ -102,10 +102,10 @@ index aac9dd19237d0708990960d03328e7530cd7bc8e..f911ff2825ab2ea6b3e82bd97b1e24dc
          this.bb = Entity.INITIAL_AABB;
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4aa83d5fbcd19fc73b26c53ac3e3c0f170b47783
+index 0000000000000000000000000000000000000000..d40a2249a87b4c6eeb3484156d64e2e44df11c75
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,52 @@
 +package puregero.multipaper;
 +
 +import com.mojang.authlib.GameProfile;
@@ -114,6 +114,7 @@ index 0000000000000000000000000000000000000000..4aa83d5fbcd19fc73b26c53ac3e3c0f1
 +import net.minecraft.network.Connection;
 +import net.minecraft.network.protocol.Packet;
 +import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.server.network.ServerGamePacketListenerImpl;
 +import org.apache.logging.log4j.LogManager;
@@ -121,7 +122,6 @@ index 0000000000000000000000000000000000000000..4aa83d5fbcd19fc73b26c53ac3e3c0f1
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftServer;
 +import org.bukkit.craftbukkit.CraftWorld;
-+import org.bukkit.event.entity.CreatureSpawnEvent;
 +
 +import javax.annotation.Nullable;
 +import java.util.UUID;
@@ -134,11 +134,12 @@ index 0000000000000000000000000000000000000000..4aa83d5fbcd19fc73b26c53ac3e3c0f1
 +    public ExternalPlayer(ExternalServerConnection externalServerConnection, int id, String name, UUID uuid, String world, double x, double y, double z) {
 +        super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), new GameProfile(uuid, name));
 +        this.externalServerConnection = externalServerConnection;
++        ((ServerLevel) level).removePlayerImmediately(this, RemovalReason.UNLOADED_WITH_PLAYER);
 +        setId(id);
 +        connection = new ServerGamePacketListenerImpl(getServer(), new ExternalPlayerConnection(PacketFlow.CLIENTBOUND), this);
 +        setPos(x, y, z);
 +        getServer().getPlayerList().addPlayer(this);
-+        level.addEntity(this, CreatureSpawnEvent.SpawnReason.CUSTOM);
++        ((ServerLevel) level).addNewPlayer(this);
 +    }
 +
 +    private class ExternalPlayerConnection extends Connection {

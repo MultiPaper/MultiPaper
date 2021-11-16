@@ -17,6 +17,46 @@ index 6a30338648214c98b05feb5a628dbdc6b2683ff9..be8ef2bd8c1d92fd1e97c2ebf6d308b9
      private static void useOptimizedTickList() {
          if (config.contains("settings.use-optimized-ticklist")) { // don't add default, hopefully temporary config
              useOptimizedTickList = config.getBoolean("settings.use-optimized-ticklist");
+diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+index 3603f1ac72635143ef927e6da90e9fcbd09e124c..38fcee7b61eb51cfaf1f809c909718776d76ce89 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
++++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+@@ -17,6 +17,7 @@ import javax.annotation.Nullable;
+ import net.minecraft.Util;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.SectionPos;
++import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+ import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
+@@ -42,6 +43,7 @@ import net.minecraft.server.MinecraftServer;
+ // CraftBukkit end
+ 
+ import it.unimi.dsi.fastutil.shorts.ShortOpenHashSet; // Paper
++import puregero.multipaper.MultiPaperChunkHandler;
+ 
+ public class ChunkHolder {
+ 
+@@ -491,11 +493,19 @@ public class ChunkHolder {
+             if (packetplayouttileentitydata != null) {
+                 this.broadcast(packetplayouttileentitydata, false);
+             }
++
++            MultiPaperChunkHandler.onBlockUpdate(this, new ClientboundBlockEntityDataPacket(pos, 0, tileentity.save(new CompoundTag()))); // MultiPaper - sync the full block with external servers
+         }
+ 
+     }
+ 
+     public void broadcast(Packet<?> packet, boolean onlyOnWatchDistanceEdge) {
++        // MultiPaper start - Sync blocks with external servers
++        if (!(packet instanceof ClientboundBlockEntityDataPacket)) { // We handle block entities separately
++            MultiPaperChunkHandler.onBlockUpdate(this, packet);
++        }
++        // MultiPaper end
++
+         // Paper start - per player view distance
+         // there can be potential desync with player's last mapped section and the view distance map, so use the
+         // view distance map here.
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
 index a9f247ba1d889dffdbac51fa70cc887f4987e717..da7c090e55023129049c235a46d874ad08fb74ab 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
@@ -103,14 +143,14 @@ index 35f27e9a7c82eaec5b4a1a71696dac8485b2cd6d..59b07fcf193f8af00832631e807bb1f7
                  }
              } // Paper start - optimise chunk tick iteration
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 1ae7a10df7460f223413c38ac6bd85dba15fb347..4d8cf146d601dfb09c89881131fccd84946813de 100644
+index 1ae7a10df7460f223413c38ac6bd85dba15fb347..f8e29035de239718cec7640c8df03639c31457dc 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -162,6 +162,7 @@ import org.bukkit.event.weather.LightningStrikeEvent;
  import org.bukkit.event.world.TimeSkipEvent;
  // CraftBukkit end
  import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
-+import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperChunkHandler;
  
  public class ServerLevel extends Level implements WorldGenLevel {
  
@@ -118,7 +158,7 @@ index 1ae7a10df7460f223413c38ac6bd85dba15fb347..4d8cf146d601dfb09c89881131fccd84
      }
  
      private void tickLiquid(TickNextTickData<Fluid> tick) {
-+        if (!MultiPaper.shouldTick(this, tick.pos)) return; // MultiPaper - should tick
++        if (!MultiPaperChunkHandler.shouldTick(this, tick.pos)) return; // MultiPaper - should tick
 +
          FluidState fluid = this.getFluidState(tick.pos);
  
@@ -127,7 +167,7 @@ index 1ae7a10df7460f223413c38ac6bd85dba15fb347..4d8cf146d601dfb09c89881131fccd84
      }
  
      private void tickBlock(TickNextTickData<Block> tick) {
-+        if (!MultiPaper.shouldTick(this, tick.pos)) return; // MultiPaper - should tick
++        if (!MultiPaperChunkHandler.shouldTick(this, tick.pos)) return; // MultiPaper - should tick
 +
          BlockState iblockdata = this.getBlockState(tick.pos);
  
@@ -161,14 +201,14 @@ index 2b79ace854461b216dc4970d1cc4a3953a51dd50..a61f2acf874c033cde1a5285818aa0cc
      }
      // Paper end
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 24d772c18d5a448154909e4a51964ba29485a5c2..193f6eac262fd34c64a61f20f15a6d9ca04598a1 100644
+index 24d772c18d5a448154909e4a51964ba29485a5c2..f1982e4d37130db67fa767a8051cb8feae08771f 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
 @@ -98,6 +98,7 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
  import org.bukkit.craftbukkit.util.CraftNamespacedKey;
  import org.bukkit.event.block.BlockPhysicsEvent;
  import org.bukkit.event.world.GenericGameEvent;
-+import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperChunkHandler;
  // CraftBukkit end
  
  public abstract class Level implements LevelAccessor, AutoCloseable {
@@ -176,12 +216,12 @@ index 24d772c18d5a448154909e4a51964ba29485a5c2..193f6eac262fd34c64a61f20f15a6d9c
                  toRemove.add(tickingblockentity); // Paper - use removeAll
                  // Spigot end
              } else {
-+                if (!MultiPaper.shouldTick(this, tickingblockentity.getPos())) continue; // MultiPaper - should tick
++                if (!MultiPaperChunkHandler.shouldTick(this, tickingblockentity.getPos())) continue; // MultiPaper - should tick
                  tickingblockentity.tick();
              }
          }
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index db7904b1bb402a36684b97c443336630762aeaf9..eb07b059db46e7c24870f5b2303b9b01f950e241 100644
+index db7904b1bb402a36684b97c443336630762aeaf9..e55dfba47d8163cae7cb8343986fca2a0d6333ff 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -13,13 +13,9 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -200,18 +240,15 @@ index db7904b1bb402a36684b97c443336630762aeaf9..eb07b059db46e7c24870f5b2303b9b01
  import java.util.function.Consumer;
  import java.util.function.Supplier;
  import java.util.stream.Stream;
-@@ -69,6 +65,10 @@ import net.minecraft.world.level.material.FluidState;
+@@ -69,6 +65,7 @@ import net.minecraft.world.level.material.FluidState;
  import net.minecraft.world.level.material.Fluids;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
-+import puregero.multipaper.ChunkKey;
-+import puregero.multipaper.ExternalServer;
-+import puregero.multipaper.ExternalServerConnection;
-+import puregero.multipaper.MultiPaper;
++import puregero.multipaper.*;
  
  public class LevelChunk implements ChunkAccess {
  
-@@ -105,6 +105,8 @@ public class LevelChunk implements ChunkAccess {
+@@ -105,6 +102,8 @@ public class LevelChunk implements ChunkAccess {
      public final Map<BlockPos, BlockEntity> blockEntities;
      private final Map<StructureFeature<?>, StructureStart<?>> structureStarts;
      private final Map<StructureFeature<?>, LongSet> structuresRefences;
@@ -220,7 +257,7 @@ index db7904b1bb402a36684b97c443336630762aeaf9..eb07b059db46e7c24870f5b2303b9b01
      private final ShortList[] postProcessing;
      private TickList<Block> blockTicks;
      private TickList<Fluid> liquidTicks;
-@@ -978,6 +980,10 @@ public class LevelChunk implements ChunkAccess {
+@@ -978,6 +977,10 @@ public class LevelChunk implements ChunkAccess {
          // Paper end - neighbour cache
          org.bukkit.Server server = this.level.getCraftServer();
          this.level.getChunkSource().addLoadedChunk(this); // Paper
@@ -231,15 +268,15 @@ index db7904b1bb402a36684b97c443336630762aeaf9..eb07b059db46e7c24870f5b2303b9b01
          ((ServerLevel)this.level).getChunkSource().chunkMap.playerChunkManager.onChunkLoad(this.chunkPos.x, this.chunkPos.z); // Paper - rewrite player chunk management
          if (server != null) {
              /*
-@@ -1021,6 +1027,7 @@ public class LevelChunk implements ChunkAccess {
+@@ -1021,6 +1024,7 @@ public class LevelChunk implements ChunkAccess {
          // note: saving can be prevented, but not forced if no saving is actually required
          this.mustNotSave = !unloadEvent.isSaveChunk();
          this.level.getChunkSource().removeLoadedChunk(this); // Paper
-+        MultiPaper.onChunkUnload(this);
++        MultiPaperChunkHandler.onChunkUnload(this); // MultiPaper
          // Paper start - neighbour cache
          int chunkX = this.chunkPos.x;
          int chunkZ = this.chunkPos.z;
-@@ -1162,7 +1169,7 @@ public class LevelChunk implements ChunkAccess {
+@@ -1162,7 +1166,7 @@ public class LevelChunk implements ChunkAccess {
  
      @Override
      public boolean isUnsaved() {
@@ -357,10 +394,10 @@ index f718693be5d04ef4ec045bb8de206a072c6c6813..aa5367c8aa4288625c21b10e10e8b088
          }
      }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 31101c72b96785e0b428d287b3aab6396036db0d..863c0773560f079ffd893f90a645b188051dc939 100644
+index 31101c72b96785e0b428d287b3aab6396036db0d..64c4ab210984b3a9503d91cbcb1663b1daf8e0a9 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -2,6 +2,8 @@ package puregero.multipaper;
+@@ -2,22 +2,34 @@ package puregero.multipaper;
  
  import io.netty.buffer.ByteBuf;
  import io.netty.buffer.Unpooled;
@@ -369,7 +406,11 @@ index 31101c72b96785e0b428d287b3aab6396036db0d..863c0773560f079ffd893f90a645b188
  import net.minecraft.network.ConnectionProtocol;
  import net.minecraft.network.FriendlyByteBuf;
  import net.minecraft.network.protocol.Packet;
-@@ -9,15 +11,21 @@ import net.minecraft.network.protocol.PacketFlow;
+ import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
++import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
++import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
++import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
  import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
@@ -392,7 +433,7 @@ index 31101c72b96785e0b428d287b3aab6396036db0d..863c0773560f079ffd893f90a645b188
  
  public class ExternalServerConnection extends Thread implements Closeable {
  
-@@ -27,6 +35,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -27,6 +39,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
      private Socket socket;
      private ExternalServer externalServer = null;
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new HashMap<>();
@@ -400,10 +441,24 @@ index 31101c72b96785e0b428d287b3aab6396036db0d..863c0773560f079ffd893f90a645b188
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
-@@ -107,6 +116,47 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -107,6 +120,61 @@ public class ExternalServerConnection extends Thread implements Closeable {
                              player.connection.send(packet);
                          }
                      }
++                } else if (message.equals("sendUpdate")) {
++                    String world = in.readUTF();
++                    int length = in.readInt();
++                    byte[] bytes = new byte[length];
++                    in.readFully(bytes);
++                    ByteBuf buf = Unpooled.wrappedBuffer(bytes);
++                    FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++                    int packetId = friendlyByteBuf.readVarInt();
++                    Packet<?> packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++                    if (packet instanceof ClientboundBlockUpdatePacket || packet instanceof ClientboundSectionBlocksUpdatePacket || packet instanceof ClientboundLightUpdatePacket || packet instanceof ClientboundBlockEntityDataPacket) {
++                        runSync(() -> MultiPaperChunkHandler.handleBlockUpdate(world, packet));
++                    } else {
++                        LOGGER.warn("Unhandled packet of type " + packet.getClass().getSimpleName());
++                    }
 +                } else if (message.equals("requestChunk")) {
 +                    String world = in.readUTF();
 +                    int cx = in.readInt();
@@ -448,10 +503,30 @@ index 31101c72b96785e0b428d287b3aab6396036db0d..863c0773560f079ffd893f90a645b188
                  }
              }
          } catch (EOFException e) {
-@@ -239,6 +289,53 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -239,6 +307,73 @@ public class ExternalServerConnection extends Thread implements Closeable {
          }
      }
  
++    public void sendUpdate(String world, Packet<?> packet) {
++        try {
++            PacketBuffer buffer = new PacketBuffer(socket);
++            buffer.writeUTF("sendUpdate");
++            buffer.writeUTF(world);
++            ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
++            Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
++            ByteBuf buf = Unpooled.buffer();
++            FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++            friendlyByteBuf.writeVarInt(id);
++            packet.write(friendlyByteBuf);
++            byte[] bytes = buf.array();
++            buffer.writeInt(bytes.length);
++            buffer.write(bytes);
++            buffer.close();
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
 +    public void requestChunk(String world, int cx, int cz, Consumer<byte[]> callback) {
 +        try {
 +            PacketBuffer buffer = new PacketBuffer(socket);
@@ -503,16 +578,18 @@ index 31101c72b96785e0b428d287b3aab6396036db0d..863c0773560f079ffd893f90a645b188
          private final Socket socket;
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..057e86a00d61cf3b641a3fa08e7652ecfa7a0821 100644
+index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..04ac57dda76616f2af72fb70f26c9692b8d29660 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,31 +1,34 @@
+@@ -1,31 +1,37 @@
  package puregero.multipaper;
 -
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.nbt.NbtIo;
++import net.minecraft.network.protocol.Packet;
  import net.minecraft.server.dedicated.DedicatedServer;
++import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.level.ChunkPos;
@@ -523,6 +600,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..057e86a00d61cf3b641a3fa08e7652ec
 -import java.io.IOException;
 +import java.io.*;
  import java.nio.file.Files;
++import java.util.Collections;
  import java.util.HashMap;
  import java.util.UUID;
 +import java.util.zip.DeflaterOutputStream;
@@ -548,7 +626,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..057e86a00d61cf3b641a3fa08e7652ec
      private static String bungeeCordName = null;
      public static String getBungeeCordName() {
          if (bungeeCordName == null) {
-@@ -41,9 +44,7 @@ public class MultiPaper {
+@@ -41,9 +47,7 @@ public class MultiPaper {
          }
          return bungeeCordName;
      }
@@ -558,7 +636,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..057e86a00d61cf3b641a3fa08e7652ec
      public static void tick() {
          for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
              if (!(player instanceof ExternalPlayer)) {
-@@ -58,7 +59,6 @@ public class MultiPaper {
+@@ -58,7 +62,6 @@ public class MultiPaper {
                  }
              }
          }
@@ -566,7 +644,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..057e86a00d61cf3b641a3fa08e7652ec
          for (ExternalServer server : getConnection().getServersMap().values()) {
              if (server.getConnection() != null) {
                  // This tick function must be run after the vanilla tick
-@@ -66,17 +66,14 @@ public class MultiPaper {
+@@ -66,17 +69,14 @@ public class MultiPaper {
              }
          }
      }
@@ -584,7 +662,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..057e86a00d61cf3b641a3fa08e7652ec
      public static void onStart() {
          try {
              externalServerSocket = new ExternalServerSocket();
-@@ -85,7 +82,6 @@ public class MultiPaper {
+@@ -85,7 +85,6 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -592,7 +670,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..057e86a00d61cf3b641a3fa08e7652ec
      public static void onPlayerJoin(ServerPlayer player) {
          getConnection().getServersMap().values().forEach(externalServer -> {
              if (externalServer.getConnection() != null) {
-@@ -93,7 +89,6 @@ public class MultiPaper {
+@@ -93,7 +92,6 @@ public class MultiPaper {
              }
          });
      }
@@ -600,7 +678,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..057e86a00d61cf3b641a3fa08e7652ec
      public static void onPlayerDisconnect(ServerPlayer player) {
          if (!(player instanceof ExternalPlayer)) {
              getConnection().getServersMap().values().forEach(externalServer -> {
-@@ -103,7 +98,6 @@ public class MultiPaper {
+@@ -103,7 +101,6 @@ public class MultiPaper {
              });
          }
      }
@@ -608,7 +686,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..057e86a00d61cf3b641a3fa08e7652ec
      public static int getEntityCounterStartValue() {
          try {
              return getConnection().getEntityCounterStartValue().join();
-@@ -111,8 +105,106 @@ public class MultiPaper {
+@@ -111,8 +108,91 @@ public class MultiPaper {
              throw new RuntimeException(e);
          }
      }
@@ -700,6 +778,40 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..057e86a00d61cf3b641a3fa08e7652ec
 +        deflaterOutputStream.close();
 +        return buffer.toByteArray();
 +    }
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..14bf462eaec47e069f43007b68c7122b222a734c
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
+@@ -0,0 +1,112 @@
++package puregero.multipaper;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.SectionPos;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
++import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
++import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
++import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
++import net.minecraft.server.level.ChunkHolder;
++import net.minecraft.world.level.Level;
++import net.minecraft.world.level.LightLayer;
++import net.minecraft.world.level.chunk.DataLayer;
++import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.level.lighting.LevelLightEngine;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++
++import java.util.BitSet;
++import java.util.Iterator;
++
++public class MultiPaperChunkHandler {
++
++    private static final Logger LOGGER = LogManager.getLogger(MultiPaperChunkHandler.class.getSimpleName());
 +
 +    public static boolean shouldTick(Level level, BlockPos pos) {
 +        LevelChunk chunk = level.getChunkIfLoaded(pos);
@@ -709,13 +821,82 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..057e86a00d61cf3b641a3fa08e7652ec
 +    public static void onChunkUnload(LevelChunk chunk) {
 +        if (chunk.externalOwner != null) {
 +            if (chunk.externalOwner.isMe()) {
-+                unlockChunk(chunk);
++                MultiPaper.unlockChunk(chunk);
 +            } else {
 +                chunk.externalOwner.getConnection().unsubscribeFromChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 +            }
 +        }
 +    }
- }
++
++    public static void onBlockUpdate(ChunkHolder chunkHolder, Packet<?> packet) {
++        LevelChunk chunk = chunkHolder.getFullChunk();
++        if (chunk.externalOwner != null && chunk.externalOwner.isMe()) {
++            for (ExternalServer externalServer : chunk.externalSubscribers) {
++                externalServer.getConnection().sendUpdate(chunkHolder.getWorld().convertable.getLevelId(), packet);
++            }
++        } else if (chunk.externalOwner != null && !chunk.externalOwner.isMe() && blockUpdateChunk == null) {
++            chunk.externalOwner.getConnection().sendUpdate(chunkHolder.getWorld().convertable.getLevelId(), packet);
++        }
++    }
++
++    private static LevelChunk blockUpdateChunk = null;
++    public static void handleBlockUpdate(String world, Packet<?> packet) {
++        blockUpdateChunk = null;
++        if (packet instanceof ClientboundBlockUpdatePacket update) {
++            blockUpdateChunk = ((CraftWorld) Bukkit.getWorld(world)).getHandle().getChunkIfLoaded(update.getPos());
++            blockUpdateChunk.setType(update.getPos(), update.blockState, false, false);
++        } else if (packet instanceof ClientboundSectionBlocksUpdatePacket update) {
++            update.runUpdates((pos, state) -> {
++                if (blockUpdateChunk == null) blockUpdateChunk = ((CraftWorld) Bukkit.getWorld(world)).getHandle().getChunkIfLoaded(pos);
++                blockUpdateChunk.setType(pos, state, false, false);
++            });
++        } else if (packet instanceof ClientboundBlockEntityDataPacket update) {
++            LOGGER.info("NBT received " + update.getTag());
++            blockUpdateChunk = ((CraftWorld) Bukkit.getWorld(world)).getHandle().getChunkIfLoaded(update.getPos());
++            blockUpdateChunk.removeBlockEntity(update.getPos());
++            blockUpdateChunk.setBlockEntityNbt(update.getTag());
++            // Rebuild the packet before sending it to the clients (to hide sensitive data)
++            LOGGER.info("NBT saved as " + blockUpdateChunk.getBlockEntity(update.getPos()).save(new CompoundTag()));
++            packet = blockUpdateChunk.getBlockEntity(update.getPos()).getUpdatePacket();
++        } else if (packet instanceof ClientboundLightUpdatePacket update) {
++            blockUpdateChunk = ((CraftWorld) Bukkit.getWorld(world)).getHandle().getChunkIfLoaded(update.getX(), update.getZ());
++            // TODO: Doesn't work
++            handleLightUpdatePacket(blockUpdateChunk, update);
++        }
++
++        if (blockUpdateChunk != null && packet != null) {
++            blockUpdateChunk.playerChunk.broadcast(packet, false);
++        }
++        blockUpdateChunk = null;
++    }
++
++    // From the client
++    private static void handleLightUpdatePacket(LevelChunk chunk, ClientboundLightUpdatePacket packet) {
++        int i = packet.getX();
++        int j = packet.getZ();
++        LevelLightEngine levellightengine = chunk.level.getChunkSource().getLightEngine();
++        BitSet bitset = packet.getSkyYMask();
++        BitSet bitset1 = packet.getEmptySkyYMask();
++        Iterator<byte[]> iterator = packet.getSkyUpdates().iterator();
++        readSectionList(i, j, levellightengine, LightLayer.SKY, bitset, bitset1, iterator, packet.getTrustEdges());
++        BitSet bitset2 = packet.getBlockYMask();
++        BitSet bitset3 = packet.getEmptyBlockYMask();
++        Iterator<byte[]> iterator1 = packet.getBlockUpdates().iterator();
++        readSectionList(i, j, levellightengine, LightLayer.BLOCK, bitset2, bitset3, iterator1, packet.getTrustEdges());
++    }
++
++    // From the client
++    private static void readSectionList(int i, int j, LevelLightEngine levelLightEngine, LightLayer lightLayer, BitSet bitset2, BitSet bitset3, Iterator<byte[]> iterator1, boolean trustEdges) {
++        for(int k = 0; k < levelLightEngine.getLightSectionCount(); ++k) {
++            int l = levelLightEngine.getMinLightSection() + k;
++            boolean flag = bitset2.get(k);
++            boolean flag1 = bitset3.get(k);
++            if (flag || flag1) {
++                levelLightEngine.queueSectionData(lightLayer, SectionPos.of(i, l, j), flag ? new DataLayer((byte[])iterator1.next().clone()) : new DataLayer(), trustEdges);
++            }
++        }
++    }
++}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 index 3d19e69add10e8a6a8305d9b651f30cbf4034c12..8ad8dfa428bf54d2686771063b05d3f0c189aaab 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java

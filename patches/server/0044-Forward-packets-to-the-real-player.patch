@@ -24,7 +24,7 @@ index ff478815a4366819fe72c73ae7acea18fae6b133..3eeead16367087d48fc7b091d017d329
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 7a4d2484c2b98a0df4916467625100226b8d3676..4d21c63a9b744bf69a6cb30a83c3fc174e93dcc3 100644
+index 7a4d2484c2b98a0df4916467625100226b8d3676..874e0996cb5a5ea9fe870910a2e1b62408faf507 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -1,6 +1,13 @@
@@ -41,12 +41,34 @@ index 7a4d2484c2b98a0df4916467625100226b8d3676..4d21c63a9b744bf69a6cb30a83c3fc17
  import net.minecraft.server.level.ServerPlayer;
  import net.minecraft.world.entity.Entity;
  import org.apache.logging.log4j.LogManager;
-@@ -79,6 +86,19 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -10,14 +17,16 @@ import org.bukkit.craftbukkit.scheduler.CraftScheduler;
+ 
+ import java.io.*;
+ import java.net.Socket;
+-import java.util.UUID;
++import java.util.*;
+ 
+ public class ExternalServerConnection extends Thread implements Closeable {
+ 
+     private static final Logger LOGGER = LogManager.getLogger(ExternalServerConnection.class.getSimpleName());
++    private static Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
+ 
+     private Socket socket;
+     private ExternalServer externalServer = null;
++    private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new HashMap<>();
+ 
+     public ExternalServerConnection(Socket socket) {
+         this.socket = socket;
+@@ -79,6 +88,25 @@ public class ExternalServerConnection extends Thread implements Closeable {
                      } else {
                          LOGGER.warn("Tried to move a non-existant player with entity id of " + id);
                      }
 +                } else if (message.equals("sendPacket")) {
-+                    int id = in.readInt();
++                    int idCount = in.readShort();
++                    int[] ids = new int[idCount];
++                    for (int i = 0; i < idCount; i++) {
++                        ids[i] = in.readInt();
++                    }
 +                    int length = in.readInt();
 +                    byte[] bytes = new byte[length];
 +                    in.readFully(bytes);
@@ -54,22 +76,62 @@ index 7a4d2484c2b98a0df4916467625100226b8d3676..4d21c63a9b744bf69a6cb30a83c3fc17
 +                    FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
 +                    int packetId = friendlyByteBuf.readVarInt();
 +                    Packet<?> packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
-+                    ServerPlayer player = getPlayerById(id);
-+                    if (player != null) {
-+                        player.connection.send(packet);
++                    for (int id : ids) {
++                        ServerPlayer player = getPlayerById(id);
++                        if (player != null) {
++                            player.connection.send(packet);
++                        }
 +                    }
                  }
              }
          } catch (EOFException e) {
-@@ -160,6 +180,26 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -102,6 +130,18 @@ public class ExternalServerConnection extends Thread implements Closeable {
+         }
+     }
+ 
++    public void tick() {
++        // Send the packets after each vanilla tick
++        synchronized (packetsToSend) {
++            packetsToSend.forEach((packet, players) -> {
++                sendPacket(players, packet);
++                players.clear();
++                externalPlayerListPool.add(players);
++            });
++            packetsToSend.clear();
++        }
++    }
++
+     private ServerPlayer getPlayerById(int id) {
+         for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
+             if (player.getId() == id) {
+@@ -160,6 +200,45 @@ public class ExternalServerConnection extends Thread implements Closeable {
          }
      }
  
 +    public void sendPacket(ExternalPlayer player, Packet<?> packet) {
++        // Combine all the players that the packet's being sent to together
++        // so that the packet only needs to be sent to the external server
++        // just once, not duplicated for each player
++        synchronized (packetsToSend) {
++            List<ExternalPlayer> players = packetsToSend.computeIfAbsent(packet, key -> {
++                List<ExternalPlayer> list = externalPlayerListPool.poll();
++                if (list == null) {
++                    list = new ArrayList<>();
++                }
++                return list;
++            });
++            players.add(player);
++        }
++    }
++
++    public void sendPacket(List<ExternalPlayer> players, Packet<?> packet) {
 +        try {
 +            PacketBuffer buffer = new PacketBuffer(socket);
 +            buffer.writeUTF("sendPacket");
-+            buffer.writeInt(player.getId());
++            buffer.writeShort(players.size());
++            for (ExternalPlayer player : players) {
++                buffer.writeInt(player.getId());
++            }
 +            ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
 +            Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
 +            ByteBuf buf = Unpooled.buffer();
@@ -88,3 +150,21 @@ index 7a4d2484c2b98a0df4916467625100226b8d3676..4d21c63a9b744bf69a6cb30a83c3fc17
      private static class PacketBuffer extends DataOutputStream {
          private final Socket socket;
  
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index d0c3593567166ef2eb18b49ca059868386a224b4..106b5f0576c5ac76ee79e84c117a0ee8ba6458e5 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -58,6 +58,13 @@ public class MultiPaper {
+                 }
+             }
+         }
++
++        for (ExternalServer server : getConnection().getServersMap().values()) {
++            if (server.getConnection() != null) {
++                // This tick function must be run after the vanilla tick
++                server.getConnection().tick();
++            }
++        }
+     }
+ 
+     public static void sendTickTime(long time) {

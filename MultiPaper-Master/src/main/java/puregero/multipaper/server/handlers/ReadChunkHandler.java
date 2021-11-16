@@ -2,6 +2,7 @@ package puregero.multipaper.server.handlers;
 
 import puregero.multipaper.server.DataOutputSender;
 import puregero.multipaper.server.ServerConnection;
+import puregero.multipaper.server.locks.ChunkLock;
 import puregero.multipaper.server.util.RegionFileCache;
 
 import java.io.DataInputStream;
@@ -16,11 +17,23 @@ public class ReadChunkHandler implements Handler {
         int cx = in.readInt();
         int cz = in.readInt();
 
+        if (path.equals("region") || path.equals("entities")) {
+            ServerConnection owner = ChunkLock.getOwner(world, cx, cz);
+            if (owner != null && owner != connection) {
+                out.writeUTF("chunkData");
+                out.writeUTF(owner.getBungeeCordName());
+                out.writeInt(0);
+                out.send();
+                return;
+            }
+        }
+
         byte[] b = RegionFileCache.getChunkDeflatedData(getWorldDir(world, path), cx, cz);
         if (b == null) {
             b = new byte[0];
         }
         out.writeUTF("chunkData");
+        out.writeUTF("");
         out.writeInt(b.length);
         out.write(b);
         out.send();

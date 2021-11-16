@@ -2,6 +2,7 @@ package puregero.multipaper.server;
 
 import puregero.multipaper.server.handlers.Handler;
 import puregero.multipaper.server.handlers.Handlers;
+import puregero.multipaper.server.locks.ChunkLock;
 
 import java.io.*;
 import java.net.Socket;
@@ -150,6 +151,8 @@ public class ServerConnection extends Thread {
         try {
             socket.close();
         } catch (Exception ignored) {}
+
+        ChunkLock.unlockAll(this);
 
         connections.remove(this);
         System.out.println(socket.getRemoteSocketAddress() + " (" + name + ") closed");

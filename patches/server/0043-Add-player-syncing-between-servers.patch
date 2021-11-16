@@ -71,7 +71,7 @@ index eaa005c1c9b4386bcdbe1d6eb28c3eca7635066c..bfb203069a0331d38a8b224dedeb4cfc
          if (++this.sendAllPlayerInfoIn > 600) {
              // CraftBukkit start
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index aac9dd19237d0708990960d03328e7530cd7bc8e..f911ff2825ab2ea6b3e82bd97b1e24dc35e73bb5 100644
+index aac9dd19237d0708990960d03328e7530cd7bc8e..58fdc7257858b3494aef290a5c029ffcef4e2089 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -147,6 +147,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -91,21 +91,28 @@ index aac9dd19237d0708990960d03328e7530cd7bc8e..f911ff2825ab2ea6b3e82bd97b1e24dc
      private static final List<ItemStack> EMPTY_LIST = Collections.emptyList();
      public static final int BOARDING_COOLDOWN = 60;
      public static final int TOTAL_AIR_SUPPLY = 300;
-@@ -495,7 +496,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+@@ -494,8 +495,14 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+     public int sectionZ = Integer.MIN_VALUE;
      // Paper end
  
++    // MultiPaper start - New next id functionality
++    public int getNextId() {
++        return Entity.ENTITY_COUNTER.addAndGet(256);
++    }
++    // MultiPaper end
++
      public Entity(EntityType<?> type, Level world) {
 -        this.id = Entity.ENTITY_COUNTER.incrementAndGet();
-+        this.id = Entity.ENTITY_COUNTER.addAndGet(256); // MultiPaper - Change increment value
++        this.id = getNextId(); // MultiPaper - New id getter
          this.passengers = ImmutableList.of();
          this.deltaMovement = Vec3.ZERO;
          this.bb = Entity.INITIAL_AABB;
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ff478815a4366819fe72c73ae7acea18fae6b133
+index 0000000000000000000000000000000000000000..1fc56b264bb5b7b302abe7a90c66d5f60834e6aa
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,67 @@
 +package puregero.multipaper;
 +
 +import com.mojang.authlib.GameProfile;
@@ -114,7 +121,6 @@ index 0000000000000000000000000000000000000000..ff478815a4366819fe72c73ae7acea18
 +import net.minecraft.network.Connection;
 +import net.minecraft.network.protocol.Packet;
 +import net.minecraft.network.protocol.PacketFlow;
-+import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.server.network.ServerGamePacketListenerImpl;
 +import org.apache.logging.log4j.LogManager;
@@ -122,6 +128,7 @@ index 0000000000000000000000000000000000000000..ff478815a4366819fe72c73ae7acea18
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftServer;
 +import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.event.entity.CreatureSpawnEvent;
 +
 +import javax.annotation.Nullable;
 +import java.util.UUID;
@@ -129,17 +136,32 @@ index 0000000000000000000000000000000000000000..ff478815a4366819fe72c73ae7acea18
 +public class ExternalPlayer extends ServerPlayer {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(ExternalPlayer.class.getSimpleName());
++    private static int nextId = -1;
 +    public ExternalServerConnection externalServerConnection;
 +
-+    public ExternalPlayer(ExternalServerConnection externalServerConnection, int id, String name, UUID uuid, String world, double x, double y, double z) {
++    public static void create(ExternalServerConnection externalServerConnection, int id, String name, UUID uuid, String world, double x, double y, double z) {
++        nextId = id;
++        new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z);
++    }
++
++    @Override
++    public int getNextId() {
++        if (nextId == -1) {
++            LOGGER.warn("Tried to get the next id for ExternalPlayer, but it's -1");
++            return super.getNextId();
++        }
++        int id = nextId;
++        nextId = -1;
++        return id;
++    }
++
++    public ExternalPlayer(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z) {
 +        super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), new GameProfile(uuid, name));
 +        this.externalServerConnection = externalServerConnection;
-+        ((ServerLevel) level).removePlayerImmediately(this, RemovalReason.UNLOADED_WITH_PLAYER);
-+        setId(id);
 +        connection = new ServerGamePacketListenerImpl(getServer(), new ExternalPlayerConnection(PacketFlow.CLIENTBOUND), this);
 +        setPos(x, y, z);
 +        getServer().getPlayerList().addPlayer(this);
-+        ((ServerLevel) level).addNewPlayer(this);
++        level.addEntity(this, CreatureSpawnEvent.SpawnReason.CUSTOM);
 +    }
 +
 +    private class ExternalPlayerConnection extends Connection {
@@ -159,7 +181,7 @@ index 0000000000000000000000000000000000000000..ff478815a4366819fe72c73ae7acea18
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 73c721e4e11c8a0f13f1af8e5e289531da38a56d..7a4d2484c2b98a0df4916467625100226b8d3676 100644
+index 73c721e4e11c8a0f13f1af8e5e289531da38a56d..0b5d17b4821a3c15e493ce9c50a9b81b2da0502c 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -1,10 +1,16 @@
@@ -191,7 +213,7 @@ index 73c721e4e11c8a0f13f1af8e5e289531da38a56d..7a4d2484c2b98a0df491646762510022
 +                    double x = in.readDouble();
 +                    double y = in.readDouble();
 +                    double z = in.readDouble();
-+                    runSync(() -> new ExternalPlayer(this, id, name, uuid, world, x, y, z));
++                    runSync(() -> ExternalPlayer.create(this, id, name, uuid, world, x, y, z));
 +                } else if (message.equals("removePlayer")) {
 +                    int id = in.readInt();
 +                    ServerPlayer player = getPlayerById(id);

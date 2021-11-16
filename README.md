@@ -33,6 +33,25 @@ MultiPaper 2.0:
   player nearby to load the chunks, and forwards these packets to the
   ExternalPlayer's server so that they are sent to the real player
 - Servers do not send packets for chunks that they are not ticking
+
+How chunk syncing works:
+
+- When a server reads a chunk, it asks the Master to load the chunk from the
+  region file. If another server has ownership of the chunk, the Master will
+  tell the server to load the chunk from the other server and subscribe to it.
+- If the chunk has no owner and is loaded, it won't immediately be taken
+  ownership of as it could be an edge chunk that won't get ticked.
+- When the server wants to tick an unowned chunk, it won't but will send a
+  request to the Master to take ownership of it. If ownership is granted, the
+  chunk will be ticked next tick. If ownership is denied since another server
+  owns it, the server will redownload the chunk from that server and subscribe
+  to it.
+- Each tick the server will keep track of what chunks it has ticked. If a chunk
+  it owns hasn't been ticked, it'll remove ownership of the chunk. The Master
+  will check if any other servers are subscribed to the chunk, and update them
+  with a new owner.
+- If a server is subscribed to another server's chunk, that means any block
+  changes will be sent to that server to keep it in sync.
   
 Setting up MultiPaper
 ------

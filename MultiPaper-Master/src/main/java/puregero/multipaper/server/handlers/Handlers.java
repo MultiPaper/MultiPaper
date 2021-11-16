@@ -9,6 +9,8 @@ public class Handlers {
     static {
         handlers.put("readChunk", new ReadChunkHandler());
         handlers.put("writeChunk", new WriteChunkHandler());
+        handlers.put("lockChunk", new LockChunkHandler());
+        handlers.put("unlockChunk", new UnlockChunkHandler());
         handlers.put("readLevel", new ReadLevelHandler());
         handlers.put("writeLevel", new WriteLevelHandler());
         handlers.put("readJson", new ReadJsonHandler());
@@ -18,7 +20,6 @@ public class Handlers {
         handlers.put("readUid", new ReadUidHandler());
         handlers.put("writeUid", new WriteUidHandler());
         handlers.put("writeTickTime", new WriteTickTimeHandler());
-        handlers.put("chunkNotSaving", new ChunkNotSavingHandler());
         handlers.put("readAdvancements", new ReadAdvancementsHandler());
         handlers.put("writeAdvancements", new WriteAdvancementsHandler());
         handlers.put("readStats", new ReadStatsHandler());

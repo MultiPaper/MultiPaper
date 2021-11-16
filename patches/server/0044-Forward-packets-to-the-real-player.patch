@@ -5,7 +5,7 @@ Subject: [PATCH] Forward packets to the real player
 
 
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index d40a2249a87b4c6eeb3484156d64e2e44df11c75..6eaf6c2f02bce163bf79adcbcc560df887bc4be0 100644
+index ff478815a4366819fe72c73ae7acea18fae6b133..3eeead16367087d48fc7b091d017d3291ca17234 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
 @@ -46,7 +46,13 @@ public class ExternalPlayer extends ServerPlayer {
@@ -24,7 +24,7 @@ index d40a2249a87b4c6eeb3484156d64e2e44df11c75..6eaf6c2f02bce163bf79adcbcc560df8
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 51e02f826928b382a2fab4bbc1b38e005855b952..41d5c072a8b7cd3c571bdbd05148243491761dda 100644
+index 7a4d2484c2b98a0df4916467625100226b8d3676..4d21c63a9b744bf69a6cb30a83c3fc174e93dcc3 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -1,6 +1,13 @@
@@ -41,8 +41,8 @@ index 51e02f826928b382a2fab4bbc1b38e005855b952..41d5c072a8b7cd3c571bdbd051482434
  import net.minecraft.server.level.ServerPlayer;
  import net.minecraft.world.entity.Entity;
  import org.apache.logging.log4j.LogManager;
-@@ -87,6 +94,21 @@ public class ExternalServerConnection extends Thread implements Closeable {
-                     if (id != -1) {
+@@ -79,6 +86,19 @@ public class ExternalServerConnection extends Thread implements Closeable {
+                     } else {
                          LOGGER.warn("Tried to move a non-existant player with entity id of " + id);
                      }
 +                } else if (message.equals("sendPacket")) {
@@ -54,16 +54,14 @@ index 51e02f826928b382a2fab4bbc1b38e005855b952..41d5c072a8b7cd3c571bdbd051482434
 +                    FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
 +                    int packetId = friendlyByteBuf.readVarInt();
 +                    Packet<?> packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
-+                    for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
-+                        if (player.getId() == id) {
-+                            player.connection.send(packet);
-+                            break;
-+                        }
++                    ServerPlayer player = getPlayerById(id);
++                    if (player != null) {
++                        player.connection.send(packet);
 +                    }
                  }
              }
          } catch (EOFException e) {
-@@ -153,6 +175,26 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -160,6 +180,26 @@ public class ExternalServerConnection extends Thread implements Closeable {
          }
      }
  

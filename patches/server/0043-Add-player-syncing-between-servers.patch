@@ -4,6 +4,39 @@ Date: Mon, 15 Nov 2021 20:30:35 +1000
 Subject: [PATCH] Add player syncing between servers
 
 
+diff --git a/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java b/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java
+index 4eadc15f747528b59349f095171dd5a649a46ed9..f0af73aa7c17de5cad5c9c7c560b8ead9e5ee1a9 100644
+--- a/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java
++++ b/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java
+@@ -22,6 +22,8 @@ import net.minecraft.server.level.TicketType;
+ import net.minecraft.util.Mth;
+ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.chunk.LevelChunk;
++import puregero.multipaper.ExternalPlayer;
++
+ import java.util.ArrayDeque;
+ import java.util.ArrayList;
+ import java.util.List;
+@@ -448,6 +450,8 @@ public final class PlayerChunkLoader {
+ 
+             this.chunkSendWaitQueue.pollFirst();
+ 
++            if (data.player instanceof ExternalPlayer) continue; // MultiPaper - don't send chunks to ExternalPlayers
++
+             this.chunkSendQueue.add(data);
+         }
+ 
+@@ -867,6 +871,10 @@ public final class PlayerChunkLoader {
+             this.player.needsChunkCenterUpdate = true;
+             this.loader.broadcastMap.addOrUpdate(this.player, centerChunkX, centerChunkZ, sendViewDistance);
+             this.player.needsChunkCenterUpdate = false;
++
++            // MultiPaper start - Don't load chunks for an ExternalPlayer, but do broadcast changes to us
++            if (this.player instanceof ExternalPlayer) return;
++
+             this.loader.loadMap.addOrUpdate(this.player, centerChunkX, centerChunkZ, loadViewDistance);
+             this.loader.loadTicketCleanup.addOrUpdate(this.player, centerChunkX, centerChunkZ, loadViewDistance + 1);
+             this.loader.tickMap.addOrUpdate(this.player, centerChunkX, centerChunkZ, tickViewDistance);
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
 index eaa005c1c9b4386bcdbe1d6eb28c3eca7635066c..bfb203069a0331d38a8b224dedeb4cfc9b24ba63 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
@@ -109,10 +142,10 @@ index aac9dd19237d0708990960d03328e7530cd7bc8e..58fdc7257858b3494aef290a5c029ffc
          this.bb = Entity.INITIAL_AABB;
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..1fc56b264bb5b7b302abe7a90c66d5f60834e6aa
+index 0000000000000000000000000000000000000000..8d4c1e482c8bb5c8b4c23a1e07e674980fb3bc5c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,68 @@
 +package puregero.multipaper;
 +
 +import com.mojang.authlib.GameProfile;
@@ -158,6 +191,7 @@ index 0000000000000000000000000000000000000000..1fc56b264bb5b7b302abe7a90c66d5f6
 +    public ExternalPlayer(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z) {
 +        super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), new GameProfile(uuid, name));
 +        this.externalServerConnection = externalServerConnection;
++        this.isRealPlayer = true;
 +        connection = new ServerGamePacketListenerImpl(getServer(), new ExternalPlayerConnection(PacketFlow.CLIENTBOUND), this);
 +        setPos(x, y, z);
 +        getServer().getPlayerList().addPlayer(this);

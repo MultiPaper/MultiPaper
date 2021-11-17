@@ -7,20 +7,13 @@ import puregero.multipaper.server.ChunkSubscriptionManager;
 import java.io.DataInputStream;
 import java.io.IOException;
 
-public class LockChunkHandler implements Handler {
+public class UnsubscribeChunkHandler implements Handler {
     @Override
     public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
         String world = in.readUTF();
         int cx = in.readInt();
         int cz = in.readInt();
 
-        ServerConnection owner = ChunkSubscriptionManager.lock(connection, world, cx, cz);
-
-        out.writeUTF("chunkOwner");
-        out.writeUTF(world);
-        out.writeInt(cx);
-        out.writeInt(cz);
-        out.writeUTF(owner.getBungeeCordName());
-        out.send();
+        ChunkSubscriptionManager.unsubscribe(connection, world, cx, cz);
     }
 }

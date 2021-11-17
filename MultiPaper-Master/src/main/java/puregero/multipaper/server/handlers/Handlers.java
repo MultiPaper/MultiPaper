@@ -8,9 +8,11 @@ public class Handlers {
 
     static {
         handlers.put("readChunk", new ReadChunkHandler());
+        handlers.put("forceReadChunk", new ForceReadChunkHandler());
         handlers.put("writeChunk", new WriteChunkHandler());
         handlers.put("lockChunk", new LockChunkHandler());
         handlers.put("unlockChunk", new UnlockChunkHandler());
+        handlers.put("unsubscribeChunk", new UnsubscribeChunkHandler());
         handlers.put("readLevel", new ReadLevelHandler());
         handlers.put("writeLevel", new WriteLevelHandler());
         handlers.put("readJson", new ReadJsonHandler());

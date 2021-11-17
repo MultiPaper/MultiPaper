@@ -394,10 +394,10 @@ index f718693be5d04ef4ec045bb8de206a072c6c6813..aa5367c8aa4288625c21b10e10e8b088
          }
      }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 31101c72b96785e0b428d287b3aab6396036db0d..64c4ab210984b3a9503d91cbcb1663b1daf8e0a9 100644
+index e53dfcc6e2f5b50594cb12e9ef0a075e9f2e8f4c..b8aebdb374b2e65acdcbe220cc7ebe4228cf04e6 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -2,22 +2,34 @@ package puregero.multipaper;
+@@ -2,19 +2,33 @@ package puregero.multipaper;
  
  import io.netty.buffer.ByteBuf;
  import io.netty.buffer.Unpooled;
@@ -414,16 +414,14 @@ index 31101c72b96785e0b428d287b3aab6396036db0d..64c4ab210984b3a9503d91cbcb1663b1
  import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
--import net.minecraft.world.entity.Entity;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.ImposterProtoChunk;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.level.chunk.storage.ChunkSerializer;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
- import org.bukkit.Bukkit;
++import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
- import org.bukkit.craftbukkit.scheduler.CraftScheduler;
 +import org.bukkit.util.Consumer;
  
  import java.io.*;
@@ -433,7 +431,7 @@ index 31101c72b96785e0b428d287b3aab6396036db0d..64c4ab210984b3a9503d91cbcb1663b1
  
  public class ExternalServerConnection extends Thread implements Closeable {
  
-@@ -27,6 +39,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -24,6 +38,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
      private Socket socket;
      private ExternalServer externalServer = null;
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new HashMap<>();
@@ -441,7 +439,7 @@ index 31101c72b96785e0b428d287b3aab6396036db0d..64c4ab210984b3a9503d91cbcb1663b1
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
-@@ -107,6 +120,61 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -104,6 +119,61 @@ public class ExternalServerConnection extends Thread implements Closeable {
                              player.connection.send(packet);
                          }
                      }
@@ -455,7 +453,7 @@ index 31101c72b96785e0b428d287b3aab6396036db0d..64c4ab210984b3a9503d91cbcb1663b1
 +                    int packetId = friendlyByteBuf.readVarInt();
 +                    Packet<?> packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
 +                    if (packet instanceof ClientboundBlockUpdatePacket || packet instanceof ClientboundSectionBlocksUpdatePacket || packet instanceof ClientboundLightUpdatePacket || packet instanceof ClientboundBlockEntityDataPacket) {
-+                        runSync(() -> MultiPaperChunkHandler.handleBlockUpdate(world, packet));
++                        MultiPaper.runSync(() -> MultiPaperChunkHandler.handleBlockUpdate(world, packet));
 +                    } else {
 +                        LOGGER.warn("Unhandled packet of type " + packet.getClass().getSimpleName());
 +                    }
@@ -489,7 +487,7 @@ index 31101c72b96785e0b428d287b3aab6396036db0d..64c4ab210984b3a9503d91cbcb1663b1
 +                            ChunkSerializer.InProgressChunkHolder holder = ChunkSerializer.loadChunk(level, null, level.getPoiManager(), new ChunkPos(cx, cz), tag, true);
 +                            LevelChunk newChunk = ((ImposterProtoChunk) holder.protoChunk).getWrapped();
 +                            newChunk.externalOwner = externalServer;
-+                            runSync(newChunk::loadCallback);
++                            MultiPaper.runSync(newChunk::loadCallback);
 +                        }
 +                    }
 +                } else if (message.equals("unsubscribeFromChunk")) {
@@ -503,7 +501,7 @@ index 31101c72b96785e0b428d287b3aab6396036db0d..64c4ab210984b3a9503d91cbcb1663b1
                  }
              }
          } catch (EOFException e) {
-@@ -239,6 +307,73 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -232,6 +302,73 @@ public class ExternalServerConnection extends Thread implements Closeable {
          }
      }
  
@@ -578,29 +576,25 @@ index 31101c72b96785e0b428d287b3aab6396036db0d..64c4ab210984b3a9503d91cbcb1663b1
          private final Socket socket;
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..04ac57dda76616f2af72fb70f26c9692b8d29660 100644
+index ddc8dad011c1c02035a8641c800956124048e93d..a9baa59cfa9cf706f0bebc13b5bdbf064578fcd3 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,31 +1,37 @@
+@@ -1,32 +1,34 @@
  package puregero.multipaper;
--
-+import net.minecraft.core.BlockPos;
+ 
+ import net.minecraft.server.MinecraftServer;
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.nbt.NbtIo;
-+import net.minecraft.network.protocol.Packet;
  import net.minecraft.server.dedicated.DedicatedServer;
-+import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.level.ChunkPos;
-+import net.minecraft.world.level.Level;
 +import net.minecraft.world.level.chunk.LevelChunk;
  
 -import java.io.File;
 -import java.io.IOException;
 +import java.io.*;
  import java.nio.file.Files;
-+import java.util.Collections;
  import java.util.HashMap;
  import java.util.UUID;
 +import java.util.zip.DeflaterOutputStream;
@@ -626,17 +620,15 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..04ac57dda76616f2af72fb70f26c9692
      private static String bungeeCordName = null;
      public static String getBungeeCordName() {
          if (bungeeCordName == null) {
-@@ -41,9 +47,7 @@ public class MultiPaper {
-         }
-         return bungeeCordName;
+@@ -48,7 +50,6 @@ public class MultiPaper {
      }
--
+ 
      private static HashMap<UUID, Double> lastLocations = new HashMap<UUID, Double>();
 -
      public static void tick() {
          for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
              if (!(player instanceof ExternalPlayer)) {
-@@ -58,7 +62,6 @@ public class MultiPaper {
+@@ -63,7 +64,6 @@ public class MultiPaper {
                  }
              }
          }
@@ -644,7 +636,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..04ac57dda76616f2af72fb70f26c9692
          for (ExternalServer server : getConnection().getServersMap().values()) {
              if (server.getConnection() != null) {
                  // This tick function must be run after the vanilla tick
-@@ -66,17 +69,14 @@ public class MultiPaper {
+@@ -71,17 +71,14 @@ public class MultiPaper {
              }
          }
      }
@@ -662,7 +654,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..04ac57dda76616f2af72fb70f26c9692
      public static void onStart() {
          try {
              externalServerSocket = new ExternalServerSocket();
-@@ -85,7 +85,6 @@ public class MultiPaper {
+@@ -90,7 +87,6 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -670,7 +662,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..04ac57dda76616f2af72fb70f26c9692
      public static void onPlayerJoin(ServerPlayer player) {
          getConnection().getServersMap().values().forEach(externalServer -> {
              if (externalServer.getConnection() != null) {
-@@ -93,7 +92,6 @@ public class MultiPaper {
+@@ -98,7 +94,6 @@ public class MultiPaper {
              }
          });
      }
@@ -678,7 +670,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..04ac57dda76616f2af72fb70f26c9692
      public static void onPlayerDisconnect(ServerPlayer player) {
          if (!(player instanceof ExternalPlayer)) {
              getConnection().getServersMap().values().forEach(externalServer -> {
-@@ -103,7 +101,6 @@ public class MultiPaper {
+@@ -108,7 +103,6 @@ public class MultiPaper {
              });
          }
      }
@@ -686,7 +678,7 @@ index 106b5f0576c5ac76ee79e84c117a0ee8ba6458e5..04ac57dda76616f2af72fb70f26c9692
      public static int getEntityCounterStartValue() {
          try {
              return getConnection().getEntityCounterStartValue().join();
-@@ -111,8 +108,91 @@ public class MultiPaper {
+@@ -116,8 +110,91 @@ public class MultiPaper {
              throw new RuntimeException(e);
          }
      }

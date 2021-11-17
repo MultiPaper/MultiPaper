@@ -181,19 +181,16 @@ index 0000000000000000000000000000000000000000..1fc56b264bb5b7b302abe7a90c66d5f6
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 73c721e4e11c8a0f13f1af8e5e289531da38a56d..0b5d17b4821a3c15e493ce9c50a9b81b2da0502c 100644
+index 73c721e4e11c8a0f13f1af8e5e289531da38a56d..896729fec75279642df2879d50125935c31e4ca2 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -1,10 +1,16 @@
+@@ -1,10 +1,13 @@
  package puregero.multipaper;
  
 +import net.minecraft.server.dedicated.DedicatedServer;
 +import net.minecraft.server.level.ServerPlayer;
-+import net.minecraft.world.entity.Entity;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
-+import org.bukkit.Bukkit;
-+import org.bukkit.craftbukkit.scheduler.CraftScheduler;
  
  import java.io.*;
  import java.net.Socket;
@@ -201,7 +198,7 @@ index 73c721e4e11c8a0f13f1af8e5e289531da38a56d..0b5d17b4821a3c15e493ce9c50a9b81b
  
  public class ExternalServerConnection extends Thread implements Closeable {
  
-@@ -44,6 +50,35 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -44,6 +47,35 @@ public class ExternalServerConnection extends Thread implements Closeable {
                      LOGGER.info("Connected to external server " + name);
                      externalServer = MultiPaper.getConnection().getServersMap().computeIfAbsent(name, key -> new ExternalServer(key, key.equals(MultiPaper.getBungeeCordName())));
                      externalServer.setConnection(this);
@@ -213,11 +210,11 @@ index 73c721e4e11c8a0f13f1af8e5e289531da38a56d..0b5d17b4821a3c15e493ce9c50a9b81b
 +                    double x = in.readDouble();
 +                    double y = in.readDouble();
 +                    double z = in.readDouble();
-+                    runSync(() -> ExternalPlayer.create(this, id, name, uuid, world, x, y, z));
++                    MultiPaper.runSync(() -> ExternalPlayer.create(this, id, name, uuid, world, x, y, z));
 +                } else if (message.equals("removePlayer")) {
 +                    int id = in.readInt();
 +                    ServerPlayer player = getPlayerById(id);
-+                    runSync(() -> player.connection.disconnect("Disconnected from external server"));
++                    MultiPaper.runSync(() -> player.connection.disconnect("Disconnected from external server"));
 +                } else if (message.equals("movePlayer")) {
 +                    int id = in.readInt();
 +                    double x = in.readDouble();
@@ -227,7 +224,7 @@ index 73c721e4e11c8a0f13f1af8e5e289531da38a56d..0b5d17b4821a3c15e493ce9c50a9b81b
 +                    float pitch = in.readFloat();
 +                    ServerPlayer player = getPlayerById(id);
 +                    if (player != null) {
-+                        runSync(() -> {
++                        MultiPaper.runSync(() -> {
 +                            player.moveTo(x, y, z, yaw, pitch);
 +                            player.getLevel().getChunkSource().move(player);
 +                        });
@@ -237,14 +234,14 @@ index 73c721e4e11c8a0f13f1af8e5e289531da38a56d..0b5d17b4821a3c15e493ce9c50a9b81b
                  }
              }
          } catch (EOFException e) {
-@@ -59,6 +94,70 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -59,6 +91,66 @@ public class ExternalServerConnection extends Thread implements Closeable {
          } catch (Exception e) {
              // Ignore
          }
 +
 +        for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
 +            if (player instanceof ExternalPlayer && ((ExternalPlayer) player).externalServerConnection == this) {
-+                runSync(() -> player.connection.disconnect("External server disconnected"));
++                MultiPaper.runSync(() -> player.connection.disconnect("External server disconnected"));
 +            }
 +        }
 +    }
@@ -256,10 +253,6 @@ index 73c721e4e11c8a0f13f1af8e5e289531da38a56d..0b5d17b4821a3c15e493ce9c50a9b81b
 +            }
 +        }
 +        return null;
-+    }
-+
-+    private void runSync(Runnable runnable) {
-+        ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(runnable, 0, "ExternalServerConnection-" + runnable.getClass().getName());
 +    }
 +
 +    public void sendPlayerCreate(ServerPlayer player) {
@@ -309,12 +302,13 @@ index 73c721e4e11c8a0f13f1af8e5e289531da38a56d..0b5d17b4821a3c15e493ce9c50a9b81b
  
      private static class PacketBuffer extends DataOutputStream {
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index e3d29fd5be7d86d4c3127573160ce02a6666e66b..d0c3593567166ef2eb18b49ca059868386a224b4 100644
+index e3d29fd5be7d86d4c3127573160ce02a6666e66b..d7ae0669ef10e1994c02fa8a9510c3d1f5ba8292 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,10 +1,20 @@
+@@ -1,10 +1,21 @@
  package puregero.multipaper;
  
++import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.dedicated.DedicatedServer;
 +import net.minecraft.server.level.ServerPlayer;
 +
@@ -333,10 +327,14 @@ index e3d29fd5be7d86d4c3127573160ce02a6666e66b..d0c3593567166ef2eb18b49ca0598683
      private static MultiPaperConnection multiPaperConnection = null;
      private static ExternalServerSocket externalServerSocket = null;
  
-@@ -32,9 +42,29 @@ public class MultiPaper {
+@@ -32,9 +43,33 @@ public class MultiPaper {
          return bungeeCordName;
      }
  
++    public static void runSync(Runnable runnable) {
++        MinecraftServer.getServer().scheduleOnMain(runnable);
++    }
++
 +    private static HashMap<UUID, Double> lastLocations = new HashMap<UUID, Double>();
 +
 +    public static void tick() {
@@ -363,7 +361,7 @@ index e3d29fd5be7d86d4c3127573160ce02a6666e66b..d0c3593567166ef2eb18b49ca0598683
          } catch (IOException e) {
              e.printStackTrace();
          }
-@@ -48,4 +78,34 @@ public class MultiPaper {
+@@ -48,4 +83,34 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }

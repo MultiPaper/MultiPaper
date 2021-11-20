@@ -202,154 +202,8 @@ index 8d329bca0818033df41fbd781028919c73e052a6..8a01433c65f5d24acb4501bd59a233c4
                  }
              }
  
-diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index af98a71ae3d3e6b40852ced13a30b7136accf0cb..5d7e64b2d345c89de2964df3bb82c7a3c20419b9 100644
---- a/src/main/java/puregero/multipaper/ExternalPlayer.java
-+++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -68,6 +68,11 @@ public class ExternalPlayer extends ServerPlayer {
-             return true;
-         }
- 
-+        @Override
-+        public boolean isConnected() {
-+            return true;
-+        }
-+
-         @Override
-         public void send(Packet<?> packet, @Nullable GenericFutureListener<? extends Future<? super Void>> callback) {
- //            LOGGER.info("Forwarding packet " + packet);
-diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 214acb5313ca5c29ede83b69c8e1cf557d7edd26..603de12f873381c269a359eeb8186f294a8540fe 100644
---- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
-+++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -3,19 +3,20 @@ package puregero.multipaper;
- import io.netty.buffer.ByteBuf;
- import io.netty.buffer.Unpooled;
- import net.minecraft.nbt.CompoundTag;
-+import net.minecraft.nbt.ListTag;
- import net.minecraft.nbt.NbtIo;
-+import net.minecraft.nbt.Tag;
- import net.minecraft.network.ConnectionProtocol;
- import net.minecraft.network.FriendlyByteBuf;
- import net.minecraft.network.protocol.Packet;
- import net.minecraft.network.protocol.PacketFlow;
--import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
--import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
--import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
--import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
-+import net.minecraft.network.protocol.game.*;
- import net.minecraft.server.dedicated.DedicatedServer;
- import net.minecraft.server.level.ChunkHolder;
- import net.minecraft.server.level.ServerLevel;
- import net.minecraft.server.level.ServerPlayer;
-+import net.minecraft.world.entity.player.Player;
-+import net.minecraft.world.item.ItemStack;
- import net.minecraft.world.level.chunk.ChunkAccess;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
-@@ -40,7 +41,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
- 
-     private Socket socket;
-     private ExternalServer externalServer = null;
--    private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new HashMap<>();
-+    private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
-     private final HashMap<ChunkKey, Consumer<byte[]>> chunkCallbacks = new HashMap<>();
- 
-     public ExternalServerConnection(Socket socket) {
-@@ -82,6 +83,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
-                     double x = in.readDouble();
-                     double y = in.readDouble();
-                     double z = in.readDouble();
-+                    LOGGER.info("Adding external player " + name + " (" + id + ")");
-                     MultiPaper.runSync(() -> ExternalPlayer.create(this, id, name, uuid, world, x, y, z));
-                 } else if (message.equals("removePlayer")) {
-                     int id = in.readInt();
-@@ -119,6 +121,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
-                     for (int id : ids) {
-                         ServerPlayer player = getPlayerById(id);
-                         if (player != null) {
-+                            MultiPaperInventoryHandler.handlePacketFromExternalServer(externalServer, player, packet);
-                             player.connection.send(packet);
-                         }
-                     }
-@@ -169,6 +172,33 @@ public class ExternalServerConnection extends Thread implements Closeable {
-                             MultiPaper.runSync(newChunk::loadCallback);
-                         }
-                     }
-+                } else if (message.equals("playerAction")) {
-+                    int id = in.readInt();
-+                    int length = in.readInt();
-+                    byte[] bytes = new byte[length];
-+                    in.readFully(bytes);
-+                    ByteBuf buf = Unpooled.wrappedBuffer(bytes);
-+                    FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
-+                    int packetId = friendlyByteBuf.readVarInt();
-+                    Packet<ServerGamePacketListener> packet = (Packet<ServerGamePacketListener>) ConnectionProtocol.PLAY.createPacket(PacketFlow.SERVERBOUND, packetId, friendlyByteBuf);
-+                    ServerPlayer player = getPlayerById(id);
-+                    player.server.execute(() -> packet.handle(player.connection));
-+                } else if (message.equals("inventoryUpdate")) {
-+                    int id = in.readInt();
-+                    String name = in.readUTF();
-+                    int length = in.readInt();
-+                    byte[] bytes = new byte[length];
-+                    in.readFully(bytes);
-+                    CompoundTag tag = MultiPaper.nbtDecompressFromBytes(bytes);
-+                    MultiPaper.runSync(() -> {
-+                        ServerPlayer player = getPlayerById(id);
-+                        ListTag items = tag.getList("items", Tag.TAG_COMPOUND);
-+                        items.forEach(i -> {
-+                            CompoundTag item = (CompoundTag) i;
-+                            ItemStack itemStack = ItemStack.of(item);
-+                            MultiPaperInventoryHandler.updateInventory(player, name, item.getInt("Slot"), itemStack);
-+                        });
-+                    });
-                 }
-             }
-         } catch (EOFException e) {
-@@ -380,6 +410,41 @@ public class ExternalServerConnection extends Thread implements Closeable {
-         }
-     }
- 
-+    public void sendPlayerAction(ServerPlayer player, Packet<?> packet) {
-+        try {
-+            PacketBuffer buffer = new PacketBuffer(socket);
-+            buffer.writeUTF("playerAction");
-+            buffer.writeInt(player.getId());
-+            ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
-+            Integer id = protocol.getPacketId(PacketFlow.SERVERBOUND, packet);
-+            ByteBuf buf = Unpooled.buffer();
-+            FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
-+            friendlyByteBuf.writeVarInt(id);
-+            packet.write(friendlyByteBuf);
-+            byte[] bytes = buf.array();
-+            buffer.writeInt(bytes.length);
-+            buffer.write(bytes);
-+            buffer.close();
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
-+    }
-+
-+    public void sendInventoryUpdate(Player player, String name, CompoundTag itemsRoot) {
-+        try {
-+            PacketBuffer buffer = new PacketBuffer(socket);
-+            buffer.writeUTF("inventoryUpdate");
-+            buffer.writeInt(player.getId());
-+            buffer.writeUTF(name);
-+            byte[] bytes = MultiPaper.nbtCompressToBytes(itemsRoot);
-+            buffer.writeInt(bytes.length);
-+            buffer.write(bytes);
-+            buffer.close();
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
-+    }
-+
-     private static class PacketBuffer extends DataOutputStream {
-         private final Socket socket;
- 
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 2a766af0cbc6e7772eb2bde6e2fb9d084816779a..26a42ea787569c075810b2ca94f200e81cd6f9c8 100644
+index 3a0be17477734f7d625c795706fae8d0bdb06677..61ace618429a46c216eab3055c7ce9d7fa9d2057 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,6 +1,7 @@
@@ -360,7 +214,19 @@ index 2a766af0cbc6e7772eb2bde6e2fb9d084816779a..26a42ea787569c075810b2ca94f200e8
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.nbt.CompoundTag;
  import net.minecraft.nbt.NbtIo;
-@@ -22,6 +23,7 @@ import java.util.HashSet;
+@@ -14,10 +15,7 @@ import net.minecraft.world.level.chunk.ImposterProtoChunk;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ import org.bukkit.Bukkit;
+ import org.bukkit.craftbukkit.CraftWorld;
+-import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
+-import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
+-import puregero.multipaper.externalserverprotocol.PlayerMovePacket;
+-import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
++import puregero.multipaper.externalserverprotocol.*;
+ 
+ import java.io.*;
+ import java.nio.file.Files;
+@@ -26,6 +24,7 @@ import java.util.HashSet;
  import java.util.UUID;
  import java.util.concurrent.ConcurrentHashMap;
  import java.util.zip.DeflaterOutputStream;
@@ -368,7 +234,7 @@ index 2a766af0cbc6e7772eb2bde6e2fb9d084816779a..26a42ea787569c075810b2ca94f200e8
  
  public class MultiPaper {
      // You'll want to increase this if you have more than 250 servers
-@@ -79,6 +81,7 @@ public class MultiPaper {
+@@ -79,6 +78,7 @@ public class MultiPaper {
                  server.getConnection().tick();
              }
          }
@@ -376,7 +242,7 @@ index 2a766af0cbc6e7772eb2bde6e2fb9d084816779a..26a42ea787569c075810b2ca94f200e8
      }
      public static void sendTickTime(long time) {
          try {
-@@ -190,7 +193,7 @@ public class MultiPaper {
+@@ -200,7 +200,7 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -385,7 +251,7 @@ index 2a766af0cbc6e7772eb2bde6e2fb9d084816779a..26a42ea787569c075810b2ca94f200e8
      public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
          if (compoundTag == null) {
              return new byte[0];
-@@ -200,6 +203,10 @@ public class MultiPaper {
+@@ -210,6 +210,10 @@ public class MultiPaper {
          return buffer.toByteArray();
      }
  
@@ -396,7 +262,7 @@ index 2a766af0cbc6e7772eb2bde6e2fb9d084816779a..26a42ea787569c075810b2ca94f200e8
      public static byte[] nbtCompressToBytes(CompoundTag compoundTag) throws IOException {
          ByteArrayOutputStream buffer = new ByteArrayOutputStream();
          DeflaterOutputStream deflaterOutputStream = new DeflaterOutputStream(buffer);
-@@ -208,6 +215,10 @@ public class MultiPaper {
+@@ -218,6 +222,10 @@ public class MultiPaper {
          return buffer.toByteArray();
      }
  
@@ -407,7 +273,7 @@ index 2a766af0cbc6e7772eb2bde6e2fb9d084816779a..26a42ea787569c075810b2ca94f200e8
      public static ChunkAccess getChunkAccess(String world, int cx, int cz) {
          ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
          ChunkAccess chunkAccess = level.getChunkIfLoaded(cx, cz);
-@@ -242,4 +253,12 @@ public class MultiPaper {
+@@ -252,4 +260,12 @@ public class MultiPaper {
  
          return holder;
      }
@@ -415,17 +281,17 @@ index 2a766af0cbc6e7772eb2bde6e2fb9d084816779a..26a42ea787569c075810b2ca94f200e8
 +    public static void broadcastPlayerAction(ServerPlayer player, ServerboundSetCarriedItemPacket packet) {
 +        getConnection().getServersMap().values().forEach(externalServer -> {
 +            if (externalServer.getConnection() != null) {
-+                externalServer.getConnection().sendPlayerAction(player, packet);
++                externalServer.getConnection().send(new PlayerActionPacket(player, packet));
 +            }
 +        });
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..589a6d829d01aa64cb82cca4bd7defa5009c280f
+index 0000000000000000000000000000000000000000..de0fda1f1e8639d0f293fa9f605e1ca04fe9bbd8
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,137 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -437,6 +303,8 @@ index 0000000000000000000000000000000000000000..589a6d829d01aa64cb82cca4bd7defa5
 +import net.minecraft.world.item.ItemStack;
 +import net.minecraft.world.level.block.entity.BlockEntity;
 +import net.minecraft.world.level.chunk.LevelChunk;
++import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
++import puregero.multipaper.externalserverprotocol.PlayerInventoryUpdatePacket;
 +
 +import java.util.HashSet;
 +import java.util.Iterator;
@@ -475,7 +343,7 @@ index 0000000000000000000000000000000000000000..589a6d829d01aa64cb82cca4bd7defa5
 +        if (blockEntity instanceof Container) {
 +            LevelChunk chunk = player.level.getChunkIfLoaded(packet.getHitResult().getBlockPos());
 +            if (chunk.externalOwner != null && !chunk.externalOwner.isMe()) {
-+                chunk.externalOwner.getConnection().sendPlayerAction(player, packet);
++                chunk.externalOwner.getConnection().send(new PlayerActionPacket(player, packet));
 +                return true;
 +            }
 +        }
@@ -486,9 +354,9 @@ index 0000000000000000000000000000000000000000..589a6d829d01aa64cb82cca4bd7defa5
 +    /**
 +     * Returns true if the even should be cancelled
 +     */
-+    public static boolean handleContainerEvent(ServerPlayer player, Packet<?> containerPacket) {
++    public static boolean handleContainerEvent(ServerPlayer player, Packet<ServerGamePacketListener> containerPacket) {
 +        if (player.openContainer != null) {
-+            player.openContainer.getConnection().sendPlayerAction(player, containerPacket);
++            player.openContainer.getConnection().send(new PlayerActionPacket(player, containerPacket));
 +
 +            if (containerPacket instanceof ServerboundContainerClosePacket) {
 +                player.openContainer = null;
@@ -553,7 +421,7 @@ index 0000000000000000000000000000000000000000..589a6d829d01aa64cb82cca4bd7defa5
 +                itemsRoot.put("items", items);
 +                for (ExternalServer externalServer : MultiPaper.getConnection().getServersMap().values()) {
 +                    if (externalServer.getConnection() != null) {
-+                        externalServer.getConnection().sendInventoryUpdate(inventoryComponent.player, inventoryComponent.name, itemsRoot);
++                        externalServer.getConnection().send(new PlayerInventoryUpdatePacket((ServerPlayer) inventoryComponent.player, inventoryComponent.name, itemsRoot));
 +                    }
 +                }
 +                iterator.remove();
@@ -627,5 +495,170 @@ index 0000000000000000000000000000000000000000..79b5ec18fc80714daac2c70c6a385fb1
 +            Arrays.fill(dirty, true);
 +        }
 +        super.clear();
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 33ccdb58e2c5bd18e761dd24d800d60a57e95f6a..5ac0bdf729b8a1fd04c3ff3e2c9df9c52e49e5c9 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -19,6 +19,8 @@ public class ExternalServerPacketSerializer {
+         addPacket(SendUpdatePacket.class, SendUpdatePacket::new);
+         addPacket(RequestChunkPacket.class, RequestChunkPacket::new);
+         addPacket(SendChunkPacket.class, SendChunkPacket::new);
++        addPacket(PlayerActionPacket.class, PlayerActionPacket::new);
++        addPacket(PlayerInventoryUpdatePacket.class, PlayerInventoryUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..5f3decd91b8c101f77e910db6bd0ab61499be8fd
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
+@@ -0,0 +1,70 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import net.minecraft.network.ConnectionProtocol;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.game.ServerGamePacketListener;
++import net.minecraft.server.level.ServerPlayer;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++public class PlayerActionPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PlayerActionPacket.class.getSimpleName());
++
++    private final int id;
++    private final Packet<ServerGamePacketListener> action;
++
++    public PlayerActionPacket(ServerPlayer player, Packet<ServerGamePacketListener> action) {
++        this.id = player.getId();
++        this.action = action;
++    }
++
++    public PlayerActionPacket(DataInputStream in) throws IOException {
++        id = in.readInt();
++
++        int length = in.readInt();
++        byte[] bytes = new byte[length];
++        in.readFully(bytes);
++        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        int packetId = friendlyByteBuf.readVarInt();
++        action = (Packet<ServerGamePacketListener>) ConnectionProtocol.PLAY.createPacket(PacketFlow.SERVERBOUND, packetId, friendlyByteBuf);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeInt(id);
++
++        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(action);
++        Integer id = protocol.getPacketId(PacketFlow.SERVERBOUND, action);
++        ByteBuf buf = Unpooled.buffer();
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        friendlyByteBuf.writeVarInt(id);
++        action.write(friendlyByteBuf);
++        byte[] bytes = buf.array();
++        out.writeInt(bytes.length);
++        out.write(bytes);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        ServerPlayer player = MultiPaper.getPlayerById(id);
++
++        if (player == null) {
++            LOGGER.warn("Tried to run an action on a non-existant player with entity id of " + id);
++            return;
++        }
++
++        player.server.execute(() -> action.handle(player.connection));
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..465e537974f6bdd1a480432473d782c7947ee491
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java
+@@ -0,0 +1,70 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.ListTag;
++import net.minecraft.nbt.Tag;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.item.ItemStack;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperInventoryHandler;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++public class PlayerInventoryUpdatePacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PlayerInventoryUpdatePacket.class.getSimpleName());
++
++    private final int id;
++    private final String component;
++    private final CompoundTag tag;
++
++    public PlayerInventoryUpdatePacket(ServerPlayer player, String component, CompoundTag tag) {
++        this.id = player.getId();
++        this.component = component;
++        this.tag = tag;
++    }
++
++    public PlayerInventoryUpdatePacket(DataInputStream in) throws IOException {
++        id = in.readInt();
++        component = in.readUTF();
++
++        int length = in.readInt();
++        byte[] bytes = new byte[length];
++        in.readFully(bytes);
++        tag = MultiPaper.nbtDecompressFromBytes(bytes);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeInt(id);
++
++        out.writeUTF(component);
++        byte[] bytes = MultiPaper.nbtCompressToBytes(tag);
++        out.writeInt(bytes.length);
++        out.write(bytes);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MultiPaper.getPlayerById(id);
++
++            if (player == null) {
++                LOGGER.warn("Tried to update the inventory of a non-existant player with entity id of " + id);
++                return;
++            }
++
++            ListTag items = tag.getList("items", Tag.TAG_COMPOUND);
++            items.forEach(i -> {
++                CompoundTag item = (CompoundTag) i;
++                ItemStack itemStack = ItemStack.of(item);
++                MultiPaperInventoryHandler.updateInventory(player, component, item.getInt("Slot"), itemStack);
++            });
++        });
 +    }
 +}

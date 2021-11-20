@@ -435,203 +435,59 @@ index 411b1cfdb0de16c8c183860833ebdd0772b92f7d..af98a71ae3d3e6b40852ced13a30b713
          }
      }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index e53dfcc6e2f5b50594cb12e9ef0a075e9f2e8f4c..214acb5313ca5c29ede83b69c8e1cf557d7edd26 100644
+index 17ff655ef21e26b5d6b195bad0400166e83694a0..a113a2045027688819ac0cf855bb5c7740a17cf3 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -2,19 +2,36 @@ package puregero.multipaper;
- 
- import io.netty.buffer.ByteBuf;
- import io.netty.buffer.Unpooled;
-+import net.minecraft.nbt.CompoundTag;
-+import net.minecraft.nbt.NbtIo;
- import net.minecraft.network.ConnectionProtocol;
- import net.minecraft.network.FriendlyByteBuf;
+@@ -3,22 +3,25 @@ package puregero.multipaper;
  import net.minecraft.network.protocol.Packet;
- import net.minecraft.network.protocol.PacketFlow;
-+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
-+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
-+import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
-+import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
  import net.minecraft.server.dedicated.DedicatedServer;
-+import net.minecraft.server.level.ChunkHolder;
- import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
-+import net.minecraft.world.level.chunk.ChunkAccess;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
-+import net.minecraft.world.level.ChunkPos;
-+import net.minecraft.world.level.chunk.ImposterProtoChunk;
-+import net.minecraft.world.level.chunk.LevelChunk;
-+import net.minecraft.world.level.chunk.storage.ChunkSerializer;
-+import org.bukkit.Bukkit;
-+import org.bukkit.craftbukkit.CraftWorld;
-+import org.bukkit.craftbukkit.scheduler.CraftScheduler;
+-import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
+-import puregero.multipaper.externalserverprotocol.ExternalServerPacketSerializer;
+-import puregero.multipaper.externalserverprotocol.HelloPacket;
+-import puregero.multipaper.externalserverprotocol.SendPacketPacket;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.externalserverprotocol.*;
  
  import java.io.*;
  import java.net.Socket;
  import java.util.*;
 +import java.util.function.Consumer;
-+import java.util.zip.InflaterInputStream;
  
  public class ExternalServerConnection extends Thread implements Closeable {
  
-@@ -24,6 +41,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
++    private static final Logger LOGGER = LogManager.getLogger(ExternalServerPacket.class.getSimpleName());
++
      private Socket socket;
-     private ExternalServer externalServer = null;
+     public ExternalServer externalServer = null;
+ 
+     private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new HashMap<>();
-+    private final HashMap<ChunkKey, Consumer<byte[]>> chunkCallbacks = new HashMap<>();
++    public final HashMap<ChunkKey, Consumer<byte[]>> chunkCallbacks = new HashMap<>();
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
-@@ -104,6 +122,53 @@ public class ExternalServerConnection extends Thread implements Closeable {
-                             player.connection.send(packet);
-                         }
-                     }
-+                } else if (message.equals("sendUpdate")) {
-+                    String world = in.readUTF();
-+                    int length = in.readInt();
-+                    byte[] bytes = new byte[length];
-+                    in.readFully(bytes);
-+                    ByteBuf buf = Unpooled.wrappedBuffer(bytes);
-+                    FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
-+                    int packetId = friendlyByteBuf.readVarInt();
-+                    Packet<?> packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
-+                    if (packet instanceof ClientboundBlockUpdatePacket || packet instanceof ClientboundSectionBlocksUpdatePacket || packet instanceof ClientboundLightUpdatePacket || packet instanceof ClientboundBlockEntityDataPacket) {
-+                        MultiPaper.runSync(() -> MultiPaperChunkHandler.handleBlockUpdate(world, packet));
-+                    } else {
-+                        LOGGER.warn("Unhandled packet of type " + packet.getClass().getSimpleName());
-+                    }
-+                } else if (message.equals("requestChunk")) {
-+                    String world = in.readUTF();
-+                    int cx = in.readInt();
-+                    int cz = in.readInt();
-+                    sendChunkLater(world, cx, cz, 0);
-+                } else if (message.equals("chunkData")) {
-+                    String world = in.readUTF();
-+                    int cx = in.readInt();
-+                    int cz = in.readInt();
-+                    int byteLength = in.readInt();
-+                    byte[] b = new byte[byteLength];
-+                    in.readFully(b);
-+                    Consumer<byte[]> callback = chunkCallbacks.remove(new ChunkKey(world, cx, cz));
-+                    if (callback != null) {
-+                        if (byteLength == 0) {
-+                            LOGGER.warn(externalServer.getName() + " sent us an empty chunk for " + world + "," + cx + "," + cz + ", force loading it from disk");
-+                            MultiPaper.getConnection().forceReadChunk(world, "region", cx, cz).thenAccept(callback);
-+                        } else {
-+                            callback.accept(b);
-+                        }
-+                    } else {
-+                        CompoundTag tag = NbtIo.read(new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(b))));
-+                        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
-+                        LevelChunk chunk = level.getChunkIfLoaded(cx, cz);
-+                        if (chunk != null) {
-+                            ChunkSerializer.InProgressChunkHolder holder = ChunkSerializer.loadChunk(level, null, level.getPoiManager(), new ChunkPos(cx, cz), tag, true);
-+                            LevelChunk newChunk = ((ImposterProtoChunk) holder.protoChunk).getWrapped();
-+                            newChunk.externalOwner = chunk.externalOwner;
-+                            newChunk.externalSubscribers = chunk.externalSubscribers;
-+                            newChunk.playerChunk = chunk.playerChunk;
-+                            MultiPaper.runSync(newChunk::loadCallback);
-+                        }
-+                    }
-                 }
-             }
-         } catch (EOFException e) {
-@@ -232,6 +297,89 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -104,4 +107,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
+             players.add(player);
          }
      }
- 
-+    public void sendUpdate(String world, Packet<?> packet) {
-+        try {
-+            PacketBuffer buffer = new PacketBuffer(socket);
-+            buffer.writeUTF("sendUpdate");
-+            buffer.writeUTF(world);
-+            ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
-+            Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
-+            ByteBuf buf = Unpooled.buffer();
-+            FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
-+            friendlyByteBuf.writeVarInt(id);
-+            packet.write(friendlyByteBuf);
-+            byte[] bytes = buf.array();
-+            buffer.writeInt(bytes.length);
-+            buffer.write(bytes);
-+            buffer.close();
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
-+    }
 +
 +    public void requestChunk(String world, int cx, int cz, Consumer<byte[]> callback) {
-+        try {
-+            PacketBuffer buffer = new PacketBuffer(socket);
-+            buffer.writeUTF("requestChunk");
-+            buffer.writeUTF(world);
-+            buffer.writeInt(cx);
-+            buffer.writeInt(cz);
-+            if (callback != null) {
-+                if (chunkCallbacks.put(new ChunkKey(world, cx, cz), callback) != null) {
-+                    LOGGER.warn("A chunk callback already existed for " + world + ", " + cx + ", " + cz);
-+                }
++        send(new RequestChunkPacket(world, cx, cz));
++
++        if (callback != null) {
++            if (chunkCallbacks.put(new ChunkKey(world, cx, cz), callback) != null) {
++                LOGGER.warn("A chunk callback already existed for " + world + ", " + cx + ", " + cz);
 +            }
-+            buffer.close();
-+        } catch (IOException e) {
-+            e.printStackTrace();
 +        }
 +    }
-+
-+    public void sendChunk(String world, int cx, int cz, CompoundTag tag) {
-+        try {
-+            byte[] bytes;
-+            if (tag == null) {
-+                bytes = new byte[0];
-+            } else {
-+                bytes = MultiPaper.nbtCompressToBytes(tag);
-+            }
-+            PacketBuffer buffer = new PacketBuffer(socket);
-+            buffer.writeUTF("chunkData");
-+            buffer.writeUTF(world);
-+            buffer.writeInt(cx);
-+            buffer.writeInt(cz);
-+            buffer.writeInt(bytes.length);
-+            buffer.write(bytes);
-+            buffer.close();
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
-+    }
-+
-+    private void sendChunkLater(String world, int cx, int cz, int depth) {
-+        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
-+        if (chunk == null) {
-+            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
-+            ChunkHolder holder = level.chunkSource.chunkMap.getUpdatingChunkIfPresent(ChunkPos.asLong(cx, cz));
-+            if (holder != null) {
-+                if (depth == 20) {
-+                    LOGGER.warn(externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we timed out waiting for it to load.");
-+                    sendChunk(world, cx, cz, null);
-+                    return;
-+                }
-+                ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
-+                    sendChunkLater(world, cx, cz, depth + 1);
-+                }, 1, "ExternalServerConnection-sendChunkLater");
-+            } else {
-+                LOGGER.warn(externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we don't have it loaded.");
-+                sendChunk(world, cx, cz, null);
-+            }
-+        } else {
-+            CompoundTag tag = ChunkSerializer.write((ServerLevel) chunk.getLevel(), chunk);
-+            sendChunk(world, cx, cz, tag);
-+        }
-+    }
-+
-     private static class PacketBuffer extends DataOutputStream {
-         private final Socket socket;
- 
+ }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index ddc8dad011c1c02035a8641c800956124048e93d..2a766af0cbc6e7772eb2bde6e2fb9d084816779a 100644
+index d3663f181a8ad9fa0d978005c6864ba9d2d90fc7..3a0be17477734f7d625c795706fae8d0bdb06677 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,32 +1,43 @@
+@@ -1,36 +1,47 @@
  package puregero.multipaper;
  
 +import net.minecraft.core.BlockPos;
@@ -642,16 +498,19 @@ index ddc8dad011c1c02035a8641c800956124048e93d..2a766af0cbc6e7772eb2bde6e2fb9d08
 +import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
--
--import java.io.File;
--import java.io.IOException;
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.ImposterProtoChunk;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
-+
+ import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
+ import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
+ import puregero.multipaper.externalserverprotocol.PlayerMovePacket;
+ import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
+ 
+-import java.io.File;
+-import java.io.IOException;
 +import java.io.*;
  import java.nio.file.Files;
  import java.util.HashMap;
@@ -682,7 +541,7 @@ index ddc8dad011c1c02035a8641c800956124048e93d..2a766af0cbc6e7772eb2bde6e2fb9d08
      private static String bungeeCordName = null;
      public static String getBungeeCordName() {
          if (bungeeCordName == null) {
-@@ -48,7 +59,6 @@ public class MultiPaper {
+@@ -52,7 +63,6 @@ public class MultiPaper {
      }
  
      private static HashMap<UUID, Double> lastLocations = new HashMap<UUID, Double>();
@@ -716,37 +575,29 @@ index ddc8dad011c1c02035a8641c800956124048e93d..2a766af0cbc6e7772eb2bde6e2fb9d08
      public static void onStart() {
          try {
              externalServerSocket = new ExternalServerSocket();
-@@ -90,7 +96,6 @@ public class MultiPaper {
+@@ -90,11 +96,9 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
 -
      public static void onPlayerJoin(ServerPlayer player) {
-         getConnection().getServersMap().values().forEach(externalServer -> {
-             if (externalServer.getConnection() != null) {
-@@ -98,7 +103,6 @@ public class MultiPaper {
-             }
-         });
+         broadcastPacketToExternalServers(new PlayerCreatePacket(player));
      }
 -
      public static void onPlayerDisconnect(ServerPlayer player) {
          if (!(player instanceof ExternalPlayer)) {
-             getConnection().getServersMap().values().forEach(externalServer -> {
-@@ -108,7 +112,6 @@ public class MultiPaper {
-             });
-         }
-     }
--
-     public static int getEntityCounterStartValue() {
-         try {
-             return getConnection().getEntityCounterStartValue().join();
-@@ -116,8 +119,127 @@ public class MultiPaper {
+             broadcastPacketToExternalServers(new PlayerRemovePacket(player));
+@@ -116,7 +120,6 @@ public class MultiPaper {
              throw new RuntimeException(e);
          }
      }
 -
      public static int getEntityCounterIncrement() {
          return ENTITY_COUNTER_INCREMENT;
+     }
+@@ -129,4 +132,124 @@ public class MultiPaper {
+         }
+         return null;
      }
 +
 +    public static CompoundTag readChunk(ChunkPos chunkPos, ServerLevel serverLevel) throws IOException {
@@ -871,10 +722,10 @@ index ddc8dad011c1c02035a8641c800956124048e93d..2a766af0cbc6e7772eb2bde6e2fb9d08
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f1d757616c665e19abe3419bb4ecda22512fa27c
+index 0000000000000000000000000000000000000000..1547a5dae07f0b68fbb423f93a4baa7e3e0dd907
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,186 @@
+@@ -0,0 +1,187 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -898,6 +749,7 @@ index 0000000000000000000000000000000000000000..f1d757616c665e19abe3419bb4ecda22
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.externalserverprotocol.SendUpdatePacket;
 +
 +import java.io.IOException;
 +import java.util.BitSet;
@@ -950,7 +802,7 @@ index 0000000000000000000000000000000000000000..f1d757616c665e19abe3419bb4ecda22
 +        if (blockUpdateChunk == null) { // Don't broadcast the update to other servers if we're handling an update
 +            for (ExternalServer externalServer : chunk.externalSubscribers) {
 +                if (!externalServer.isMe()) {
-+                    externalServer.getConnection().sendUpdate(chunkHolder.getWorld().convertable.getLevelId(), packet);
++                    externalServer.getConnection().send(new SendUpdatePacket(chunkHolder.getWorld().convertable.getLevelId(), packet));
 +                }
 +            }
 +        }
@@ -1260,3 +1112,277 @@ index 3d19e69add10e8a6a8305d9b651f30cbf4034c12..46b9eafb44f1855e8830ddcd7b0aa7c0
 +        out.send(null);
 +    }
  }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 998b0df31e09092b199f7b7637bd64dda213b773..33ccdb58e2c5bd18e761dd24d800d60a57e95f6a 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -16,6 +16,9 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerRemovePacket.class, PlayerRemovePacket::new);
+         addPacket(PlayerMovePacket.class, PlayerMovePacket::new);
+         addPacket(SendPacketPacket.class, SendPacketPacket::new);
++        addPacket(SendUpdatePacket.class, SendUpdatePacket::new);
++        addPacket(RequestChunkPacket.class, RequestChunkPacket::new);
++        addPacket(SendChunkPacket.class, SendChunkPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..fe6b403fec4fbdc5458afef3bcaabe8b0caf8aab
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
+@@ -0,0 +1,76 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.server.level.ChunkHolder;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.ChunkPos;
++import net.minecraft.world.level.chunk.ChunkAccess;
++import net.minecraft.world.level.chunk.storage.ChunkSerializer;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.craftbukkit.scheduler.CraftScheduler;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++public class RequestChunkPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(RequestChunkPacket.class.getSimpleName());
++
++    private final String world;
++    private final int cx;
++    private final int cz;
++
++    public RequestChunkPacket(String world, int cx, int cz) {
++        this.world = world;
++        this.cx = cx;
++        this.cz = cz;
++    }
++
++    public RequestChunkPacket(DataInputStream in) throws IOException {
++        world = in.readUTF();
++        cx = in.readInt();
++        cz = in.readInt();
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        out.writeInt(cx);
++        out.writeInt(cz);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        sendChunkLater(connection, world, cx, cz, 0);
++    }
++
++    private void sendChunkLater(ExternalServerConnection connection, String world, int cx, int cz, int depth) {
++        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
++        if (chunk == null) {
++            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++            ChunkHolder holder = level.chunkSource.chunkMap.getUpdatingChunkIfPresent(ChunkPos.asLong(cx, cz));
++            if (holder != null) {
++                if (depth == 20) {
++                    LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we timed out waiting for it to load.");
++                    connection.send(new SendChunkPacket(world, cx, cz, null));
++                    return;
++                }
++                ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
++                    sendChunkLater(connection, world, cx, cz, depth + 1);
++                }, 1, "ExternalServerConnection-sendChunkLater");
++            } else {
++                LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we don't have it loaded.");
++                connection.send(new SendChunkPacket(world, cx, cz, null));
++            }
++        } else {
++            CompoundTag tag = ChunkSerializer.write((ServerLevel) chunk.getLevel(), chunk);
++            connection.send(new SendChunkPacket(world, cx, cz, tag));
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e2f33ad7ea22a414861082cf2496d65979ea9c76
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
+@@ -0,0 +1,96 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.NbtIo;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.ChunkPos;
++import net.minecraft.world.level.chunk.ImposterProtoChunk;
++import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.level.chunk.storage.ChunkSerializer;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ChunkKey;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.ByteArrayInputStream;
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.function.Consumer;
++import java.util.zip.InflaterInputStream;
++
++public class SendChunkPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(SendChunkPacket.class.getSimpleName());
++
++    private final String world;
++    private final int cx;
++    private final int cz;
++    private final byte[] data;
++
++    public SendChunkPacket(String world, int cx, int cz, CompoundTag tag) {
++        this.world = world;
++        this.cx = cx;
++        this.cz = cz;
++
++        try {
++            if (tag == null) {
++                data = new byte[0];
++            } else {
++                data = MultiPaper.nbtCompressToBytes(tag);
++            }
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
++    }
++
++    public SendChunkPacket(DataInputStream in) throws IOException {
++        world = in.readUTF();
++        cx = in.readInt();
++        cz = in.readInt();
++        int byteLength = in.readInt();
++        data = new byte[byteLength];
++        in.readFully(data);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        out.writeInt(cx);
++        out.writeInt(cz);
++        out.writeInt(data.length);
++        out.write(data);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        try {
++            Consumer<byte[]> callback = connection.chunkCallbacks.remove(new ChunkKey(world, cx, cz));
++            if (callback != null) {
++                if (data.length == 0) {
++                    LOGGER.warn(connection.externalServer.getName() + " sent us an empty chunk for " + world + "," + cx + "," + cz + ", force loading it from disk");
++                    MultiPaper.getConnection().forceReadChunk(world, "region", cx, cz).thenAccept(callback);
++                } else {
++                    callback.accept(data);
++                }
++            } else {
++                CompoundTag tag = NbtIo.read(new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
++                ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++                LevelChunk chunk = level.getChunkIfLoaded(cx, cz);
++                if (chunk != null) {
++                    ChunkSerializer.InProgressChunkHolder holder = ChunkSerializer.loadChunk(level, null, level.getPoiManager(), new ChunkPos(cx, cz), tag, true);
++                    LevelChunk newChunk = ((ImposterProtoChunk) holder.protoChunk).getWrapped();
++                    newChunk.externalOwner = chunk.externalOwner;
++                    newChunk.externalSubscribers = chunk.externalSubscribers;
++                    newChunk.playerChunk = chunk.playerChunk;
++                    MultiPaper.runSync(newChunk::loadCallback);
++                }
++            }
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..b2bcaa3fbb1f9640faf3d7c61ba1a7087d46db12
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
+@@ -0,0 +1,70 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import net.minecraft.network.ConnectionProtocol;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
++import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
++import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
++import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperChunkHandler;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++public class SendUpdatePacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(SendUpdatePacket.class.getSimpleName());
++
++    private final String world;
++    private final Packet<?> packet;
++
++    public SendUpdatePacket(String world, Packet<?> packet) {
++        this.world = world;
++        this.packet = packet;
++    }
++
++    public SendUpdatePacket(DataInputStream in) throws IOException {
++        world = in.readUTF();
++
++        int length = in.readInt();
++        byte[] bytes = new byte[length];
++        in.readFully(bytes);
++        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        int packetId = friendlyByteBuf.readVarInt();
++        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++
++        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
++        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
++        ByteBuf buf = Unpooled.buffer();
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        friendlyByteBuf.writeVarInt(id);
++        packet.write(friendlyByteBuf);
++        byte[] bytes = buf.array();
++        out.writeInt(bytes.length);
++        out.write(bytes);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        if (packet instanceof ClientboundBlockUpdatePacket || packet instanceof ClientboundSectionBlocksUpdatePacket || packet instanceof ClientboundLightUpdatePacket || packet instanceof ClientboundBlockEntityDataPacket) {
++            MultiPaper.runSync(() -> MultiPaperChunkHandler.handleBlockUpdate(world, packet));
++        } else {
++            LOGGER.warn("Unhandled update packet of type " + packet.getClass().getSimpleName());
++        }
++    }
++}

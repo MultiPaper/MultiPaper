@@ -52,24 +52,23 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..73c721e4e11c8a0f13f1af8e5e289531da38a56d
+index 0000000000000000000000000000000000000000..519333b7d1629a3e8105d11e911df0b7430e00c5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,69 @@
 +package puregero.multipaper;
 +
-+import org.apache.logging.log4j.LogManager;
-+import org.apache.logging.log4j.Logger;
++import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
++import puregero.multipaper.externalserverprotocol.ExternalServerPacketSerializer;
++import puregero.multipaper.externalserverprotocol.HelloPacket;
 +
 +import java.io.*;
 +import java.net.Socket;
 +
 +public class ExternalServerConnection extends Thread implements Closeable {
 +
-+    private static final Logger LOGGER = LogManager.getLogger(ExternalServerConnection.class.getSimpleName());
-+
 +    private Socket socket;
-+    private ExternalServer externalServer = null;
++    public ExternalServer externalServer = null;
 +
 +    public ExternalServerConnection(Socket socket) {
 +        this.socket = socket;
@@ -88,21 +87,12 @@ index 0000000000000000000000000000000000000000..73c721e4e11c8a0f13f1af8e5e289531
 +    @Override
 +    public void run() {
 +        try {
-+            PacketBuffer buffer = new PacketBuffer(socket);
-+            buffer.writeUTF("hello");
-+            buffer.writeUTF(MultiPaper.getBungeeCordName());
-+            buffer.close();
++            send(new HelloPacket(MultiPaper.getBungeeCordName()));
 +
 +            DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
 +            while (!socket.isClosed()) {
-+                String message = in.readUTF();
-+
-+                if (message.equals("hello")) {
-+                    String name = in.readUTF();
-+                    LOGGER.info("Connected to external server " + name);
-+                    externalServer = MultiPaper.getConnection().getServersMap().computeIfAbsent(name, key -> new ExternalServer(key, key.equals(MultiPaper.getBungeeCordName())));
-+                    externalServer.setConnection(this);
-+                }
++                ExternalServerPacket packet = ExternalServerPacketSerializer.deserialize(in);
++                packet.handle(this);
 +            }
 +        } catch (EOFException e) {
 +            // Ignore
@@ -117,22 +107,21 @@ index 0000000000000000000000000000000000000000..73c721e4e11c8a0f13f1af8e5e289531
 +        } catch (Exception e) {
 +            // Ignore
 +        }
++
++        if (externalServer != null && externalServer.getConnection() == this) {
++            externalServer.setConnection(null);
++        }
 +    }
 +
-+    private static class PacketBuffer extends DataOutputStream {
-+        private final Socket socket;
-+
-+        public PacketBuffer(Socket socket) {
-+            super(new ByteArrayOutputStream());
-+
-+            this.socket = socket;
-+        }
-+
-+        @Override
-+        public void close() throws IOException {
++    public void send(ExternalServerPacket packet) {
++        try {
++            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
++            ExternalServerPacketSerializer.serialize(packet, new DataOutputStream(buffer));
 +            synchronized (socket) {
-+                socket.getOutputStream().write(((ByteArrayOutputStream) out).toByteArray());
++                socket.getOutputStream().write(buffer.toByteArray());
 +            }
++        } catch (IOException e) {
++            e.printStackTrace();
 +        }
 +    }
 +}
@@ -268,3 +257,124 @@ index 2f940113bb7da19b4e5c71e61e74814a2b4acbad..aeeffab321999a6e0c03dafc8dfd04ef
 +        out.send(null);
 +    }
  }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..81d61a2d671fedd031eb2725ac3ab45622e196b1
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
+@@ -0,0 +1,14 @@
++package puregero.multipaper.externalserverprotocol;
++
++import puregero.multipaper.ExternalServerConnection;
++
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++public abstract class ExternalServerPacket {
++
++    public abstract void handle(ExternalServerConnection connection);
++
++    public abstract void write(DataOutputStream out) throws IOException;
++
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..813c88cd23411cbd0615d3d1da11d5173a96fdff
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -0,0 +1,35 @@
++package puregero.multipaper.externalserverprotocol;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++
++public class ExternalServerPacketSerializer {
++
++    private static final List<Class<? extends ExternalServerPacket>> PACKETS = new ArrayList<>();
++    private static final List<IOExceptionFunction<DataInputStream, ExternalServerPacket>> PACKET_DESERIALIZERS = new ArrayList<>();
++    static {
++        addPacket(HelloPacket.class, HelloPacket::new);
++    }
++
++    private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
++        PACKETS.add(clazz);
++        PACKET_DESERIALIZERS.add(deserializer);
++    }
++
++    private static int getPacketId(ExternalServerPacket packet) {
++        return PACKETS.indexOf(packet.getClass());
++    }
++
++    public static void serialize(ExternalServerPacket packet, DataOutputStream out) throws IOException {
++        out.write(getPacketId(packet));
++        packet.write(out);
++    }
++
++    public static ExternalServerPacket deserialize(DataInputStream in) throws IOException {
++        int packetId = in.read();
++        return PACKET_DESERIALIZERS.get(packetId).apply(in);
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..98df09ee6eb37797ce764bbca69f482f4b90ab4d
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+@@ -0,0 +1,38 @@
++package puregero.multipaper.externalserverprotocol;
++
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServer;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++public class HelloPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(HelloPacket.class.getSimpleName());
++
++    private final String bungeecordName;
++
++    public HelloPacket(String bungeecordName) {
++        this.bungeecordName = bungeecordName;
++    }
++
++    public HelloPacket(DataInputStream in) throws IOException {
++        bungeecordName = in.readUTF();
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(bungeecordName);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        LOGGER.info("Connected to external server " + bungeecordName);
++        connection.externalServer = MultiPaper.getConnection().getServersMap().computeIfAbsent(bungeecordName, key -> new ExternalServer(key, key.equals(MultiPaper.getBungeeCordName())));
++        connection.externalServer.setConnection(connection);
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/IOExceptionFunction.java b/src/main/java/puregero/multipaper/externalserverprotocol/IOExceptionFunction.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e75e8d222336483ce2d5cda77e570e161ea86cbb
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/IOExceptionFunction.java
+@@ -0,0 +1,10 @@
++package puregero.multipaper.externalserverprotocol;
++
++import java.io.IOException;
++
++@FunctionalInterface
++public interface IOExceptionFunction<T, R> {
++
++    R apply(final T elem) throws IOException;
++
++}

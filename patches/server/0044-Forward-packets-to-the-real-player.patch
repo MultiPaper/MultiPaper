@@ -24,75 +24,56 @@ index fe7ac552211558c40d10a739a1d719a426d85d6d..411b1cfdb0de16c8c183860833ebdd07
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 896729fec75279642df2879d50125935c31e4ca2..e53dfcc6e2f5b50594cb12e9ef0a075e9f2e8f4c 100644
+index 11ee85df2d7ed546c4f7b05ff668d6278d73d1b3..17ff655ef21e26b5d6b195bad0400166e83694a0 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -1,20 +1,29 @@
+@@ -1,19 +1,25 @@
  package puregero.multipaper;
  
-+import io.netty.buffer.ByteBuf;
-+import io.netty.buffer.Unpooled;
-+import net.minecraft.network.ConnectionProtocol;
-+import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.network.protocol.Packet;
-+import net.minecraft.network.protocol.PacketFlow;
  import net.minecraft.server.dedicated.DedicatedServer;
-+import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
+ import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
+ import puregero.multipaper.externalserverprotocol.ExternalServerPacketSerializer;
+ import puregero.multipaper.externalserverprotocol.HelloPacket;
++import puregero.multipaper.externalserverprotocol.SendPacketPacket;
  
  import java.io.*;
  import java.net.Socket;
--import java.util.UUID;
 +import java.util.*;
  
  public class ExternalServerConnection extends Thread implements Closeable {
  
-     private static final Logger LOGGER = LogManager.getLogger(ExternalServerConnection.class.getSimpleName());
-+    private static Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
- 
      private Socket socket;
-     private ExternalServer externalServer = null;
-+    private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new HashMap<>();
+     public ExternalServer externalServer = null;
  
++    private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
++    private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new HashMap<>();
++
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
-@@ -76,6 +85,25 @@ public class ExternalServerConnection extends Thread implements Closeable {
-                     } else {
-                         LOGGER.warn("Tried to move a non-existant player with entity id of " + id);
-                     }
-+                } else if (message.equals("sendPacket")) {
-+                    int idCount = in.readShort();
-+                    int[] ids = new int[idCount];
-+                    for (int i = 0; i < idCount; i++) {
-+                        ids[i] = in.readInt();
-+                    }
-+                    int length = in.readInt();
-+                    byte[] bytes = new byte[length];
-+                    in.readFully(bytes);
-+                    ByteBuf buf = Unpooled.wrappedBuffer(bytes);
-+                    FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
-+                    int packetId = friendlyByteBuf.readVarInt();
-+                    Packet<?> packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
-+                    for (int id : ids) {
-+                        ServerPlayer player = getPlayerById(id);
-+                        if (player != null) {
-+                            player.connection.send(packet);
-+                        }
-+                    }
-                 }
+         start();
+@@ -57,10 +63,6 @@ public class ExternalServerConnection extends Thread implements Closeable {
+                 MultiPaper.runSync(() -> player.connection.disconnect("External server disconnected"));
              }
-         } catch (EOFException e) {
-@@ -99,6 +127,18 @@ public class ExternalServerConnection extends Thread implements Closeable {
          }
+-
+-        if (externalServer != null && externalServer.getConnection() == this) {
+-            externalServer.setConnection(null);
+-        }
      }
  
+     public void send(ExternalServerPacket packet) {
+@@ -74,4 +76,32 @@ public class ExternalServerConnection extends Thread implements Closeable {
+             e.printStackTrace();
+         }
+     }
++
 +    public void tick() {
 +        // Send the packets after each vanilla tick
 +        synchronized (packetsToSend) {
 +            packetsToSend.forEach((packet, players) -> {
-+                sendPacket(players, packet);
++                send(new SendPacketPacket(players, packet));
 +                players.clear();
 +                externalPlayerListPool.add(players);
 +            });
@@ -100,13 +81,6 @@ index 896729fec75279642df2879d50125935c31e4ca2..e53dfcc6e2f5b50594cb12e9ef0a075e
 +        }
 +    }
 +
-     private ServerPlayer getPlayerById(int id) {
-         for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
-             if (player.getId() == id) {
-@@ -153,6 +193,45 @@ public class ExternalServerConnection extends Thread implements Closeable {
-         }
-     }
- 
 +    public void sendPacket(ExternalPlayer player, Packet<?> packet) {
 +        // Combine all the players that the packet's being sent to together
 +        // so that the packet only needs to be sent to the external server
@@ -122,35 +96,9 @@ index 896729fec75279642df2879d50125935c31e4ca2..e53dfcc6e2f5b50594cb12e9ef0a075e
 +            players.add(player);
 +        }
 +    }
-+
-+    public void sendPacket(List<ExternalPlayer> players, Packet<?> packet) {
-+        try {
-+            PacketBuffer buffer = new PacketBuffer(socket);
-+            buffer.writeUTF("sendPacket");
-+            buffer.writeShort(players.size());
-+            for (ExternalPlayer player : players) {
-+                buffer.writeInt(player.getId());
-+            }
-+            ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
-+            Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
-+            ByteBuf buf = Unpooled.buffer();
-+            FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
-+            friendlyByteBuf.writeVarInt(id);
-+            packet.write(friendlyByteBuf);
-+            byte[] bytes = buf.array();
-+            buffer.writeInt(bytes.length);
-+            buffer.write(bytes);
-+            buffer.close();
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
-+    }
-+
-     private static class PacketBuffer extends DataOutputStream {
-         private final Socket socket;
- 
+ }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index d7ae0669ef10e1994c02fa8a9510c3d1f5ba8292..ddc8dad011c1c02035a8641c800956124048e93d 100644
+index 722bfbe316e63e4427458c91d7b5e912b6cbed99..d3663f181a8ad9fa0d978005c6864ba9d2d90fc7 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -63,6 +63,13 @@ public class MultiPaper {
@@ -167,3 +115,103 @@ index d7ae0669ef10e1994c02fa8a9510c3d1f5ba8292..ddc8dad011c1c02035a8641c80095612
      }
  
      public static void sendTickTime(long time) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 77e18bb08ee446140abe55f87fa30a4ab1dd005e..998b0df31e09092b199f7b7637bd64dda213b773 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -15,6 +15,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerCreatePacket.class, PlayerCreatePacket::new);
+         addPacket(PlayerRemovePacket.class, PlayerRemovePacket::new);
+         addPacket(PlayerMovePacket.class, PlayerMovePacket::new);
++        addPacket(SendPacketPacket.class, SendPacketPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..d606e66e6142790bfd7ea738e84d2b66063c2061
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
+@@ -0,0 +1,82 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import net.minecraft.network.ConnectionProtocol;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.server.level.ServerPlayer;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalPlayer;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.List;
++
++public class SendPacketPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(SendPacketPacket.class.getSimpleName());
++
++    private final int[] ids;
++    private final Packet<?> packet;
++
++    public SendPacketPacket(List<ExternalPlayer> players, Packet<?> packet) {
++        this.ids = new int[players.size()];
++        for (int i = 0; i < players.size(); i++) {
++            this.ids[i] = players.get(i).getId();
++        }
++        this.packet = packet;
++    }
++
++    public SendPacketPacket(DataInputStream in) throws IOException {
++        ids = new int[in.readInt()];
++        for (int i = 0; i < ids.length; i++) {
++            this.ids[i] = in.readInt();
++        }
++
++        int length = in.readInt();
++        byte[] bytes = new byte[length];
++        in.readFully(bytes);
++        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        int packetId = friendlyByteBuf.readVarInt();
++        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeInt(ids.length);
++        for (int id : ids) {
++            out.writeInt(id);
++        }
++
++        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
++        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
++        ByteBuf buf = Unpooled.buffer();
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        friendlyByteBuf.writeVarInt(id);
++        packet.write(friendlyByteBuf);
++        byte[] bytes = buf.array();
++        out.writeInt(bytes.length);
++        out.write(bytes);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        for (int id : ids) {
++            ServerPlayer player = MultiPaper.getPlayerById(id);
++
++            if (player == null) {
++                LOGGER.warn("Tried to remove a non-existant player with entity id of " + id);
++                return;
++            }
++
++            player.connection.send(packet);
++        }
++    }
++}

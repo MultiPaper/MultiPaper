@@ -325,6 +325,21 @@ index db7904b1bb402a36684b97c443336630762aeaf9..17e7b39e8b187efb623a236ca766b398
      }
  
      @Nullable
+diff --git a/src/main/java/net/minecraft/world/level/chunk/ProtoChunk.java b/src/main/java/net/minecraft/world/level/chunk/ProtoChunk.java
+index e1b32b644bc976ff66258ed706f4d1e8de99420d..6933c39425143ba853214888c6ca25fe983f548f 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/ProtoChunk.java
++++ b/src/main/java/net/minecraft/world/level/chunk/ProtoChunk.java
+@@ -59,8 +59,8 @@ public class ProtoChunk implements ChunkAccess {
+     private final Map<StructureFeature<?>, StructureStart<?>> structureStarts = Maps.newHashMap();
+     private final Map<StructureFeature<?>, LongSet> structuresRefences = Maps.newHashMap();
+     private final UpgradeData upgradeData;
+-    private final ProtoTickList<Block> blockTicks;
+-    private final ProtoTickList<Fluid> liquidTicks;
++    public ProtoTickList<Block> blockTicks; // MultiPaper - make public and non-final
++    public ProtoTickList<Fluid> liquidTicks; // MultiPaper - make public and non-final
+     private final LevelHeightAccessor levelHeightAccessor;
+     private long inhabitedTime;
+     private final Map<GenerationStep.Carving, BitSet> carvingMasks = new Object2ObjectArrayMap<>();
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
 index 1c77959518039e4b4fb2ffa8b93f5f69e8587ade..c206fd51978a16a1e405db8203953273880c4ce7 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
@@ -1314,39 +1329,34 @@ index 0000000000000000000000000000000000000000..e2f33ad7ea22a414861082cf2496d659
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c0f0a22b193dd8ef6489b519a787852c0e5854f2
+index 0000000000000000000000000000000000000000..bc30660aecb693b3780a43074629bee680d5ee04
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
-@@ -0,0 +1,92 @@
+@@ -0,0 +1,87 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.core.Registry;
 +import net.minecraft.nbt.CompoundTag;
-+import net.minecraft.nbt.NbtIo;
 +import net.minecraft.nbt.Tag;
 +import net.minecraft.server.level.ServerLevel;
-+import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.ChunkTickList;
-+import net.minecraft.world.level.TickList;
 +import net.minecraft.world.level.block.Block;
-+import net.minecraft.world.level.chunk.ImposterProtoChunk;
++import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.LevelChunk;
-+import net.minecraft.world.level.chunk.storage.ChunkSerializer;
++import net.minecraft.world.level.chunk.ProtoChunk;
++import net.minecraft.world.level.chunk.ProtoTickList;
 +import net.minecraft.world.level.material.Fluid;
++import net.minecraft.world.level.material.Fluids;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
-+import puregero.multipaper.ChunkKey;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.ByteArrayInputStream;
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
 +import java.io.IOException;
-+import java.util.function.Consumer;
-+import java.util.zip.InflaterInputStream;
 +
 +public class SendTickListPacket extends ExternalServerPacket {
 +
@@ -1355,16 +1365,19 @@ index 0000000000000000000000000000000000000000..c0f0a22b193dd8ef6489b519a787852c
 +    private final String world;
 +    private final int cx;
 +    private final int cz;
-+    private final ChunkTickList<Block> blockTicks;
-+    private final ChunkTickList<Fluid> liquidTicks;
++    private final CompoundTag tag;
 +
 +    public SendTickListPacket(LevelChunk chunk) {
 +        this.world = chunk.level.convertable.getLevelId();
 +        this.cx = chunk.locX;
 +        this.cz = chunk.locZ;
 +
-+        this.blockTicks = new ChunkTickList<>(Registry.BLOCK::getKey, chunk.level.getBlockTicks().fetchTicksInChunk(chunk.getPos(), false, false), chunk.level.getGameTime());
-+        this.liquidTicks = new ChunkTickList<>(Registry.FLUID::getKey, chunk.level.getLiquidTicks().fetchTicksInChunk(chunk.getPos(), false, false), chunk.level.getGameTime());
++        ChunkTickList<Block> blockTicks = new ChunkTickList<>(Registry.BLOCK::getKey, chunk.level.getBlockTicks().fetchTicksInChunk(chunk.getPos(), false, false), chunk.level.getGameTime());
++        ChunkTickList<Fluid> liquidTicks = new ChunkTickList<>(Registry.FLUID::getKey, chunk.level.getLiquidTicks().fetchTicksInChunk(chunk.getPos(), false, false), chunk.level.getGameTime());
++
++        tag = new CompoundTag();
++        tag.put("TileTicks", blockTicks.save());
++        tag.put("LiquidTicks", liquidTicks.save());
 +    }
 +
 +    public SendTickListPacket(DataInputStream in) throws IOException {
@@ -1375,10 +1388,7 @@ index 0000000000000000000000000000000000000000..c0f0a22b193dd8ef6489b519a787852c
 +        int byteLength = in.readInt();
 +        byte[] data = new byte[byteLength];
 +        in.readFully(data);
-+        CompoundTag tag = MultiPaper.nbtDecompressFromBytes(data);
-+
-+        this.blockTicks = ChunkTickList.create(tag.getList("TileTicks", Tag.TAG_COMPOUND), Registry.BLOCK::getKey, Registry.BLOCK::get);
-+        this.liquidTicks = ChunkTickList.create(tag.getList("LiquidTicks", Tag.TAG_COMPOUND), Registry.FLUID::getKey, Registry.FLUID::get);
++        tag = MultiPaper.nbtDecompressFromBytes(data);
 +    }
 +
 +    @Override
@@ -1387,9 +1397,6 @@ index 0000000000000000000000000000000000000000..c0f0a22b193dd8ef6489b519a787852c
 +        out.writeInt(cx);
 +        out.writeInt(cz);
 +
-+        CompoundTag tag = new CompoundTag();
-+        tag.put("TileTicks", blockTicks.save());
-+        tag.put("LiquidTicks", liquidTicks.save());
 +        byte[] data = MultiPaper.nbtCompressToBytes(tag);
 +
 +        out.writeInt(data.length);
@@ -1399,12 +1406,15 @@ index 0000000000000000000000000000000000000000..c0f0a22b193dd8ef6489b519a787852c
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
 +        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
-+        LevelChunk chunk = level.getChunkIfLoaded(cx, cz);
-+        if (chunk != null) {
-+            chunk.packTicks(level);
-+            chunk.blockTicks = blockTicks;
-+            chunk.liquidTicks = liquidTicks;
-+            chunk.unpackTicks();
++        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
++        if (chunk instanceof LevelChunk levelChunk) {
++            levelChunk.packTicks(level);
++            levelChunk.blockTicks = ChunkTickList.create(tag.getList("TileTicks", Tag.TAG_COMPOUND), Registry.BLOCK::getKey, Registry.BLOCK::get);
++            levelChunk.liquidTicks = ChunkTickList.create(tag.getList("LiquidTicks", Tag.TAG_COMPOUND), Registry.FLUID::getKey, Registry.FLUID::get);
++            levelChunk.unpackTicks();
++        } else if (chunk instanceof ProtoChunk protoChunk) {
++            protoChunk.blockTicks = new ProtoTickList<>(block -> block == null || block.defaultBlockState().isAir(), chunk.getPos(), tag.getList("TileTicks", Tag.TAG_COMPOUND), level);
++            protoChunk.liquidTicks = new ProtoTickList<>(fluidtype -> fluidtype == null || fluidtype == Fluids.EMPTY, chunk.getPos(), tag.getList("LiquidTicks", Tag.TAG_COMPOUND), level);
 +        } else {
 +            LOGGER.warn("Received tick lists for an unloaded chunk " + world + "," + cx + "," + cz);
 +        }

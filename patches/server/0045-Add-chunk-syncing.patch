@@ -18,7 +18,7 @@ index 6a30338648214c98b05feb5a628dbdc6b2683ff9..be8ef2bd8c1d92fd1e97c2ebf6d308b9
          if (config.contains("settings.use-optimized-ticklist")) { // don't add default, hopefully temporary config
              useOptimizedTickList = config.getBoolean("settings.use-optimized-ticklist");
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
-index 3603f1ac72635143ef927e6da90e9fcbd09e124c..38fcee7b61eb51cfaf1f809c909718776d76ce89 100644
+index 3603f1ac72635143ef927e6da90e9fcbd09e124c..7cca3f3baeb0c1fc1beb428b1ebfd2ae99a7e2e7 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
 @@ -17,6 +17,7 @@ import javax.annotation.Nullable;
@@ -29,15 +29,16 @@ index 3603f1ac72635143ef927e6da90e9fcbd09e124c..38fcee7b61eb51cfaf1f809c90971877
  import net.minecraft.network.protocol.Packet;
  import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
  import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
-@@ -42,6 +43,7 @@ import net.minecraft.server.MinecraftServer;
+@@ -42,6 +43,8 @@ import net.minecraft.server.MinecraftServer;
  // CraftBukkit end
  
  import it.unimi.dsi.fastutil.shorts.ShortOpenHashSet; // Paper
++import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperChunkHandler;
  
  public class ChunkHolder {
  
-@@ -491,11 +493,19 @@ public class ChunkHolder {
+@@ -491,11 +494,19 @@ public class ChunkHolder {
              if (packetplayouttileentitydata != null) {
                  this.broadcast(packetplayouttileentitydata, false);
              }
@@ -57,6 +58,22 @@ index 3603f1ac72635143ef927e6da90e9fcbd09e124c..38fcee7b61eb51cfaf1f809c90971877
          // Paper start - per player view distance
          // there can be potential desync with player's last mapped section and the view distance map, so use the
          // view distance map here.
+@@ -809,6 +820,7 @@ public class ChunkHolder {
+                 either.ifLeft(chunk -> {
+                     ChunkHolder.this.isEntityTickingReady = true;
+                     // Paper start - entity ticking chunk set
++                    if (!chunk.hasExternalLockRequest) MultiPaper.lockChunk(chunk); // MultiPaper
+                     ChunkHolder.this.chunkMap.level.getChunkSource().entityTickingChunks.add(chunk);
+                     // Paper end - entity ticking chunk set
+                 });
+@@ -823,6 +835,7 @@ public class ChunkHolder {
+             // Paper start - entity ticking chunk set
+             LevelChunk chunkIfCached = this.getFullChunkUnchecked();
+             if (chunkIfCached != null) {
++                if (chunkIfCached.hasExternalLockRequest) MultiPaper.unlockChunk(chunkIfCached); // MultiPaper
+                 this.chunkMap.level.getChunkSource().entityTickingChunks.remove(chunkIfCached);
+             }
+             // Paper end - entity ticking chunk set
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
 index a9f247ba1d889dffdbac51fa70cc887f4987e717..da7c090e55023129049c235a46d874ad08fb74ab 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
@@ -100,7 +117,7 @@ index a9f247ba1d889dffdbac51fa70cc887f4987e717..da7c090e55023129049c235a46d874ad
  
          return regionFile.getStatusIfCached(chunkPos.x, chunkPos.z);
 diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
-index 35f27e9a7c82eaec5b4a1a71696dac8485b2cd6d..b93f60fa3b5640d54543bf81dd5e051ed101be2f 100644
+index 35f27e9a7c82eaec5b4a1a71696dac8485b2cd6d..5c4c8839f3603282d39238e9ef245044486574cc 100644
 --- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 +++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 @@ -45,6 +45,8 @@ import net.minecraft.world.level.storage.DimensionDataStorage;
@@ -112,38 +129,15 @@ index 35f27e9a7c82eaec5b4a1a71696dac8485b2cd6d..b93f60fa3b5640d54543bf81dd5e051e
  
  public class ServerChunkCache extends ChunkSource {
      public static final org.apache.logging.log4j.Logger LOGGER = org.apache.logging.log4j.LogManager.getLogger(); // Paper
-@@ -1039,7 +1041,19 @@ public class ServerChunkCache extends ChunkSource {
+@@ -1039,6 +1041,8 @@ public class ServerChunkCache extends ChunkSource {
                      // Paper end
                      ChunkPos chunkcoordintpair = chunk.getPos();
  
-+                    if (chunk.hasExternalLockRequest && (chunk.externalOwner == null || !chunk.externalOwner.isMe())) continue; // MultiPaper
++                    if (chunk.externalOwner == null || !chunk.externalOwner.isMe()) continue; // MultiPaper - Don't tick this chunk if we don't own it
 +
                      if ((true || this.level.isPositionEntityTicking(chunkcoordintpair)) && !this.chunkMap.isOutsideOfRange(playerchunk, chunkcoordintpair, false)) { // Paper - optimise isOutsideOfRange // Paper - we only iterate entity ticking chunks
-+
-+                        // MultiPaper start
-+                        if (!chunk.hasExternalLockRequest) {
-+                            MultiPaper.lockChunk(chunk);
-+                        }
-+                        if (chunk.externalOwner == null || !chunk.externalOwner.isMe()) {
-+                            continue;
-+                        }
-+                        // MultiPaper end
-+
                          chunk.setInhabitedTime(chunk.getInhabitedTime() + j);
                          if (flag1 && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunk.getPos()) && !this.chunkMap.isOutsideOfRange(playerchunk, chunkcoordintpair, true)) { // Spigot // Paper - optimise isOutsideOfRange
-                             NaturalSpawner.spawnForChunk(this.level, chunk, spawnercreature_d, this.spawnFriendlies, this.spawnEnemies, flag2);
-@@ -1048,7 +1062,11 @@ public class ServerChunkCache extends ChunkSource {
-                         // this.level.timings.doTickTiles.startTiming(); // Spigot // Paper
-                         this.level.tickChunk(chunk, k);
-                         // this.level.timings.doTickTiles.stopTiming(); // Spigot // Paper
-+                    // MultiPaper start - unlock the chunk if we're not ticking it
-+                    } else if (chunk.hasExternalLockRequest) {
-+                        MultiPaper.unlockChunk(chunk);
-                     }
-+                    // MultiPaper end
-                     if ((chunksTicked++ & 1) == 0) net.minecraft.server.MinecraftServer.getServer().executeMidTickTasks(); // Paper
-                 }
-             } // Paper start - optimise chunk tick iteration
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
 index 1ae7a10df7460f223413c38ac6bd85dba15fb347..f8e29035de239718cec7640c8df03639c31457dc 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java

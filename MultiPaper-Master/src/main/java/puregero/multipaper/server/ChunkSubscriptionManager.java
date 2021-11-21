@@ -86,7 +86,7 @@ public class ChunkSubscriptionManager {
 
                         if (i == -1 && !serverConnections.isEmpty()) {
                             synchronized (chunkSubscribers) {
-                                updateOwner(chunkSubscribers.get(key), key.name, key.x, key.z);
+                                updateOwner(serverConnections.get(0), chunkSubscribers.get(key), key.name, key.x, key.z);
                             }
                         }
                     }
@@ -106,8 +106,8 @@ public class ChunkSubscriptionManager {
         }
     }
 
-    private static void updateOwner(List<ServerConnection> serverConnections, String world, int cx, int cz) {
-        String owner = serverConnections.get(0).getBungeeCordName();
+    private static void updateOwner(ServerConnection ownerConnection, List<ServerConnection> serverConnections, String world, int cx, int cz) {
+        String owner = ownerConnection.getBungeeCordName();
         System.out.println("Owner of " + world + "," + cx + "," + cz + " is now " + owner);
         for (ServerConnection connection : serverConnections) {
             CompletableFuture.runAsync(() -> {

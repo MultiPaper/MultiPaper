@@ -258,7 +258,7 @@ index 9b4a464fe820effa906af486cf71a74e283ccd4e..8c9fdefee45b9039728373e7d0ce7f5d
          }
  
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index db7904b1bb402a36684b97c443336630762aeaf9..6cdd4fa5db343600315acc6e8af653504b7a4dbe 100644
+index db7904b1bb402a36684b97c443336630762aeaf9..17e7b39e8b187efb623a236ca766b398d82b3317 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -13,13 +13,9 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -285,7 +285,7 @@ index db7904b1bb402a36684b97c443336630762aeaf9..6cdd4fa5db343600315acc6e8af65350
  
  public class LevelChunk implements ChunkAccess {
  
-@@ -105,6 +102,9 @@ public class LevelChunk implements ChunkAccess {
+@@ -105,9 +102,12 @@ public class LevelChunk implements ChunkAccess {
      public final Map<BlockPos, BlockEntity> blockEntities;
      private final Map<StructureFeature<?>, StructureStart<?>> structureStarts;
      private final Map<StructureFeature<?>, LongSet> structuresRefences;
@@ -293,8 +293,13 @@ index db7904b1bb402a36684b97c443336630762aeaf9..6cdd4fa5db343600315acc6e8af65350
 +    public HashSet<ExternalServer> externalSubscribers = new HashSet<>(); // MultiPaper - Chunk subscribers
 +    public boolean hasExternalLockRequest = false; // MultiPaper - Have we sent a request to lock this chunk?
      private final ShortList[] postProcessing;
-     private TickList<Block> blockTicks;
-     private TickList<Fluid> liquidTicks;
+-    private TickList<Block> blockTicks;
+-    private TickList<Fluid> liquidTicks;
++    public TickList<Block> blockTicks; // MultiPaper - make public
++    public TickList<Fluid> liquidTicks; // MultiPaper - make public
+     // Paper start - track last save time
+     public long lastSaveTime;
+     @Override
 @@ -978,6 +978,7 @@ public class LevelChunk implements ChunkAccess {
          // Paper end - neighbour cache
          org.bukkit.Server server = this.level.getCraftServer();
@@ -478,10 +483,10 @@ index 5384c15cb77ef984a6596c16f8b7f94c06dbb7ab..d45e1060ea382730cac6458b065d9442
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 54f11ee72e99a26af832731f903f3a25c621cbe0..14d69e0cd61a8e54877f7285922df808012770ab 100644
+index 38be2afcc04916ab199930a931a8753de426a40c..c951a45154a4886432709a9abbfa7f09eeea9794 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,36 +1,47 @@
+@@ -1,38 +1,47 @@
  package puregero.multipaper;
  
 +import net.minecraft.core.BlockPos;
@@ -492,26 +497,30 @@ index 54f11ee72e99a26af832731f903f3a25c621cbe0..14d69e0cd61a8e54877f7285922df808
 +import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
+-import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
+-import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
+-import puregero.multipaper.externalserverprotocol.PlayerMovePacket;
+-import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.ImposterProtoChunk;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
- import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
- import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
- import puregero.multipaper.externalserverprotocol.PlayerMovePacket;
- import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
++import puregero.multipaper.externalserverprotocol.*;
  
 -import java.io.File;
 -import java.io.IOException;
 +import java.io.*;
  import java.nio.file.Files;
+ import java.util.Collection;
  import java.util.HashMap;
 +import java.util.HashSet;
  import java.util.UUID;
+ import java.util.function.Supplier;
 +import java.util.concurrent.ConcurrentHashMap;
 +import java.util.zip.DeflaterOutputStream;
++import java.util.zip.InflaterInputStream;
  
  public class MultiPaper {
      // You'll want to increase this if you have more than 250 servers
@@ -535,7 +544,7 @@ index 54f11ee72e99a26af832731f903f3a25c621cbe0..14d69e0cd61a8e54877f7285922df808
      private static String bungeeCordName = null;
      public static String getBungeeCordName() {
          if (bungeeCordName == null) {
-@@ -63,7 +74,6 @@ public class MultiPaper {
+@@ -65,7 +74,6 @@ public class MultiPaper {
                  }
              }
          }
@@ -543,7 +552,7 @@ index 54f11ee72e99a26af832731f903f3a25c621cbe0..14d69e0cd61a8e54877f7285922df808
          for (ExternalServer server : getConnection().getServersMap().values()) {
              if (server.getConnection() != null) {
                  // This tick function must be run after the vanilla tick
-@@ -71,17 +81,14 @@ public class MultiPaper {
+@@ -73,17 +81,14 @@ public class MultiPaper {
              }
          }
      }
@@ -561,7 +570,7 @@ index 54f11ee72e99a26af832731f903f3a25c621cbe0..14d69e0cd61a8e54877f7285922df808
      public static void onStart() {
          try {
              externalServerSocket = new ExternalServerSocket();
-@@ -90,11 +97,9 @@ public class MultiPaper {
+@@ -92,11 +97,9 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -573,7 +582,7 @@ index 54f11ee72e99a26af832731f903f3a25c621cbe0..14d69e0cd61a8e54877f7285922df808
      public static void onPlayerDisconnect(ServerPlayer player) {
          if (!(player instanceof ExternalPlayer)) {
              broadcastPacketToExternalServers(new PlayerRemovePacket(player));
-@@ -116,7 +121,6 @@ public class MultiPaper {
+@@ -129,7 +132,6 @@ public class MultiPaper {
              throw new RuntimeException(e);
          }
      }
@@ -581,7 +590,7 @@ index 54f11ee72e99a26af832731f903f3a25c621cbe0..14d69e0cd61a8e54877f7285922df808
      public static int getEntityCounterIncrement() {
          return ENTITY_COUNTER_INCREMENT;
      }
-@@ -129,4 +133,124 @@ public class MultiPaper {
+@@ -142,4 +144,133 @@ public class MultiPaper {
          }
          return null;
      }
@@ -646,6 +655,7 @@ index 54f11ee72e99a26af832731f903f3a25c621cbe0..14d69e0cd61a8e54877f7285922df808
 +
 +    public static void unlockChunk(LevelChunk chunk) {
 +        try {
++            broadcastPacketToExternalServers(chunk.externalSubscribers, () -> new SendTickListPacket(chunk));
 +            getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 +            chunk.externalOwner = null;
 +            chunk.hasExternalLockRequest = false;
@@ -663,12 +673,20 @@ index 54f11ee72e99a26af832731f903f3a25c621cbe0..14d69e0cd61a8e54877f7285922df808
 +        return buffer.toByteArray();
 +    }
 +
++    public static CompoundTag nbtFromBytes(byte[] data) throws IOException {
++        return NbtIo.read(new DataInputStream(new ByteArrayInputStream(data)));
++    }
++
 +    public static byte[] nbtCompressToBytes(CompoundTag compoundTag) throws IOException {
 +        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 +        DeflaterOutputStream deflaterOutputStream = new DeflaterOutputStream(buffer);
 +        NbtIo.write(compoundTag, (DataOutput) new DataOutputStream(deflaterOutputStream));
 +        deflaterOutputStream.close();
 +        return buffer.toByteArray();
++    }
++
++    public static CompoundTag nbtDecompressFromBytes(byte[] data) throws IOException {
++        return NbtIo.read(new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
 +    }
 +
 +    public static ChunkAccess getChunkAccess(String world, int cx, int cz) {
@@ -1096,16 +1114,17 @@ index 3d19e69add10e8a6a8305d9b651f30cbf4034c12..46b9eafb44f1855e8830ddcd7b0aa7c0
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 998b0df31e09092b199f7b7637bd64dda213b773..33ccdb58e2c5bd18e761dd24d800d60a57e95f6a 100644
+index 998b0df31e09092b199f7b7637bd64dda213b773..92721ba1ae32a1477d7cbb7a1d55b9cd7303c011 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -16,6 +16,9 @@ public class ExternalServerPacketSerializer {
+@@ -16,6 +16,10 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerRemovePacket.class, PlayerRemovePacket::new);
          addPacket(PlayerMovePacket.class, PlayerMovePacket::new);
          addPacket(SendPacketPacket.class, SendPacketPacket::new);
 +        addPacket(SendUpdatePacket.class, SendUpdatePacket::new);
 +        addPacket(RequestChunkPacket.class, RequestChunkPacket::new);
 +        addPacket(SendChunkPacket.class, SendChunkPacket::new);
++        addPacket(SendTickListPacket.class, SendTickListPacket::new);
      }
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
@@ -1290,6 +1309,104 @@ index 0000000000000000000000000000000000000000..e2f33ad7ea22a414861082cf2496d659
 +            }
 +        } catch (IOException e) {
 +            e.printStackTrace();
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c0f0a22b193dd8ef6489b519a787852c0e5854f2
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
+@@ -0,0 +1,92 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.core.Registry;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.NbtIo;
++import net.minecraft.nbt.Tag;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.ChunkPos;
++import net.minecraft.world.level.ChunkTickList;
++import net.minecraft.world.level.TickList;
++import net.minecraft.world.level.block.Block;
++import net.minecraft.world.level.chunk.ImposterProtoChunk;
++import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.level.chunk.storage.ChunkSerializer;
++import net.minecraft.world.level.material.Fluid;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ChunkKey;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.ByteArrayInputStream;
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.function.Consumer;
++import java.util.zip.InflaterInputStream;
++
++public class SendTickListPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(SendTickListPacket.class.getSimpleName());
++
++    private final String world;
++    private final int cx;
++    private final int cz;
++    private final ChunkTickList<Block> blockTicks;
++    private final ChunkTickList<Fluid> liquidTicks;
++
++    public SendTickListPacket(LevelChunk chunk) {
++        this.world = chunk.level.convertable.getLevelId();
++        this.cx = chunk.locX;
++        this.cz = chunk.locZ;
++
++        this.blockTicks = new ChunkTickList<>(Registry.BLOCK::getKey, chunk.level.getBlockTicks().fetchTicksInChunk(chunk.getPos(), false, false), chunk.level.getGameTime());
++        this.liquidTicks = new ChunkTickList<>(Registry.FLUID::getKey, chunk.level.getLiquidTicks().fetchTicksInChunk(chunk.getPos(), false, false), chunk.level.getGameTime());
++    }
++
++    public SendTickListPacket(DataInputStream in) throws IOException {
++        this.world = in.readUTF();
++        this.cx = in.readInt();
++        this.cz = in.readInt();
++
++        int byteLength = in.readInt();
++        byte[] data = new byte[byteLength];
++        in.readFully(data);
++        CompoundTag tag = MultiPaper.nbtDecompressFromBytes(data);
++
++        this.blockTicks = ChunkTickList.create(tag.getList("TileTicks", Tag.TAG_COMPOUND), Registry.BLOCK::getKey, Registry.BLOCK::get);
++        this.liquidTicks = ChunkTickList.create(tag.getList("LiquidTicks", Tag.TAG_COMPOUND), Registry.FLUID::getKey, Registry.FLUID::get);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        out.writeInt(cx);
++        out.writeInt(cz);
++
++        CompoundTag tag = new CompoundTag();
++        tag.put("TileTicks", blockTicks.save());
++        tag.put("LiquidTicks", liquidTicks.save());
++        byte[] data = MultiPaper.nbtCompressToBytes(tag);
++
++        out.writeInt(data.length);
++        out.write(data);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++        LevelChunk chunk = level.getChunkIfLoaded(cx, cz);
++        if (chunk != null) {
++            chunk.packTicks(level);
++            chunk.blockTicks = blockTicks;
++            chunk.liquidTicks = liquidTicks;
++            chunk.unpackTicks();
++        } else {
++            LOGGER.warn("Received tick lists for an unloaded chunk " + world + "," + cx + "," + cz);
 +        }
 +    }
 +}

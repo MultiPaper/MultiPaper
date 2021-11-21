@@ -203,7 +203,7 @@ index 8d329bca0818033df41fbd781028919c73e052a6..8a01433c65f5d24acb4501bd59a233c4
              }
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 14d69e0cd61a8e54877f7285922df808012770ab..ffda6593490c4efe4431d296cfafee671ab1513e 100644
+index c951a45154a4886432709a9abbfa7f09eeea9794..9da622677972bc09029ac71b75cae58ec12896d5 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,6 +1,7 @@
@@ -214,27 +214,7 @@ index 14d69e0cd61a8e54877f7285922df808012770ab..ffda6593490c4efe4431d296cfafee67
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.nbt.CompoundTag;
  import net.minecraft.nbt.NbtIo;
-@@ -14,10 +15,7 @@ import net.minecraft.world.level.chunk.ImposterProtoChunk;
- import net.minecraft.world.level.chunk.LevelChunk;
- import org.bukkit.Bukkit;
- import org.bukkit.craftbukkit.CraftWorld;
--import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
--import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
--import puregero.multipaper.externalserverprotocol.PlayerMovePacket;
--import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
-+import puregero.multipaper.externalserverprotocol.*;
- 
- import java.io.*;
- import java.nio.file.Files;
-@@ -26,6 +24,7 @@ import java.util.HashSet;
- import java.util.UUID;
- import java.util.concurrent.ConcurrentHashMap;
- import java.util.zip.DeflaterOutputStream;
-+import java.util.zip.InflaterInputStream;
- 
- public class MultiPaper {
-     // You'll want to increase this if you have more than 250 servers
-@@ -80,6 +79,7 @@ public class MultiPaper {
+@@ -80,6 +81,7 @@ public class MultiPaper {
                  server.getConnection().tick();
              }
          }
@@ -242,7 +222,7 @@ index 14d69e0cd61a8e54877f7285922df808012770ab..ffda6593490c4efe4431d296cfafee67
      }
      public static void sendTickTime(long time) {
          try {
-@@ -201,7 +201,7 @@ public class MultiPaper {
+@@ -213,7 +215,7 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -251,29 +231,7 @@ index 14d69e0cd61a8e54877f7285922df808012770ab..ffda6593490c4efe4431d296cfafee67
      public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
          if (compoundTag == null) {
              return new byte[0];
-@@ -211,6 +211,10 @@ public class MultiPaper {
-         return buffer.toByteArray();
-     }
- 
-+    public static CompoundTag nbtFromBytes(byte[] data) throws IOException {
-+        return NbtIo.read(new DataInputStream(new ByteArrayInputStream(data)));
-+    }
-+
-     public static byte[] nbtCompressToBytes(CompoundTag compoundTag) throws IOException {
-         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-         DeflaterOutputStream deflaterOutputStream = new DeflaterOutputStream(buffer);
-@@ -219,6 +223,10 @@ public class MultiPaper {
-         return buffer.toByteArray();
-     }
- 
-+    public static CompoundTag nbtDecompressFromBytes(byte[] data) throws IOException {
-+        return NbtIo.read(new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
-+    }
-+
-     public static ChunkAccess getChunkAccess(String world, int cx, int cz) {
-         ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
-         ChunkAccess chunkAccess = level.getChunkIfLoaded(cx, cz);
-@@ -253,4 +261,12 @@ public class MultiPaper {
+@@ -273,4 +275,12 @@ public class MultiPaper {
  
          return holder;
      }
@@ -498,13 +456,13 @@ index 0000000000000000000000000000000000000000..79b5ec18fc80714daac2c70c6a385fb1
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 33ccdb58e2c5bd18e761dd24d800d60a57e95f6a..5ac0bdf729b8a1fd04c3ff3e2c9df9c52e49e5c9 100644
+index 92721ba1ae32a1477d7cbb7a1d55b9cd7303c011..f6102b11c04d606fc0b6ce9e9d5c53d89ef534fe 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -19,6 +19,8 @@ public class ExternalServerPacketSerializer {
-         addPacket(SendUpdatePacket.class, SendUpdatePacket::new);
+@@ -20,6 +20,8 @@ public class ExternalServerPacketSerializer {
          addPacket(RequestChunkPacket.class, RequestChunkPacket::new);
          addPacket(SendChunkPacket.class, SendChunkPacket::new);
+         addPacket(SendTickListPacket.class, SendTickListPacket::new);
 +        addPacket(PlayerActionPacket.class, PlayerActionPacket::new);
 +        addPacket(PlayerInventoryUpdatePacket.class, PlayerInventoryUpdatePacket::new);
      }

@@ -248,10 +248,10 @@ index 519333b7d1629a3e8105d11e911df0b7430e00c5..11ee85df2d7ed546c4f7b05ff668d627
              externalServer.setConnection(null);
          }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index e3d29fd5be7d86d4c3127573160ce02a6666e66b..b6225f23fb82ce7acb18ace43687f6f75a17b507 100644
+index e3d29fd5be7d86d4c3127573160ce02a6666e66b..81f6542c9fc609eabb6cbd5c082242541d260519 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,10 +1,25 @@
+@@ -1,10 +1,27 @@
  package puregero.multipaper;
  
 +import net.minecraft.server.MinecraftServer;
@@ -265,8 +265,10 @@ index e3d29fd5be7d86d4c3127573160ce02a6666e66b..b6225f23fb82ce7acb18ace43687f6f7
  import java.io.File;
  import java.io.IOException;
  import java.nio.file.Files;
++import java.util.Collection;
 +import java.util.HashMap;
 +import java.util.UUID;
++import java.util.function.Supplier;
  
  public class MultiPaper {
 +    // You'll want to increase this if you have more than 250 servers
@@ -277,7 +279,7 @@ index e3d29fd5be7d86d4c3127573160ce02a6666e66b..b6225f23fb82ce7acb18ace43687f6f7
      private static MultiPaperConnection multiPaperConnection = null;
      private static ExternalServerSocket externalServerSocket = null;
  
-@@ -32,9 +47,29 @@ public class MultiPaper {
+@@ -32,9 +49,29 @@ public class MultiPaper {
          return bungeeCordName;
      }
  
@@ -307,7 +309,7 @@ index e3d29fd5be7d86d4c3127573160ce02a6666e66b..b6225f23fb82ce7acb18ace43687f6f7
          } catch (IOException e) {
              e.printStackTrace();
          }
-@@ -48,4 +83,43 @@ public class MultiPaper {
+@@ -48,4 +85,54 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -323,11 +325,22 @@ index e3d29fd5be7d86d4c3127573160ce02a6666e66b..b6225f23fb82ce7acb18ace43687f6f7
 +    }
 +
 +    public static void broadcastPacketToExternalServers(ExternalServerPacket packet) {
-+        getConnection().getServersMap().values().forEach(externalServer -> {
-+            if (externalServer.getConnection() != null) {
-+                externalServer.getConnection().send(packet);
-+            }
-+        });
++        broadcastPacketToExternalServers(getConnection().getServersMap().values(), packet);
++    }
++
++    public static void broadcastPacketToExternalServers(Collection<ExternalServer> externalServers, ExternalServerPacket packet) {
++        broadcastPacketToExternalServers(externalServers, () -> packet);
++    }
++
++    public static void broadcastPacketToExternalServers(Collection<ExternalServer> externalServers, Supplier<ExternalServerPacket> generatePacketIfNeeded) {
++        if (!externalServers.isEmpty()) {
++            ExternalServerPacket packet = generatePacketIfNeeded.get();
++            externalServers.forEach(externalServer -> {
++                if (externalServer.getConnection() != null) {
++                    externalServer.getConnection().send(packet);
++                }
++            });
++        }
 +    }
 +
 +    public static int getEntityCounterStartValue() {

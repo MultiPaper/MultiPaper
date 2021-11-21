@@ -1,0 +1,157 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 21 Nov 2021 22:41:15 +1000
+Subject: [PATCH] Sync entities
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 9cde430b1a3c1b462d1df17dea78c1a80b22dc6c..0de0b64ec1f7c4db82ba73989e87605f6d1c3d8b 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -168,6 +168,7 @@ import org.bukkit.event.player.PlayerPortalEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
+ import org.bukkit.inventory.MainHand;
++import puregero.multipaper.ExternalPlayer;
+ import puregero.multipaper.ExternalServer;
+ // CraftBukkit end
+ 
+@@ -1883,7 +1884,9 @@ public class ServerPlayer extends Player {
+         this.locale = packet.language;
+         // Paper start
+         this.adventure$locale = net.kyori.adventure.translation.Translator.parseLocale(this.locale);
++        if (!(this instanceof ExternalPlayer)) { // MultiPaper
+         this.connection.connection.channel.attr(PaperAdventure.LOCALE_ATTRIBUTE).set(this.adventure$locale);
++        } // MultiPaper
+         // Paper end
+         this.clientViewDistance = packet.viewDistance;
+         // CraftBukkit end
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index c24611777d893cdfa4d3c36897926318130470ca..28fedd727549cfedfa5fcbb5f02b25082ffb1be0 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -149,7 +149,6 @@ import net.minecraft.world.level.block.entity.CommandBlockEntity;
+ import net.minecraft.world.level.block.entity.JigsawBlockEntity;
+ import net.minecraft.world.level.block.entity.SignBlockEntity;
+ import net.minecraft.world.level.block.entity.StructureBlockEntity;
+-import net.minecraft.world.level.block.state.BlockBehaviour;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.BlockHitResult;
+@@ -177,7 +176,6 @@ import org.bukkit.Location;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
+ import org.bukkit.craftbukkit.event.CraftEventFactory;
+ import org.bukkit.craftbukkit.inventory.CraftItemStack;
+-import org.bukkit.craftbukkit.util.CraftChatMessage;
+ import org.bukkit.craftbukkit.util.CraftMagicNumbers;
+ import org.bukkit.craftbukkit.util.LazyPlayerSet;
+ import org.bukkit.craftbukkit.util.Waitable;
+@@ -194,7 +192,6 @@ import org.bukkit.event.inventory.InventoryCreativeEvent;
+ import org.bukkit.event.inventory.InventoryType.SlotType;
+ import org.bukkit.event.inventory.SmithItemEvent;
+ import org.bukkit.event.player.AsyncPlayerChatEvent;
+-import org.bukkit.event.player.PlayerAnimationEvent;
+ import org.bukkit.event.player.PlayerChatEvent;
+ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+ import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+@@ -216,6 +213,7 @@ import org.bukkit.util.NumberConversions;
+ import co.aikar.timings.MinecraftTimings; // Paper
+ import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperInventoryHandler;
++import puregero.multipaper.MultiPaperEntityHandler;
+ // CraftBukkit end
+ 
+ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
+@@ -3103,6 +3101,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+     @Override
+     public void handlePlayerAbilities(ServerboundPlayerAbilitiesPacket packet) {
+         PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
++        MultiPaperEntityHandler.handlePlayerAbilities(this.player, packet); // MultiPaper
+         // CraftBukkit start
+         if (this.player.getAbilities().mayfly && this.player.getAbilities().flying != packet.isFlying()) {
+             PlayerToggleFlightEvent event = new PlayerToggleFlightEvent(this.player.getBukkitEntity(), packet.isFlying());
+@@ -3119,6 +3118,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+     @Override
+     public void handleClientInformation(ServerboundClientInformationPacket packet) {
+         PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
++        MultiPaperEntityHandler.handleClientInformation(this.player, packet);
+         this.player.updateOptions(packet);
+     }
+ 
+diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
+index 94e76e295dbd0f3bac4b30a3e7338cd56a971207..de3932d9f84ffb30ab8eaacbf37d67ffbd2026d5 100644
+--- a/src/main/java/net/minecraft/world/entity/player/Player.java
++++ b/src/main/java/net/minecraft/world/entity/player/Player.java
+@@ -145,7 +145,7 @@ public abstract class Player extends LivingEntity {
+     private static final EntityDataAccessor<Float> DATA_PLAYER_ABSORPTION_ID = SynchedEntityData.defineId(Player.class, EntityDataSerializers.FLOAT);
+     private static final EntityDataAccessor<Integer> DATA_SCORE_ID = SynchedEntityData.defineId(Player.class, EntityDataSerializers.INT);
+     public static final EntityDataAccessor<Byte> DATA_PLAYER_MODE_CUSTOMISATION = SynchedEntityData.defineId(Player.class, EntityDataSerializers.BYTE);
+-    protected static final EntityDataAccessor<Byte> DATA_PLAYER_MAIN_HAND = SynchedEntityData.defineId(Player.class, EntityDataSerializers.BYTE);
++    public static final EntityDataAccessor<Byte> DATA_PLAYER_MAIN_HAND = SynchedEntityData.defineId(Player.class, EntityDataSerializers.BYTE); // MultiPaper - make public
+     protected static final EntityDataAccessor<CompoundTag> DATA_SHOULDER_LEFT = SynchedEntityData.defineId(Player.class, EntityDataSerializers.COMPOUND_TAG);
+     protected static final EntityDataAccessor<CompoundTag> DATA_SHOULDER_RIGHT = SynchedEntityData.defineId(Player.class, EntityDataSerializers.COMPOUND_TAG);
+     private long timeEntitySatOnShoulder;
+diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+index d45e1060ea382730cac6458b065d944285ce5826..92f2fa0b19b48fe7bffb575e3eb8712d4f782b35 100644
+--- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
++++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+@@ -1,8 +1,11 @@
+ package puregero.multipaper;
+ 
+ import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.game.ServerboundClientInformationPacket;
++import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.dedicated.DedicatedServer;
+ import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.HumanoidArm;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import puregero.multipaper.externalserverprotocol.*;
+@@ -42,6 +45,21 @@ public class ExternalServerConnection extends Thread implements Closeable {
+         try {
+             send(new HelloPacket(MultiPaper.getBungeeCordName()));
+ 
++            for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
++                if (!(player instanceof ExternalPlayer)) {
++                    send(new PlayerCreatePacket(player));
++                    send(new PlayerActionPacket(player, new ServerboundClientInformationPacket(
++                            player.locale,
++                            player.clientViewDistance,
++                            player.getChatVisibility(),
++                            player.canChatInColor(),
++                            player.getEntityData().get(ServerPlayer.DATA_PLAYER_MODE_CUSTOMISATION),
++                            player.getEntityData().get(ServerPlayer.DATA_PLAYER_MAIN_HAND) == 0 ? HumanoidArm.LEFT : HumanoidArm.RIGHT,
++                            player.isTextFilteringEnabled()
++                    )));
++                }
++            }
++
+             DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+             while (!socket.isClosed()) {
+                 ExternalServerPacket packet = ExternalServerPacketSerializer.deserialize(in);
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEntityHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntityHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..bf4acd7d8352d5c44d15aceda21653f7cf3ec0fc
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperEntityHandler.java
+@@ -0,0 +1,20 @@
++package puregero.multipaper;
++
++import net.minecraft.network.protocol.game.ServerboundClientInformationPacket;
++import net.minecraft.network.protocol.game.ServerboundPlayerAbilitiesPacket;
++import net.minecraft.server.level.ServerPlayer;
++import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
++
++public class MultiPaperEntityHandler {
++    public static void handlePlayerAbilities(ServerPlayer player, ServerboundPlayerAbilitiesPacket packet) {
++        if (!(player instanceof ExternalPlayer)) {
++            MultiPaper.broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
++        }
++    }
++
++    public static void handleClientInformation(ServerPlayer player, ServerboundClientInformationPacket packet) {
++        if (!(player instanceof ExternalPlayer)) {
++            MultiPaper.broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
++        }
++    }
++}

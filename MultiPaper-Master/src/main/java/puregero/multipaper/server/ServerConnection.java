@@ -50,18 +50,22 @@ public class ServerConnection extends Thread {
     }
 
     public void send(byte[] bytes) throws IOException {
-        synchronized (socket) {
-            socket.getOutputStream().write(bytes);
-            socket.getOutputStream().flush();
+        if (!socket.isClosed()) {
+            synchronized (socket) {
+                socket.getOutputStream().write(bytes);
+                socket.getOutputStream().flush();
+            }
         }
     }
 
     public void send(byte[] bytes, int id, Consumer<DataInputStream> callback) throws IOException {
-        synchronized (socket) {
-            socket.getOutputStream().write(bytes);
-            socket.getOutputStream().flush();
-            callbacks.put(id, callback);
+        if (!socket.isClosed()) {
+            synchronized (socket) {
+                socket.getOutputStream().write(bytes);
+                socket.getOutputStream().flush();
+            }
         }
+        callbacks.put(id, callback);
     }
 
     public DataOutputSender buffer() throws IOException {

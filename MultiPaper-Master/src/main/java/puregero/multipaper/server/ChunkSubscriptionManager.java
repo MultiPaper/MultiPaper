@@ -63,6 +63,14 @@ public class ChunkSubscriptionManager {
             if (!serverConnections.contains(serverConnection)) {
                 serverConnections.add(serverConnection);
                 lockedChunks.computeIfAbsent(serverConnection, k -> new HashSet<>()).add(key);
+
+                if (serverConnections.size() == 1) {
+                    synchronized (chunkSubscribers) {
+                        if (chunkSubscribers.get(key) != null) {
+                            updateOwner(serverConnections.get(0), chunkSubscribers.get(key), key.name, key.x, key.z);
+                        }
+                    }
+                }
             }
 
             System.out.println("Owner of " + world + "," + cx + "," + cz + " is " + serverConnections.get(0).getBungeeCordName());
@@ -84,9 +92,15 @@ public class ChunkSubscriptionManager {
                     if (serverConnections.get(i) == serverConnection) {
                         serverConnections.remove(i--);
 
-                        if (i == -1 && !serverConnections.isEmpty()) {
+                        if (i == -1) {
                             synchronized (chunkSubscribers) {
-                                updateOwner(serverConnections.get(0), chunkSubscribers.get(key), key.name, key.x, key.z);
+                                if (chunkSubscribers.get(key) != null) {
+                                    if (serverConnections.isEmpty()) {
+                                        updateOwner(null, chunkSubscribers.get(key), key.name, key.x, key.z);
+                                    } else {
+                                        updateOwner(serverConnections.get(0), chunkSubscribers.get(key), key.name, key.x, key.z);
+                                    }
+                                }
                             }
                         }
                     }
@@ -107,7 +121,7 @@ public class ChunkSubscriptionManager {
     }
 
     private static void updateOwner(ServerConnection ownerConnection, List<ServerConnection> serverConnections, String world, int cx, int cz) {
-        String owner = ownerConnection.getBungeeCordName();
+        String owner = ownerConnection == null ? "" : ownerConnection.getBungeeCordName();
         System.out.println("Owner of " + world + "," + cx + "," + cz + " is now " + owner);
         for (ServerConnection connection : serverConnections) {
             CompletableFuture.runAsync(() -> {
@@ -152,6 +166,10 @@ public class ChunkSubscriptionManager {
                 serverConnections.add(serverConnection);
                 updateSubscriberAdd(serverConnections, serverConnection, world, cx, cz);
                 subscribedChunks.computeIfAbsent(serverConnection, k -> new HashSet<>()).add(key);
+            }
+
+            if (chunkLocks.get(key) != null && !chunkLocks.get(key).isEmpty()) {
+                updateOwner(chunkLocks.get(key).get(0), Collections.singletonList(serverConnection), key.name, key.x, key.z);
             }
         }
     }

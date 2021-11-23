@@ -1,6 +1,7 @@
 package puregero.multipaper.server.handlers;
 
 import puregero.multipaper.server.DataOutputSender;
+import puregero.multipaper.server.EntitiesSubscriptionManager;
 import puregero.multipaper.server.ServerConnection;
 import puregero.multipaper.server.ChunkSubscriptionManager;
 import puregero.multipaper.server.util.RegionFileCache;
@@ -17,12 +18,24 @@ public class ReadChunkHandler implements Handler {
         int cx = in.readInt();
         int cz = in.readInt();
 
-        if (path.equals("region") || path.equals("entities")) {
+        if (path.equals("region")) {
             ServerConnection alreadyLoadedChunk = ChunkSubscriptionManager.getOwnerOrSubscriber(world, cx, cz);
             ChunkSubscriptionManager.subscribe(connection, world, cx, cz);
             if (alreadyLoadedChunk != null && alreadyLoadedChunk != connection) {
                 out.writeUTF("chunkData");
                 out.writeUTF(alreadyLoadedChunk.getBungeeCordName());
+                out.writeInt(0);
+                out.send();
+                return;
+            }
+        }
+
+        if (path.equals("entities")) {
+            ServerConnection alreadyLoadedEntities = EntitiesSubscriptionManager.getSubscriber(world, cx, cz);
+            EntitiesSubscriptionManager.subscribe(connection, world, cx, cz);
+            if (alreadyLoadedEntities != null && alreadyLoadedEntities != connection) {
+                out.writeUTF("chunkData");
+                out.writeUTF(alreadyLoadedEntities.getBungeeCordName());
                 out.writeInt(0);
                 out.send();
                 return;

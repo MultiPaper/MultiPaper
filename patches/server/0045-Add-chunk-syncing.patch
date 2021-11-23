@@ -436,10 +436,10 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 411b1cfdb0de16c8c183860833ebdd0772b92f7d..af98a71ae3d3e6b40852ced13a30b7136accf0cb 100644
+index ce8487f5dfb42cc5f01aa5f9d46562453296dc15..5f94d9c1b76b395c396ff28204f3c48a66a826aa 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -70,7 +70,7 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -57,7 +57,7 @@ public class ExternalPlayer extends ServerPlayer {
  
          @Override
          public void send(Packet<?> packet, @Nullable GenericFutureListener<? extends Future<? super Void>> callback) {
@@ -498,7 +498,7 @@ index 5384c15cb77ef984a6596c16f8b7f94c06dbb7ab..d45e1060ea382730cac6458b065d9442
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 38be2afcc04916ab199930a931a8753de426a40c..c951a45154a4886432709a9abbfa7f09eeea9794 100644
+index 41ff628e123e89b9af4915f35b784b282766f8d4..3e8c20dd27da8765075f8b3ff39204d5bda38d65 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,38 +1,47 @@
@@ -597,18 +597,30 @@ index 38be2afcc04916ab199930a931a8753de426a40c..c951a45154a4886432709a9abbfa7f09
      public static void onPlayerDisconnect(ServerPlayer player) {
          if (!(player instanceof ExternalPlayer)) {
              broadcastPacketToExternalServers(new PlayerRemovePacket(player));
-@@ -129,7 +132,6 @@ public class MultiPaper {
-             throw new RuntimeException(e);
+@@ -121,4 +124,157 @@ public class MultiPaper {
+             });
          }
      }
--
-     public static int getEntityCounterIncrement() {
-         return ENTITY_COUNTER_INCREMENT;
-     }
-@@ -142,4 +144,133 @@ public class MultiPaper {
-         }
-         return null;
-     }
++
++    public static int getEntityCounterStartValue() {
++        try {
++            return getConnection().getEntityCounterStartValue().join();
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
++    }
++    public static int getEntityCounterIncrement() {
++        return ENTITY_COUNTER_INCREMENT;
++    }
++
++    public static ServerPlayer getPlayerById(int id) {
++        for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
++            if (player.getId() == id) {
++                return player;
++            }
++        }
++        return null;
++    }
 +
 +    public static CompoundTag readChunk(ChunkPos chunkPos, ServerLevel serverLevel) throws IOException {
 +        return readRegionFileNBT(serverLevel, "region", chunkPos);
@@ -670,7 +682,9 @@ index 38be2afcc04916ab199930a931a8753de426a40c..c951a45154a4886432709a9abbfa7f09
 +
 +    public static void unlockChunk(LevelChunk chunk) {
 +        try {
-+            broadcastPacketToExternalServers(chunk.externalSubscribers, () -> new SendTickListPacket(chunk));
++            if (chunk.externalOwner != null && chunk.externalOwner.isMe()) {
++                broadcastPacketToExternalServers(chunk.externalSubscribers, () -> new SendTickListPacket(chunk));
++            }
 +            getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 +            chunk.externalOwner = null;
 +            chunk.hasExternalLockRequest = false;
@@ -684,7 +698,7 @@ index 38be2afcc04916ab199930a931a8753de426a40c..c951a45154a4886432709a9abbfa7f09
 +            return new byte[0];
 +        }
 +        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-+        NbtIo.write(compoundTag, (DataOutput) new DataOutputStream(buffer));
++        NbtIo.write(compoundTag, new DataOutputStream(buffer));
 +        return buffer.toByteArray();
 +    }
 +
@@ -695,7 +709,7 @@ index 38be2afcc04916ab199930a931a8753de426a40c..c951a45154a4886432709a9abbfa7f09
 +    public static byte[] nbtCompressToBytes(CompoundTag compoundTag) throws IOException {
 +        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 +        DeflaterOutputStream deflaterOutputStream = new DeflaterOutputStream(buffer);
-+        NbtIo.write(compoundTag, (DataOutput) new DataOutputStream(deflaterOutputStream));
++        NbtIo.write(compoundTag, new DataOutputStream(deflaterOutputStream));
 +        deflaterOutputStream.close();
 +        return buffer.toByteArray();
 +    }
@@ -710,10 +724,12 @@ index 38be2afcc04916ab199930a931a8753de426a40c..c951a45154a4886432709a9abbfa7f09
 +
 +        if (chunkAccess == null) {
 +            ChunkHolder holder = level.chunkSource.chunkMap.getUpdatingChunkIfPresent(ChunkPos.asLong(cx, cz));
-+            chunkAccess = holder.getAvailableChunkNow();
++            if (holder != null) {
++                chunkAccess = holder.getAvailableChunkNow();
 +
-+            if (chunkAccess instanceof ImposterProtoChunk) {
-+                chunkAccess = ((ImposterProtoChunk) chunkAccess).getWrapped();
++                if (chunkAccess instanceof ImposterProtoChunk) {
++                    chunkAccess = ((ImposterProtoChunk) chunkAccess).getWrapped();
++                }
 +            }
 +        }
 +
@@ -930,7 +946,7 @@ index 0000000000000000000000000000000000000000..10842ae0c1330d17db15ebb292c93e5e
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 3d19e69add10e8a6a8305d9b651f30cbf4034c12..32c08b486d6a8750a22b4ee6eebaf225eb85331c 100644
+index aeeffab321999a6e0c03dafc8dfd04effa3948f1..32c08b486d6a8750a22b4ee6eebaf225eb85331c 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -1,17 +1,25 @@
@@ -1022,10 +1038,26 @@ index 3d19e69add10e8a6a8305d9b651f30cbf4034c12..32c08b486d6a8750a22b4ee6eebaf225
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -171,4 +235,106 @@ public class MultiPaperConnection extends Thread {
- 
-         return future;
+@@ -155,4 +219,122 @@ public class MultiPaperConnection extends Thread {
+         out.writeInt(port);
+         out.send(null);
      }
++
++    public CompletableFuture<Integer> getEntityCounterStartValue() throws IOException {
++        CompletableFuture<Integer> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("getEntityCounterStartValue");
++        out.send(in -> {
++            try {
++                future.complete(in.readInt());
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
 +
 +    public CompletableFuture<byte[]> forceReadChunk(String world, String path, int cx, int cz) throws IOException {
 +        CompletableFuture<byte[]> future = new CompletableFuture<>();

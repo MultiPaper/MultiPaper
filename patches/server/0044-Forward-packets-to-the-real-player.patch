@@ -5,10 +5,10 @@ Subject: [PATCH] Forward packets to the real player
 
 
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index fe7ac552211558c40d10a739a1d719a426d85d6d..411b1cfdb0de16c8c183860833ebdd0772b92f7d 100644
+index 22d1a0f88cd86fe4893123ec73994b5ced1b500a..ce8487f5dfb42cc5f01aa5f9d46562453296dc15 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -70,7 +70,13 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -57,7 +57,13 @@ public class ExternalPlayer extends ServerPlayer {
  
          @Override
          public void send(Packet<?> packet, @Nullable GenericFutureListener<? extends Future<? super Void>> callback) {
@@ -98,7 +98,7 @@ index 11ee85df2d7ed546c4f7b05ff668d6278d73d1b3..5384c15cb77ef984a6596c16f8b7f94c
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 81f6542c9fc609eabb6cbd5c082242541d260519..38be2afcc04916ab199930a931a8753de426a40c 100644
+index b5b928bec01990c5ad61b193e649405c482d6f00..41ff628e123e89b9af4915f35b784b282766f8d4 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -65,6 +65,13 @@ public class MultiPaper {
@@ -129,10 +129,10 @@ index 77e18bb08ee446140abe55f87fa30a4ab1dd005e..998b0df31e09092b199f7b7637bd64dd
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d606e66e6142790bfd7ea738e84d2b66063c2061
+index 0000000000000000000000000000000000000000..8ed75a553a0de9c1dfcff9a6353a72adfededea4
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,84 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -141,6 +141,7 @@ index 0000000000000000000000000000000000000000..d606e66e6142790bfd7ea738e84d2b66
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.network.protocol.Packet;
 +import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
@@ -152,26 +153,27 @@ index 0000000000000000000000000000000000000000..d606e66e6142790bfd7ea738e84d2b66
 +import java.io.DataOutputStream;
 +import java.io.IOException;
 +import java.util.List;
++import java.util.UUID;
 +
 +public class SendPacketPacket extends ExternalServerPacket {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(SendPacketPacket.class.getSimpleName());
 +
-+    private final int[] ids;
++    private final UUID[] uuids;
 +    private final Packet<?> packet;
 +
 +    public SendPacketPacket(List<ExternalPlayer> players, Packet<?> packet) {
-+        this.ids = new int[players.size()];
++        this.uuids = new UUID[players.size()];
 +        for (int i = 0; i < players.size(); i++) {
-+            this.ids[i] = players.get(i).getId();
++            this.uuids[i] = players.get(i).getUUID();
 +        }
 +        this.packet = packet;
 +    }
 +
 +    public SendPacketPacket(DataInputStream in) throws IOException {
-+        ids = new int[in.readInt()];
-+        for (int i = 0; i < ids.length; i++) {
-+            this.ids[i] = in.readInt();
++        uuids = new UUID[in.readInt()];
++        for (int i = 0; i < uuids.length; i++) {
++            this.uuids[i] = readUUID(in);
 +        }
 +
 +        int length = in.readInt();
@@ -185,9 +187,9 @@ index 0000000000000000000000000000000000000000..d606e66e6142790bfd7ea738e84d2b66
 +
 +    @Override
 +    public void write(DataOutputStream out) throws IOException {
-+        out.writeInt(ids.length);
-+        for (int id : ids) {
-+            out.writeInt(id);
++        out.writeInt(uuids.length);
++        for (UUID uuid : uuids) {
++            writeUUID(out, uuid);
 +        }
 +
 +        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
@@ -203,11 +205,11 @@ index 0000000000000000000000000000000000000000..d606e66e6142790bfd7ea738e84d2b66
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        for (int id : ids) {
-+            ServerPlayer player = MultiPaper.getPlayerById(id);
++        for (UUID uuid : uuids) {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
 +
 +            if (player == null) {
-+                LOGGER.warn("Tried to remove a non-existant player with entity id of " + id);
++                LOGGER.warn("Tried to send a packet to a non-existent player uuid " + player);
 +                return;
 +            }
 +

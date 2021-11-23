@@ -103,49 +103,12 @@ index eaa005c1c9b4386bcdbe1d6eb28c3eca7635066c..ee7f65f94c71654da22c413219fc4374
      public void tick() {
          if (++this.sendAllPlayerInfoIn > 600) {
              // CraftBukkit start
-diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index aac9dd19237d0708990960d03328e7530cd7bc8e..58fdc7257858b3494aef290a5c029ffcef4e2089 100644
---- a/src/main/java/net/minecraft/world/entity/Entity.java
-+++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -147,6 +147,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
- import org.bukkit.event.entity.EntityPoseChangeEvent;
- import org.bukkit.event.player.PlayerTeleportEvent;
- import org.bukkit.plugin.PluginManager;
-+import puregero.multipaper.MultiPaper;
- // CraftBukkit end
- 
- public abstract class Entity implements Nameable, EntityAccess, CommandSource, net.minecraft.server.KeyedObject { // Paper
-@@ -196,7 +197,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
-     protected static final Logger LOGGER = LogManager.getLogger();
-     public static final String ID_TAG = "id";
-     public static final String PASSENGERS_TAG = "Passengers";
--    private static final AtomicInteger ENTITY_COUNTER = new AtomicInteger();
-+    private static final AtomicInteger ENTITY_COUNTER = new AtomicInteger(MultiPaper.getEntityCounterStartValue()); // MultiPape - Change start value
-     private static final List<ItemStack> EMPTY_LIST = Collections.emptyList();
-     public static final int BOARDING_COOLDOWN = 60;
-     public static final int TOTAL_AIR_SUPPLY = 300;
-@@ -494,8 +495,14 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
-     public int sectionZ = Integer.MIN_VALUE;
-     // Paper end
- 
-+    // MultiPaper start - New next id functionality
-+    public int getNextId() {
-+        return Entity.ENTITY_COUNTER.addAndGet(256);
-+    }
-+    // MultiPaper end
-+
-     public Entity(EntityType<?> type, Level world) {
--        this.id = Entity.ENTITY_COUNTER.incrementAndGet();
-+        this.id = getNextId(); // MultiPaper - New id getter
-         this.passengers = ImmutableList.of();
-         this.deltaMovement = Vec3.ZERO;
-         this.bb = Entity.INITIAL_AABB;
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..fe7ac552211558c40d10a739a1d719a426d85d6d
+index 0000000000000000000000000000000000000000..22d1a0f88cd86fe4893123ec73994b5ced1b500a
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,63 @@
 +package puregero.multipaper;
 +
 +import com.mojang.authlib.GameProfile;
@@ -169,23 +132,10 @@ index 0000000000000000000000000000000000000000..fe7ac552211558c40d10a739a1d719a4
 +public class ExternalPlayer extends ServerPlayer {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(ExternalPlayer.class.getSimpleName());
-+    private static int nextId = -1;
 +    public ExternalServerConnection externalServerConnection;
 +
-+    public static void create(ExternalServerConnection externalServerConnection, int id, String name, UUID uuid, String world, double x, double y, double z) {
-+        nextId = id;
++    public static void create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z) {
 +        new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z);
-+    }
-+
-+    @Override
-+    public int getNextId() {
-+        if (nextId == -1) {
-+            LOGGER.warn("Tried to get the next id for ExternalPlayer, but it's -1");
-+            return super.getNextId();
-+        }
-+        int id = nextId;
-+        nextId = -1;
-+        return id;
 +    }
 +
 +    public ExternalPlayer(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z) {
@@ -248,7 +198,7 @@ index 519333b7d1629a3e8105d11e911df0b7430e00c5..11ee85df2d7ed546c4f7b05ff668d627
              externalServer.setConnection(null);
          }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index e3d29fd5be7d86d4c3127573160ce02a6666e66b..81f6542c9fc609eabb6cbd5c082242541d260519 100644
+index e3d29fd5be7d86d4c3127573160ce02a6666e66b..b5b928bec01990c5ad61b193e649405c482d6f00 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,10 +1,27 @@
@@ -309,7 +259,7 @@ index e3d29fd5be7d86d4c3127573160ce02a6666e66b..81f6542c9fc609eabb6cbd5c08224254
          } catch (IOException e) {
              e.printStackTrace();
          }
-@@ -48,4 +85,54 @@ public class MultiPaper {
+@@ -48,4 +85,33 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -342,52 +292,35 @@ index e3d29fd5be7d86d4c3127573160ce02a6666e66b..81f6542c9fc609eabb6cbd5c08224254
 +            });
 +        }
 +    }
-+
-+    public static int getEntityCounterStartValue() {
-+        try {
-+            return getConnection().getEntityCounterStartValue().join();
-+        } catch (IOException e) {
-+            throw new RuntimeException(e);
-+        }
-+    }
-+
-+    public static int getEntityCounterIncrement() {
-+        return ENTITY_COUNTER_INCREMENT;
-+    }
-+
-+    public static ServerPlayer getPlayerById(int id) {
-+        for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
-+            if (player.getId() == id) {
-+                return player;
-+            }
-+        }
-+        return null;
-+    }
  }
-diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index aeeffab321999a6e0c03dafc8dfd04effa3948f1..3d19e69add10e8a6a8305d9b651f30cbf4034c12 100644
---- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
-+++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -155,4 +155,20 @@ public class MultiPaperConnection extends Thread {
-         out.writeInt(port);
-         out.send(null);
-     }
-+
-+    public CompletableFuture<Integer> getEntityCounterStartValue() throws IOException {
-+        CompletableFuture<Integer> future = new CompletableFuture<>();
-+
-+        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("getEntityCounterStartValue");
-+        out.send(in -> {
-+            try {
-+                future.complete(in.readInt());
-+            } catch (IOException e) {
-+                e.printStackTrace();
-+            }
-+        });
-+
-+        return future;
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
+index 81d61a2d671fedd031eb2725ac3ab45622e196b1..ae0855ca9cc5328b2fad1cd505a28ce44f57acaa 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
+@@ -2,8 +2,10 @@ package puregero.multipaper.externalserverprotocol;
+ 
+ import puregero.multipaper.ExternalServerConnection;
+ 
++import java.io.DataInputStream;
+ import java.io.DataOutputStream;
+ import java.io.IOException;
++import java.util.UUID;
+ 
+ public abstract class ExternalServerPacket {
+ 
+@@ -11,4 +13,13 @@ public abstract class ExternalServerPacket {
+ 
+     public abstract void write(DataOutputStream out) throws IOException;
+ 
++    protected UUID readUUID(DataInputStream in) throws IOException {
++        return new UUID(in.readLong(), in.readLong());
 +    }
++
++    protected void writeUUID(DataOutputStream out, UUID uuid) throws IOException {
++        out.writeLong(uuid.getMostSignificantBits());
++        out.writeLong(uuid.getLeastSignificantBits());
++    }
++
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 index 813c88cd23411cbd0615d3d1da11d5173a96fdff..77e18bb08ee446140abe55f87fa30a4ab1dd005e 100644
@@ -405,10 +338,10 @@ index 813c88cd23411cbd0615d3d1da11d5173a96fdff..77e18bb08ee446140abe55f87fa30a4a
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..eb49de9a317aa94fe5bbcc6bd07c343d54022863
+index 0000000000000000000000000000000000000000..152f91480a3a453a7dd55c1c28c5c6e5bea41cc0
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,59 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.level.ServerPlayer;
@@ -427,7 +360,6 @@ index 0000000000000000000000000000000000000000..eb49de9a317aa94fe5bbcc6bd07c343d
 +
 +    private static final Logger LOGGER = LogManager.getLogger(PlayerCreatePacket.class.getSimpleName());
 +
-+    private final int id;
 +    private final String name;
 +    private final UUID uuid;
 +    private final String world;
@@ -436,7 +368,6 @@ index 0000000000000000000000000000000000000000..eb49de9a317aa94fe5bbcc6bd07c343d
 +    private final double z;
 +
 +    public PlayerCreatePacket(ServerPlayer player) {
-+        this.id = player.getId();
 +        this.name = player.getScoreboardName();
 +        this.uuid = player.getUUID();
 +        this.world = player.getLevel().convertable.getLevelId();
@@ -446,9 +377,8 @@ index 0000000000000000000000000000000000000000..eb49de9a317aa94fe5bbcc6bd07c343d
 +    }
 +
 +    public PlayerCreatePacket(DataInputStream in) throws IOException {
-+        id = in.readInt();
 +        name = in.readUTF();
-+        uuid = new UUID(in.readLong(), in.readLong());
++        uuid = readUUID(in);
 +        world = in.readUTF();
 +        x = in.readDouble();
 +        y = in.readDouble();
@@ -457,10 +387,8 @@ index 0000000000000000000000000000000000000000..eb49de9a317aa94fe5bbcc6bd07c343d
 +
 +    @Override
 +    public void write(DataOutputStream out) throws IOException {
-+        out.writeInt(id);
 +        out.writeUTF(name);
-+        out.writeLong(uuid.getMostSignificantBits());
-+        out.writeLong(uuid.getLeastSignificantBits());
++        writeUUID(out, uuid);
 +        out.writeUTF(world);
 +        out.writeDouble(x);
 +        out.writeDouble(y);
@@ -469,18 +397,19 @@ index 0000000000000000000000000000000000000000..eb49de9a317aa94fe5bbcc6bd07c343d
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        LOGGER.info("Adding player " + name + " (" + id + ")");
-+        MultiPaper.runSync(() -> ExternalPlayer.create(connection, id, name, uuid, world, x, y, z));
++        LOGGER.info("Adding player " + name + " (" + uuid + ")");
++        MultiPaper.runSync(() -> ExternalPlayer.create(connection, name, uuid, world, x, y, z));
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerMovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerMovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8f6c79d9ab3b6c0ec06997dc8901809c962bbba5
+index 0000000000000000000000000000000000000000..0b4db5d58fd39b052a481c9531e11ddf40440ff5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerMovePacket.java
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,68 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
@@ -490,12 +419,13 @@ index 0000000000000000000000000000000000000000..8f6c79d9ab3b6c0ec06997dc8901809c
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
 +import java.io.IOException;
++import java.util.UUID;
 +
 +public class PlayerMovePacket extends ExternalServerPacket {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(PlayerMovePacket.class.getSimpleName());
 +
-+    private final int id;
++    private final UUID uuid;
 +    private final double x;
 +    private final double y;
 +    private final double z;
@@ -503,7 +433,7 @@ index 0000000000000000000000000000000000000000..8f6c79d9ab3b6c0ec06997dc8901809c
 +    private final float pitch;
 +
 +    public PlayerMovePacket(ServerPlayer player) {
-+        this.id = player.getId();
++        this.uuid = player.getUUID();
 +        this.x = player.getX();
 +        this.y = player.getY();
 +        this.z = player.getZ();
@@ -512,7 +442,7 @@ index 0000000000000000000000000000000000000000..8f6c79d9ab3b6c0ec06997dc8901809c
 +    }
 +
 +    public PlayerMovePacket(DataInputStream in) throws IOException {
-+        id = in.readInt();
++        uuid = readUUID(in);
 +        x = in.readDouble();
 +        y = in.readDouble();
 +        z = in.readDouble();
@@ -522,7 +452,7 @@ index 0000000000000000000000000000000000000000..8f6c79d9ab3b6c0ec06997dc8901809c
 +
 +    @Override
 +    public void write(DataOutputStream out) throws IOException {
-+        out.writeInt(id);
++        writeUUID(out, uuid);
 +        out.writeDouble(x);
 +        out.writeDouble(y);
 +        out.writeDouble(z);
@@ -532,10 +462,10 @@ index 0000000000000000000000000000000000000000..8f6c79d9ab3b6c0ec06997dc8901809c
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        ServerPlayer player = MultiPaper.getPlayerById(id);
++        ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
 +
 +        if (player == null) {
-+            LOGGER.warn("Tried to move a non-existant player with entity id of " + id);
++            LOGGER.warn("Tried to move a non-existent player with uuid " + uuid);
 +            return;
 +        }
 +
@@ -547,12 +477,13 @@ index 0000000000000000000000000000000000000000..8f6c79d9ab3b6c0ec06997dc8901809c
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..eb8abee1b04b20acf918839906073296e81be5e0
+index 0000000000000000000000000000000000000000..b2012d93a098ddacf707159b7fccd0a1820776ae
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,45 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
@@ -562,32 +493,33 @@ index 0000000000000000000000000000000000000000..eb8abee1b04b20acf918839906073296
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
 +import java.io.IOException;
++import java.util.UUID;
 +
 +public class PlayerRemovePacket extends ExternalServerPacket {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(PlayerRemovePacket.class.getSimpleName());
 +
-+    private final int id;
++    private final UUID uuid;
 +
 +    public PlayerRemovePacket(ServerPlayer player) {
-+        this.id = player.getId();
++        this.uuid = player.getUUID();
 +    }
 +
 +    public PlayerRemovePacket(DataInputStream in) throws IOException {
-+        id = in.readInt();
++        uuid = readUUID(in);
 +    }
 +
 +    @Override
 +    public void write(DataOutputStream out) throws IOException {
-+        out.writeInt(id);
++        writeUUID(out, uuid);
 +    }
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        ServerPlayer player = MultiPaper.getPlayerById(id);
++        ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
 +
 +        if (player == null) {
-+            LOGGER.warn("Tried to remove a non-existant player with entity id of " + id);
++            LOGGER.warn("Tried to remove a non-existent player with uuid " + uuid);
 +            return;
 +        }
 +

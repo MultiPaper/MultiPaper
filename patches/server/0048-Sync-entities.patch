@@ -4,6 +4,90 @@ Date: Sun, 21 Nov 2021 22:41:15 +1000
 Subject: [PATCH] Sync entities
 
 
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index da7c090e55023129049c235a46d874ad08fb74ab..92150612c2622c071f4c23d83eb96cc7ee211daf 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -104,7 +104,9 @@ import org.apache.logging.log4j.Logger;
+ 
+ import org.bukkit.entity.Player; // CraftBukkit
+ import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet; // Paper
++import puregero.multipaper.ExternalPlayer;
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperEntitiesHandler;
+ 
+ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
+ 
+@@ -2353,6 +2355,13 @@ Sections go from 0..16. Now whenever a section is not empty, it can potentially
+         public void broadcast(Packet<?> packet) {
+             Iterator iterator = this.seenBy.iterator();
+ 
++            // MultiPaper start - Are we ticking this entity?
++            LevelChunk chunk = level.getChunkIfLoaded(entity.blockPosition());
++            if (chunk != null && chunk.externalOwner != null && chunk.externalOwner.isMe()) {
++                MultiPaperEntitiesHandler.onEntityUpdate(entity, packet); // MultiPaper
++            }
++            // MultiPaper end
++
+             while (iterator.hasNext()) {
+                 ServerPlayerConnection serverplayerconnection = (ServerPlayerConnection) iterator.next();
+ 
+@@ -2389,6 +2398,8 @@ Sections go from 0..16. Now whenever a section is not empty, it can potentially
+         }
+ 
+         public void updatePlayer(ServerPlayer player) {
++            if (player instanceof ExternalPlayer) return; // MultiPaper
++
+             org.spigotmc.AsyncCatcher.catchOp("player tracker update"); // Spigot
+             if (player != this.entity) {
+                 // Paper start - remove allocation of Vec3D here
+diff --git a/src/main/java/net/minecraft/server/level/ServerEntity.java b/src/main/java/net/minecraft/server/level/ServerEntity.java
+index a453aac607f9b38f0bf90038ff2d8071687c4bae..ca60edfc98042f54c2194958e51c2a2d5eb777b5 100644
+--- a/src/main/java/net/minecraft/server/level/ServerEntity.java
++++ b/src/main/java/net/minecraft/server/level/ServerEntity.java
+@@ -34,6 +34,7 @@ import net.minecraft.world.entity.projectile.AbstractArrow;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.MapItem;
+ import net.minecraft.world.level.Level;
++import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
+ import net.minecraft.world.phys.Vec3;
+ import org.apache.logging.log4j.LogManager;
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index 04098de654aa0e72b35ae18e2a041ea661cc0be2..901a5e1ee36f29ef32882ad35b619438a7743fc0 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -164,6 +164,7 @@ import org.bukkit.event.world.TimeSkipEvent;
+ import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
+ import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperChunkHandler;
++import puregero.multipaper.MultiPaperEntitiesHandler;
+ import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
+ 
+ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -758,6 +759,13 @@ public class ServerLevel extends Level implements WorldGenLevel {
+             org.spigotmc.ActivationRange.activateEntities(this); // Spigot
+             timings.entityTick.startTiming(); // Spigot
+             this.entityTickList.forEach((entity) -> {
++                // MultiPaper start - Are we ticking this entity?
++                LevelChunk chunk = getChunkIfLoaded(entity.blockPosition());
++                if (chunk == null || chunk.externalOwner == null || !chunk.externalOwner.isMe()) {
++                    return;
++                }
++                // MultiPaper end
++
+                 if (!entity.isRemoved()) {
+                     if (false && this.shouldDiscardEntity(entity)) { // CraftBukkit - We prevent spawning in general, so this butchering is not needed
+                         entity.discard();
+@@ -1424,6 +1432,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+             }
+             // CraftBukkit end
+ 
++            MultiPaperEntitiesHandler.onEntitySpawn(entity); // MultiPaper
++
+             return this.entityManager.addNewEntity(entity); // CraftBukkit - decompile error
+         }
+     }
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 index 9cde430b1a3c1b462d1df17dea78c1a80b22dc6c..0de0b64ec1f7c4db82ba73989e87605f6d1c3d8b 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
@@ -78,6 +162,29 @@ index c24611777d893cdfa4d3c36897926318130470ca..28fedd727549cfedfa5fcbb5f02b2508
          this.player.updateOptions(packet);
      }
  
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index aac9dd19237d0708990960d03328e7530cd7bc8e..ff9e363ed45611b035dd9301523747cd72534145 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -147,6 +147,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
+ import org.bukkit.event.entity.EntityPoseChangeEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.plugin.PluginManager;
++import puregero.multipaper.MultiPaperEntitiesHandler;
+ // CraftBukkit end
+ 
+ public abstract class Entity implements Nameable, EntityAccess, CommandSource, net.minecraft.server.KeyedObject { // Paper
+@@ -4124,6 +4125,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+             int j = Mth.floor(y);
+             int k = Mth.floor(z);
+ 
++            if ((i >> 4) != (this.blockPosition.getX() >> 4) || (k >> 4) != (this.blockPosition.getZ() >> 4)) {
++                MultiPaperEntitiesHandler.onChunkMove(this, new BlockPos(i, j, k), this.blockPosition);
++            }
++
+             if (i != this.blockPosition.getX() || j != this.blockPosition.getY() || k != this.blockPosition.getZ()) {
+                 this.blockPosition = new BlockPos(i, j, k);
+             }
 diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
 index 94e76e295dbd0f3bac4b30a3e7338cd56a971207..de3932d9f84ffb30ab8eaacbf37d67ffbd2026d5 100644
 --- a/src/main/java/net/minecraft/world/entity/player/Player.java
@@ -91,8 +198,108 @@ index 94e76e295dbd0f3bac4b30a3e7338cd56a971207..de3932d9f84ffb30ab8eaacbf37d67ff
      protected static final EntityDataAccessor<CompoundTag> DATA_SHOULDER_LEFT = SynchedEntityData.defineId(Player.class, EntityDataSerializers.COMPOUND_TAG);
      protected static final EntityDataAccessor<CompoundTag> DATA_SHOULDER_RIGHT = SynchedEntityData.defineId(Player.class, EntityDataSerializers.COMPOUND_TAG);
      private long timeEntitySatOnShoulder;
+diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+index 17e7b39e8b187efb623a236ca766b398d82b3317..622cd993b3a58e67f6c4c2b1e8c814674a7616fb 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
++++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+@@ -105,6 +105,7 @@ public class LevelChunk implements ChunkAccess {
+     @Nullable public ExternalServer externalOwner; // MultiPaper - Chunk owner
+     public HashSet<ExternalServer> externalSubscribers = new HashSet<>(); // MultiPaper - Chunk subscribers
+     public boolean hasExternalLockRequest = false; // MultiPaper - Have we sent a request to lock this chunk?
++    public HashSet<ExternalServer> externalEntitiesSubscribers = new HashSet<>(); // MultiPaper - Entities subscribers
+     private final ShortList[] postProcessing;
+     public TickList<Block> blockTicks; // MultiPaper - make public
+     public TickList<Fluid> liquidTicks; // MultiPaper - make public
+diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/IOWorker.java b/src/main/java/net/minecraft/world/level/chunk/storage/IOWorker.java
+index 2340feb8483c2478a22b78e735bcbd6759f1b011..21023743292cd1f9d6eafdee23cbf28339cc4455 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/storage/IOWorker.java
++++ b/src/main/java/net/minecraft/world/level/chunk/storage/IOWorker.java
+@@ -21,6 +21,7 @@ import net.minecraft.util.thread.StrictQueue;
+ import net.minecraft.world.level.ChunkPos;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class IOWorker implements AutoCloseable {
+     private static final Logger LOGGER = LogManager.getLogger();
+@@ -66,7 +67,7 @@ public class IOWorker implements AutoCloseable {
+                 return Either.left(pendingStore.data);
+             } else {
+                 try {
+-                    CompoundTag compoundTag = this.storage.read(pos);
++                    CompoundTag compoundTag = MultiPaper.readRegionFileNBT(storage.getFolder(), pos); // this.storage.read(pos); // MultiPaper
+                     return Either.left(compoundTag);
+                 } catch (Exception var4) {
+                     LOGGER.warn("Failed to read chunk {}", pos, var4);
+@@ -129,7 +130,7 @@ public class IOWorker implements AutoCloseable {
+ 
+     private void runStore(ChunkPos pos, IOWorker.PendingStore result) {
+         try {
+-            this.storage.write(pos, result.data);
++            MultiPaper.writeRegionFileNBT(storage.getFolder(), pos, result.data); // this.storage.write(pos, result.data); // MultiPaper
+             result.result.complete((Void)null);
+         } catch (Exception var4) {
+             LOGGER.error("Failed to store chunk {}", pos, var4);
+diff --git a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
+index 5a72ce41cc57578498c4a072a1eb04ac28958afe..9f1feb9c90ab4d8451851949b366ba7466969f2b 100644
+--- a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
++++ b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
+@@ -34,6 +34,7 @@ import net.minecraft.world.level.ChunkPos;
+ // CraftBukkit start
+ import net.minecraft.world.level.chunk.storage.EntityStorage;
+ import org.bukkit.craftbukkit.event.CraftEventFactory;
++import puregero.multipaper.MultiPaperEntitiesHandler;
+ // CraftBukkit end
+ 
+ public class PersistentEntitySectionManager<T extends EntityAccess> implements AutoCloseable {
+@@ -46,9 +47,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+     final EntitySectionStorage<T> sectionStorage;
+     private final LevelEntityGetter<T> entityGetter;
+     private final Long2ObjectMap<Visibility> chunkVisibility = new Long2ObjectOpenHashMap();
+-    private final Long2ObjectMap<PersistentEntitySectionManager.ChunkLoadStatus> chunkLoadStatuses = new Long2ObjectOpenHashMap();
++    public final Long2ObjectMap<PersistentEntitySectionManager.ChunkLoadStatus> chunkLoadStatuses = new Long2ObjectOpenHashMap(); // MultiPaper - make public
+     private final LongSet chunksToUnload = new LongOpenHashSet();
+-    private final Queue<ChunkEntities<T>> loadingInbox = Queues.newConcurrentLinkedQueue();
++    public final Queue<ChunkEntities<T>> loadingInbox = Queues.newConcurrentLinkedQueue(); // MultiPaper - make public
+     public final io.papermc.paper.world.EntitySliceManager entitySliceManager; // Paper
+ 
+     public PersistentEntitySectionManager(Class<T> entityClass, LevelCallback<T> handler, EntityPersistentStorage<T> dataAccess, io.papermc.paper.world.EntitySliceManager entitySliceManager) { // Paper
+@@ -347,6 +348,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+ 
+     private boolean processChunkUnload(long chunkPos) {
+         org.spigotmc.AsyncCatcher.catchOp("Entity chunk unload process"); // Paper
++        MultiPaperEntitiesHandler.onEntitiesUnload(entitySliceManager.world, new ChunkPos(chunkPos));
+         boolean flag = this.storeChunkSections(chunkPos, (entityaccess) -> {
+             entityaccess.getPassengersAndSelf().forEach(this::unloadEntity);
+         }, true); // CraftBukkit - add boolean for event call
+@@ -513,7 +515,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+         return i + "," + this.visibleEntityStorage.count() + "," + this.sectionStorage.count() + "," + this.chunkLoadStatuses.size() + "," + this.chunkVisibility.size() + "," + this.loadingInbox.size() + "," + this.chunksToUnload.size();
+     }
+ 
+-    private static enum ChunkLoadStatus {
++    public static enum ChunkLoadStatus { // MultiPaper - make public
+ 
+         FRESH, PENDING, LOADED;
+ 
+diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
+index 5f94d9c1b76b395c396ff28204f3c48a66a826aa..9b70c656b001546897a93c82c5e519b0a4b0ae31 100644
+--- a/src/main/java/puregero/multipaper/ExternalPlayer.java
++++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
+@@ -62,8 +62,8 @@ public class ExternalPlayer extends ServerPlayer {
+         }
+     }
+ 
+-    @Override
+-    public boolean broadcastToPlayer(ServerPlayer spectator) {
+-        return false;
+-    }
++//    @Override
++//    public boolean broadcastToPlayer(ServerPlayer spectator) {
++//        return false;
++//    }
+ }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index d45e1060ea382730cac6458b065d944285ce5826..92f2fa0b19b48fe7bffb575e3eb8712d4f782b35 100644
+index d45e1060ea382730cac6458b065d944285ce5826..e78c2543314e1af3b433bad51365f3e748f672bd 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -1,8 +1,11 @@
@@ -107,10 +314,22 @@ index d45e1060ea382730cac6458b065d944285ce5826..92f2fa0b19b48fe7bffb575e3eb8712d
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
  import puregero.multipaper.externalserverprotocol.*;
-@@ -42,6 +45,21 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -22,6 +25,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
+     private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
+     private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
+     public final HashMap<ChunkKey, Consumer<byte[]>> chunkCallbacks = new HashMap<>();
++    public final HashMap<ChunkKey, Consumer<byte[]>> entitiesCallbacks = new HashMap<>();
+ 
+     public ExternalServerConnection(Socket socket) {
+         this.socket = socket;
+@@ -42,6 +46,25 @@ public class ExternalServerConnection extends Thread implements Closeable {
          try {
              send(new HelloPacket(MultiPaper.getBungeeCordName()));
  
++            while (MinecraftServer.getServer() == null || MinecraftServer.getServer().getPlayerList() == null || MinecraftServer.getServer().getPlayerList().players == null) {
++                Thread.sleep(100); // Wait for server to initialise
++            }
++
 +            for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
 +                if (!(player instanceof ExternalPlayer)) {
 +                    send(new PlayerCreatePacket(player));
@@ -129,6 +348,232 @@ index d45e1060ea382730cac6458b065d944285ce5826..92f2fa0b19b48fe7bffb575e3eb8712d
              DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
              while (!socket.isClosed()) {
                  ExternalServerPacket packet = ExternalServerPacketSerializer.deserialize(in);
+@@ -117,4 +140,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
+             }
+         }
+     }
++
++    public void requestEntities(String world, int cx, int cz, Consumer<byte[]> callback) {
++        send(new RequestEntitiesPacket(world, cx, cz));
++
++        if (callback != null) {
++            if (entitiesCallbacks.put(new ChunkKey(world, cx, cz), callback) != null) {
++                LOGGER.warn("An entities callback already existed for " + world + ", " + cx + ", " + cz);
++            }
++        }
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 0f0b59359d7ad578efb9cba332d431703639dd0e..2f7584aa722ef14f4efbe33dedc175bebffc1afc 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -213,6 +213,7 @@ public class MultiPaper {
+     public static void unlockChunk(LevelChunk chunk) {
+         try {
+             if (chunk.externalOwner != null && chunk.externalOwner.isMe()) {
++                broadcastPacketToExternalServers(chunk.externalSubscribers, () -> new SendEntitiesPacket(chunk));
+                 broadcastPacketToExternalServers(chunk.externalSubscribers, () -> new SendTickListPacket(chunk));
+             }
+             getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 32c08b486d6a8750a22b4ee6eebaf225eb85331c..2dcf6276e576ef472e71744935d8c363ebd35a65 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -192,6 +192,34 @@ public class MultiPaperConnection extends Thread {
+         }
+     }
+ 
++    public void entitiesSubscribe(DataInputStream in, DataOutputSender out) throws IOException {
++        String world = in.readUTF();
++        int cx = in.readInt();
++        int cz = in.readInt();
++        ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
++
++        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
++        if (chunk instanceof LevelChunk) {
++            ((LevelChunk) chunk).externalEntitiesSubscribers.add(server);
++        } else {
++            LOGGER.warn("Received an entities subscribe notification for an unloaded chunk " + world + ";" + cx + ";" + cz);
++        }
++    }
++
++    public void entitiesUnsubscribe(DataInputStream in, DataOutputSender out) throws IOException {
++        String world = in.readUTF();
++        int cx = in.readInt();
++        int cz = in.readInt();
++        ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
++
++        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
++        if (chunk instanceof LevelChunk) {
++            ((LevelChunk) chunk).externalEntitiesSubscribers.remove(server);
++        } else {
++            LOGGER.warn("Received an entities unsubscribe notification for an unloaded chunk " + world + ";" + cx + ";" + cz);
++        }
++    }
++
+     public void start(DataInputStream in, DataOutputSender out) throws IOException {
+         String address = in.readUTF();
+         int port = in.readInt();
+@@ -275,6 +303,11 @@ public class MultiPaperConnection extends Thread {
+                     server.getConnection().requestChunk(world, cx, cz, data2 -> {
+                         future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
+                     });
++                } else if (!owner.isEmpty() && path.equals("entities")) {
++                    ExternalServer server = serversMap.get(owner);
++                    server.getConnection().requestEntities(world, cx, cz, data2 -> {
++                        future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
++                    });
+                 } else {
+                     future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
+                 }
+@@ -295,10 +328,13 @@ public class MultiPaperConnection extends Thread {
+     }
+ 
+     public void writeChunk(String world, String path, int cx, int cz, byte[] data) throws IOException {
+-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+-        DeflaterOutputStream deflateOut = new DeflaterOutputStream(baos);
+-        deflateOut.write(data);
+-        deflateOut.close();
++        if (data.length != 0) {
++            ByteArrayOutputStream baos = new ByteArrayOutputStream();
++            DeflaterOutputStream deflateOut = new DeflaterOutputStream(baos);
++            deflateOut.write(data);
++            deflateOut.close();
++            data = baos.toByteArray();
++        }
+ 
+         DataOutputSender out = new DataOutputSender(this);
+         out.writeUTF("writeChunk");
+@@ -306,8 +342,8 @@ public class MultiPaperConnection extends Thread {
+         out.writeUTF(path);
+         out.writeInt(cx);
+         out.writeInt(cz);
+-        out.writeInt(baos.size());
+-        out.write(baos.toByteArray());
++        out.writeInt(data.length);
++        out.write(data);
+         out.send(in -> { /* Do nothing */ });
+     }
+ 
+@@ -337,4 +373,13 @@ public class MultiPaperConnection extends Thread {
+         out.writeInt(cz);
+         out.send(null);
+     }
++
++    public void unsubscribeEntities(String world, int cx, int cz) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("unsubscribeEntities");
++        out.writeUTF(world);
++        out.writeInt(cx);
++        out.writeInt(cz);
++        out.send(null);
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..ca6afa52fb7f5cd43943775da189aacdc30a4926
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+@@ -0,0 +1,99 @@
++package puregero.multipaper;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
++import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
++import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
++import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.ChunkPos;
++import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.phys.Vec3;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
++import puregero.multipaper.externalserverprotocol.EntityUpdatePacket;
++import puregero.multipaper.externalserverprotocol.SendUpdatePacket;
++
++import java.io.IOException;
++
++public class MultiPaperEntitiesHandler {
++
++    private static final Logger LOGGER = LogManager.getLogger(MultiPaperEntitiesHandler.class.getSimpleName());
++
++    public static void onEntitiesUnload(ServerLevel level, ChunkPos pos) {
++        try {
++            MultiPaper.getConnection().unsubscribeEntities(level.convertable.getLevelId(), pos.x, pos.z);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    public static void onChunkMove(Entity entity, BlockPos to, BlockPos from) {
++        if (from.equals(BlockPos.ZERO)) return; // They just spawned
++        if (!entity.shouldBeSaved()) return; // Entity shouldn't be synced (eg players)
++
++        LevelChunk chunkFrom = entity.level.getChunkIfLoaded(from);
++        LevelChunk chunkTo = entity.level.getChunkIfLoaded(to);
++
++        if (chunkFrom == null || chunkTo == null) {
++            LOGGER.warn("Entity moving chunk from " + chunkFrom + " (" + from + ") to " + chunkTo + " (" + to + ")");
++            return;
++        }
++
++        if (chunkFrom.externalOwner != null && chunkFrom.externalOwner.isMe()) {
++            if (chunkTo.externalOwner == null || !chunkTo.externalOwner.isMe()) {
++                // Leaving our jurisdiction, do a full entity update to ensure the new external server has all the required info
++                MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity)));
++            }
++            for (ExternalServer fromServer : chunkFrom.externalEntitiesSubscribers) {
++                if (fromServer.getConnection() != null && !chunkTo.externalEntitiesSubscribers.contains(fromServer)) {
++                    // Entity is leaving another server's area, make sure they know this
++                    fromServer.getConnection().send(new SendUpdatePacket(chunkFrom.level, new ClientboundTeleportEntityPacket(entity)));
++                }
++            }
++        }
++    }
++
++    public static void handleEntityUpdate(Entity entity, Packet<?> packet) {
++        if (packet instanceof ClientboundMoveEntityPacket moveEntityPacket) {
++            Vec3 vector = moveEntityPacket.updateEntityPosition(entity.position());
++            entity.moveTo(vector.x, vector.y, vector.z, moveEntityPacket.getyRot() * 360f / 256, moveEntityPacket.getxRot() * 360f / 256);
++        } else if (packet instanceof ClientboundTeleportEntityPacket teleportEntityPacket) {
++            entity.moveTo(teleportEntityPacket.getX(), teleportEntityPacket.getY(), teleportEntityPacket.getZ(), teleportEntityPacket.getyRot() * 360f / 256, teleportEntityPacket.getxRot() * 360f / 256);
++        } else if (packet instanceof ClientboundSetEntityMotionPacket setEntityMotionPacket) {
++            entity.setDeltaMovement(setEntityMotionPacket.getXa() / 8000.0D, setEntityMotionPacket.getYa() / 8000.0D, setEntityMotionPacket.getZa() / 8000.0D);
++        } else if (packet instanceof ClientboundRotateHeadPacket rotateHeadPacket) {
++            entity.setYHeadRot(rotateHeadPacket.getYHeadRot() * 360f / 256);
++        } else {
++            LOGGER.warn("Unhandled packet " + packet);
++        }
++    }
++
++    public static void onEntitySpawn(Entity entity) {
++        if (!entity.shouldBeSaved()) return;
++
++        MultiPaper.runSync(() -> { // Run this after the entity has finished spawning
++            LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
++            if (chunk != null) {
++                MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity));
++            } else {
++                LOGGER.warn(entity + " spawned in an unloaded chunk");
++            }
++        });
++    }
++
++    public static void onEntityUpdate(Entity entity, Packet<?> packet) {
++        if (!entity.shouldBeSaved()) return;
++
++        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
++
++        if (chunk != null) {
++            MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityUpdatePacket(entity, packet));
++        } else {
++            LOGGER.warn("onEntityUpdate was called for an unloaded chunk " + entity);
++        }
++    }
++}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntityHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntityHandler.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..bf4acd7d8352d5c44d15aceda21653f7cf3ec0fc
@@ -155,3 +600,432 @@ index 0000000000000000000000000000000000000000..bf4acd7d8352d5c44d15aceda21653f7
 +        }
 +    }
 +}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e8f4566f93dc2b24cc5a6c71138a7c3d0e5fc46e
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
+@@ -0,0 +1,79 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.EntityType;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.UUID;
++
++public class EntityUpdateNBTPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(EntityUpdateNBTPacket.class.getSimpleName());
++
++    private final String world;
++    private final UUID uuid;
++    private final byte[] data;
++
++    public EntityUpdateNBTPacket(Entity entity) {
++        this.world = ((ServerLevel) entity.level).convertable.getLevelId();
++        this.uuid = entity.getUUID();
++
++        CompoundTag tag = new CompoundTag();
++        entity.save(tag);
++
++        try {
++            this.data = MultiPaper.nbtCompressToBytes(tag);
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
++    }
++
++    public EntityUpdateNBTPacket(DataInputStream in) throws IOException {
++        this.world = in.readUTF();
++        this.uuid = readUUID(in);
++        int byteLength = in.readInt();
++        this.data = new byte[byteLength];
++        in.readFully(data);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        writeUUID(out, uuid);
++        out.writeInt(data.length);
++        out.write(data);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            try {
++                ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++                Entity entity = level.getEntity(uuid);
++                CompoundTag tag = MultiPaper.nbtDecompressFromBytes(data);
++                if (entity == null) {
++                    Entity entity2 = EntityType.create(tag, level).get();
++                    if (level.entityManager.areEntitiesLoaded(entity2.chunkPosition().longKey)) {
++                        MultiPaper.runSync(() -> level.entityManager.addNewEntity(entity2));
++                    } else {
++                        LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk isn't loaded: " + entity);
++                    }
++                } else {
++                    entity.load(tag);
++                }
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..9c19d62019c958058f97186c564e232e645e2340
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
+@@ -0,0 +1,86 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import net.minecraft.network.ConnectionProtocol;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.game.*;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperEntitiesHandler;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.UUID;
++
++public class EntityUpdatePacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(EntityUpdatePacket.class.getSimpleName());
++
++    private final String world;
++    private final UUID uuid;
++    private final Packet<?> packet;
++
++    public EntityUpdatePacket(Entity entity, Packet<?> packet) {
++        this.world = ((ServerLevel) entity.level).convertable.getLevelId();
++        this.uuid = entity.getUUID();
++        this.packet = packet;
++    }
++
++    public EntityUpdatePacket(DataInputStream in) throws IOException {
++        world = in.readUTF();
++        uuid = readUUID(in);
++
++        int length = in.readInt();
++        byte[] bytes = new byte[length];
++        in.readFully(bytes);
++        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        int packetId = friendlyByteBuf.readVarInt();
++        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        writeUUID(out, uuid);
++
++        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
++        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
++        ByteBuf buf = Unpooled.buffer();
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        friendlyByteBuf.writeVarInt(id);
++        packet.write(friendlyByteBuf);
++        byte[] bytes = buf.array();
++        out.writeInt(bytes.length);
++        out.write(bytes);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++            Entity entity = level.getEntity(uuid);
++
++            if (entity == null) {
++                LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName());
++                return;
++            }
++
++            if (packet instanceof ClientboundMoveEntityPacket || packet instanceof ClientboundTeleportEntityPacket || packet instanceof ClientboundSetEntityMotionPacket || packet instanceof ClientboundRotateHeadPacket) {
++                MultiPaper.runSync(() -> MultiPaperEntitiesHandler.handleEntityUpdate(entity, packet));
++            } else {
++                LOGGER.warn("Unhandled update packet of type " + packet.getClass().getSimpleName());
++            }
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index c8536c690964aff15748746eafa1acbbf4eea062..ee757f0907ec20eb94756074541ac72e9db64a4c 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -23,6 +23,10 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerActionPacket.class, PlayerActionPacket::new);
+         addPacket(PlayerInventoryUpdatePacket.class, PlayerInventoryUpdatePacket::new);
+         addPacket(TimeUpdatePacket.class, TimeUpdatePacket::new);
++        addPacket(RequestEntitiesPacket.class, RequestEntitiesPacket::new);
++        addPacket(SendEntitiesPacket.class, SendEntitiesPacket::new);
++        addPacket(EntityUpdateNBTPacket.class, EntityUpdateNBTPacket::new);
++        addPacket(EntityUpdatePacket.class, EntityUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..8482ed16ef089d1b2b882672ee4d82da973ec718
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java
+@@ -0,0 +1,63 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.ChunkPos;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.craftbukkit.scheduler.CraftScheduler;
++import puregero.multipaper.ExternalServerConnection;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++public class RequestEntitiesPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(RequestEntitiesPacket.class.getSimpleName());
++
++    private final String world;
++    private final int cx;
++    private final int cz;
++
++    public RequestEntitiesPacket(String world, int cx, int cz) {
++        this.world = world;
++        this.cx = cx;
++        this.cz = cz;
++    }
++
++    public RequestEntitiesPacket(DataInputStream in) throws IOException {
++        world = in.readUTF();
++        cx = in.readInt();
++        cz = in.readInt();
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        out.writeInt(cx);
++        out.writeInt(cz);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        sendChunkLater(connection, world, cx, cz, 0);
++    }
++
++    private void sendChunkLater(ExternalServerConnection connection, String world, int cx, int cz, int depth) {
++        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++        if (!level.entityManager.areEntitiesLoaded(ChunkPos.asLong(cx, cz))) {
++            if (depth == 20) {
++                LOGGER.warn(connection.externalServer.getName() + " is requesting entities " + world + "," + cx + "," + cz + " but we timed out waiting for them to load.");
++                connection.send(new SendEntitiesPacket(world, cx, cz, null));
++                return;
++            }
++            ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
++                sendChunkLater(connection, world, cx, cz, depth + 1);
++            }, 1, "ExternalServerConnection-sendEntitiesLater");
++        } else {
++            connection.send(new SendEntitiesPacket(level, new ChunkPos(cx, cz)));
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..672e5477153e2743550b7a832af6e72a2f297563
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
+@@ -0,0 +1,138 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.SharedConstants;
++import net.minecraft.nbt.*;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.level.ChunkPos;
++import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.level.entity.ChunkEntities;
++import net.minecraft.world.level.entity.EntityInLevelCallback;
++import net.minecraft.world.level.entity.PersistentEntitySectionManager;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ChunkKey;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.ByteArrayInputStream;
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.List;
++import java.util.function.Consumer;
++import java.util.stream.Collectors;
++import java.util.zip.InflaterInputStream;
++
++public class SendEntitiesPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(SendEntitiesPacket.class.getSimpleName());
++
++    private final String world;
++    private final int cx;
++    private final int cz;
++    private final byte[] data;
++
++    public SendEntitiesPacket(LevelChunk chunk) {
++        this(chunk.level, chunk.getPos());
++    }
++
++    public SendEntitiesPacket(ServerLevel level, ChunkPos pos) {
++        this(level.convertable.getLevelId(), pos.x, pos.z, getEntites(level, pos));
++    }
++
++    private static CompoundTag getEntites(ServerLevel level, ChunkPos pos) {
++        if (!level.entityManager.areEntitiesLoaded(pos.longKey)) throw new IllegalStateException("Entities are not loaded in " + level.convertable.getLevelId() + pos);
++        CompoundTag entitiesRoot = new CompoundTag();
++        ListTag entities = new ListTag();
++        for (Entity entity : level.entityManager.getEntities(pos)) {
++            if (entity.shouldBeSaved()) {
++                CompoundTag tag = new CompoundTag();
++                entity.save(tag);
++                entities.add(tag);
++            }
++        }
++        entitiesRoot.putInt("DataVersion", SharedConstants.getCurrentVersion().getWorldVersion());
++        entitiesRoot.put("Entities", entities);
++        entitiesRoot.put("Position", new IntArrayTag(new int[]{pos.x, pos.z}));
++        return entitiesRoot;
++    }
++
++    public SendEntitiesPacket(String world, int cx, int cz, CompoundTag tag) {
++        this.world = world;
++        this.cx = cx;
++        this.cz = cz;
++
++        try {
++            if (tag == null) {
++                data = new byte[0];
++            } else {
++                data = MultiPaper.nbtCompressToBytes(tag);
++            }
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
++    }
++
++    public SendEntitiesPacket(DataInputStream in) throws IOException {
++        world = in.readUTF();
++        cx = in.readInt();
++        cz = in.readInt();
++        int byteLength = in.readInt();
++        data = new byte[byteLength];
++        in.readFully(data);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        out.writeInt(cx);
++        out.writeInt(cz);
++        out.writeInt(data.length);
++        out.write(data);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        try {
++            Consumer<byte[]> callback = connection.entitiesCallbacks.remove(new ChunkKey(world, cx, cz));
++            if (callback != null) {
++                if (data.length == 0) {
++                    LOGGER.warn(connection.externalServer.getName() + " sent us an empty entities for " + world + "," + cx + "," + cz + ", force loading it from disk");
++                    MultiPaper.getConnection().forceReadChunk(world, "entities", cx, cz).thenAccept(callback);
++                } else {
++                    callback.accept(data);
++                }
++            } else {
++                // Replace the existing entities with these new entities
++                ChunkPos pos = new ChunkPos(cx, cz);
++                ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++                // Check that we have these entities loaded in the first place
++                if (level.entityManager.chunkLoadStatuses.containsKey(pos.longKey)) {
++                    CompoundTag tag = data.length == 0 ? null : NbtIo.read(new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
++                    ListTag entities = tag == null ? new ListTag() : tag.getList("Entities", Tag.TAG_COMPOUND);
++                    MultiPaper.runSync(() -> {
++                        // Remove existing entities in this chunk
++                        for (Entity entity : level.entityManager.getEntities(new ChunkPos(cx, cz))) {
++                            if (entity.shouldBeSaved()) {
++                                entity.setRemoved(Entity.RemovalReason.UNLOADED_TO_CHUNK);
++                                entity.setLevelCallback(EntityInLevelCallback.NULL);
++                            }
++                        }
++                        // Add our entities to be loaded
++                        List<Entity> list = EntityType.loadEntitiesRecursive(entities, level).collect(Collectors.toList());
++                        level.entityManager.chunkLoadStatuses.put(pos.longKey, PersistentEntitySectionManager.ChunkLoadStatus.PENDING);
++                        level.entityManager.loadingInbox.add(new ChunkEntities<>(pos, list));
++                    });
++                } else {
++                    LOGGER.warn("Unsolicited entities for " + world + "," + cx + "," + cz);
++                }
++            }
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
+index b2bcaa3fbb1f9640faf3d7c61ba1a7087d46db12..389878c9f2a66e336b983f7b760a9584ae76f5f9 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
+@@ -10,6 +10,7 @@ import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+ import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
+ import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
+ import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
++import net.minecraft.server.level.ServerLevel;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import puregero.multipaper.ExternalServerConnection;
+@@ -27,6 +28,11 @@ public class SendUpdatePacket extends ExternalServerPacket {
+     private final String world;
+     private final Packet<?> packet;
+ 
++    public SendUpdatePacket(ServerLevel level, Packet<?> packet) {
++        this.world = level.convertable.getLevelId();
++        this.packet = packet;
++    }
++
+     public SendUpdatePacket(String world, Packet<?> packet) {
+         this.world = world;
+         this.packet = packet;

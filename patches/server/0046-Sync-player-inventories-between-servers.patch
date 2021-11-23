@@ -203,7 +203,7 @@ index 8d329bca0818033df41fbd781028919c73e052a6..8a01433c65f5d24acb4501bd59a233c4
              }
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index c951a45154a4886432709a9abbfa7f09eeea9794..9da622677972bc09029ac71b75cae58ec12896d5 100644
+index 3e8c20dd27da8765075f8b3ff39204d5bda38d65..a6f564eb52349a03e1001b21334ba9a5351a5d1c 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,6 +1,7 @@
@@ -222,7 +222,7 @@ index c951a45154a4886432709a9abbfa7f09eeea9794..9da622677972bc09029ac71b75cae58e
      }
      public static void sendTickTime(long time) {
          try {
-@@ -213,7 +215,7 @@ public class MultiPaper {
+@@ -215,7 +217,7 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -231,7 +231,7 @@ index c951a45154a4886432709a9abbfa7f09eeea9794..9da622677972bc09029ac71b75cae58e
      public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
          if (compoundTag == null) {
              return new byte[0];
-@@ -273,4 +275,12 @@ public class MultiPaper {
+@@ -277,4 +279,12 @@ public class MultiPaper {
  
          return holder;
      }
@@ -470,10 +470,10 @@ index 92721ba1ae32a1477d7cbb7a1d55b9cd7303c011..f6102b11c04d606fc0b6ce9e9d5c53d8
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..5f3decd91b8c101f77e910db6bd0ab61499be8fd
+index 0000000000000000000000000000000000000000..b242b1f00b4f4380db4d2c3d5a9c7ec66f478fcd
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,72 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -483,6 +483,7 @@ index 0000000000000000000000000000000000000000..5f3decd91b8c101f77e910db6bd0ab61
 +import net.minecraft.network.protocol.Packet;
 +import net.minecraft.network.protocol.PacketFlow;
 +import net.minecraft.network.protocol.game.ServerGamePacketListener;
++import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
@@ -492,21 +493,22 @@ index 0000000000000000000000000000000000000000..5f3decd91b8c101f77e910db6bd0ab61
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
 +import java.io.IOException;
++import java.util.UUID;
 +
 +public class PlayerActionPacket extends ExternalServerPacket {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(PlayerActionPacket.class.getSimpleName());
 +
-+    private final int id;
++    private final UUID uuid;
 +    private final Packet<ServerGamePacketListener> action;
 +
 +    public PlayerActionPacket(ServerPlayer player, Packet<ServerGamePacketListener> action) {
-+        this.id = player.getId();
++        this.uuid = player.getUUID();
 +        this.action = action;
 +    }
 +
 +    public PlayerActionPacket(DataInputStream in) throws IOException {
-+        id = in.readInt();
++        uuid = readUUID(in);
 +
 +        int length = in.readInt();
 +        byte[] bytes = new byte[length];
@@ -519,7 +521,7 @@ index 0000000000000000000000000000000000000000..5f3decd91b8c101f77e910db6bd0ab61
 +
 +    @Override
 +    public void write(DataOutputStream out) throws IOException {
-+        out.writeInt(id);
++        writeUUID(out, uuid);
 +
 +        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(action);
 +        Integer id = protocol.getPacketId(PacketFlow.SERVERBOUND, action);
@@ -534,10 +536,10 @@ index 0000000000000000000000000000000000000000..5f3decd91b8c101f77e910db6bd0ab61
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        ServerPlayer player = MultiPaper.getPlayerById(id);
++        ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
 +
 +        if (player == null) {
-+            LOGGER.warn("Tried to run an action on a non-existant player with entity id of " + id);
++            LOGGER.warn("Tried to run an action on a non-existent player with uuid " + uuid);
 +            return;
 +        }
 +
@@ -546,15 +548,16 @@ index 0000000000000000000000000000000000000000..5f3decd91b8c101f77e910db6bd0ab61
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..465e537974f6bdd1a480432473d782c7947ee491
+index 0000000000000000000000000000000000000000..8ccc6e591fa0d2eab520f426bf49ab9b377f36cd
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,72 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.nbt.ListTag;
 +import net.minecraft.nbt.Tag;
++import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.item.ItemStack;
 +import org.apache.logging.log4j.LogManager;
@@ -566,23 +569,24 @@ index 0000000000000000000000000000000000000000..465e537974f6bdd1a480432473d782c7
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
 +import java.io.IOException;
++import java.util.UUID;
 +
 +public class PlayerInventoryUpdatePacket extends ExternalServerPacket {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(PlayerInventoryUpdatePacket.class.getSimpleName());
 +
-+    private final int id;
++    private final UUID uuid;
 +    private final String component;
 +    private final CompoundTag tag;
 +
 +    public PlayerInventoryUpdatePacket(ServerPlayer player, String component, CompoundTag tag) {
-+        this.id = player.getId();
++        this.uuid = player.getUUID();
 +        this.component = component;
 +        this.tag = tag;
 +    }
 +
 +    public PlayerInventoryUpdatePacket(DataInputStream in) throws IOException {
-+        id = in.readInt();
++        uuid = readUUID(in);
 +        component = in.readUTF();
 +
 +        int length = in.readInt();
@@ -593,7 +597,7 @@ index 0000000000000000000000000000000000000000..465e537974f6bdd1a480432473d782c7
 +
 +    @Override
 +    public void write(DataOutputStream out) throws IOException {
-+        out.writeInt(id);
++        writeUUID(out, uuid);
 +
 +        out.writeUTF(component);
 +        byte[] bytes = MultiPaper.nbtCompressToBytes(tag);
@@ -604,10 +608,10 @@ index 0000000000000000000000000000000000000000..465e537974f6bdd1a480432473d782c7
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
 +        MultiPaper.runSync(() -> {
-+            ServerPlayer player = MultiPaper.getPlayerById(id);
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
 +
 +            if (player == null) {
-+                LOGGER.warn("Tried to update the inventory of a non-existant player with entity id of " + id);
++                LOGGER.warn("Tried to update the inventory of a non-existant player uuid " + uuid);
 +                return;
 +            }
 +
@@ -621,10 +625,10 @@ index 0000000000000000000000000000000000000000..465e537974f6bdd1a480432473d782c7
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
-index d606e66e6142790bfd7ea738e84d2b66063c2061..f8de7d721ae919bb07a81c2df780a79e503264db 100644
+index 8ed75a553a0de9c1dfcff9a6353a72adfededea4..01f9ce5e1ab7986be6fd560847680d316d393c72 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
-@@ -12,6 +12,7 @@ import org.apache.logging.log4j.Logger;
+@@ -13,6 +13,7 @@ import org.apache.logging.log4j.Logger;
  import puregero.multipaper.ExternalPlayer;
  import puregero.multipaper.ExternalServerConnection;
  import puregero.multipaper.MultiPaper;
@@ -632,7 +636,7 @@ index d606e66e6142790bfd7ea738e84d2b66063c2061..f8de7d721ae919bb07a81c2df780a79e
  
  import java.io.DataInputStream;
  import java.io.DataOutputStream;
-@@ -76,6 +77,7 @@ public class SendPacketPacket extends ExternalServerPacket {
+@@ -78,6 +79,7 @@ public class SendPacketPacket extends ExternalServerPacket {
                  return;
              }
  

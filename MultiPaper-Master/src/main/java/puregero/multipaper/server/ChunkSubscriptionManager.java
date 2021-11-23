@@ -1,9 +1,5 @@
 package puregero.multipaper.server;
 
-import puregero.multipaper.server.ChunkKey;
-import puregero.multipaper.server.DataOutputSender;
-import puregero.multipaper.server.ServerConnection;
-
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -175,7 +171,7 @@ public class ChunkSubscriptionManager {
     }
 
     public static void unsubscribe(ServerConnection serverConnection, String world, int cx, int cz) {
-        unlock(serverConnection, new ChunkKey(world, cx, cz));
+        unsubscribe(serverConnection, new ChunkKey(world, cx, cz));
     }
 
     public static void unsubscribe(ServerConnection serverConnection, ChunkKey key) {

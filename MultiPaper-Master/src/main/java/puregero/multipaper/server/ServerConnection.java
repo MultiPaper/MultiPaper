@@ -155,6 +155,7 @@ public class ServerConnection extends Thread {
             socket.close();
         } catch (Exception ignored) {}
 
+        EntitiesSubscriptionManager.unsubscribeAll(this);
         ChunkSubscriptionManager.unsubscribeAndUnlockAll(this);
 
         connections.remove(this);

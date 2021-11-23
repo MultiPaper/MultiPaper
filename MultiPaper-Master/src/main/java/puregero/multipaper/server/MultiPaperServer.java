@@ -2,7 +2,6 @@ package puregero.multipaper.server;
 
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.util.ArrayList;
 
 public class MultiPaperServer extends Thread {
     public static final int DEFAULT_PORT = 35353;

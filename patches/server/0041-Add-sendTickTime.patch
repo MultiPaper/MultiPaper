@@ -5,19 +5,19 @@ Subject: [PATCH] Add sendTickTime
 
 
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 0793fc66c3510f7865fb658d3e5a08e89623297e..ae7613f92c1122fd4ff7009a002c5d95c93b06c1 100644
+index 0793fc66c3510f7865fb658d3e5a08e89623297e..b39db9051bef0b42a9dc8cf82e3830bc45f83a69 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -1553,6 +1553,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          tickTimes60s.add(this.tickCount, l);
          // Paper end
  
-+        MultiPaper.sendTickTime(i1 - i); // MultiPaper
++        MultiPaper.sendTickTime(i1 - i, recentTps[0]); // MultiPaper
          this.frameTimer.logFrameDuration(i1 - i);
          this.profiler.pop();
          org.spigotmc.WatchdogThread.tick(); // Spigot
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 7a6b980502593afd47de458ed2b443160dfb5754..c8f9aea3915ec94a915e1003931c6ef460b79f40 100644
+index 7a6b980502593afd47de458ed2b443160dfb5754..5ddb4c40c42f94b6a4b76dc0479c51dbcfe65f6e 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -30,4 +30,12 @@ public class MultiPaper {
@@ -25,27 +25,46 @@ index 7a6b980502593afd47de458ed2b443160dfb5754..c8f9aea3915ec94a915e1003931c6ef4
          return bungeeCordName;
      }
 +
-+    public static void sendTickTime(long time) {
++    public static void sendTickTime(long time, double tps) {
 +        try {
-+            getConnection().writeTickTime(time);
++            getConnection().writeTickTime(time, tps);
 +        } catch (IOException e) {
 +            e.printStackTrace();
 +        }
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 4c3b5986e4c29663e193987d24cc2f88d309b30d..2f940113bb7da19b4e5c71e61e74814a2b4acbad 100644
+index 4c3b5986e4c29663e193987d24cc2f88d309b30d..4aaa90a7023245791003dfe274af04bcf42ca1d9 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -118,4 +118,11 @@ public class MultiPaperConnection extends Thread {
+@@ -27,6 +27,14 @@ public class MultiPaperConnection extends Thread {
+     }
+ 
+     public void send(byte[] bytes, int id, @Nullable Consumer<DataInputStream> callback) {
++        while (socket == null) {
++            // Wait for socket to connect
++            try {
++                Thread.sleep(10);
++            } catch (InterruptedException e) {
++                e.printStackTrace();
++            }
++        }
+         Request request = new Request(bytes, callback);
+         if (callback != null) {
+             callbacks.put(id, request);
+@@ -116,6 +124,15 @@ public class MultiPaperConnection extends Thread {
+     public void serverInfo(DataInputStream in, DataOutputSender out) throws IOException {
+         ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
          server.setAverageTickTime(in.readInt());
++        server.setTps(in.readFloat());
          server.setLastAlive(System.currentTimeMillis());
      }
 +
-+    public void writeTickTime(long time) throws IOException {
++    public void writeTickTime(long time, double tps) throws IOException {
 +        DataOutputSender out = new DataOutputSender(this);
 +        out.writeUTF("writeTickTime");
 +        out.writeLong(time);
++        out.writeFloat((float) tps);
 +        out.send(null);
 +    }
  }

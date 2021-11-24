@@ -15,15 +15,17 @@ public class WriteTickTimeHandler implements Handler {
     @Override
     public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
         long tickTime = in.readLong();
-        
+        float tps = in.readFloat();
+
         connection.getTimer().append(tickTime);
+        connection.setTps(tps);
         
         if (tickTime == -1) {
             connection.setTps(-1);
         }
 
         try {
-            if (lastUpdates.getOrDefault(connection.getBungeeCordName(), 0L) < System.currentTimeMillis() - 1000) {
+            if (lastUpdates.getOrDefault(connection.getBungeeCordName(), 0L) < System.currentTimeMillis() - 1000 || connection.getTps() == -1) {
                 lastUpdates.put(connection.getBungeeCordName(), System.currentTimeMillis());
 
                 DataOutputStream broadcast = connection.broadcastAll();
@@ -31,6 +33,7 @@ public class WriteTickTimeHandler implements Handler {
                 broadcast.writeUTF("serverInfo");
                 broadcast.writeUTF(connection.getBungeeCordName());
                 broadcast.writeInt((int) connection.getTimer().averageInMillis());
+                broadcast.writeFloat((float) connection.getTps());
                 broadcast.close();
             }
         } catch (IOException e) {

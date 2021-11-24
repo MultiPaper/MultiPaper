@@ -436,10 +436,10 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index ce8487f5dfb42cc5f01aa5f9d46562453296dc15..5f94d9c1b76b395c396ff28204f3c48a66a826aa 100644
+index 040da907c10a5621ec372596bc2950ee0b3106b2..741baef2e619c46deab7584b6738bdfa8945e824 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -57,7 +57,7 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -58,7 +58,7 @@ public class ExternalPlayer extends ServerPlayer {
  
          @Override
          public void send(Packet<?> packet, @Nullable GenericFutureListener<? extends Future<? super Void>> callback) {
@@ -498,30 +498,30 @@ index 5384c15cb77ef984a6596c16f8b7f94c06dbb7ab..d45e1060ea382730cac6458b065d9442
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 41ff628e123e89b9af4915f35b784b282766f8d4..3e8c20dd27da8765075f8b3ff39204d5bda38d65 100644
+index 5b7c834353ff640050adbdcca08b8f13d5424a47..227beb4a587bdc18eff0445c61ae71caf4e4320f 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,38 +1,47 @@
+@@ -1,32 +1,43 @@
  package puregero.multipaper;
  
 +import net.minecraft.core.BlockPos;
  import net.minecraft.server.MinecraftServer;
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.nbt.NbtIo;
- import net.minecraft.server.dedicated.DedicatedServer;
 +import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
--import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
--import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
--import puregero.multipaper.externalserverprotocol.PlayerMovePacket;
--import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
+ import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.ImposterProtoChunk;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
+ import org.bukkit.craftbukkit.entity.CraftEntity;
+-import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
+-import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
+-import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
 +import puregero.multipaper.externalserverprotocol.*;
  
 -import java.io.File;
@@ -529,20 +529,14 @@ index 41ff628e123e89b9af4915f35b784b282766f8d4..3e8c20dd27da8765075f8b3ff39204d5
 +import java.io.*;
  import java.nio.file.Files;
  import java.util.Collection;
- import java.util.HashMap;
 +import java.util.HashSet;
- import java.util.UUID;
  import java.util.function.Supplier;
 +import java.util.concurrent.ConcurrentHashMap;
 +import java.util.zip.DeflaterOutputStream;
 +import java.util.zip.InflaterInputStream;
  
  public class MultiPaper {
-     // You'll want to increase this if you have more than 250 servers
-     // The bits in this value should be all 1s to optimize hashmaps and the like
-     // Eg 255 is 0b11111111
-     private static final int ENTITY_COUNTER_INCREMENT = 255;
--
+ 
 +    public final static ConcurrentHashMap<ChunkKey, ExternalServer> chunkOwnerToSet = new ConcurrentHashMap<>();
 +    public final static ConcurrentHashMap<ChunkKey, HashSet<ExternalServer>> chunkSubscribersToSet = new ConcurrentHashMap<>();
      private static MultiPaperConnection multiPaperConnection = null;
@@ -559,15 +553,7 @@ index 41ff628e123e89b9af4915f35b784b282766f8d4..3e8c20dd27da8765075f8b3ff39204d5
      private static String bungeeCordName = null;
      public static String getBungeeCordName() {
          if (bungeeCordName == null) {
-@@ -65,7 +74,6 @@ public class MultiPaper {
-                 }
-             }
-         }
--
-         for (ExternalServer server : getConnection().getServersMap().values()) {
-             if (server.getConnection() != null) {
-                 // This tick function must be run after the vanilla tick
-@@ -73,17 +81,14 @@ public class MultiPaper {
+@@ -55,17 +66,14 @@ public class MultiPaper {
              }
          }
      }
@@ -585,7 +571,7 @@ index 41ff628e123e89b9af4915f35b784b282766f8d4..3e8c20dd27da8765075f8b3ff39204d5
      public static void onStart() {
          try {
              externalServerSocket = new ExternalServerSocket();
-@@ -92,11 +97,9 @@ public class MultiPaper {
+@@ -74,11 +82,9 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -597,30 +583,10 @@ index 41ff628e123e89b9af4915f35b784b282766f8d4..3e8c20dd27da8765075f8b3ff39204d5
      public static void onPlayerDisconnect(ServerPlayer player) {
          if (!(player instanceof ExternalPlayer)) {
              broadcastPacketToExternalServers(new PlayerRemovePacket(player));
-@@ -121,4 +124,157 @@ public class MultiPaper {
-             });
-         }
+@@ -119,4 +125,137 @@ public class MultiPaper {
+     public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
+         return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
      }
-+
-+    public static int getEntityCounterStartValue() {
-+        try {
-+            return getConnection().getEntityCounterStartValue().join();
-+        } catch (IOException e) {
-+            throw new RuntimeException(e);
-+        }
-+    }
-+    public static int getEntityCounterIncrement() {
-+        return ENTITY_COUNTER_INCREMENT;
-+    }
-+
-+    public static ServerPlayer getPlayerById(int id) {
-+        for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
-+            if (player.getId() == id) {
-+                return player;
-+            }
-+        }
-+        return null;
-+    }
 +
 +    public static CompoundTag readChunk(ChunkPos chunkPos, ServerLevel serverLevel) throws IOException {
 +        return readRegionFileNBT(serverLevel, "region", chunkPos);
@@ -1162,12 +1128,12 @@ index aeeffab321999a6e0c03dafc8dfd04effa3948f1..32c08b486d6a8750a22b4ee6eebaf225
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 998b0df31e09092b199f7b7637bd64dda213b773..92721ba1ae32a1477d7cbb7a1d55b9cd7303c011 100644
+index 3a41441416f8c3ca89f9509c14b53347ac8cd0ca..ac0e1bb91b4e0340c0e79924607706ef5fb9fb9e 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -16,6 +16,10 @@ public class ExternalServerPacketSerializer {
+@@ -15,6 +15,10 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerCreatePacket.class, PlayerCreatePacket::new);
          addPacket(PlayerRemovePacket.class, PlayerRemovePacket::new);
-         addPacket(PlayerMovePacket.class, PlayerMovePacket::new);
          addPacket(SendPacketPacket.class, SendPacketPacket::new);
 +        addPacket(SendUpdatePacket.class, SendUpdatePacket::new);
 +        addPacket(RequestChunkPacket.class, RequestChunkPacket::new);

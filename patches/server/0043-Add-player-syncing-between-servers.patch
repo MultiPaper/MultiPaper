@@ -5,14 +5,14 @@ Subject: [PATCH] Add player syncing between servers
 
 
 diff --git a/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java b/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java
-index 4eadc15f747528b59349f095171dd5a649a46ed9..f0af73aa7c17de5cad5c9c7c560b8ead9e5ee1a9 100644
+index 4eadc15f747528b59349f095171dd5a649a46ed9..6824c3da571d9fcf9c045b6ccbbdf73fac786abc 100644
 --- a/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java
 +++ b/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java
 @@ -22,6 +22,8 @@ import net.minecraft.server.level.TicketType;
  import net.minecraft.util.Mth;
  import net.minecraft.world.level.ChunkPos;
  import net.minecraft.world.level.chunk.LevelChunk;
-+import puregero.multipaper.ExternalPlayer;
++import puregero.multipaper.MultiPaper;
 +
  import java.util.ArrayDeque;
  import java.util.ArrayList;
@@ -21,7 +21,7 @@ index 4eadc15f747528b59349f095171dd5a649a46ed9..f0af73aa7c17de5cad5c9c7c560b8ead
  
              this.chunkSendWaitQueue.pollFirst();
  
-+            if (data.player instanceof ExternalPlayer) continue; // MultiPaper - don't send chunks to ExternalPlayers
++            if (MultiPaper.isExternalPlayer(data.player)) continue; // MultiPaper - don't send chunks to ExternalPlayers
 +
              this.chunkSendQueue.add(data);
          }
@@ -32,7 +32,7 @@ index 4eadc15f747528b59349f095171dd5a649a46ed9..f0af73aa7c17de5cad5c9c7c560b8ead
              this.player.needsChunkCenterUpdate = false;
 +
 +            // MultiPaper start - Don't load chunks for an ExternalPlayer, but do broadcast changes to us
-+            if (this.player instanceof ExternalPlayer) return;
++            if (MultiPaper.isExternalPlayer(this.player)) return;
 +
              this.loader.loadMap.addOrUpdate(this.player, centerChunkX, centerChunkZ, loadViewDistance);
              this.loader.loadTicketCleanup.addOrUpdate(this.player, centerChunkX, centerChunkZ, loadViewDistance + 1);
@@ -105,10 +105,10 @@ index eaa005c1c9b4386bcdbe1d6eb28c3eca7635066c..ee7f65f94c71654da22c413219fc4374
              // CraftBukkit start
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..22d1a0f88cd86fe4893123ec73994b5ced1b500a
+index 0000000000000000000000000000000000000000..cadbd24322a2bea589d6d83b22d8cc0f5619d074
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,64 @@
 +package puregero.multipaper;
 +
 +import com.mojang.authlib.GameProfile;
@@ -117,6 +117,7 @@ index 0000000000000000000000000000000000000000..22d1a0f88cd86fe4893123ec73994b5c
 +import net.minecraft.network.Connection;
 +import net.minecraft.network.protocol.Packet;
 +import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.server.network.ServerGamePacketListenerImpl;
 +import org.apache.logging.log4j.LogManager;
@@ -124,7 +125,6 @@ index 0000000000000000000000000000000000000000..22d1a0f88cd86fe4893123ec73994b5c
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftServer;
 +import org.bukkit.craftbukkit.CraftWorld;
-+import org.bukkit.event.entity.CreatureSpawnEvent;
 +
 +import javax.annotation.Nullable;
 +import java.util.UUID;
@@ -143,10 +143,11 @@ index 0000000000000000000000000000000000000000..22d1a0f88cd86fe4893123ec73994b5c
 +        this.externalServerConnection = externalServerConnection;
 +        this.isRealPlayer = true;
 +        this.didPlayerJoinEvent = true;
++        this.valid = true;
 +        connection = new ServerGamePacketListenerImpl(getServer(), new ExternalPlayerConnection(PacketFlow.CLIENTBOUND), this);
 +        setPos(x, y, z);
 +        getServer().getPlayerList().addPlayer(this);
-+        level.addEntity(this, CreatureSpawnEvent.SpawnReason.CUSTOM);
++        ((ServerLevel) level).addNewPlayer(this);
 +        containerMenu.transferTo(containerMenu, getBukkitEntity());
 +        initInventoryMenu();
 +    }
@@ -198,38 +199,32 @@ index 519333b7d1629a3e8105d11e911df0b7430e00c5..11ee85df2d7ed546c4f7b05ff668d627
              externalServer.setConnection(null);
          }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index e3d29fd5be7d86d4c3127573160ce02a6666e66b..b5b928bec01990c5ad61b193e649405c482d6f00 100644
+index e3d29fd5be7d86d4c3127573160ce02a6666e66b..1c9fe6243757fe4150d48ebfda9d5a1d8a4ed8d4 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,10 +1,27 @@
+@@ -1,10 +1,21 @@
  package puregero.multipaper;
  
 +import net.minecraft.server.MinecraftServer;
-+import net.minecraft.server.dedicated.DedicatedServer;
 +import net.minecraft.server.level.ServerPlayer;
-+import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
++import net.minecraft.world.entity.Entity;
++import org.bukkit.craftbukkit.entity.CraftEntity;
 +import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
-+import puregero.multipaper.externalserverprotocol.PlayerMovePacket;
++import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
 +import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
 +
  import java.io.File;
  import java.io.IOException;
  import java.nio.file.Files;
 +import java.util.Collection;
-+import java.util.HashMap;
-+import java.util.UUID;
 +import java.util.function.Supplier;
  
  public class MultiPaper {
-+    // You'll want to increase this if you have more than 250 servers
-+    // The bits in this value should be all 1s to optimize hashmaps and the like
-+    // Eg 255 is 0b11111111
-+    private static final int ENTITY_COUNTER_INCREMENT = 255;
 +
      private static MultiPaperConnection multiPaperConnection = null;
      private static ExternalServerSocket externalServerSocket = null;
  
-@@ -32,9 +49,29 @@ public class MultiPaper {
+@@ -32,9 +43,18 @@ public class MultiPaper {
          return bungeeCordName;
      }
  
@@ -237,18 +232,7 @@ index e3d29fd5be7d86d4c3127573160ce02a6666e66b..b5b928bec01990c5ad61b193e649405c
 +        MinecraftServer.getServer().scheduleOnMain(runnable);
 +    }
 +
-+    private static HashMap<UUID, Double> lastLocations = new HashMap<>();
-+
 +    public static void tick() {
-+        for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
-+            if (!(player instanceof ExternalPlayer)) {
-+                double location = player.getX() + player.getY() * 7 + player.getZ() * 49;
-+                if (location != lastLocations.getOrDefault(player.getUUID(), 0D)) {
-+                    broadcastPacketToExternalServers(new PlayerMovePacket(player));
-+                    lastLocations.put(player.getUUID(), location);
-+                }
-+            }
-+        }
 +    }
 +
      public static void sendTickTime(long time) {
@@ -259,7 +243,7 @@ index e3d29fd5be7d86d4c3127573160ce02a6666e66b..b5b928bec01990c5ad61b193e649405c
          } catch (IOException e) {
              e.printStackTrace();
          }
-@@ -48,4 +85,33 @@ public class MultiPaper {
+@@ -48,4 +68,49 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -292,6 +276,22 @@ index e3d29fd5be7d86d4c3127573160ce02a6666e66b..b5b928bec01990c5ad61b193e649405c
 +            });
 +        }
 +    }
++
++    public static boolean isRealPlayer(Entity entity) {
++        return entity instanceof ServerPlayer && !(entity instanceof ExternalPlayer);
++    }
++
++    public static boolean isRealPlayer(org.bukkit.entity.Entity bukkitEntity) {
++        return isRealPlayer(((CraftEntity) bukkitEntity).getHandle());
++    }
++
++    public static boolean isExternalPlayer(Entity entity) {
++        return entity instanceof ExternalPlayer;
++    }
++
++    public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
++        return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
++    }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
 index 81d61a2d671fedd031eb2725ac3ab45622e196b1..ae0855ca9cc5328b2fad1cd505a28ce44f57acaa 100644
@@ -323,16 +323,15 @@ index 81d61a2d671fedd031eb2725ac3ab45622e196b1..ae0855ca9cc5328b2fad1cd505a28ce4
 +
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 813c88cd23411cbd0615d3d1da11d5173a96fdff..77e18bb08ee446140abe55f87fa30a4ab1dd005e 100644
+index 813c88cd23411cbd0615d3d1da11d5173a96fdff..5c744e340b918437f272e061d3966e7854377161 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -12,6 +12,9 @@ public class ExternalServerPacketSerializer {
+@@ -12,6 +12,8 @@ public class ExternalServerPacketSerializer {
      private static final List<IOExceptionFunction<DataInputStream, ExternalServerPacket>> PACKET_DESERIALIZERS = new ArrayList<>();
      static {
          addPacket(HelloPacket.class, HelloPacket::new);
 +        addPacket(PlayerCreatePacket.class, PlayerCreatePacket::new);
 +        addPacket(PlayerRemovePacket.class, PlayerRemovePacket::new);
-+        addPacket(PlayerMovePacket.class, PlayerMovePacket::new);
      }
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
@@ -399,80 +398,6 @@ index 0000000000000000000000000000000000000000..152f91480a3a453a7dd55c1c28c5c6e5
 +    public void handle(ExternalServerConnection connection) {
 +        LOGGER.info("Adding player " + name + " (" + uuid + ")");
 +        MultiPaper.runSync(() -> ExternalPlayer.create(connection, name, uuid, world, x, y, z));
-+    }
-+}
-diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerMovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerMovePacket.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..0b4db5d58fd39b052a481c9531e11ddf40440ff5
---- /dev/null
-+++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerMovePacket.java
-@@ -0,0 +1,68 @@
-+package puregero.multipaper.externalserverprotocol;
-+
-+import net.minecraft.server.MinecraftServer;
-+import net.minecraft.server.level.ServerPlayer;
-+import org.apache.logging.log4j.LogManager;
-+import org.apache.logging.log4j.Logger;
-+import puregero.multipaper.ExternalServerConnection;
-+import puregero.multipaper.MultiPaper;
-+
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
-+import java.util.UUID;
-+
-+public class PlayerMovePacket extends ExternalServerPacket {
-+
-+    private static final Logger LOGGER = LogManager.getLogger(PlayerMovePacket.class.getSimpleName());
-+
-+    private final UUID uuid;
-+    private final double x;
-+    private final double y;
-+    private final double z;
-+    private final float yaw;
-+    private final float pitch;
-+
-+    public PlayerMovePacket(ServerPlayer player) {
-+        this.uuid = player.getUUID();
-+        this.x = player.getX();
-+        this.y = player.getY();
-+        this.z = player.getZ();
-+        this.yaw = player.getYRot();
-+        this.pitch = player.getYRot();
-+    }
-+
-+    public PlayerMovePacket(DataInputStream in) throws IOException {
-+        uuid = readUUID(in);
-+        x = in.readDouble();
-+        y = in.readDouble();
-+        z = in.readDouble();
-+        yaw = in.readFloat();
-+        pitch = in.readFloat();
-+    }
-+
-+    @Override
-+    public void write(DataOutputStream out) throws IOException {
-+        writeUUID(out, uuid);
-+        out.writeDouble(x);
-+        out.writeDouble(y);
-+        out.writeDouble(z);
-+        out.writeFloat(yaw);
-+        out.writeFloat(pitch);
-+    }
-+
-+    @Override
-+    public void handle(ExternalServerConnection connection) {
-+        ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
-+
-+        if (player == null) {
-+            LOGGER.warn("Tried to move a non-existent player with uuid " + uuid);
-+            return;
-+        }
-+
-+        MultiPaper.runSync(() -> {
-+            player.moveTo(x, y, z, yaw, pitch);
-+            player.getLevel().getChunkSource().move(player);
-+        });
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java

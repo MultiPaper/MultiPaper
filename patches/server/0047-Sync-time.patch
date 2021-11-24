@@ -5,22 +5,14 @@ Subject: [PATCH] Sync time
 
 
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index ae7613f92c1122fd4ff7009a002c5d95c93b06c1..844e42de9e75788cbea14695c9da1a2f6d1e85f1 100644
+index ae7613f92c1122fd4ff7009a002c5d95c93b06c1..903f41c14ebac6dc01bc517070e760f02756f3b5 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -188,6 +188,7 @@ import org.bukkit.event.server.ServerLoadEvent;
- 
- import co.aikar.timings.MinecraftTimings; // Paper
- import org.spigotmc.SlackActivityAccountant; // Spigot
-+import puregero.multipaper.ExternalPlayer;
- import puregero.multipaper.MultiPaper;
- 
- public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements SnooperPopulator, CommandSource, AutoCloseable {
-@@ -1589,6 +1590,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1589,6 +1589,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
              long worldTime = world.getGameTime();
              final ClientboundSetTimePacket worldPacket = new ClientboundSetTimePacket(worldTime, dayTime, doDaylight);
              for (Player entityhuman : world.players()) {
-+                if (entityhuman instanceof ExternalPlayer) continue; // MultiPaper - Don't send the time to external players
++                if (MultiPaper.isExternalPlayer(entityhuman)) continue; // MultiPaper - Don't send the time to external players
                  if (!(entityhuman instanceof ServerPlayer) || (tickCount + entityhuman.getId()) % 20 != 0) {
                      continue;
                  }
@@ -97,10 +89,10 @@ index 00d8b61c04ac91770b0ff3b846d3ff70bef2e8e7..a9063440f4a06913e9afcbd2eded0432
          // Forces the client to update to the new time immediately
          for (Player p : this.getPlayers()) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 9da622677972bc09029ac71b75cae58ec12896d5..24faf901b5384455512cb4bc2a59200bff573a1c 100644
+index fed7d634514e25e96a7612b7a92cbd8ca24eda62..d49448c33545f93a36405192a465f1db3345a2d9 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -82,6 +82,11 @@ public class MultiPaper {
+@@ -67,6 +67,11 @@ public class MultiPaper {
              }
          }
          MultiPaperInventoryHandler.tick();
@@ -113,10 +105,10 @@ index 9da622677972bc09029ac71b75cae58ec12896d5..24faf901b5384455512cb4bc2a59200b
      public static void sendTickTime(long time) {
          try {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index f6102b11c04d606fc0b6ce9e9d5c53d89ef534fe..c8536c690964aff15748746eafa1acbbf4eea062 100644
+index 78a84be5e35ef7a17770c8f4a2bd3041fee6e220..2a2f598540fa735a017e93dd162bed305f1cfab7 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -22,6 +22,7 @@ public class ExternalServerPacketSerializer {
+@@ -21,6 +21,7 @@ public class ExternalServerPacketSerializer {
          addPacket(SendTickListPacket.class, SendTickListPacket::new);
          addPacket(PlayerActionPacket.class, PlayerActionPacket::new);
          addPacket(PlayerInventoryUpdatePacket.class, PlayerInventoryUpdatePacket::new);

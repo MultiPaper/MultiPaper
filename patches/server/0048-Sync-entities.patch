@@ -5,27 +5,25 @@ Subject: [PATCH] Sync entities
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index da7c090e55023129049c235a46d874ad08fb74ab..b5e0d8bc15c26d9bd2a03b46f32f99e7bfd7b681 100644
+index da7c090e55023129049c235a46d874ad08fb74ab..e8c6366c99385c14ce0b7fd9419f9ea750bb8813 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
-@@ -104,7 +104,9 @@ import org.apache.logging.log4j.Logger;
- 
+@@ -105,6 +105,7 @@ import org.apache.logging.log4j.Logger;
  import org.bukkit.entity.Player; // CraftBukkit
  import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet; // Paper
-+import puregero.multipaper.ExternalPlayer;
  import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -2353,10 +2355,20 @@ Sections go from 0..16. Now whenever a section is not empty, it can potentially
+@@ -2353,10 +2354,20 @@ Sections go from 0..16. Now whenever a section is not empty, it can potentially
          public void broadcast(Packet<?> packet) {
              Iterator iterator = this.seenBy.iterator();
  
 +            // MultiPaper start - Are we ticking this entity?
 +            LevelChunk chunk = level.getChunkIfLoaded(entity.blockPosition());
-+            if ((entity instanceof ServerPlayer && !(entity instanceof ExternalPlayer)) ||
-+                    (!(entity instanceof ExternalPlayer) && chunk != null && chunk.externalOwner != null && chunk.externalOwner.isMe())) {
++            if (MultiPaper.isRealPlayer(entity) ||
++                    (!MultiPaper.isExternalPlayer(entity) && chunk != null && chunk.externalOwner != null && chunk.externalOwner.isMe())) {
 +                MultiPaperEntitiesHandler.onEntityUpdate(entity, packet); // MultiPaper
 +            }
 +            // MultiPaper end
@@ -34,21 +32,12 @@ index da7c090e55023129049c235a46d874ad08fb74ab..b5e0d8bc15c26d9bd2a03b46f32f99e7
                  ServerPlayerConnection serverplayerconnection = (ServerPlayerConnection) iterator.next();
  
 -                serverplayerconnection.send(packet);
-+                if (!(serverplayerconnection.getPlayer() instanceof ExternalPlayer)) {
++                if (!MultiPaper.isExternalPlayer(serverplayerconnection.getPlayer())) {
 +                    serverplayerconnection.send(packet);
 +                }
              }
  
          }
-@@ -2389,6 +2401,8 @@ Sections go from 0..16. Now whenever a section is not empty, it can potentially
-         }
- 
-         public void updatePlayer(ServerPlayer player) {
-+            if (player instanceof ExternalPlayer) return; // MultiPaper
-+
-             org.spigotmc.AsyncCatcher.catchOp("player tracker update"); // Spigot
-             if (player != this.entity) {
-                 // Paper start - remove allocation of Vec3D here
 diff --git a/src/main/java/net/minecraft/server/level/ServerEntity.java b/src/main/java/net/minecraft/server/level/ServerEntity.java
 index a453aac607f9b38f0bf90038ff2d8071687c4bae..ca60edfc98042f54c2194958e51c2a2d5eb777b5 100644
 --- a/src/main/java/net/minecraft/server/level/ServerEntity.java
@@ -119,7 +108,7 @@ index 9cde430b1a3c1b462d1df17dea78c1a80b22dc6c..0de0b64ec1f7c4db82ba73989e87605f
          this.clientViewDistance = packet.viewDistance;
          // CraftBukkit end
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index c24611777d893cdfa4d3c36897926318130470ca..28fedd727549cfedfa5fcbb5f02b25082ffb1be0 100644
+index c24611777d893cdfa4d3c36897926318130470ca..4d6e31891b11bf6a4fcf8c9663488b61f4e57764 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -149,7 +149,6 @@ import net.minecraft.world.level.block.entity.CommandBlockEntity;
@@ -150,7 +139,7 @@ index c24611777d893cdfa4d3c36897926318130470ca..28fedd727549cfedfa5fcbb5f02b2508
  import co.aikar.timings.MinecraftTimings; // Paper
  import puregero.multipaper.MultiPaper;
  import puregero.multipaper.MultiPaperInventoryHandler;
-+import puregero.multipaper.MultiPaperEntityHandler;
++import puregero.multipaper.MultiPaperPlayerHandler;
  // CraftBukkit end
  
  public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
@@ -158,7 +147,7 @@ index c24611777d893cdfa4d3c36897926318130470ca..28fedd727549cfedfa5fcbb5f02b2508
      @Override
      public void handlePlayerAbilities(ServerboundPlayerAbilitiesPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
-+        MultiPaperEntityHandler.handlePlayerAbilities(this.player, packet); // MultiPaper
++        MultiPaperPlayerHandler.handlePlayerAbilities(this.player, packet); // MultiPaper
          // CraftBukkit start
          if (this.player.getAbilities().mayfly && this.player.getAbilities().flying != packet.isFlying()) {
              PlayerToggleFlightEvent event = new PlayerToggleFlightEvent(this.player.getBukkitEntity(), packet.isFlying());
@@ -166,7 +155,7 @@ index c24611777d893cdfa4d3c36897926318130470ca..28fedd727549cfedfa5fcbb5f02b2508
      @Override
      public void handleClientInformation(ServerboundClientInformationPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
-+        MultiPaperEntityHandler.handleClientInformation(this.player, packet);
++        MultiPaperPlayerHandler.handleClientInformation(this.player, packet);
          this.player.updateOptions(packet);
      }
  
@@ -290,39 +279,10 @@ index 5a72ce41cc57578498c4a072a1eb04ac28958afe..9f1feb9c90ab4d8451851949b366ba74
          FRESH, PENDING, LOADED;
  
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 5f94d9c1b76b395c396ff28204f3c48a66a826aa..453f40e8bf4cf965874bee77cab2533e193298fc 100644
+index 741baef2e619c46deab7584b6738bdfa8945e824..453f40e8bf4cf965874bee77cab2533e193298fc 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -6,6 +6,7 @@ import io.netty.util.concurrent.GenericFutureListener;
- import net.minecraft.network.Connection;
- import net.minecraft.network.protocol.Packet;
- import net.minecraft.network.protocol.PacketFlow;
-+import net.minecraft.server.level.ServerLevel;
- import net.minecraft.server.level.ServerPlayer;
- import net.minecraft.server.network.ServerGamePacketListenerImpl;
- import org.apache.logging.log4j.LogManager;
-@@ -13,7 +14,6 @@ import org.apache.logging.log4j.Logger;
- import org.bukkit.Bukkit;
- import org.bukkit.craftbukkit.CraftServer;
- import org.bukkit.craftbukkit.CraftWorld;
--import org.bukkit.event.entity.CreatureSpawnEvent;
- 
- import javax.annotation.Nullable;
- import java.util.UUID;
-@@ -32,10 +32,11 @@ public class ExternalPlayer extends ServerPlayer {
-         this.externalServerConnection = externalServerConnection;
-         this.isRealPlayer = true;
-         this.didPlayerJoinEvent = true;
-+        this.valid = true;
-         connection = new ServerGamePacketListenerImpl(getServer(), new ExternalPlayerConnection(PacketFlow.CLIENTBOUND), this);
-         setPos(x, y, z);
-         getServer().getPlayerList().addPlayer(this);
--        level.addEntity(this, CreatureSpawnEvent.SpawnReason.CUSTOM);
-+        ((ServerLevel) level).addNewPlayer(this);
-         containerMenu.transferTo(containerMenu, getBukkitEntity());
-         initInventoryMenu();
-     }
-@@ -61,9 +62,4 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -62,9 +62,4 @@ public class ExternalPlayer extends ServerPlayer {
              externalServerConnection.sendPacket(ExternalPlayer.this, packet);
          }
      }
@@ -333,7 +293,7 @@ index 5f94d9c1b76b395c396ff28204f3c48a66a826aa..453f40e8bf4cf965874bee77cab2533e
 -    }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index d45e1060ea382730cac6458b065d944285ce5826..e78c2543314e1af3b433bad51365f3e748f672bd 100644
+index d45e1060ea382730cac6458b065d944285ce5826..f0784dbe7255a47c39f84e725bf3f8bcef72b37b 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -1,8 +1,11 @@
@@ -365,7 +325,7 @@ index d45e1060ea382730cac6458b065d944285ce5826..e78c2543314e1af3b433bad51365f3e7
 +            }
 +
 +            for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
-+                if (!(player instanceof ExternalPlayer)) {
++                if (MultiPaper.isRealPlayer(player)) {
 +                    send(new PlayerCreatePacket(player));
 +                    send(new PlayerActionPacket(player, new ServerboundClientInformationPacket(
 +                            player.locale,
@@ -398,7 +358,7 @@ index d45e1060ea382730cac6458b065d944285ce5826..e78c2543314e1af3b433bad51365f3e7
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 0f0b59359d7ad578efb9cba332d431703639dd0e..3fe5b022991390ef0df7a8a73da51e5b2d765737 100644
+index d49448c33545f93a36405192a465f1db3345a2d9..55af337f72fc1bbd3af23b128d966b6b5dd52f49 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,10 +1,10 @@
@@ -411,42 +371,20 @@ index 0f0b59359d7ad578efb9cba332d431703639dd0e..3fe5b022991390ef0df7a8a73da51e5b
  import net.minecraft.nbt.NbtIo;
 +import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 +import net.minecraft.server.MinecraftServer;
- import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ChunkHolder;
  import net.minecraft.server.level.ServerLevel;
-@@ -20,11 +20,9 @@ import puregero.multipaper.externalserverprotocol.*;
- import java.io.*;
+ import net.minecraft.server.level.ServerPlayer;
+@@ -22,8 +22,8 @@ import java.io.*;
  import java.nio.file.Files;
  import java.util.Collection;
--import java.util.HashMap;
  import java.util.HashSet;
--import java.util.UUID;
 -import java.util.function.Supplier;
  import java.util.concurrent.ConcurrentHashMap;
 +import java.util.function.Supplier;
  import java.util.zip.DeflaterOutputStream;
  import java.util.zip.InflaterInputStream;
  
-@@ -63,18 +61,7 @@ public class MultiPaper {
-         MinecraftServer.getServer().scheduleOnMain(runnable);
-     }
- 
--    private static HashMap<UUID, Double> lastLocations = new HashMap<>();
--
-     public static void tick() {
--        for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
--            if (!(player instanceof ExternalPlayer)) {
--                double location = player.getX() + player.getY() * 7 + player.getZ() * 49;
--                if (location != lastLocations.getOrDefault(player.getUUID(), 0D)) {
--                    broadcastPacketToExternalServers(new PlayerMovePacket(player));
--                    lastLocations.put(player.getUUID(), location);
--                }
--            }
--        }
-         for (ExternalServer server : getConnection().getServersMap().values()) {
-             if (server.getConnection() != null) {
-                 // This tick function must be run after the vanilla tick
-@@ -213,6 +200,7 @@ public class MultiPaper {
+@@ -194,6 +194,7 @@ public class MultiPaper {
      public static void unlockChunk(LevelChunk chunk) {
          try {
              if (chunk.externalOwner != null && chunk.externalOwner.isMe()) {
@@ -550,7 +488,7 @@ index 32c08b486d6a8750a22b4ee6eebaf225eb85331c..2dcf6276e576ef472e71744935d8c363
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..754cd215d0d3e3397670cbabde3bde5dc2a7b017
+index 0000000000000000000000000000000000000000..28485d19fd5c8ed8925bcca4f38838dee00cc062
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 @@ -0,0 +1,109 @@
@@ -649,7 +587,7 @@ index 0000000000000000000000000000000000000000..754cd215d0d3e3397670cbabde3bde5d
 +
 +    public static void onEntityUpdate(Entity entity, Packet<?> packet) {
 +        if ((packet instanceof ClientboundMoveEntityPacket || packet instanceof ClientboundTeleportEntityPacket)
-+                && entity instanceof ServerPlayer && !(entity instanceof ExternalPlayer)) {
++                && MultiPaper.isRealPlayer(entity)) {
 +            MultiPaper.broadcastPacketToExternalServers(new EntityUpdatePacket(entity, packet));
 +            return;
 +        }
@@ -663,11 +601,11 @@ index 0000000000000000000000000000000000000000..754cd215d0d3e3397670cbabde3bde5d
 +        }
 +    }
 +}
-diff --git a/src/main/java/puregero/multipaper/MultiPaperEntityHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntityHandler.java
+diff --git a/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java b/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..bf4acd7d8352d5c44d15aceda21653f7cf3ec0fc
+index 0000000000000000000000000000000000000000..08c117ed10095b47ccba3d844d21488fddc7b780
 --- /dev/null
-+++ b/src/main/java/puregero/multipaper/MultiPaperEntityHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java
 @@ -0,0 +1,20 @@
 +package puregero.multipaper;
 +
@@ -676,15 +614,15 @@ index 0000000000000000000000000000000000000000..bf4acd7d8352d5c44d15aceda21653f7
 +import net.minecraft.server.level.ServerPlayer;
 +import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
 +
-+public class MultiPaperEntityHandler {
++public class MultiPaperPlayerHandler {
 +    public static void handlePlayerAbilities(ServerPlayer player, ServerboundPlayerAbilitiesPacket packet) {
-+        if (!(player instanceof ExternalPlayer)) {
++        if (MultiPaper.isRealPlayer(player)) {
 +            MultiPaper.broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
 +        }
 +    }
 +
 +    public static void handleClientInformation(ServerPlayer player, ServerboundClientInformationPacket packet) {
-+        if (!(player instanceof ExternalPlayer)) {
++        if (MultiPaper.isRealPlayer(player)) {
 +            MultiPaper.broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
 +        }
 +    }
@@ -867,10 +805,10 @@ index 0000000000000000000000000000000000000000..9c19d62019c958058f97186c564e232e
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index c8536c690964aff15748746eafa1acbbf4eea062..ee757f0907ec20eb94756074541ac72e9db64a4c 100644
+index 2a2f598540fa735a017e93dd162bed305f1cfab7..f5489a9fefd4ef56b0b8966d5febb865d03dc809 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -23,6 +23,10 @@ public class ExternalServerPacketSerializer {
+@@ -22,6 +22,10 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerActionPacket.class, PlayerActionPacket::new);
          addPacket(PlayerInventoryUpdatePacket.class, PlayerInventoryUpdatePacket::new);
          addPacket(TimeUpdatePacket.class, TimeUpdatePacket::new);

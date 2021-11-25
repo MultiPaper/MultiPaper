@@ -5,7 +5,7 @@ Subject: [PATCH] Sync entities
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 76ddd2fd9aae82a75f6b2ca27aca43a45e017ab2..505a24863df7eb1b891dd7df4a8b5d03c3403f95 100644
+index 76ddd2fd9aae82a75f6b2ca27aca43a45e017ab2..00eebd606c2037ea2d2bb2a17501d42231598711 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -106,6 +106,7 @@ import org.bukkit.entity.Player; // CraftBukkit
@@ -23,7 +23,7 @@ index 76ddd2fd9aae82a75f6b2ca27aca43a45e017ab2..505a24863df7eb1b891dd7df4a8b5d03
 +            // MultiPaper start - Are we ticking this entity?
 +            LevelChunk chunk = level.getChunkIfLoaded(entity.blockPosition());
 +            if (MultiPaper.isRealPlayer(entity) ||
-+                    (!MultiPaper.isExternalPlayer(entity) && chunk != null && chunk.externalOwner != null && chunk.externalOwner.isMe())) {
++                    (!MultiPaper.isExternalPlayer(entity) && MultiPaper.isChunkLocal(chunk))) {
 +                MultiPaperEntitiesHandler.onEntityUpdate(entity, packet); // MultiPaper
 +            }
 +            // MultiPaper end
@@ -67,7 +67,7 @@ index a453aac607f9b38f0bf90038ff2d8071687c4bae..6c1f980673741b5f7147459da52fcd7c
          this.entity.startSeenByPlayer(player);
      }
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 04098de654aa0e72b35ae18e2a041ea661cc0be2..901a5e1ee36f29ef32882ad35b619438a7743fc0 100644
+index 04098de654aa0e72b35ae18e2a041ea661cc0be2..65603ffe757f65fc83e2e0c6fcfc4f98b2bac2c5 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -164,6 +164,7 @@ import org.bukkit.event.world.TimeSkipEvent;
@@ -84,7 +84,7 @@ index 04098de654aa0e72b35ae18e2a041ea661cc0be2..901a5e1ee36f29ef32882ad35b619438
              this.entityTickList.forEach((entity) -> {
 +                // MultiPaper start - Are we ticking this entity?
 +                LevelChunk chunk = getChunkIfLoaded(entity.blockPosition());
-+                if (chunk == null || chunk.externalOwner == null || !chunk.externalOwner.isMe()) {
++                if (!MultiPaper.isChunkLocal(chunk)) {
 +                    return;
 +                }
 +                // MultiPaper end
@@ -233,7 +233,7 @@ index 94e76e295dbd0f3bac4b30a3e7338cd56a971207..de3932d9f84ffb30ab8eaacbf37d67ff
      protected static final EntityDataAccessor<CompoundTag> DATA_SHOULDER_RIGHT = SynchedEntityData.defineId(Player.class, EntityDataSerializers.COMPOUND_TAG);
      private long timeEntitySatOnShoulder;
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index fe3a6d88fb8681940b1be5bb9ae8684014c9b3f8..e50083b42f8b3d566806912346a5cf3234d3b66f 100644
+index 18ed7fd0173b010ed6fd5a2dc9c4ddcccbf192e4..ec416cad04b929a2f1be99a23cfae8f6bf8d784e 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -105,6 +105,7 @@ public class LevelChunk implements ChunkAccess {
@@ -421,7 +421,7 @@ index d45e1060ea382730cac6458b065d944285ce5826..f0784dbe7255a47c39f84e725bf3f8bc
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 39f3ba5c5ca54b8f1653853c7ed5e67db50adb44..9cbb0f908beb882188ca19160606535262d67b41 100644
+index e69f5750bd4003cf08ea6de73e54fae6d7a639ac..244f0c886d493dc820307d0e6507ff1918f85af9 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,10 +1,10 @@
@@ -437,7 +437,7 @@ index 39f3ba5c5ca54b8f1653853c7ed5e67db50adb44..9cbb0f908beb882188ca191606065352
  import net.minecraft.server.level.ChunkHolder;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
-@@ -27,8 +27,8 @@ import java.io.*;
+@@ -29,8 +29,8 @@ import java.io.*;
  import java.nio.file.Files;
  import java.util.Collection;
  import java.util.HashSet;
@@ -447,10 +447,10 @@ index 39f3ba5c5ca54b8f1653853c7ed5e67db50adb44..9cbb0f908beb882188ca191606065352
  import java.util.zip.DeflaterOutputStream;
  import java.util.zip.InflaterInputStream;
  
-@@ -303,6 +303,7 @@ public class MultiPaper {
+@@ -321,6 +321,7 @@ public class MultiPaper {
      public static void unlockChunk(LevelChunk chunk) {
          try {
-             if (chunk.externalOwner != null && chunk.externalOwner.isMe()) {
+             if (MultiPaper.isChunkLocal(chunk)) {
 +                broadcastPacketToExternalServers(chunk.externalSubscribers, () -> new SendEntitiesPacket(chunk));
                  broadcastPacketToExternalServers(chunk.externalSubscribers, () -> new SendTickListPacket(chunk));
              }
@@ -551,7 +551,7 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..b80da2908f4a90c607459c32b8ed62b8
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7a3ff3fb65d79342d2c6d523aeeb336e6bb1cfa3
+index 0000000000000000000000000000000000000000..4a8111c29f4ed9a30f562573cda7e85805b9877e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 @@ -0,0 +1,127 @@
@@ -602,8 +602,8 @@ index 0000000000000000000000000000000000000000..7a3ff3fb65d79342d2c6d523aeeb336e
 +            return;
 +        }
 +
-+        if (chunkFrom.externalOwner != null && chunkFrom.externalOwner.isMe()) {
-+            if (chunkTo.externalOwner == null || !chunkTo.externalOwner.isMe()) {
++        if (MultiPaper.isChunkLocal(chunkFrom)) {
++            if (!MultiPaper.isChunkLocal(chunkTo)) {
 +                // Leaving our jurisdiction, do a full entity update to ensure the new external server has all the required info
 +                MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity)));
 +            }

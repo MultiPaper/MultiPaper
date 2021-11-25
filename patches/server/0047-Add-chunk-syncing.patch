@@ -909,7 +909,7 @@ index 0000000000000000000000000000000000000000..17e63265fc3cf6390eca397f3b8e1c02
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 6366cd1defa3de59963e8fd5ec4e87a567b81b54..55db99d8c5f5be858b50b1a46b4c08bb953a836c 100644
+index 6366cd1defa3de59963e8fd5ec4e87a567b81b54..09815dcf20899e8915a8bf86c4857c3d8ed564e2 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -1,17 +1,25 @@
@@ -938,7 +938,7 @@ index 6366cd1defa3de59963e8fd5ec4e87a567b81b54..55db99d8c5f5be858b50b1a46b4c08bb
  
  public class MultiPaperConnection extends Thread {
  
-@@ -129,6 +137,62 @@ public class MultiPaperConnection extends Thread {
+@@ -129,6 +137,64 @@ public class MultiPaperConnection extends Thread {
          server.setLastAlive(System.currentTimeMillis());
      }
  
@@ -958,11 +958,13 @@ index 6366cd1defa3de59963e8fd5ec4e87a567b81b54..55db99d8c5f5be858b50b1a46b4c08bb
 +                // A server has locked the chunk, which means their chunk must be full.
 +                // Let's redownload their full copy
 +//                server.getConnection().requestChunk(world, cx, cz, null);
-+                if (Bukkit.getWorld(world).unloadChunk(cx, cz, false)) {
-+                    LOGGER.info("Unloaded chunk " + world + "," + cx + "," + cz + " as someone has a full copy");
-+                } else {
-+                    LOGGER.warn("Failed to unload chunk " + world + "," + cx + "," + cz + " due to someone having a full copy");
-+                }
++                MultiPaper.runSync(() -> {
++                    if (Bukkit.getWorld(world).unloadChunk(cx, cz, false)) {
++                        LOGGER.info("Unloaded chunk " + world + "," + cx + "," + cz + " as someone has a full copy");
++                    } else {
++                        LOGGER.warn("Failed to unload chunk " + world + "," + cx + "," + cz + " due to someone having a full copy");
++                    }
++                });
 +            }
 +        }
 +    }
@@ -1001,7 +1003,7 @@ index 6366cd1defa3de59963e8fd5ec4e87a567b81b54..55db99d8c5f5be858b50b1a46b4c08bb
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -157,4 +221,122 @@ public class MultiPaperConnection extends Thread {
+@@ -157,4 +223,122 @@ public class MultiPaperConnection extends Thread {
          out.writeInt(port);
          out.send(null);
      }

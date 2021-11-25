@@ -551,21 +551,22 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..b80da2908f4a90c607459c32b8ed62b8
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..28485d19fd5c8ed8925bcca4f38838dee00cc062
+index 0000000000000000000000000000000000000000..7a3ff3fb65d79342d2c6d523aeeb336e6bb1cfa3
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,127 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.network.protocol.Packet;
-+import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
-+import net.minecraft.network.protocol.game.ClientboundRotateHeadPacket;
-+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
-+import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
++import net.minecraft.network.protocol.game.*;
++import net.minecraft.network.syncher.SynchedEntityData;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.LivingEntity;
++import net.minecraft.world.entity.ai.attributes.AttributeInstance;
++import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.phys.Vec3;
@@ -630,6 +631,23 @@ index 0000000000000000000000000000000000000000..28485d19fd5c8ed8925bcca4f38838de
 +            entity.setDeltaMovement(setEntityMotionPacket.getXa() / 8000.0D, setEntityMotionPacket.getYa() / 8000.0D, setEntityMotionPacket.getZa() / 8000.0D);
 +        } else if (packet instanceof ClientboundRotateHeadPacket rotateHeadPacket) {
 +            entity.setYHeadRot(rotateHeadPacket.getYHeadRot() * 360f / 256);
++        } else if (packet instanceof ClientboundSetEntityDataPacket setEntityDataPacket) {
++            if (setEntityDataPacket.getUnpackedData() != null) {
++                for (SynchedEntityData.DataItem item : setEntityDataPacket.getUnpackedData()) {
++                    entity.getEntityData().set(item.getAccessor(), item.getValue());
++                }
++            } else {
++                LOGGER.warn("ClientboundSetEntityDataPacket.getUnpackedData() was null");
++            }
++        } else if (packet instanceof ClientboundUpdateAttributesPacket updateAttributesPacket) {
++            for (ClientboundUpdateAttributesPacket.AttributeSnapshot snapshot : updateAttributesPacket.getValues()) {
++                AttributeInstance instance = ((LivingEntity) entity).getAttribute(snapshot.getAttribute());
++                instance.setBaseValue(snapshot.getBase());
++                instance.removeModifiers();
++                for (AttributeModifier modifier : snapshot.getModifiers()) {
++                    instance.addPermanentModifier(modifier);
++                }
++            }
 +        } else {
 +            LOGGER.warn("Unhandled packet " + packet);
 +        }
@@ -777,7 +795,7 @@ index 0000000000000000000000000000000000000000..e8f4566f93dc2b24cc5a6c71138a7c3d
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9c19d62019c958058f97186c564e232e645e2340
+index 0000000000000000000000000000000000000000..4d147a0b861c739d7f3214812bba7fc5d7e0af91
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 @@ -0,0 +1,86 @@
@@ -859,7 +877,7 @@ index 0000000000000000000000000000000000000000..9c19d62019c958058f97186c564e232e
 +                return;
 +            }
 +
-+            if (packet instanceof ClientboundMoveEntityPacket || packet instanceof ClientboundTeleportEntityPacket || packet instanceof ClientboundSetEntityMotionPacket || packet instanceof ClientboundRotateHeadPacket) {
++            if (packet instanceof ClientboundMoveEntityPacket || packet instanceof ClientboundTeleportEntityPacket || packet instanceof ClientboundSetEntityMotionPacket || packet instanceof ClientboundRotateHeadPacket || packet instanceof ClientboundSetEntityDataPacket || packet instanceof ClientboundUpdateAttributesPacket) {
 +                MultiPaper.runSync(() -> MultiPaperEntitiesHandler.handleEntityUpdate(entity, packet));
 +            } else {
 +                LOGGER.warn("Unhandled update packet of type " + packet.getClass().getSimpleName());

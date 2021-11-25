@@ -227,26 +227,30 @@ index 24d772c18d5a448154909e4a51964ba29485a5c2..f1982e4d37130db67fa767a8051cb8fe
              }
          }
 diff --git a/src/main/java/net/minecraft/world/level/ServerTickList.java b/src/main/java/net/minecraft/world/level/ServerTickList.java
-index 0f61dd3a3115f68ccd2c7cb4c9309f5ace96a406..5ab89a28cb9eb437a3841dfe782e4c5156f77e61 100644
+index 0f61dd3a3115f68ccd2c7cb4c9309f5ace96a406..e23a1e8df1baf846ac93e8094a67c8ca2aa996ac 100644
 --- a/src/main/java/net/minecraft/world/level/ServerTickList.java
 +++ b/src/main/java/net/minecraft/world/level/ServerTickList.java
-@@ -9,6 +9,7 @@ import java.util.Iterator;
+@@ -9,6 +9,8 @@ import java.util.Iterator;
  import java.util.List;
  import java.util.Queue;
  import java.util.Set;
++import java.util.concurrent.ConcurrentLinkedDeque;
 +import java.util.concurrent.ConcurrentSkipListSet;
  import java.util.function.Consumer;
  import java.util.function.Function;
  import java.util.function.Predicate;
-@@ -31,7 +32,7 @@ public class ServerTickList<T> implements TickList<T> {
+@@ -31,9 +33,9 @@ public class ServerTickList<T> implements TickList<T> {
      protected final Predicate<T> ignore;
      private final Function<T, ResourceLocation> toId;
      private final Set<TickNextTickData<T>> tickNextTickSet = Sets.newHashSet();
 -    private final Set<TickNextTickData<T>> tickNextTickList = Sets.newTreeSet(TickNextTickData.createTimeComparator());
 +    private final Set<TickNextTickData<T>> tickNextTickList = new ConcurrentSkipListSet<>(TickNextTickData.createTimeComparator()); // MultiPaper - Make thread safe
      private final ServerLevel level;
-     private final Queue<TickNextTickData<T>> currentlyTicking = Queues.newArrayDeque();
+-    private final Queue<TickNextTickData<T>> currentlyTicking = Queues.newArrayDeque();
++    private final Queue<TickNextTickData<T>> currentlyTicking = new ConcurrentLinkedDeque<>(); // MultiPaper - Make thread safe
      private final List<TickNextTickData<T>> alreadyTicked = Lists.newArrayList();
+     private final Consumer<TickNextTickData<T>> ticker;
+ 
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
 index 9b4a464fe820effa906af486cf71a74e283ccd4e..8c9fdefee45b9039728373e7d0ce7f5d8ba4bb78 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java

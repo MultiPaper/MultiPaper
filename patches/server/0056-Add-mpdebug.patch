@@ -1,0 +1,136 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 25 Nov 2021 21:43:06 +1000
+Subject: [PATCH] Add /mpdebug
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+index fa03c956d06f3b093545e2861a23c67b3cfff8f5..4e86da4e5f8af5ab6e07f846545f7b4e51e629aa 100644
+--- a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
++++ b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+@@ -4,6 +4,7 @@ import java.util.Map;
+ import org.bukkit.Server;
+ import org.bukkit.command.Command;
+ import org.bukkit.command.SimpleCommandMap;
++import puregero.multipaper.commands.MPDebugCommand;
+ import puregero.multipaper.commands.ServersCommand;
+ 
+ public class CraftCommandMap extends SimpleCommandMap {
+@@ -22,6 +23,7 @@ public class CraftCommandMap extends SimpleCommandMap {
+     }
+ 
+     private void setDefaultCommands() {
++        register("multipaper", new MPDebugCommand("mpdebug"));
+         register("multipaper", new ServersCommand("servers"));
+     }
+     // MultiPaper end
+diff --git a/src/main/java/puregero/multipaper/commands/MPDebugCommand.java b/src/main/java/puregero/multipaper/commands/MPDebugCommand.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..6c84ea8f89d729d8a84b08912c009520275a1d58
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/commands/MPDebugCommand.java
+@@ -0,0 +1,104 @@
++package puregero.multipaper.commands;
++
++import net.kyori.adventure.text.Component;
++import net.kyori.adventure.text.format.NamedTextColor;
++import net.kyori.adventure.text.format.TextColor;
++import net.minecraft.core.BlockPos;
++import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.phys.Vec3;
++import org.bukkit.*;
++import org.bukkit.command.Command;
++import org.bukkit.command.CommandSender;
++import org.bukkit.craftbukkit.CraftChunk;
++import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.craftbukkit.scheduler.CraftScheduler;
++import org.bukkit.entity.Player;
++import org.bukkit.scheduler.BukkitTask;
++import puregero.multipaper.ExternalServer;
++
++import java.util.HashSet;
++import java.util.Iterator;
++
++public class MPDebugCommand extends Command implements Runnable {
++    private HashSet<Player> debugEnabled = new HashSet<>();
++    private BukkitTask task = null;
++
++    public MPDebugCommand(String command) {
++        super(command);
++    }
++
++    @Override
++    public boolean execute(CommandSender sender, String commandLabel, String[] args) {
++        if (!(sender instanceof Player)) {
++            sender.sendMessage(ChatColor.RED + "Only players can execute this command.");
++            return false;
++        }
++
++        Player player = (Player) sender;
++
++        if (debugEnabled.remove(player)) {
++            player.sendMessage("MultiPaper debug disabled");
++            return false;
++        }
++
++        debugEnabled.add(player);
++
++        sender.sendMessage("MultiPaper debug enabled");
++
++        if (task == null) {
++            run();
++        }
++
++        return true;
++    }
++
++    @Override
++    public void run() {
++        task = null;
++
++        Iterator<Player> iterator = debugEnabled.iterator();
++        while (iterator.hasNext()) {
++            Player player = iterator.next();
++
++            if (!player.isOnline()) {
++                iterator.remove();
++                continue;
++            }
++
++            run(player);
++        }
++
++        if (!debugEnabled.isEmpty()) {
++            task = ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(this, 5, "MultiPaper debug");
++        }
++    }
++
++    private void run(Player player) {
++        Chunk chunk = player.getChunk();
++
++        if (chunk != null) {
++            ExternalServer owner = ((CraftChunk) chunk).getHandle().externalOwner;
++            player.sendActionBar(Component.text(owner == null ? "null" : owner.getName()).color(owner != null && owner.isMe() ? NamedTextColor.AQUA : NamedTextColor.RED));
++        }
++
++        for (double x = -2; x <= 2; x += 0.5) {
++            for (double z = -2; z <= 2; z += 0.5) {
++                Vec3 vec = ((CraftPlayer) player).getHandle().position().add(x, 0.5, z);
++                BlockPos pos = new BlockPos(vec);
++                LevelChunk levelChunk = ((CraftWorld) player.getWorld()).getHandle().getChunkIfLoaded(pos);
++                if (levelChunk != null) {
++                    Color color;
++                    if (levelChunk.externalOwner == null) {
++                        color = Color.WHITE;
++                    } else if (levelChunk.externalOwner.isMe()) {
++                        color = Color.AQUA;
++                    } else {
++                        color = Color.RED;
++                    }
++                    player.spawnParticle(Particle.REDSTONE, vec.x, vec.y, vec.z, 1, new Particle.DustOptions(color, 1));
++                }
++            }
++        }
++    }
++}

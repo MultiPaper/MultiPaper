@@ -75,18 +75,28 @@ index 3603f1ac72635143ef927e6da90e9fcbd09e124c..7cca3f3baeb0c1fc1beb428b1ebfd2ae
              }
              // Paper end - entity ticking chunk set
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index a9f247ba1d889dffdbac51fa70cc887f4987e717..da7c090e55023129049c235a46d874ad08fb74ab 100644
+index a9f247ba1d889dffdbac51fa70cc887f4987e717..76ddd2fd9aae82a75f6b2ca27aca43a45e017ab2 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
-@@ -104,6 +104,7 @@ import org.apache.logging.log4j.Logger;
+@@ -104,6 +104,8 @@ import org.apache.logging.log4j.Logger;
  
  import org.bukkit.entity.Player; // CraftBukkit
  import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet; // Paper
 +import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperChunkHandler;
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -1688,6 +1689,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1126,6 +1128,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+                         ((LevelChunk) ichunkaccess).setLoaded(false);
+                     }
+ 
++                    MultiPaperChunkHandler.onChunkUnload(ichunkaccess); // MultiPaper
++
+                     // Paper start - async chunk saving
+                     try {
+                         this.asyncSave(ichunkaccess);
+@@ -1688,6 +1692,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              }
              return ret;
          }
@@ -94,7 +104,7 @@ index a9f247ba1d889dffdbac51fa70cc887f4987e717..da7c090e55023129049c235a46d874ad
          return super.read(chunkcoordintpair);
      }
  
-@@ -1699,6 +1701,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1699,6 +1704,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                  com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread());
              return;
          }
@@ -107,7 +117,7 @@ index a9f247ba1d889dffdbac51fa70cc887f4987e717..da7c090e55023129049c235a46d874ad
          super.write(chunkcoordintpair, nbttagcompound);
      }
      // Paper end
-@@ -1742,6 +1750,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1742,6 +1753,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              return status;
          }
  
@@ -258,7 +268,7 @@ index 9b4a464fe820effa906af486cf71a74e283ccd4e..8c9fdefee45b9039728373e7d0ce7f5d
          }
  
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index db7904b1bb402a36684b97c443336630762aeaf9..17e7b39e8b187efb623a236ca766b398d82b3317 100644
+index db7904b1bb402a36684b97c443336630762aeaf9..fe3a6d88fb8681940b1be5bb9ae8684014c9b3f8 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -13,13 +13,9 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -308,15 +318,7 @@ index db7904b1bb402a36684b97c443336630762aeaf9..17e7b39e8b187efb623a236ca766b398
          ((ServerLevel)this.level).getChunkSource().chunkMap.playerChunkManager.onChunkLoad(this.chunkPos.x, this.chunkPos.z); // Paper - rewrite player chunk management
          if (server != null) {
              /*
-@@ -1021,6 +1022,7 @@ public class LevelChunk implements ChunkAccess {
-         // note: saving can be prevented, but not forced if no saving is actually required
-         this.mustNotSave = !unloadEvent.isSaveChunk();
-         this.level.getChunkSource().removeLoadedChunk(this); // Paper
-+        MultiPaperChunkHandler.onChunkUnload(this); // MultiPaper
-         // Paper start - neighbour cache
-         int chunkX = this.chunkPos.x;
-         int chunkZ = this.chunkPos.z;
-@@ -1162,7 +1164,7 @@ public class LevelChunk implements ChunkAccess {
+@@ -1162,7 +1163,7 @@ public class LevelChunk implements ChunkAccess {
  
      @Override
      public boolean isUnsaved() {
@@ -713,7 +715,7 @@ index dfbb4c47f0308e8395057014ca14dec0152eec07..019973919ec5e8e9e2a186354dbf42a4
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..10842ae0c1330d17db15ebb292c93e5eefbc04af
+index 0000000000000000000000000000000000000000..7e0147fcef8df2584fb3ca5b424aedd38cd526e4
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 @@ -0,0 +1,184 @@
@@ -761,12 +763,12 @@ index 0000000000000000000000000000000000000000..10842ae0c1330d17db15ebb292c93e5e
 +        }
 +    }
 +
-+    public static void onChunkUnload(LevelChunk chunk) {
-+        if (chunk.hasExternalLockRequest) {
-+            MultiPaper.unlockChunk(chunk);
++    public static void onChunkUnload(ChunkAccess chunk) {
++        if (chunk instanceof LevelChunk && ((LevelChunk) chunk).hasExternalLockRequest) {
++            MultiPaper.unlockChunk((LevelChunk) chunk);
 +        }
 +        try {
-+            MultiPaper.getConnection().unsubscribeChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
++            MultiPaper.getConnection().unsubscribeChunk(((ServerLevel) chunk.getLevel()).convertable.getLevelId(), chunk.getPos().x, chunk.getPos().z);
 +        } catch (IOException e) {
 +            e.printStackTrace();
 +        }

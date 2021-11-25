@@ -1,0 +1,132 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 25 Nov 2021 15:19:41 +1000
+Subject: [PATCH] Sync level.dat
+
+
+diff --git a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
+index 83ed842325c30dc3d62af697db87fe95b38a400d..834e0a33680388b58561688ae6ab7a64837fe8f4 100644
+--- a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
++++ b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
+@@ -61,6 +61,7 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+ import net.minecraft.world.level.levelgen.WorldGenSettings;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class LevelStorageSource {
+ 
+@@ -198,7 +199,7 @@ public class LevelStorageSource {
+         } else {
+             File file1 = new File(file, "level.dat");
+ 
+-            if (file1.exists()) {
++            if (true || file1.exists()) { // MultiPaper
+                 T t0 = levelDataParser.apply(file1, this.fixerUpper);
+ 
+                 if (t0 != null) {
+@@ -214,7 +215,8 @@ public class LevelStorageSource {
+     @Nullable
+     private static DataPackConfig getDataPacks(File file, DataFixer datafixer) {
+         try {
+-            CompoundTag nbttagcompound = NbtIo.readCompressed(file);
++            CompoundTag nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NbtIo.readCompressed(file); // MultiPaper
++            if (nbttagcompound == null) return null;
+             CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
+ 
+             nbttagcompound1.remove("Player");
+@@ -231,7 +233,8 @@ public class LevelStorageSource {
+     static BiFunction<File, DataFixer, PrimaryLevelData> getLevelData(DynamicOps<Tag> dynamicops, DataPackConfig datapackconfiguration) {
+         return (file, datafixer) -> {
+             try {
+-                CompoundTag nbttagcompound = NbtIo.readCompressed(file);
++                CompoundTag nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NbtIo.readCompressed(file); // MultiPaper
++                if (nbttagcompound == null) return null;
+                 CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
+                 CompoundTag nbttagcompound2 = nbttagcompound1.contains("Player", 10) ? nbttagcompound1.getCompound("Player") : null;
+ 
+@@ -253,7 +256,8 @@ public class LevelStorageSource {
+     BiFunction<File, DataFixer, LevelSummary> levelSummaryReader(File file, boolean locked) {
+         return (file1, datafixer) -> {
+             try {
+-                CompoundTag nbttagcompound = NbtIo.readCompressed(file1);
++                CompoundTag nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NbtIo.readCompressed(file); // MultiPaper
++                if (nbttagcompound == null) return null;
+                 CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
+ 
+                 nbttagcompound1.remove("Player");
+@@ -410,6 +414,13 @@ public class LevelStorageSource {
+             nbttagcompound2.put("Data", nbttagcompound1);
+ 
+             try {
++                // MultiPaper start
++                if (true) {
++                    MultiPaper.writeLevel(file.getName(), nbttagcompound2);
++                    return;
++                }
++                // MultiPaper end
++
+                 File file1 = File.createTempFile("level", ".dat", file);
+ 
+                 NbtIo.writeCompressed(nbttagcompound2, file1);
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 019973919ec5e8e9e2a186354dbf42a4460c6ee7..793f713427272c329cf448e574956b64f0f70094 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -170,6 +170,16 @@ public class MultiPaper {
+         writeRegionFile(world, path, cx, cz, nbtToBytes(compoundTag));
+     }
+ 
++    public static CompoundTag readLevel(String world) throws IOException {
++        DataInput in = getConnection().readLevel(world).join();
++
++        return in == null ? null : NbtIo.readCompressed((InputStream) in);
++    }
++
++    public static void writeLevel(String world, CompoundTag compoundTag) throws IOException {
++        getConnection().writeLevel(world, nbtCompressToBytes(compoundTag));
++    }
++
+     private static String getWorld(File path) {
+         do {
+             path = path.getParentFile();
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 55db99d8c5f5be858b50b1a46b4c08bb953a836c..aae9dfe169fade0333b37089ec88c44c6287d9e0 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -312,6 +312,35 @@ public class MultiPaperConnection extends Thread {
+         out.write(baos.toByteArray());
+         out.send(in -> { /* Do nothing */ });
+     }
++    
++    public CompletableFuture<DataInputStream> readLevel(String world) throws IOException {
++        CompletableFuture<DataInputStream> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("readLevel");
++        out.writeUTF(world);
++        out.send(in -> {
++            try {
++                byte[] data = new byte[in.readInt()];
++                in.readFully(data);
++
++                future.complete(data.length == 0 ? null : new DataInputStream(new ByteArrayInputStream(data)));
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
++
++    public void writeLevel(String world, byte[] data) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeLevel");
++        out.writeUTF(world);
++        out.writeInt(data.length);
++        out.write(data);
++        out.send(in -> { /* Do nothing */ });
++    }
+ 
+     public void lockChunk(String world, int cx, int cz) throws IOException {
+         DataOutputSender out = new DataOutputSender(this);

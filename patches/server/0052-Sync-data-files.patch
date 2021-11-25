@@ -1,0 +1,216 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 25 Nov 2021 17:55:12 +1000
+Subject: [PATCH] Sync data files
+
+
+diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+index c8ed0673ff819cb88d0ee6f53f2a2b9b46b203d4..29433fd2a7765792f51c3b2684cd77ed74bffff8 100644
+--- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
++++ b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+@@ -2,11 +2,8 @@ package net.minecraft.world.level.storage;
+ 
+ import com.google.common.collect.Maps;
+ import com.mojang.datafixers.DataFixer;
+-import java.io.DataInputStream;
+-import java.io.File;
+-import java.io.FileInputStream;
+-import java.io.IOException;
+-import java.io.PushbackInputStream;
++
++import java.io.*;
+ import java.util.Map;
+ import java.util.function.Function;
+ import java.util.function.Supplier;
+@@ -19,6 +16,7 @@ import net.minecraft.util.datafix.DataFixTypes;
+ import net.minecraft.world.level.saveddata.SavedData;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class DimensionDataStorage {
+     private static final Logger LOGGER = LogManager.getLogger();
+@@ -61,8 +59,11 @@ public class DimensionDataStorage {
+     private <T extends SavedData> T readSavedData(Function<CompoundTag, T> function, String id) {
+         try {
+             File file = this.getDataFile(id);
+-            if (file.exists()) {
++            if (true || file.exists()) { // MultiPaper
+                 CompoundTag compoundTag = this.readTagFromDisk(id, SharedConstants.getCurrentVersion().getWorldVersion());
++
++                if (compoundTag == null) return null; // MultiPaper
++
+                 return function.apply(compoundTag.getCompound("data"));
+             }
+         } catch (Exception var5) {
+@@ -78,7 +79,14 @@ public class DimensionDataStorage {
+ 
+     public CompoundTag readTagFromDisk(String id, int dataVersion) throws IOException {
+         File file = this.getDataFile(id);
+-        FileInputStream fileInputStream = new FileInputStream(file);
++        // MultiPaper start
++        byte[] data = MultiPaper.readData(file.getPath());
++        if (data == null || data.length == 0) {
++            return null;
++        }
++        // FileInputStream fileInputStream = new FileInputStream(file);
++        ByteArrayInputStream fileInputStream = new ByteArrayInputStream(data);
++        // MultiPaper end
+ 
+         CompoundTag var8;
+         try {
+@@ -160,4 +168,10 @@ public class DimensionDataStorage {
+ 
+         });
+     }
++
++    // MultiPaper start - save a PersistentBase
++    public void save(String id, SavedData savedData) {
++        savedData.save(this.getDataFile(id));
++    }
++    // MultiPaper end
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 2f192ee7876f16291599f9e3779a284694a8cf86..b29e9e703daaf084fa1bc3285f7ffe909b7a397a 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -12,6 +12,9 @@ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.chunk.ChunkAccess;
+ import net.minecraft.world.level.chunk.ImposterProtoChunk;
+ import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.level.saveddata.maps.MapIndex;
++import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
++import net.minecraft.world.level.storage.DimensionDataStorage;
+ import org.bukkit.Bukkit;
+ import org.bukkit.craftbukkit.CraftWorld;
+ import org.bukkit.craftbukkit.entity.CraftEntity;
+@@ -32,6 +35,7 @@ public class MultiPaper {
+     public final static ConcurrentHashMap<ChunkKey, HashSet<ExternalServer>> chunkSubscribersToSet = new ConcurrentHashMap<>();
+     private static MultiPaperConnection multiPaperConnection = null;
+     private static ExternalServerSocket externalServerSocket = null;
++    private static long last10Seconds = System.currentTimeMillis();
+     public static MultiPaperConnection getConnection() {
+         if (multiPaperConnection == null) {
+             multiPaperConnection = new MultiPaperConnection();
+@@ -65,6 +69,21 @@ public class MultiPaper {
+                 server.getConnection().tick();
+             }
+         }
++        
++        boolean hasBeen10Seconds = last10Seconds < System.currentTimeMillis() - 10 * 1000;
++
++        if (hasBeen10Seconds) last10Seconds = System.currentTimeMillis();
++
++        Bukkit.getWorlds().forEach(world -> {
++            DimensionDataStorage persistentData = ((CraftWorld) world).getHandle().getDataStorage();
++            synchronized (persistentData.cache) {
++                persistentData.cache.forEach((key, value) -> {
++                    if (value instanceof MapIndex || (value instanceof MapItemSavedData && hasBeen10Seconds)) {
++                        persistentData.save(key, value);
++                    }
++                });
++            }
++        });
+     }
+ 
+     public static void sendTickTime(long time, double tps) {
+@@ -222,6 +241,24 @@ public class MultiPaper {
+         getConnection().writeUid(world, data);
+     }
+ 
++    public static byte[] readData(String path) {
++        if (path.contains("raids.dat")) {
++            // Don't load raids from dist
++            return null;
++        }
++        
++        try {
++            return getConnection().readData(path).join();
++        } catch (IOException e) {
++            e.printStackTrace();
++            return null;
++        }
++    }
++
++    public static void writeData(String path, CompoundTag compoundTag) throws IOException {
++        getConnection().writeData(path, nbtCompressToBytes(compoundTag));
++    }
++
+     private static String getWorld(File path) {
+         do {
+             path = path.getParentFile();
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index d8528d32d3b06ac257bd468f3000d8d547c558f1..2514b1cb105d8b9657c5be24d526b15cc15e544c 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -7,6 +7,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
++import org.bukkit.World;
+ import org.bukkit.craftbukkit.CraftWorld;
+ 
+ import javax.annotation.Nullable;
+@@ -170,6 +171,26 @@ public class MultiPaperConnection extends Thread {
+         });
+     }
+ 
++    public void clearData(DataInputStream in, DataOutputSender out) throws IOException {
++        String pathStr = in.readUTF();
++        File path = new File(pathStr);
++        String file = path.getName().substring(0, path.getName().length() - 4); // Remove .dat suffix
++        while (!path.getParentFile().equals(new File(".")) && !path.getParentFile().equals(path)) {
++            path = path.getParentFile();
++        }
++
++        World world = Bukkit.getWorld(path.getName());
++        if (world == null) {
++            LOGGER.warn("Unknown world '" + path.getPath() + "' in path " + pathStr + " for clearData");
++            return;
++        }
++
++        // Clear the data from the world's data cache
++        synchronized (((CraftWorld) world).getHandle().getDataStorage().cache) {
++            ((CraftWorld) world).getHandle().getDataStorage().cache.remove(file);
++        }
++    }
++
+     public void chunkOwner(DataInputStream in, DataOutputSender out) throws IOException {
+         String world = in.readUTF();
+         int cx = in.readInt();
+@@ -523,6 +544,35 @@ public class MultiPaperConnection extends Thread {
+         out.send(in -> { /* Do nothing */ });
+     }
+ 
++    public CompletableFuture<byte[]> readData(String path) throws IOException {
++        CompletableFuture<byte[]> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("readData");
++        out.writeUTF(path);
++        out.send(in -> {
++            try {
++                byte[] data = new byte[in.readInt()];
++                in.readFully(data);
++
++                future.complete(data);
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
++
++    public void writeData(String path, byte[] data) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeData");
++        out.writeUTF(path);
++        out.writeInt(data.length);
++        out.write(data);
++        out.send(in -> { /* Do nothing */ });
++    }
++
+     public void lockChunk(String world, int cx, int cz) throws IOException {
+         DataOutputSender out = new DataOutputSender(this);
+         out.writeUTF("lockChunk");

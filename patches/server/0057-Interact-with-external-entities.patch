@@ -1,0 +1,197 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 26 Nov 2021 01:30:05 +1000
+Subject: [PATCH] Interact with external entities
+
+
+diff --git a/src/main/java/net/minecraft/network/protocol/game/ServerboundInteractPacket.java b/src/main/java/net/minecraft/network/protocol/game/ServerboundInteractPacket.java
+index c45b5ab6776f3ac79f856c3a6467c510e20db25a..53ca673c9a98c580403232972d11a02f3a12ef65 100644
+--- a/src/main/java/net/minecraft/network/protocol/game/ServerboundInteractPacket.java
++++ b/src/main/java/net/minecraft/network/protocol/game/ServerboundInteractPacket.java
+@@ -29,7 +29,9 @@ public class ServerboundInteractPacket implements Packet<ServerGamePacketListene
+         }
+     };
+ 
+-    private ServerboundInteractPacket(int entityId, boolean playerSneaking, ServerboundInteractPacket.Action type) {
++    public final ServerboundInteractPacket.Action getAction() { return this.action; } // MultiPaper - add accessor
++
++    public ServerboundInteractPacket(int entityId, boolean playerSneaking, ServerboundInteractPacket.Action type) { // MultiPaper - make public
+         this.entityId = entityId;
+         this.action = type;
+         this.usingSecondaryAction = playerSneaking;
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 4d6e31891b11bf6a4fcf8c9663488b61f4e57764..22fb20be24552afefc82e21090a7095f1f59138f 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -212,6 +212,7 @@ import org.bukkit.inventory.SmithingInventory;
+ import org.bukkit.util.NumberConversions;
+ import co.aikar.timings.MinecraftTimings; // Paper
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperEntityInteractHandler;
+ import puregero.multipaper.MultiPaperInventoryHandler;
+ import puregero.multipaper.MultiPaperPlayerHandler;
+ // CraftBukkit end
+@@ -2413,6 +2414,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+         }
+         // Spigot End
+ 
++        if (MultiPaperEntityInteractHandler.handleEntityInteract(player, entity, packet)) return; // MultiPaper
++
+         this.player.resetLastActionTime();
+         this.player.setShiftKeyDown(packet.isUsingSecondaryAction());
+         if (entity != null) {
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..a39b1cc4a2e769ae057d9022757dbf4a6f0bc076
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
+@@ -0,0 +1,34 @@
++package puregero.multipaper;
++
++import net.minecraft.network.protocol.game.ServerboundInteractPacket;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.chunk.LevelChunk;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.externalserverprotocol.PlayerActionOnEntityPacket;
++
++public class MultiPaperEntityInteractHandler {
++
++    private static final Logger LOGGER = LogManager.getLogger(MultiPaperEntityInteractHandler.class.getSimpleName());
++
++    public static boolean handleEntityInteract(ServerPlayer player, Entity entity, ServerboundInteractPacket packet) {
++        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
++        if (MultiPaper.isExternalPlayer(entity)) {
++            ((ExternalPlayer) entity).externalServerConnection.send(new PlayerActionOnEntityPacket(player, entity, packet));
++            return true;
++        } else if (MultiPaper.isRealPlayer(entity)) {
++            return false;
++        } else if (MultiPaper.isChunkExternal(chunk)) {
++            if (MultiPaper.isExternalPlayer(player)) {
++                LOGGER.warn("External player " + player.getScoreboardName() + " is interacting with an external entity " + entity);
++            }
++
++            chunk.externalOwner.getConnection().send(new PlayerActionOnEntityPacket(player, entity, packet));
++
++            return true;
++        }
++
++        return false;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index f5489a9fefd4ef56b0b8966d5febb865d03dc809..294bc09cf89f3495829fe7d9e5969ea36cdb0bd8 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -26,6 +26,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(SendEntitiesPacket.class, SendEntitiesPacket::new);
+         addPacket(EntityUpdateNBTPacket.class, EntityUpdateNBTPacket::new);
+         addPacket(EntityUpdatePacket.class, EntityUpdatePacket::new);
++        addPacket(PlayerActionOnEntityPacket.class, PlayerActionOnEntityPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..f891e8d8088b7e4d5a0e76505b9524987760ed24
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java
+@@ -0,0 +1,97 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import net.minecraft.network.ConnectionProtocol;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.game.ServerGamePacketListener;
++import net.minecraft.network.protocol.game.ServerboundInteractPacket;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.Entity;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.UUID;
++
++public class PlayerActionOnEntityPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PlayerActionOnEntityPacket.class.getSimpleName());
++
++    private final UUID uuid;
++    private final UUID entityUuid;
++    private final Packet<ServerGamePacketListener> action;
++
++    public PlayerActionOnEntityPacket(ServerPlayer player, Entity entity, Packet<ServerGamePacketListener> action) {
++        this.uuid = player.getUUID();
++        this.entityUuid = entity.getUUID();
++        this.action = action;
++    }
++
++    public PlayerActionOnEntityPacket(DataInputStream in) throws IOException {
++        uuid = readUUID(in);
++        entityUuid = readUUID(in);
++
++        int length = in.readInt();
++        byte[] bytes = new byte[length];
++        in.readFully(bytes);
++        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        int packetId = friendlyByteBuf.readVarInt();
++        action = (Packet<ServerGamePacketListener>) ConnectionProtocol.PLAY.createPacket(PacketFlow.SERVERBOUND, packetId, friendlyByteBuf);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        writeUUID(out, uuid);
++        writeUUID(out, entityUuid);
++
++        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(action);
++        Integer id = protocol.getPacketId(PacketFlow.SERVERBOUND, action);
++        ByteBuf buf = Unpooled.buffer();
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        friendlyByteBuf.writeVarInt(id);
++        action.write(friendlyByteBuf);
++        byte[] bytes = buf.array();
++        out.writeInt(bytes.length);
++        out.write(bytes);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++            Entity entity = ((ServerLevel) player.level).getEntity(entityUuid);
++
++            if (player == null) {
++                LOGGER.warn("Tried to run an action on a non-existent player with uuid " + uuid);
++                return;
++            }
++
++            if (entity == null) {
++                LOGGER.warn(player.getScoreboardName() + " tried to run an action on a non-existent entity with uuid " + entityUuid);
++                return;
++            }
++
++            Packet<ServerGamePacketListener> newPacket;
++
++            // Refactor the entity id
++            if (action instanceof ServerboundInteractPacket serverboundInteractPacket) {
++                newPacket = new ServerboundInteractPacket(entity.getId(), serverboundInteractPacket.isUsingSecondaryAction(), serverboundInteractPacket.getAction());
++            } else {
++                LOGGER.error("Unhandled action on entity " + action);
++                return;
++            }
++
++            newPacket.handle(player.connection);
++        });
++    }
++}

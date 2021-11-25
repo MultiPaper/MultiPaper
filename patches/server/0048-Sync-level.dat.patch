@@ -5,29 +5,18 @@ Subject: [PATCH] Sync level.dat
 
 
 diff --git a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
-index 83ed842325c30dc3d62af697db87fe95b38a400d..509f06f1998a66aa155da1ac65275d2704d9de45 100644
+index 83ed842325c30dc3d62af697db87fe95b38a400d..59da8f51d4b73bf7a7ecd952d264836a04b63f3e 100644
 --- a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
 +++ b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
-@@ -45,6 +45,8 @@ import net.minecraft.nbt.Tag;
- import net.minecraft.network.chat.TranslatableComponent;
- import net.minecraft.resources.RegistryLookupCodec;
- import net.minecraft.resources.ResourceKey;
-+import net.minecraft.server.MinecraftServer;
-+import net.minecraft.server.level.ServerLevel;
- import net.minecraft.util.DirectoryLock;
- import net.minecraft.util.MemoryReserve;
- import net.minecraft.util.ProgressListener;
-@@ -61,6 +63,9 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+@@ -61,6 +61,7 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
  import net.minecraft.world.level.levelgen.WorldGenSettings;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
-+import org.bukkit.Bukkit;
-+import org.bukkit.craftbukkit.scheduler.CraftScheduler;
 +import puregero.multipaper.MultiPaper;
  
  public class LevelStorageSource {
  
-@@ -198,7 +203,7 @@ public class LevelStorageSource {
+@@ -198,7 +199,7 @@ public class LevelStorageSource {
          } else {
              File file1 = new File(file, "level.dat");
  
@@ -36,7 +25,7 @@ index 83ed842325c30dc3d62af697db87fe95b38a400d..509f06f1998a66aa155da1ac65275d27
                  T t0 = levelDataParser.apply(file1, this.fixerUpper);
  
                  if (t0 != null) {
-@@ -214,7 +219,8 @@ public class LevelStorageSource {
+@@ -214,7 +215,8 @@ public class LevelStorageSource {
      @Nullable
      private static DataPackConfig getDataPacks(File file, DataFixer datafixer) {
          try {
@@ -46,7 +35,7 @@ index 83ed842325c30dc3d62af697db87fe95b38a400d..509f06f1998a66aa155da1ac65275d27
              CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
  
              nbttagcompound1.remove("Player");
-@@ -231,7 +237,8 @@ public class LevelStorageSource {
+@@ -231,7 +233,8 @@ public class LevelStorageSource {
      static BiFunction<File, DataFixer, PrimaryLevelData> getLevelData(DynamicOps<Tag> dynamicops, DataPackConfig datapackconfiguration) {
          return (file, datafixer) -> {
              try {
@@ -56,7 +45,7 @@ index 83ed842325c30dc3d62af697db87fe95b38a400d..509f06f1998a66aa155da1ac65275d27
                  CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
                  CompoundTag nbttagcompound2 = nbttagcompound1.contains("Player", 10) ? nbttagcompound1.getCompound("Player") : null;
  
-@@ -253,7 +260,21 @@ public class LevelStorageSource {
+@@ -253,7 +256,14 @@ public class LevelStorageSource {
      BiFunction<File, DataFixer, LevelSummary> levelSummaryReader(File file, boolean locked) {
          return (file1, datafixer) -> {
              try {
@@ -64,22 +53,15 @@ index 83ed842325c30dc3d62af697db87fe95b38a400d..509f06f1998a66aa155da1ac65275d27
 +                CompoundTag nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NbtIo.readCompressed(file); // MultiPaper
 +                // MultiPaper start
 +                if (nbttagcompound == null) {
-+                    ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
-+                        LOGGER.info("Fresh level.dat for " + file.getPath() + ", forcing a save...");
-+                        for (ServerLevel level : MinecraftServer.getServer().getAllLevels()) {
-+                            if (file.getPath().contains(level.convertable.levelId + "/")) {
-+                                LOGGER.info("Force saving " + level.convertable.getLevelId());
-+                                level.saveIncrementally(true);
-+                            }
-+                        }
-+                    }, 1, "Save new level.dat");
++                    LOGGER.info("A new level.dat is being generated at " + file.getPath() + ", forcing it to save");
++                    MultiPaper.levelDatNeedsSaving = true;
 +                    return null;
 +                }
 +                // MultiPaper end
                  CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
  
                  nbttagcompound1.remove("Player");
-@@ -410,6 +431,13 @@ public class LevelStorageSource {
+@@ -410,6 +420,13 @@ public class LevelStorageSource {
              nbttagcompound2.put("Data", nbttagcompound1);
  
              try {
@@ -94,10 +76,48 @@ index 83ed842325c30dc3d62af697db87fe95b38a400d..509f06f1998a66aa155da1ac65275d27
  
                  NbtIo.writeCompressed(nbttagcompound2, file1);
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 019973919ec5e8e9e2a186354dbf42a4460c6ee7..793f713427272c329cf448e574956b64f0f70094 100644
+index 019973919ec5e8e9e2a186354dbf42a4460c6ee7..da282fe04b887fbab7c0352c534d8c5aa258c0c0 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -170,6 +170,16 @@ public class MultiPaper {
+@@ -12,6 +12,8 @@ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.chunk.ChunkAccess;
+ import net.minecraft.world.level.chunk.ImposterProtoChunk;
+ import net.minecraft.world.level.chunk.LevelChunk;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
+ import org.bukkit.craftbukkit.CraftWorld;
+ import org.bukkit.craftbukkit.entity.CraftEntity;
+@@ -28,10 +30,13 @@ import java.util.zip.InflaterInputStream;
+ 
+ public class MultiPaper {
+ 
++    private static final Logger LOGGER = LogManager.getLogger(MultiPaper.class.getSimpleName());
++
+     public final static ConcurrentHashMap<ChunkKey, ExternalServer> chunkOwnerToSet = new ConcurrentHashMap<>();
+     public final static ConcurrentHashMap<ChunkKey, HashSet<ExternalServer>> chunkSubscribersToSet = new ConcurrentHashMap<>();
+     private static MultiPaperConnection multiPaperConnection = null;
+     private static ExternalServerSocket externalServerSocket = null;
++    public static boolean levelDatNeedsSaving = false;
+     public static MultiPaperConnection getConnection() {
+         if (multiPaperConnection == null) {
+             multiPaperConnection = new MultiPaperConnection();
+@@ -65,6 +70,14 @@ public class MultiPaper {
+                 server.getConnection().tick();
+             }
+         }
++
++        if (levelDatNeedsSaving) {
++            levelDatNeedsSaving = false;
++            LOGGER.info("A level.dat needs saving, all worlds are being force saved");
++            for (ServerLevel level : MinecraftServer.getServer().getAllLevels()) {
++                level.saveIncrementally(true);
++            }
++        }
+     }
+ 
+     public static void sendTickTime(long time, double tps) {
+@@ -170,6 +183,16 @@ public class MultiPaper {
          writeRegionFile(world, path, cx, cz, nbtToBytes(compoundTag));
      }
  

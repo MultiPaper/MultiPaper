@@ -19,19 +19,70 @@ index c45b5ab6776f3ac79f856c3a6467c510e20db25a..53ca673c9a98c580403232972d11a02f
          this.entityId = entityId;
          this.action = type;
          this.usingSecondaryAction = playerSneaking;
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index 00eebd606c2037ea2d2bb2a17501d42231598711..144d3eca8bb57de646cac1414ed9529f39b61176 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -56,12 +56,7 @@ import net.minecraft.Util;
+ import net.minecraft.core.SectionPos;
+ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.network.protocol.Packet;
+-import net.minecraft.network.protocol.game.ClientboundLevelChunkPacket;
+-import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
+-import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
+-import net.minecraft.network.protocol.game.ClientboundSetEntityLinkPacket;
+-import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
+-import net.minecraft.network.protocol.game.DebugPackets;
++import net.minecraft.network.protocol.game.*;
+ import net.minecraft.server.MCUtil;
+ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.progress.ChunkProgressListener;
+@@ -2359,8 +2354,11 @@ Sections go from 0..16. Now whenever a section is not empty, it can potentially
+ 
+             // MultiPaper start - Are we ticking this entity?
+             LevelChunk chunk = level.getChunkIfLoaded(entity.blockPosition());
+-            if (MultiPaper.isRealPlayer(entity) ||
+-                    (!MultiPaper.isExternalPlayer(entity) && MultiPaper.isChunkLocal(chunk))) {
++            boolean isMovePacket = packet instanceof ClientboundMoveEntityPacket || packet instanceof ClientboundTeleportEntityPacket;
++            if (!(MultiPaper.isExternalPlayer(entity.getControllingPassenger()) && isMovePacket) &&
++                    (MultiPaper.isRealPlayer(entity) ||
++                    (MultiPaper.isRealPlayer(entity.getControllingPassenger()) && isMovePacket) ||
++                    (!MultiPaper.isExternalPlayer(entity) && MultiPaper.isChunkLocal(chunk)))) {
+                 MultiPaperEntitiesHandler.onEntityUpdate(entity, packet); // MultiPaper
+             }
+             // MultiPaper end
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 4d6e31891b11bf6a4fcf8c9663488b61f4e57764..22fb20be24552afefc82e21090a7095f1f59138f 100644
+index 4d6e31891b11bf6a4fcf8c9663488b61f4e57764..b2d3afb1fef4a6753a8a486e8e168a63142dac94 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -212,6 +212,7 @@ import org.bukkit.inventory.SmithingInventory;
+@@ -211,9 +211,7 @@ import org.bukkit.inventory.InventoryView;
+ import org.bukkit.inventory.SmithingInventory;
  import org.bukkit.util.NumberConversions;
  import co.aikar.timings.MinecraftTimings; // Paper
- import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperEntityInteractHandler;
- import puregero.multipaper.MultiPaperInventoryHandler;
- import puregero.multipaper.MultiPaperPlayerHandler;
+-import puregero.multipaper.MultiPaper;
+-import puregero.multipaper.MultiPaperInventoryHandler;
+-import puregero.multipaper.MultiPaperPlayerHandler;
++import puregero.multipaper.*;
  // CraftBukkit end
-@@ -2413,6 +2414,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+ 
+ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
+@@ -510,6 +508,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+     @Override
+     public void handleMoveVehicle(ServerboundMoveVehiclePacket packet) {
+         PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
++        if (MultiPaperEntityInteractHandler.handleMoveVehicle(player, packet)) return;
+         if (ServerGamePacketListenerImpl.containsInvalidValues(packet.getX(), packet.getY(), packet.getZ(), packet.getYRot(), packet.getXRot())) {
+             this.disconnect(new TranslatableComponent("multiplayer.disconnect.invalid_vehicle_movement"), org.bukkit.event.player.PlayerKickEvent.Cause.INVALID_VEHICLE_MOVEMENT); // Paper - kick event cause
+         } else {
+@@ -1932,6 +1931,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+     @Override
+     public void handlePaddleBoat(ServerboundPaddleBoatPacket packet) {
+         PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
++        if (MultiPaperEntityInteractHandler.handlePaddleBoat(player, packet)) return;
+         Entity entity = this.player.getVehicle();
+ 
+         if (entity instanceof Boat) {
+@@ -2413,6 +2413,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
          }
          // Spigot End
  
@@ -62,13 +113,15 @@ index de3932d9f84ffb30ab8eaacbf37d67ffbd2026d5..978eaf50764c3d1ca79100c3bdfdf5d9
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..18afa2f56698494f39177fa8561570a8e09986d1
+index 0000000000000000000000000000000000000000..c6d0e52e475609f70346b0e77969725c346b8ea5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,93 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.network.protocol.game.ServerboundInteractPacket;
++import net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
++import net.minecraft.network.protocol.game.ServerboundPaddleBoatPacket;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.player.Player;
@@ -76,6 +129,7 @@ index 0000000000000000000000000000000000000000..18afa2f56698494f39177fa8561570a8
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.externalserverprotocol.PlayerActionOnEntityPacket;
++import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
 +import puregero.multipaper.externalserverprotocol.PlayerTouchEntityPacket;
 +
 +public class MultiPaperEntityInteractHandler {
@@ -95,6 +149,46 @@ index 0000000000000000000000000000000000000000..18afa2f56698494f39177fa8561570a8
 +            }
 +
 +            chunk.externalOwner.getConnection().send(new PlayerActionOnEntityPacket(player, entity, packet));
++
++            return true;
++        }
++
++        return false;
++    }
++
++    public static boolean handleMoveVehicle(ServerPlayer player, ServerboundMoveVehiclePacket packet) {
++//        LevelChunk chunk = player.getRootVehicle().level.getChunkIfLoaded(player.getRootVehicle().blockPosition());
++//        if (MultiPaper.isExternalPlayer(player.getRootVehicle())) {
++//            ((ExternalPlayer) player.getRootVehicle()).externalServerConnection.send(new PlayerActionPacket(player, packet));
++//            return true;
++//        } else if (MultiPaper.isRealPlayer(player.getRootVehicle())) {
++//            return false;
++//        } else if (MultiPaper.isChunkExternal(chunk)) {
++//            if (MultiPaper.isExternalPlayer(player)) {
++//                LOGGER.warn("External player " + player.getScoreboardName() + " is steering an external entity " + player.getRootVehicle());
++//            }
++//
++//            chunk.externalOwner.getConnection().send(new PlayerActionPacket(player, packet));
++//
++//            return true;
++//        }
++
++        return false;
++    }
++
++    public static boolean handlePaddleBoat(ServerPlayer player, ServerboundPaddleBoatPacket packet) {
++        LevelChunk chunk = player.getRootVehicle().level.getChunkIfLoaded(player.getRootVehicle().blockPosition());
++        if (MultiPaper.isExternalPlayer(player.getRootVehicle())) {
++            ((ExternalPlayer) player.getRootVehicle()).externalServerConnection.send(new PlayerActionPacket(player, packet));
++            return true;
++        } else if (MultiPaper.isRealPlayer(player.getRootVehicle())) {
++            return false;
++        } else if (MultiPaper.isChunkExternal(chunk)) {
++            if (MultiPaper.isExternalPlayer(player)) {
++                LOGGER.warn("External player " + player.getScoreboardName() + " is steering an external entity " + player.getRootVehicle());
++            }
++
++            chunk.externalOwner.getConnection().send(new PlayerActionPacket(player, packet));
 +
 +            return true;
 +        }
@@ -131,10 +225,10 @@ index 4a8c6ca3916cb103db93b653d754f23929e6bfd3..dfe0a8f62073ecffdfe78bcb8c0d24bc
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..cb3c648b949b7cd8acee8ca300f9fa904edac653
+index 0000000000000000000000000000000000000000..51218de4b737ab620d5d1a16b6ea5f305168c148
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,99 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -145,6 +239,7 @@ index 0000000000000000000000000000000000000000..cb3c648b949b7cd8acee8ca300f9fa90
 +import net.minecraft.network.protocol.PacketFlow;
 +import net.minecraft.network.protocol.game.ServerGamePacketListener;
 +import net.minecraft.network.protocol.game.ServerboundInteractPacket;
++import net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;

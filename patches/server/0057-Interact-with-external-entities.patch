@@ -40,21 +40,43 @@ index 4d6e31891b11bf6a4fcf8c9663488b61f4e57764..22fb20be24552afefc82e21090a7095f
          this.player.resetLastActionTime();
          this.player.setShiftKeyDown(packet.isUsingSecondaryAction());
          if (entity != null) {
+diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
+index de3932d9f84ffb30ab8eaacbf37d67ffbd2026d5..978eaf50764c3d1ca79100c3bdfdf5d9b6600785 100644
+--- a/src/main/java/net/minecraft/world/entity/player/Player.java
++++ b/src/main/java/net/minecraft/world/entity/player/Player.java
+@@ -124,6 +124,7 @@ import org.bukkit.event.entity.EntityCombustByEntityEvent;
+ import org.bukkit.event.entity.EntityExhaustionEvent;
+ import org.bukkit.event.player.PlayerDropItemEvent;
+ import org.bukkit.event.player.PlayerVelocityEvent;
++import puregero.multipaper.MultiPaperEntityInteractHandler;
+ // CraftBukkit end
+ 
+ public abstract class Player extends LivingEntity {
+@@ -619,6 +620,7 @@ public abstract class Player extends LivingEntity {
+     }
+ 
+     private void touch(Entity entity) {
++        if (MultiPaperEntityInteractHandler.touchEntity(this, entity)) return; // MultiPaper
+         entity.playerTouch(this);
+     }
+ 
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a39b1cc4a2e769ae057d9022757dbf4a6f0bc076
+index 0000000000000000000000000000000000000000..18afa2f56698494f39177fa8561570a8e09986d1
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,50 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.player.Player;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.externalserverprotocol.PlayerActionOnEntityPacket;
++import puregero.multipaper.externalserverprotocol.PlayerTouchEntityPacket;
 +
 +public class MultiPaperEntityInteractHandler {
 +
@@ -79,25 +101,40 @@ index 0000000000000000000000000000000000000000..a39b1cc4a2e769ae057d9022757dbf4a
 +
 +        return false;
 +    }
++
++    public static boolean touchEntity(Player player, Entity entity) {
++        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
++
++        if (MultiPaper.isRealPlayer(entity)) {
++            return false;
++        } else if (MultiPaper.isChunkExternal(chunk)) {
++            chunk.externalOwner.getConnection().send(new PlayerTouchEntityPacket(player, entity));
++
++            return true;
++        }
++
++        return false;
++    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 4a913da61ce8edf17fa1661b228a17a72a0b73e4..1ba8e30174bc17a6ee65e5d8639a5bbde2ac4acf 100644
+index 4a8c6ca3916cb103db93b653d754f23929e6bfd3..dfe0a8f62073ecffdfe78bcb8c0d24bc52cf4c7c 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -27,6 +27,7 @@ public class ExternalServerPacketSerializer {
-         addPacket(EntityUpdateNBTPacket.class, EntityUpdateNBTPacket::new);
+@@ -28,6 +28,8 @@ public class ExternalServerPacketSerializer {
          addPacket(EntityUpdatePacket.class, EntityUpdatePacket::new);
          addPacket(EntityUpdateWithDependenciesPacket.class, EntityUpdateWithDependenciesPacket::new);
+         addPacket(EntityRemovePacket.class, EntityRemovePacket::new);
 +        addPacket(PlayerActionOnEntityPacket.class, PlayerActionOnEntityPacket::new);
++        addPacket(PlayerTouchEntityPacket.class, PlayerTouchEntityPacket::new);
      }
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f891e8d8088b7e4d5a0e76505b9524987760ed24
+index 0000000000000000000000000000000000000000..cb3c648b949b7cd8acee8ca300f9fa904edac653
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,98 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -169,12 +206,13 @@ index 0000000000000000000000000000000000000000..f891e8d8088b7e4d5a0e76505b952498
 +    public void handle(ExternalServerConnection connection) {
 +        MultiPaper.runSync(() -> {
 +            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
-+            Entity entity = ((ServerLevel) player.level).getEntity(entityUuid);
 +
 +            if (player == null) {
 +                LOGGER.warn("Tried to run an action on a non-existent player with uuid " + uuid);
 +                return;
 +            }
++
++            Entity entity = ((ServerLevel) player.level).getEntity(entityUuid);
 +
 +            if (entity == null) {
 +                LOGGER.warn(player.getScoreboardName() + " tried to run an action on a non-existent entity with uuid " + entityUuid);
@@ -192,6 +230,73 @@ index 0000000000000000000000000000000000000000..f891e8d8088b7e4d5a0e76505b952498
 +            }
 +
 +            newPacket.handle(player.connection);
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerTouchEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerTouchEntityPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e5d032039d13a77543b57eb9cfbdd898d672b75f
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerTouchEntityPacket.java
+@@ -0,0 +1,61 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.player.Player;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.UUID;
++
++public class PlayerTouchEntityPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PlayerTouchEntityPacket.class.getSimpleName());
++
++    private final UUID uuid;
++    private final UUID entityUuid;
++
++    public PlayerTouchEntityPacket(Player player, Entity entity) {
++        this.uuid = player.getUUID();
++        this.entityUuid = entity.getUUID();
++    }
++
++    public PlayerTouchEntityPacket(DataInputStream in) throws IOException {
++        uuid = readUUID(in);
++        entityUuid = readUUID(in);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        writeUUID(out, uuid);
++        writeUUID(out, entityUuid);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            if (player == null) {
++                LOGGER.warn("Tried to run a touch entity on a non-existent player with uuid " + uuid);
++                return;
++            }
++
++            Entity entity = ((ServerLevel) player.level).getEntity(entityUuid);
++
++            if (entity == null) {
++                LOGGER.warn(player.getScoreboardName() + " tried to touch a non-existent entity with uuid " + entityUuid);
++                return;
++            }
++
++            entity.playerTouch(player);
 +        });
 +    }
 +}

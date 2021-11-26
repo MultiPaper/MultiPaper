@@ -197,7 +197,7 @@ index ee7f65f94c71654da22c413219fc43742d323cd8..e84bb20aed1c84f07d6b3e497cbb92ca
          // Paper end
          TranslatableComponent chatmessage;
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index aac9dd19237d0708990960d03328e7530cd7bc8e..ff9e363ed45611b035dd9301523747cd72534145 100644
+index aac9dd19237d0708990960d03328e7530cd7bc8e..34113186a8c08699db7c8758a1703f25eab48b2c 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -147,6 +147,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -208,7 +208,15 @@ index aac9dd19237d0708990960d03328e7530cd7bc8e..ff9e363ed45611b035dd9301523747cd
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource, net.minecraft.server.KeyedObject { // Paper
-@@ -4124,6 +4125,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+@@ -626,6 +627,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+     }
+ 
+     public void remove(Entity.RemovalReason reason) {
++        MultiPaperEntitiesHandler.onEntityRemove(this); // MultiPaper
+         this.setRemoved(reason);
+         if (reason == Entity.RemovalReason.KILLED) {
+             this.gameEvent(GameEvent.ENTITY_KILLED);
+@@ -4124,6 +4126,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
              int j = Mth.floor(y);
              int k = Mth.floor(z);
  
@@ -551,10 +559,10 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..b80da2908f4a90c607459c32b8ed62b8
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a3b5553591492e533ce813df6bb913802860bdba
+index 0000000000000000000000000000000000000000..aa1b062b04143a61b6aa8a71ace177f364ffc314
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,185 @@
+@@ -0,0 +1,200 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -576,10 +584,7 @@ index 0000000000000000000000000000000000000000..a3b5553591492e533ce813df6bb91380
 +import net.minecraft.world.phys.Vec3;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
-+import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
-+import puregero.multipaper.externalserverprotocol.EntityUpdatePacket;
-+import puregero.multipaper.externalserverprotocol.EntityUpdateWithDependenciesPacket;
-+import puregero.multipaper.externalserverprotocol.SendUpdatePacket;
++import puregero.multipaper.externalserverprotocol.*;
 +
 +import java.io.IOException;
 +import java.util.ArrayList;
@@ -692,6 +697,8 @@ index 0000000000000000000000000000000000000000..a3b5553591492e533ce813df6bb91380
 +            } else {
 +                ((Mob) entity).setLeashedTo(entities[0], true);
 +            }
++        } else if (packet instanceof ClientboundTakeItemEntityPacket takeItemEntityPacket) {
++            ((LivingEntity) entities[0]).take(entity, takeItemEntityPacket.getAmount());
 +        } else {
 +            LOGGER.warn("Unhandled dependencies packet " + packet);
 +        }
@@ -708,6 +715,17 @@ index 0000000000000000000000000000000000000000..a3b5553591492e533ce813df6bb91380
 +                LOGGER.warn(entity + " spawned in an unloaded chunk");
 +            }
 +        });
++    }
++
++    public static void onEntityRemove(Entity entity) {
++        if (!entity.shouldBeSaved()) return;
++
++        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
++        if (chunk != null) {
++            MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityRemovePacket(entity));
++        } else {
++            LOGGER.warn(entity + " removed in an unloaded chunk");
++        }
 +    }
 +
 +    public static void onEntityUpdate(Entity entity, Packet<?> packet) {
@@ -729,6 +747,11 @@ index 0000000000000000000000000000000000000000..a3b5553591492e533ce813df6bb91380
 +        } else if (packet instanceof ClientboundSetEntityLinkPacket setEntityLinkPacket) {
 +            List<Entity> entities = new ArrayList<>();
 +            entities.add(entity.level.getEntity(setEntityLinkPacket.getDestId()));
++            MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityUpdateWithDependenciesPacket(entity, entities, packet));
++            return;
++        } else if (packet instanceof ClientboundTakeItemEntityPacket takeItemEntityPacket) {
++            List<Entity> entities = new ArrayList<>();
++            entities.add(entity.level.getEntity(takeItemEntityPacket.getPlayerId()));
 +            MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityUpdateWithDependenciesPacket(entity, entities, packet));
 +            return;
 +        }
@@ -764,6 +787,66 @@ index 0000000000000000000000000000000000000000..08c117ed10095b47ccba3d844d21488f
 +        if (MultiPaper.isRealPlayer(player)) {
 +            MultiPaper.broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
 +        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..0b9fd457b215c608edc5a68ef0369f7eb614629b
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
+@@ -0,0 +1,54 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.EntityType;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.UUID;
++
++public class EntityRemovePacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(EntityRemovePacket.class.getSimpleName());
++
++    private final String world;
++    private final UUID uuid;
++
++    public EntityRemovePacket(Entity entity) {
++        this.world = ((ServerLevel) entity.level).convertable.getLevelId();
++        this.uuid = entity.getUUID();
++    }
++
++    public EntityRemovePacket(DataInputStream in) throws IOException {
++        this.world = in.readUTF();
++        this.uuid = readUUID(in);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        writeUUID(out, uuid);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++            Entity entity = level.getEntity(uuid);
++            if (entity != null) {
++                entity.setRemoved(Entity.RemovalReason.DISCARDED);
++            } else {
++                LOGGER.warn("Tried to remove a non-existent entity with uuid " + uuid);
++            }
++        });
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
@@ -1052,10 +1135,10 @@ index 0000000000000000000000000000000000000000..2587a9bc72dafab4480e8db612518c06
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 2a2f598540fa735a017e93dd162bed305f1cfab7..4a913da61ce8edf17fa1661b228a17a72a0b73e4 100644
+index 2a2f598540fa735a017e93dd162bed305f1cfab7..4a8c6ca3916cb103db93b653d754f23929e6bfd3 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -22,6 +22,11 @@ public class ExternalServerPacketSerializer {
+@@ -22,6 +22,12 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerActionPacket.class, PlayerActionPacket::new);
          addPacket(PlayerInventoryUpdatePacket.class, PlayerInventoryUpdatePacket::new);
          addPacket(TimeUpdatePacket.class, TimeUpdatePacket::new);
@@ -1064,6 +1147,7 @@ index 2a2f598540fa735a017e93dd162bed305f1cfab7..4a913da61ce8edf17fa1661b228a17a7
 +        addPacket(EntityUpdateNBTPacket.class, EntityUpdateNBTPacket::new);
 +        addPacket(EntityUpdatePacket.class, EntityUpdatePacket::new);
 +        addPacket(EntityUpdateWithDependenciesPacket.class, EntityUpdateWithDependenciesPacket::new);
++        addPacket(EntityRemovePacket.class, EntityRemovePacket::new);
      }
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {

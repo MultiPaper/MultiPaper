@@ -5,10 +5,24 @@ Subject: [PATCH] Sync entities
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 76ddd2fd9aae82a75f6b2ca27aca43a45e017ab2..00eebd606c2037ea2d2bb2a17501d42231598711 100644
+index 76ddd2fd9aae82a75f6b2ca27aca43a45e017ab2..144d3eca8bb57de646cac1414ed9529f39b61176 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
-@@ -106,6 +106,7 @@ import org.bukkit.entity.Player; // CraftBukkit
+@@ -56,12 +56,7 @@ import net.minecraft.Util;
+ import net.minecraft.core.SectionPos;
+ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.network.protocol.Packet;
+-import net.minecraft.network.protocol.game.ClientboundLevelChunkPacket;
+-import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
+-import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
+-import net.minecraft.network.protocol.game.ClientboundSetEntityLinkPacket;
+-import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
+-import net.minecraft.network.protocol.game.DebugPackets;
++import net.minecraft.network.protocol.game.*;
+ import net.minecraft.server.MCUtil;
+ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.progress.ChunkProgressListener;
+@@ -106,6 +101,7 @@ import org.bukkit.entity.Player; // CraftBukkit
  import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet; // Paper
  import puregero.multipaper.MultiPaper;
  import puregero.multipaper.MultiPaperChunkHandler;
@@ -16,14 +30,17 @@ index 76ddd2fd9aae82a75f6b2ca27aca43a45e017ab2..00eebd606c2037ea2d2bb2a17501d422
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -2356,10 +2357,20 @@ Sections go from 0..16. Now whenever a section is not empty, it can potentially
+@@ -2356,10 +2352,23 @@ Sections go from 0..16. Now whenever a section is not empty, it can potentially
          public void broadcast(Packet<?> packet) {
              Iterator iterator = this.seenBy.iterator();
  
 +            // MultiPaper start - Are we ticking this entity?
 +            LevelChunk chunk = level.getChunkIfLoaded(entity.blockPosition());
-+            if (MultiPaper.isRealPlayer(entity) ||
-+                    (!MultiPaper.isExternalPlayer(entity) && MultiPaper.isChunkLocal(chunk))) {
++            boolean isMovePacket = packet instanceof ClientboundMoveEntityPacket || packet instanceof ClientboundTeleportEntityPacket;
++            if (!(MultiPaper.isExternalPlayer(entity.getControllingPassenger()) && isMovePacket) &&
++                    (MultiPaper.isRealPlayer(entity) ||
++                    (MultiPaper.isRealPlayer(entity.getControllingPassenger()) && isMovePacket) ||
++                    (!MultiPaper.isExternalPlayer(entity) && MultiPaper.isChunkLocal(chunk)))) {
 +                MultiPaperEntitiesHandler.onEntityUpdate(entity, packet); // MultiPaper
 +            }
 +            // MultiPaper end
@@ -429,7 +446,7 @@ index d45e1060ea382730cac6458b065d944285ce5826..f0784dbe7255a47c39f84e725bf3f8bc
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index e69f5750bd4003cf08ea6de73e54fae6d7a639ac..244f0c886d493dc820307d0e6507ff1918f85af9 100644
+index e69f5750bd4003cf08ea6de73e54fae6d7a639ac..cb2afe5c0d0ccd17c9ba3ad4df2652bff17dd41b 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,10 +1,10 @@
@@ -455,7 +472,20 @@ index e69f5750bd4003cf08ea6de73e54fae6d7a639ac..244f0c886d493dc820307d0e6507ff19
  import java.util.zip.DeflaterOutputStream;
  import java.util.zip.InflaterInputStream;
  
-@@ -321,6 +321,7 @@ public class MultiPaper {
+@@ -107,6 +107,12 @@ public class MultiPaper {
+                 broadcastPacketToExternalServers(new TimeUpdatePacket(level));
+             }
+         }
++
++        for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
++            if (player instanceof ExternalPlayer) {
++                player.detectEquipmentUpdates();
++            }
++        }
+     }
+ 
+     public static void sendTickTime(long time, double tps) {
+@@ -321,6 +327,7 @@ public class MultiPaper {
      public static void unlockChunk(LevelChunk chunk) {
          try {
              if (MultiPaper.isChunkLocal(chunk)) {
@@ -765,14 +795,15 @@ index 0000000000000000000000000000000000000000..aa1b062b04143a61b6aa8a71ace177f3
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java b/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..08c117ed10095b47ccba3d844d21488fddc7b780
+index 0000000000000000000000000000000000000000..a69c0ab8a07a32020946489acf97b9bd1e22778d
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,21 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.network.protocol.game.ServerboundClientInformationPacket;
 +import net.minecraft.network.protocol.game.ServerboundPlayerAbilitiesPacket;
++import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 +import net.minecraft.server.level.ServerPlayer;
 +import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
 +

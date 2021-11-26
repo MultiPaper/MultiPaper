@@ -19,38 +19,6 @@ index c45b5ab6776f3ac79f856c3a6467c510e20db25a..53ca673c9a98c580403232972d11a02f
          this.entityId = entityId;
          this.action = type;
          this.usingSecondaryAction = playerSneaking;
-diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 00eebd606c2037ea2d2bb2a17501d42231598711..144d3eca8bb57de646cac1414ed9529f39b61176 100644
---- a/src/main/java/net/minecraft/server/level/ChunkMap.java
-+++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
-@@ -56,12 +56,7 @@ import net.minecraft.Util;
- import net.minecraft.core.SectionPos;
- import net.minecraft.nbt.CompoundTag;
- import net.minecraft.network.protocol.Packet;
--import net.minecraft.network.protocol.game.ClientboundLevelChunkPacket;
--import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
--import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
--import net.minecraft.network.protocol.game.ClientboundSetEntityLinkPacket;
--import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
--import net.minecraft.network.protocol.game.DebugPackets;
-+import net.minecraft.network.protocol.game.*;
- import net.minecraft.server.MCUtil;
- import net.minecraft.server.MinecraftServer;
- import net.minecraft.server.level.progress.ChunkProgressListener;
-@@ -2359,8 +2354,11 @@ Sections go from 0..16. Now whenever a section is not empty, it can potentially
- 
-             // MultiPaper start - Are we ticking this entity?
-             LevelChunk chunk = level.getChunkIfLoaded(entity.blockPosition());
--            if (MultiPaper.isRealPlayer(entity) ||
--                    (!MultiPaper.isExternalPlayer(entity) && MultiPaper.isChunkLocal(chunk))) {
-+            boolean isMovePacket = packet instanceof ClientboundMoveEntityPacket || packet instanceof ClientboundTeleportEntityPacket;
-+            if (!(MultiPaper.isExternalPlayer(entity.getControllingPassenger()) && isMovePacket) &&
-+                    (MultiPaper.isRealPlayer(entity) ||
-+                    (MultiPaper.isRealPlayer(entity.getControllingPassenger()) && isMovePacket) ||
-+                    (!MultiPaper.isExternalPlayer(entity) && MultiPaper.isChunkLocal(chunk)))) {
-                 MultiPaperEntitiesHandler.onEntityUpdate(entity, packet); // MultiPaper
-             }
-             // MultiPaper end
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 index 4d6e31891b11bf6a4fcf8c9663488b61f4e57764..b2d3afb1fef4a6753a8a486e8e168a63142dac94 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java

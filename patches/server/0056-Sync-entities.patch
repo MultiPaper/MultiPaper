@@ -551,18 +551,18 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..b80da2908f4a90c607459c32b8ed62b8
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4a8111c29f4ed9a30f562573cda7e85805b9877e
+index 0000000000000000000000000000000000000000..81da0964a1a765327e232fee3b3eee6b90437a23
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,141 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.network.protocol.Packet;
 +import net.minecraft.network.protocol.game.*;
 +import net.minecraft.network.syncher.SynchedEntityData;
++import net.minecraft.server.level.ChunkMap;
 +import net.minecraft.server.level.ServerLevel;
-+import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.LivingEntity;
 +import net.minecraft.world.entity.ai.attributes.AttributeInstance;
@@ -647,6 +647,20 @@ index 0000000000000000000000000000000000000000..4a8111c29f4ed9a30f562573cda7e858
 +                for (AttributeModifier modifier : snapshot.getModifiers()) {
 +                    instance.addPermanentModifier(modifier);
 +                }
++            }
++        } else if (packet instanceof ClientboundAnimatePacket animatePacket) {
++            ChunkMap.TrackedEntity trackedEntity = ((ServerLevel) entity.level).chunkSource.chunkMap.entityMap.get(entity.getId());
++            if (trackedEntity != null) {
++                trackedEntity.broadcast(new ClientboundAnimatePacket(entity, animatePacket.getAction()));
++            } else {
++                LOGGER.warn(entity + " has no TrackedEntity!");
++            }
++        } else if (packet instanceof ClientboundEntityEventPacket animatePacket) {
++            ChunkMap.TrackedEntity trackedEntity = ((ServerLevel) entity.level).chunkSource.chunkMap.entityMap.get(entity.getId());
++            if (trackedEntity != null) {
++                trackedEntity.broadcast(new ClientboundEntityEventPacket(entity, animatePacket.getEventId()));
++            } else {
++                LOGGER.warn(entity + " has no TrackedEntity!");
 +            }
 +        } else {
 +            LOGGER.warn("Unhandled packet " + packet);
@@ -795,10 +809,10 @@ index 0000000000000000000000000000000000000000..e8f4566f93dc2b24cc5a6c71138a7c3d
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4d147a0b861c739d7f3214812bba7fc5d7e0af91
+index 0000000000000000000000000000000000000000..6c13ef25b1c2b7ecf1166730d54be0daa46a74a8
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,82 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -877,11 +891,7 @@ index 0000000000000000000000000000000000000000..4d147a0b861c739d7f3214812bba7fc5
 +                return;
 +            }
 +
-+            if (packet instanceof ClientboundMoveEntityPacket || packet instanceof ClientboundTeleportEntityPacket || packet instanceof ClientboundSetEntityMotionPacket || packet instanceof ClientboundRotateHeadPacket || packet instanceof ClientboundSetEntityDataPacket || packet instanceof ClientboundUpdateAttributesPacket) {
-+                MultiPaper.runSync(() -> MultiPaperEntitiesHandler.handleEntityUpdate(entity, packet));
-+            } else {
-+                LOGGER.warn("Unhandled update packet of type " + packet.getClass().getSimpleName());
-+            }
++            MultiPaperEntitiesHandler.handleEntityUpdate(entity, packet);
 +        });
 +    }
 +}

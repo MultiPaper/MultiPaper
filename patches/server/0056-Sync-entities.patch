@@ -551,12 +551,13 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..b80da2908f4a90c607459c32b8ed62b8
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..81da0964a1a765327e232fee3b3eee6b90437a23
+index 0000000000000000000000000000000000000000..a3b5553591492e533ce813df6bb913802860bdba
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,141 @@
+@@ -0,0 +1,185 @@
 +package puregero.multipaper;
 +
++import com.mojang.datafixers.util.Pair;
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.network.protocol.Packet;
 +import net.minecraft.network.protocol.game.*;
@@ -564,9 +565,12 @@ index 0000000000000000000000000000000000000000..81da0964a1a765327e232fee3b3eee6b
 +import net.minecraft.server.level.ChunkMap;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.EquipmentSlot;
 +import net.minecraft.world.entity.LivingEntity;
++import net.minecraft.world.entity.Mob;
 +import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 +import net.minecraft.world.entity.ai.attributes.AttributeModifier;
++import net.minecraft.world.item.ItemStack;
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.phys.Vec3;
@@ -574,9 +578,12 @@ index 0000000000000000000000000000000000000000..81da0964a1a765327e232fee3b3eee6b
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
 +import puregero.multipaper.externalserverprotocol.EntityUpdatePacket;
++import puregero.multipaper.externalserverprotocol.EntityUpdateWithDependenciesPacket;
 +import puregero.multipaper.externalserverprotocol.SendUpdatePacket;
 +
 +import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
 +
 +public class MultiPaperEntitiesHandler {
 +
@@ -655,15 +662,38 @@ index 0000000000000000000000000000000000000000..81da0964a1a765327e232fee3b3eee6b
 +            } else {
 +                LOGGER.warn(entity + " has no TrackedEntity!");
 +            }
-+        } else if (packet instanceof ClientboundEntityEventPacket animatePacket) {
++        } else if (packet instanceof ClientboundEntityEventPacket entityEventPacket) {
 +            ChunkMap.TrackedEntity trackedEntity = ((ServerLevel) entity.level).chunkSource.chunkMap.entityMap.get(entity.getId());
 +            if (trackedEntity != null) {
-+                trackedEntity.broadcast(new ClientboundEntityEventPacket(entity, animatePacket.getEventId()));
++                trackedEntity.broadcast(new ClientboundEntityEventPacket(entity, entityEventPacket.getEventId()));
 +            } else {
 +                LOGGER.warn(entity + " has no TrackedEntity!");
 +            }
++        } else if (packet instanceof ClientboundSetEquipmentPacket setEquipmentPacket) {
++            for (Pair<EquipmentSlot, ItemStack> pair : setEquipmentPacket.getSlots()) {
++                entity.setItemSlot(pair.getFirst(), pair.getSecond());
++            }
 +        } else {
 +            LOGGER.warn("Unhandled packet " + packet);
++        }
++    }
++
++    public static void handleEntityWithDependenicesUpdate(Entity entity, Entity[] entities, Packet<?> packet) {
++        if (packet instanceof ClientboundSetPassengersPacket setPassengersPacket) {
++            for (Entity riding : entity.getPassengers()) {
++                riding.stopRiding();
++            }
++            for (Entity passenger : entities) {
++                passenger.startRiding(entity);
++            }
++        } else if (packet instanceof ClientboundSetEntityLinkPacket setEntityLinkPacket) {
++            if (entities.length == 0) {
++                ((Mob) entity).setLeashedTo(null, true);
++            } else {
++                ((Mob) entity).setLeashedTo(entities[0], true);
++            }
++        } else {
++            LOGGER.warn("Unhandled dependencies packet " + packet);
 +        }
 +    }
 +
@@ -688,6 +718,20 @@ index 0000000000000000000000000000000000000000..81da0964a1a765327e232fee3b3eee6b
 +        }
 +
 +        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
++
++        if (packet instanceof ClientboundSetPassengersPacket setPassengersPacket) {
++            List<Entity> entities = new ArrayList<>();
++            for (int id : setPassengersPacket.getPassengers()) {
++                entities.add(entity.level.getEntity(id));
++            }
++            MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityUpdateWithDependenciesPacket(entity, entities, packet));
++            return;
++        } else if (packet instanceof ClientboundSetEntityLinkPacket setEntityLinkPacket) {
++            List<Entity> entities = new ArrayList<>();
++            entities.add(entity.level.getEntity(setEntityLinkPacket.getDestId()));
++            MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityUpdateWithDependenciesPacket(entity, entities, packet));
++            return;
++        }
 +
 +        if (chunk != null) {
 +            MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityUpdatePacket(entity, packet));
@@ -809,10 +853,10 @@ index 0000000000000000000000000000000000000000..e8f4566f93dc2b24cc5a6c71138a7c3d
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..6c13ef25b1c2b7ecf1166730d54be0daa46a74a8
+index 0000000000000000000000000000000000000000..35985e8d9703380c362d31e6593e281fdba6991c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,81 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -821,7 +865,6 @@ index 0000000000000000000000000000000000000000..6c13ef25b1c2b7ecf1166730d54be0da
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.network.protocol.Packet;
 +import net.minecraft.network.protocol.PacketFlow;
-+import net.minecraft.network.protocol.game.*;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
 +import org.apache.logging.log4j.LogManager;
@@ -895,11 +938,124 @@ index 0000000000000000000000000000000000000000..6c13ef25b1c2b7ecf1166730d54be0da
 +        });
 +    }
 +}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..2587a9bc72dafab4480e8db612518c0685d3e381
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
+@@ -0,0 +1,107 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import net.minecraft.network.ConnectionProtocol;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperEntitiesHandler;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.Collection;
++import java.util.Objects;
++import java.util.UUID;
++
++public class EntityUpdateWithDependenciesPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(EntityUpdateWithDependenciesPacket.class.getSimpleName());
++
++    private final String world;
++    private final UUID uuid;
++    private final UUID[] uuids;
++    private final Packet<?> packet;
++
++    public EntityUpdateWithDependenciesPacket(Entity entity, Collection<Entity> dependents, Packet<?> packet) {
++        this.world = ((ServerLevel) entity.level).convertable.getLevelId();
++        this.uuid = entity.getUUID();
++        this.uuids = dependents.stream().filter(Objects::nonNull).map(Entity::getUUID).toArray(UUID[]::new);
++        this.packet = packet;
++    }
++
++    public EntityUpdateWithDependenciesPacket(DataInputStream in) throws IOException {
++        world = in.readUTF();
++        uuid = readUUID(in);
++
++        uuids = new UUID[in.read()];
++
++        for (int i = 0; i < uuids.length; i++) {
++            uuids[i] = readUUID(in);
++        }
++
++        int length = in.readInt();
++        byte[] bytes = new byte[length];
++        in.readFully(bytes);
++        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        int packetId = friendlyByteBuf.readVarInt();
++        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        writeUUID(out, uuid);
++
++        out.write(uuids.length);
++        for (UUID uuid : uuids) {
++            writeUUID(out, uuid);
++        }
++
++        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
++        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
++        ByteBuf buf = Unpooled.buffer();
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        friendlyByteBuf.writeVarInt(id);
++        packet.write(friendlyByteBuf);
++        byte[] bytes = buf.array();
++        out.writeInt(bytes.length);
++        out.write(bytes);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++            Entity entity = level.getEntity(uuid);
++
++            if (entity == null) {
++                LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName());
++                return;
++            }
++
++            Entity[] entities = new Entity[uuids.length];
++
++            for (int i = 0; i < uuids.length; i++) {
++                entities[i] = level.getEntity(uuids[i]);
++
++                if (entities[i] == null) {
++                    LOGGER.warn("Could not find dependent entity " + uuids[i] + " for " + packet.getClass().getSimpleName());
++                    return;
++                }
++            }
++
++            MultiPaperEntitiesHandler.handleEntityWithDependenicesUpdate(entity, entities, packet);
++        });
++    }
++}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 2a2f598540fa735a017e93dd162bed305f1cfab7..f5489a9fefd4ef56b0b8966d5febb865d03dc809 100644
+index 2a2f598540fa735a017e93dd162bed305f1cfab7..4a913da61ce8edf17fa1661b228a17a72a0b73e4 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -22,6 +22,10 @@ public class ExternalServerPacketSerializer {
+@@ -22,6 +22,11 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerActionPacket.class, PlayerActionPacket::new);
          addPacket(PlayerInventoryUpdatePacket.class, PlayerInventoryUpdatePacket::new);
          addPacket(TimeUpdatePacket.class, TimeUpdatePacket::new);
@@ -907,6 +1063,7 @@ index 2a2f598540fa735a017e93dd162bed305f1cfab7..f5489a9fefd4ef56b0b8966d5febb865
 +        addPacket(SendEntitiesPacket.class, SendEntitiesPacket::new);
 +        addPacket(EntityUpdateNBTPacket.class, EntityUpdateNBTPacket::new);
 +        addPacket(EntityUpdatePacket.class, EntityUpdatePacket::new);
++        addPacket(EntityUpdateWithDependenciesPacket.class, EntityUpdateWithDependenciesPacket::new);
      }
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {

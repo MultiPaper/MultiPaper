@@ -37,8 +37,29 @@ index 4eadc15f747528b59349f095171dd5a649a46ed9..6824c3da571d9fcf9c045b6ccbbdf73f
              this.loader.loadMap.addOrUpdate(this.player, centerChunkX, centerChunkZ, loadViewDistance);
              this.loader.loadTicketCleanup.addOrUpdate(this.player, centerChunkX, centerChunkZ, loadViewDistance + 1);
              this.loader.tickMap.addOrUpdate(this.player, centerChunkX, centerChunkZ, tickViewDistance);
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 744f7b717f14a070d5a4be0b35e7f422694fb407..210f0714534cb4c2e9701199666811112a201117 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -214,6 +214,7 @@ import org.bukkit.inventory.InventoryView;
+ import org.bukkit.inventory.SmithingInventory;
+ import org.bukkit.util.NumberConversions;
+ import co.aikar.timings.MinecraftTimings; // Paper
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
+@@ -1965,7 +1966,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+         this.player.disconnect();
+         // Paper start - Adventure
+         quitMessage = quitMessage == null ? this.server.getPlayerList().disconnect(this.player) : this.server.getPlayerList().disconnect(this.player, quitMessage); // Paper - pass in quitMessage to fix kick message not being used
+-        if ((quitMessage != null) && !quitMessage.equals(net.kyori.adventure.text.Component.empty())) {
++        if ((quitMessage != null) && !quitMessage.equals(net.kyori.adventure.text.Component.empty()) && MultiPaper.isRealPlayer(this.player)) { // MultiPaper - Only run for real players
+             this.server.getPlayerList().broadcastMessage(PaperAdventure.asVanilla(quitMessage), ChatType.SYSTEM, Util.NIL_UUID);
+             // Paper end
+         }
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index eaa005c1c9b4386bcdbe1d6eb28c3eca7635066c..ee7f65f94c71654da22c413219fc43742d323cd8 100644
+index eaa005c1c9b4386bcdbe1d6eb28c3eca7635066c..1f962cf94e6e6b592281fca5fb8c5eea99ddccb2 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -13,14 +13,7 @@ import java.io.File;
@@ -73,6 +94,15 @@ index eaa005c1c9b4386bcdbe1d6eb28c3eca7635066c..ee7f65f94c71654da22c413219fc4374
          player.didPlayerJoinEvent = true;
          // Paper end
          TranslatableComponent chatmessage;
+@@ -604,7 +599,7 @@ public abstract class PlayerList {
+         }
+ 
+         PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(entityplayer.getBukkitEntity(), leaveMessage, entityplayer.quitReason); // Paper - quit reason
+-        if (entityplayer.didPlayerJoinEvent) this.cserver.getPluginManager().callEvent(playerQuitEvent); // Paper - if we disconnected before join ever fired, don't fire quit
++        if (entityplayer.didPlayerJoinEvent && MultiPaper.isRealPlayer(entityplayer)) this.cserver.getPluginManager().callEvent(playerQuitEvent); // Paper - if we disconnected before join ever fired, don't fire quit // MultiPaper - don't run for external players
+         entityplayer.getBukkitEntity().disconnect(playerQuitEvent.getQuitMessage());
+ 
+         if (server.isSameThread()) entityplayer.doTick(); // SPIGOT-924 // Paper - don't tick during emergency shutdowns (Watchdog)
 @@ -690,6 +685,8 @@ public abstract class PlayerList {
          this.cserver.getScoreboardManager().removePlayer(entityplayer.getBukkitEntity());
          // CraftBukkit end

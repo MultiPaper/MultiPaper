@@ -56,7 +56,7 @@ index 76ddd2fd9aae82a75f6b2ca27aca43a45e017ab2..144d3eca8bb57de646cac1414ed9529f
  
          }
 diff --git a/src/main/java/net/minecraft/server/level/ServerEntity.java b/src/main/java/net/minecraft/server/level/ServerEntity.java
-index a453aac607f9b38f0bf90038ff2d8071687c4bae..925bd3b850f19d6b2649ed2d1ccef800b492d6ac 100644
+index a453aac607f9b38f0bf90038ff2d8071687c4bae..bbce329627d71a9fa4c585ab47bfbb6923ff1ea9 100644
 --- a/src/main/java/net/minecraft/server/level/ServerEntity.java
 +++ b/src/main/java/net/minecraft/server/level/ServerEntity.java
 @@ -34,6 +34,7 @@ import net.minecraft.world.entity.projectile.AbstractArrow;
@@ -75,6 +75,15 @@ index a453aac607f9b38f0bf90038ff2d8071687c4bae..925bd3b850f19d6b2649ed2d1ccef800
  // CraftBukkit end
  
  public class ServerEntity {
+@@ -126,7 +128,7 @@ public class ServerEntity {
+             int i;
+             int j;
+ 
+-            if (this.entity.isPassenger()) {
++            if (!(this.entity instanceof ServerPlayer) && this.entity.isPassenger()) { // MultiPaper - Force full position update for players
+                 i = Mth.floor(this.entity.getYRot() * 256.0F / 360.0F);
+                 j = Mth.floor(this.entity.getXRot() * 256.0F / 360.0F);
+                 boolean flag = Math.abs(i - this.yRotp) >= 1 || Math.abs(j - this.xRotp) >= 1;
 @@ -260,6 +262,7 @@ public class ServerEntity {
  
      public void removePairing(ServerPlayer player) {
@@ -127,18 +136,38 @@ index 04098de654aa0e72b35ae18e2a041ea661cc0be2..7c794ed51310c1a2bd84446c69574c67
          }
      }
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 9cde430b1a3c1b462d1df17dea78c1a80b22dc6c..0de0b64ec1f7c4db82ba73989e87605f6d1c3d8b 100644
+index 9cde430b1a3c1b462d1df17dea78c1a80b22dc6c..490df6d8e3ebf438b9d6af8c46dfebe91c5a3ef0 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-@@ -168,6 +168,7 @@ import org.bukkit.event.player.PlayerPortalEvent;
+@@ -168,7 +168,9 @@ import org.bukkit.event.player.PlayerPortalEvent;
  import org.bukkit.event.player.PlayerTeleportEvent;
  import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
  import org.bukkit.inventory.MainHand;
 +import puregero.multipaper.ExternalPlayer;
  import puregero.multipaper.ExternalServer;
++import puregero.multipaper.MultiPaper;
  // CraftBukkit end
  
-@@ -1883,7 +1884,9 @@ public class ServerPlayer extends Player {
+ public class ServerPlayer extends Player {
+@@ -1387,7 +1389,7 @@ public class ServerPlayer extends Player {
+         } else {
+             Entity entity2 = this.getVehicle();
+ 
+-            if (entity2 != entity1 && this.connection != null) {
++            if (entity2 != entity1 && this.connection != null && MultiPaper.isChunkLocal(level.getChunkIfLoaded(entity.blockPosition()))) { // MultiPaper
+                 this.connection.teleport(this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
+             }
+ 
+@@ -1404,7 +1406,7 @@ public class ServerPlayer extends Player {
+         super.stopRiding(suppressCancellation); // Paper
+         Entity entity1 = this.getVehicle();
+ 
+-        if (entity1 != entity && this.connection != null) {
++        if (entity1 != entity && this.connection != null && MultiPaper.isChunkLocal(level.getChunkIfLoaded(entity.blockPosition()))) { // MultiPaper
+             this.connection.dismount(this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
+         }
+ 
+@@ -1883,7 +1885,9 @@ public class ServerPlayer extends Player {
          this.locale = packet.language;
          // Paper start
          this.adventure$locale = net.kyori.adventure.translation.Translator.parseLocale(this.locale);
@@ -201,19 +230,10 @@ index c24611777d893cdfa4d3c36897926318130470ca..4d6e31891b11bf6a4fcf8c9663488b61
      }
  
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index ee7f65f94c71654da22c413219fc43742d323cd8..e84bb20aed1c84f07d6b3e497cbb92ca8e81732b 100644
+index 421194e34f7c8871362d78e8a9a41bec2550bb63..49de5bce3e6daa60532d1b6ae047c63ca44cea10 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
-@@ -260,6 +260,8 @@ public abstract class PlayerList {
-         boolean flag = gamerules.getBoolean(GameRules.RULE_DO_IMMEDIATE_RESPAWN);
-         boolean flag1 = gamerules.getBoolean(GameRules.RULE_REDUCEDDEBUGINFO);
- 
-+        MultiPaper.onPlayerJoin(player); // MultiPaper
-+
-         // Spigot - view distance
-         playerconnection.send(new ClientboundLoginPacket(player.getId(), player.gameMode.getGameModeForPlayer(), player.gameMode.getPreviousGameModeForPlayer(), BiomeManager.obfuscateSeed(worldserver1.getSeed()), worlddata.isHardcore(), this.server.levelKeys(), this.registryHolder, worldserver1.dimensionType(), worldserver1.dimension(), this.getMaxPlayers(), worldserver1.getChunkSource().chunkMap.playerChunkManager.getLoadDistance(), flag1, !flag, worldserver1.isDebug(), worldserver1.isFlat())); // Paper - no-tick view distance // Paper - replace old player chunk management
-         player.getBukkitEntity().sendSupportedChannels(); // CraftBukkit
-@@ -319,7 +321,6 @@ public abstract class PlayerList {
+@@ -319,7 +319,6 @@ public abstract class PlayerList {
          if (!networkmanager.isConnected()) {
              return;
          }
@@ -221,6 +241,15 @@ index ee7f65f94c71654da22c413219fc43742d323cd8..e84bb20aed1c84f07d6b3e497cbb92ca
          player.didPlayerJoinEvent = true;
          // Paper end
          TranslatableComponent chatmessage;
+@@ -368,6 +367,8 @@ public abstract class PlayerList {
+         }
+         // CraftBukkit end
+ 
++        MultiPaper.onPlayerJoin(player); // MultiPaper
++
+         // CraftBukkit start - sendAll above replaced with this loop
+         ClientboundPlayerInfoPacket packet = new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.ADD_PLAYER, player);
+ 
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
 index aac9dd19237d0708990960d03328e7530cd7bc8e..34113186a8c08699db7c8758a1703f25eab48b2c 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
@@ -252,6 +281,26 @@ index aac9dd19237d0708990960d03328e7530cd7bc8e..34113186a8c08699db7c8758a1703f25
              if (i != this.blockPosition.getX() || j != this.blockPosition.getY() || k != this.blockPosition.getZ()) {
                  this.blockPosition = new BlockPos(i, j, k);
              }
+diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+index df12ba04df24e1c70c43e00283ea2a78ae2ca422..c33ce00ed8dc4251fbe035abeae9137004bf716a 100644
+--- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
++++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+@@ -140,6 +140,7 @@ import org.bukkit.event.entity.EntityRegainHealthEvent;
+ import org.bukkit.event.entity.EntityResurrectEvent;
+ import org.bukkit.event.entity.EntityTeleportEvent;
+ import org.bukkit.event.player.PlayerItemConsumeEvent;
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ 
+@@ -2568,6 +2569,7 @@ public abstract class LivingEntity extends Entity {
+             vec3d = new Vec3(this.getX(), d0, this.getZ());
+         }
+ 
++        if (MultiPaper.isChunkLocal(level.getChunkIfLoaded(vehicle.blockPosition()))) // MultiPaper
+         this.dismountTo(vec3d.x, vec3d.y, vec3d.z);
+     }
+ 
 diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
 index 94e76e295dbd0f3bac4b30a3e7338cd56a971207..de3932d9f84ffb30ab8eaacbf37d67ffbd2026d5 100644
 --- a/src/main/java/net/minecraft/world/entity/player/Player.java
@@ -308,18 +357,19 @@ index 2340feb8483c2478a22b78e735bcbd6759f1b011..21023743292cd1f9d6eafdee23cbf283
          } catch (Exception var4) {
              LOGGER.error("Failed to store chunk {}", pos, var4);
 diff --git a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-index 5a72ce41cc57578498c4a072a1eb04ac28958afe..9f1feb9c90ab4d8451851949b366ba7466969f2b 100644
+index 5a72ce41cc57578498c4a072a1eb04ac28958afe..9e278099597814140eaf13bdf3d08d6e6d81e7ca 100644
 --- a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 +++ b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-@@ -34,6 +34,7 @@ import net.minecraft.world.level.ChunkPos;
+@@ -34,6 +34,8 @@ import net.minecraft.world.level.ChunkPos;
  // CraftBukkit start
  import net.minecraft.world.level.chunk.storage.EntityStorage;
  import org.bukkit.craftbukkit.event.CraftEventFactory;
++import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
  // CraftBukkit end
  
  public class PersistentEntitySectionManager<T extends EntityAccess> implements AutoCloseable {
-@@ -46,9 +47,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -46,9 +48,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
      final EntitySectionStorage<T> sectionStorage;
      private final LevelEntityGetter<T> entityGetter;
      private final Long2ObjectMap<Visibility> chunkVisibility = new Long2ObjectOpenHashMap();
@@ -331,15 +381,22 @@ index 5a72ce41cc57578498c4a072a1eb04ac28958afe..9f1feb9c90ab4d8451851949b366ba74
      public final io.papermc.paper.world.EntitySliceManager entitySliceManager; // Paper
  
      public PersistentEntitySectionManager(Class<T> entityClass, LevelCallback<T> handler, EntityPersistentStorage<T> dataAccess, io.papermc.paper.world.EntitySliceManager entitySliceManager) { // Paper
-@@ -347,6 +348,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -347,6 +349,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
  
      private boolean processChunkUnload(long chunkPos) {
          org.spigotmc.AsyncCatcher.catchOp("Entity chunk unload process"); // Paper
 +        MultiPaperEntitiesHandler.onEntitiesUnload(entitySliceManager.world, new ChunkPos(chunkPos));
++        // MultiPaper start
++        for (Entity entity : getEntities(new ChunkPos(chunkPos))) {
++            if (MultiPaper.isExternalPlayer(entity) && entity.getVehicle() != null) {
++                entity.stopRiding();
++            }
++        }
++        // MultiPaper end
          boolean flag = this.storeChunkSections(chunkPos, (entityaccess) -> {
              entityaccess.getPassengersAndSelf().forEach(this::unloadEntity);
          }, true); // CraftBukkit - add boolean for event call
-@@ -513,7 +515,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -513,7 +523,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          return i + "," + this.visibleEntityStorage.count() + "," + this.sectionStorage.count() + "," + this.chunkLoadStatuses.size() + "," + this.chunkVisibility.size() + "," + this.loadingInbox.size() + "," + this.chunksToUnload.size();
      }
  
@@ -454,10 +511,10 @@ index d45e1060ea382730cac6458b065d944285ce5826..f0784dbe7255a47c39f84e725bf3f8bc
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index e69f5750bd4003cf08ea6de73e54fae6d7a639ac..cb2afe5c0d0ccd17c9ba3ad4df2652bff17dd41b 100644
+index e69f5750bd4003cf08ea6de73e54fae6d7a639ac..cdeef29cd561b6962baa1156c8a7b426bd66ce14 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,10 +1,10 @@
+@@ -1,14 +1,17 @@
  package puregero.multipaper;
  
  import net.minecraft.core.BlockPos;
@@ -465,12 +522,19 @@ index e69f5750bd4003cf08ea6de73e54fae6d7a639ac..cb2afe5c0d0ccd17c9ba3ad4df2652bf
 -import net.minecraft.server.MinecraftServer;
  import net.minecraft.nbt.CompoundTag;
  import net.minecraft.nbt.NbtIo;
++import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
++import net.minecraft.network.protocol.game.ServerboundClientInformationPacket;
 +import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 +import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.level.ChunkHolder;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
-@@ -29,8 +29,8 @@ import java.io.*;
+ import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.HumanoidArm;
+ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.chunk.ChunkAccess;
+ import net.minecraft.world.level.chunk.ImposterProtoChunk;
+@@ -29,8 +32,8 @@ import java.io.*;
  import java.nio.file.Files;
  import java.util.Collection;
  import java.util.HashSet;
@@ -480,7 +544,7 @@ index e69f5750bd4003cf08ea6de73e54fae6d7a639ac..cb2afe5c0d0ccd17c9ba3ad4df2652bf
  import java.util.zip.DeflaterOutputStream;
  import java.util.zip.InflaterInputStream;
  
-@@ -107,6 +107,12 @@ public class MultiPaper {
+@@ -107,6 +110,12 @@ public class MultiPaper {
                  broadcastPacketToExternalServers(new TimeUpdatePacket(level));
              }
          }
@@ -493,7 +557,37 @@ index e69f5750bd4003cf08ea6de73e54fae6d7a639ac..cb2afe5c0d0ccd17c9ba3ad4df2652bf
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -321,6 +327,7 @@ public class MultiPaper {
+@@ -126,8 +135,29 @@ public class MultiPaper {
+             e.printStackTrace();
+         }
+     }
++
+     public static void onPlayerJoin(ServerPlayer player) {
+         broadcastPacketToExternalServers(new PlayerCreatePacket(player));
++
++        if (player.clientViewDistance != null) {
++            broadcastPacketToExternalServers(new PlayerActionPacket(player, new ServerboundClientInformationPacket(
++                    player.locale,
++                    player.clientViewDistance,
++                    player.getChatVisibility(),
++                    player.canChatInColor(),
++                    player.getEntityData().get(ServerPlayer.DATA_PLAYER_MODE_CUSTOMISATION),
++                    player.getEntityData().get(ServerPlayer.DATA_PLAYER_MAIN_HAND) == 0 ? HumanoidArm.LEFT : HumanoidArm.RIGHT,
++                    player.isTextFilteringEnabled()
++            )));
++        }
++
++        if (player.getVehicle() != null) {
++            LevelChunk levelChunk = player.getVehicle().level.getChunkAt(player.getVehicle().blockPosition());
++            if (levelChunk != null) {
++                MultiPaper.broadcastPacketToExternalServers(levelChunk.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(player.getVehicle()));
++                MultiPaper.broadcastPacketToExternalServers(levelChunk.externalEntitiesSubscribers, () -> new EntityUpdateWithDependenciesPacket(player.getVehicle(), player.getVehicle().getPassengers(), new ClientboundSetPassengersPacket(player.getVehicle())));
++            }
++        }
+     }
+     public static void onPlayerDisconnect(ServerPlayer player) {
+         if (!(player instanceof ExternalPlayer)) {
+@@ -321,6 +351,7 @@ public class MultiPaper {
      public static void unlockChunk(LevelChunk chunk) {
          try {
              if (MultiPaper.isChunkLocal(chunk)) {
@@ -502,10 +596,29 @@ index e69f5750bd4003cf08ea6de73e54fae6d7a639ac..cb2afe5c0d0ccd17c9ba3ad4df2652bf
              }
              getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 28257d68a53400e59e82826c14e7688c1093f9cc..b80da2908f4a90c607459c32b8ed62b87b93ad86 100644
+index 28257d68a53400e59e82826c14e7688c1093f9cc..f6fa93d6a84fb0176d164794cf3bab6da446d757 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -249,6 +249,34 @@ public class MultiPaperConnection extends Thread {
+@@ -1,6 +1,9 @@
+ package puregero.multipaper;
+ 
++import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
+ import net.minecraft.server.dedicated.DedicatedServer;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.level.chunk.ChunkAccess;
+ import net.minecraft.world.level.chunk.ChunkStatus;
+ import net.minecraft.world.level.chunk.LevelChunk;
+@@ -9,6 +12,8 @@ import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
+ import org.bukkit.World;
+ import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
++import puregero.multipaper.externalserverprotocol.EntityUpdateWithDependenciesPacket;
+ 
+ import javax.annotation.Nullable;
+ import java.io.*;
+@@ -249,6 +254,41 @@ public class MultiPaperConnection extends Thread {
          }
      }
  
@@ -518,6 +631,13 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..b80da2908f4a90c607459c32b8ed62b8
 +        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
 +        if (chunk instanceof LevelChunk) {
 +            ((LevelChunk) chunk).externalEntitiesSubscribers.add(server);
++
++            for (Entity entity : ((LevelChunk) chunk).level.entityManager.getEntities(chunk.getPos())) {
++                if (MultiPaper.isRealPlayer(entity) && entity.getVehicle() != null) {
++                    server.getConnection().send(new EntityUpdateNBTPacket(entity.getVehicle()));
++                    server.getConnection().send(new EntityUpdateWithDependenciesPacket(entity.getVehicle(), entity.getVehicle().getPassengers(), new ClientboundSetPassengersPacket(entity.getVehicle())));
++                }
++            }
 +        } else {
 +            LOGGER.warn("Received an entities subscribe notification for an unloaded chunk " + world + ";" + cx + ";" + cz);
 +        }
@@ -540,7 +660,7 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..b80da2908f4a90c607459c32b8ed62b8
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -333,6 +361,11 @@ public class MultiPaperConnection extends Thread {
+@@ -333,6 +373,11 @@ public class MultiPaperConnection extends Thread {
                      server.getConnection().requestChunk(world, cx, cz, data2 -> {
                          future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
                      });
@@ -552,7 +672,7 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..b80da2908f4a90c607459c32b8ed62b8
                  } else {
                      future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
                  }
-@@ -353,10 +386,13 @@ public class MultiPaperConnection extends Thread {
+@@ -353,10 +398,13 @@ public class MultiPaperConnection extends Thread {
      }
  
      public void writeChunk(String world, String path, int cx, int cz, byte[] data) throws IOException {
@@ -570,7 +690,7 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..b80da2908f4a90c607459c32b8ed62b8
  
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeChunk");
-@@ -364,8 +400,8 @@ public class MultiPaperConnection extends Thread {
+@@ -364,8 +412,8 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(path);
          out.writeInt(cx);
          out.writeInt(cz);
@@ -581,7 +701,7 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..b80da2908f4a90c607459c32b8ed62b8
          out.send(in -> { /* Do nothing */ });
      }
      
-@@ -601,4 +637,13 @@ public class MultiPaperConnection extends Thread {
+@@ -601,4 +649,13 @@ public class MultiPaperConnection extends Thread {
          out.writeInt(cz);
          out.send(null);
      }
@@ -597,10 +717,10 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..b80da2908f4a90c607459c32b8ed62b8
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..aa1b062b04143a61b6aa8a71ace177f364ffc314
+index 0000000000000000000000000000000000000000..5a1928bb8b546c3d1e3fe35ed30fe283f3c0e2d4
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,200 @@
+@@ -0,0 +1,220 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -610,6 +730,7 @@ index 0000000000000000000000000000000000000000..aa1b062b04143a61b6aa8a71ace177f3
 +import net.minecraft.network.syncher.SynchedEntityData;
 +import net.minecraft.server.level.ChunkMap;
 +import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.EquipmentSlot;
 +import net.minecraft.world.entity.LivingEntity;
@@ -642,7 +763,7 @@ index 0000000000000000000000000000000000000000..aa1b062b04143a61b6aa8a71ace177f3
 +
 +    public static void onChunkMove(Entity entity, BlockPos to, BlockPos from) {
 +        if (from.equals(BlockPos.ZERO)) return; // They just spawned
-+        if (!entity.shouldBeSaved()) return; // Entity shouldn't be synced (eg players)
++        if (!entity.shouldBeSaved() && !(entity.isVehicle() && entity.hasExactlyOnePlayerPassenger())) return; // Entity shouldn't be synced (eg players)
 +
 +        LevelChunk chunkFrom = entity.level.getChunkIfLoaded(from);
 +        LevelChunk chunkTo = entity.level.getChunkIfLoaded(to);
@@ -655,12 +776,23 @@ index 0000000000000000000000000000000000000000..aa1b062b04143a61b6aa8a71ace177f3
 +        if (MultiPaper.isChunkLocal(chunkFrom)) {
 +            if (!MultiPaper.isChunkLocal(chunkTo)) {
 +                // Leaving our jurisdiction, do a full entity update to ensure the new external server has all the required info
-+                MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity)));
++                MultiPaper.runSync(() -> {
++                    MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity));
++                });
 +            }
 +            for (ExternalServer fromServer : chunkFrom.externalEntitiesSubscribers) {
 +                if (fromServer.getConnection() != null && !chunkTo.externalEntitiesSubscribers.contains(fromServer)) {
 +                    // Entity is leaving another server's area, make sure they know this
-+                    fromServer.getConnection().send(new SendUpdatePacket(chunkFrom.level, new ClientboundTeleportEntityPacket(entity)));
++                    fromServer.getConnection().send(new EntityUpdatePacket(entity, new ClientboundTeleportEntityPacket(entity)));
++                }
++            }
++            for (ExternalServer toServer : chunkTo.externalEntitiesSubscribers) {
++                if (toServer.getConnection() != null && !chunkFrom.externalEntitiesSubscribers.contains(toServer)) {
++                    // Entity is entering another server's area, send them the full entity
++                    MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity));
++                    if (entity.isVehicle() && entity.hasExactlyOnePlayerPassenger()) {
++                        MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateWithDependenciesPacket(entity, entity.getPassengers(), new ClientboundSetPassengersPacket(entity)));
++                    }
 +                }
 +            }
 +        }
@@ -669,6 +801,10 @@ index 0000000000000000000000000000000000000000..aa1b062b04143a61b6aa8a71ace177f3
 +    public static void handleEntityUpdate(Entity entity, Packet<?> packet) {
 +        if (packet instanceof ClientboundMoveEntityPacket moveEntityPacket) {
 +            Vec3 vector = moveEntityPacket.updateEntityPosition(entity.position());
++            if (!(entity instanceof ServerPlayer) && !((ServerLevel) entity.level).entityManager.areEntitiesLoaded(new ChunkPos(new BlockPos(vector)).longKey)) {
++                entity.setRemoved(Entity.RemovalReason.UNLOADED_TO_CHUNK);
++                return;
++            }
 +            if (moveEntityPacket.hasRotation()) {
 +                entity.moveTo(vector.x, vector.y, vector.z, moveEntityPacket.getyRot() * 360f / 256, moveEntityPacket.getxRot() * 360f / 256);
 +            } else {
@@ -676,6 +812,10 @@ index 0000000000000000000000000000000000000000..aa1b062b04143a61b6aa8a71ace177f3
 +                entity.moveTo(vector.x, vector.y, vector.z, entity.getYRot(), entity.getXRot());
 +            }
 +        } else if (packet instanceof ClientboundTeleportEntityPacket teleportEntityPacket) {
++            if (!(entity instanceof ServerPlayer) &&!((ServerLevel) entity.level).entityManager.areEntitiesLoaded(new ChunkPos(new BlockPos(teleportEntityPacket.getX(), teleportEntityPacket.getY(), teleportEntityPacket.getZ())).longKey)) {
++                entity.setRemoved(Entity.RemovalReason.UNLOADED_TO_CHUNK);
++                return;
++            }
 +            entity.moveTo(teleportEntityPacket.getX(), teleportEntityPacket.getY(), teleportEntityPacket.getZ(), teleportEntityPacket.getyRot() * 360f / 256, teleportEntityPacket.getxRot() * 360f / 256);
 +        } else if (packet instanceof ClientboundSetEntityMotionPacket setEntityMotionPacket) {
 +            entity.setDeltaMovement(setEntityMotionPacket.getXa() / 8000.0D, setEntityMotionPacket.getYa() / 8000.0D, setEntityMotionPacket.getZa() / 8000.0D);
@@ -890,7 +1030,7 @@ index 0000000000000000000000000000000000000000..0b9fd457b215c608edc5a68ef0369f7e
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e8f4566f93dc2b24cc5a6c71138a7c3d0e5fc46e
+index 0000000000000000000000000000000000000000..4c16882377df494514d7140752d8d0015764aebd
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 @@ -0,0 +1,79 @@
@@ -959,8 +1099,8 @@ index 0000000000000000000000000000000000000000..e8f4566f93dc2b24cc5a6c71138a7c3d
 +                CompoundTag tag = MultiPaper.nbtDecompressFromBytes(data);
 +                if (entity == null) {
 +                    Entity entity2 = EntityType.create(tag, level).get();
-+                    if (level.entityManager.areEntitiesLoaded(entity2.chunkPosition().longKey)) {
-+                        MultiPaper.runSync(() -> level.entityManager.addNewEntity(entity2));
++                    if (level.entityManager.isPending(entity2.chunkPosition().longKey) || level.entityManager.areEntitiesLoaded(entity2.chunkPosition().longKey)) {
++                        level.entityManager.addNewEntity(entity2);
 +                    } else {
 +                        LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk isn't loaded: " + entity);
 +                    }

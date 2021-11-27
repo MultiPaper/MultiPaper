@@ -246,10 +246,10 @@ index 5daf2468f4615a3a96fbf947cc4bbd8bf4dd58e6..520af7b627b04cfc51b9bb7fbe7a6948
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..47fedf410d7a11ac62b5f99103ea6222535eb535
+index 0000000000000000000000000000000000000000..6437c5e31e9e5bf97cbdc6bd97b43e8a9207ae4b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,149 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -289,6 +289,18 @@ index 0000000000000000000000000000000000000000..47fedf410d7a11ac62b5f99103ea6222
 +            player.experienceLevel = setExperiencePacket.getExperienceLevel();
 +            player.experienceProgress = setExperiencePacket.getExperienceProgress();
 +            player.totalExperience = setExperiencePacket.getTotalExperience();
++        } else if (packet instanceof ClientboundPlayerPositionPacket playerPositionPacket) {
++            // An external server is changing the player's position
++            double x = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.X) ? player.getX() : 0.0D;
++            double y = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.Y) ? player.getY() : 0.0D;
++            double z = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.Z) ? player.getZ() : 0.0D;
++            float yaw = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.Y_ROT) ? player.getYRot() : 0.0F;
++            float pitch = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.X_ROT) ? player.getXRot() : 0.0F;
++            MultiPaper.runSync(() -> {
++                player.setPosRaw(x + playerPositionPacket.getX(), y + playerPositionPacket.getY(), z + playerPositionPacket.getZ());
++                player.setYRot(yaw + playerPositionPacket.getYRot());
++                player.setXRot(pitch + playerPositionPacket.getXRot());
++            });
 +        }
 +    }
 +

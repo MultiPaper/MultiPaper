@@ -50,6 +50,28 @@ index 4eadc15f747528b59349f095171dd5a649a46ed9..6824c3da571d9fcf9c045b6ccbbdf73f
              this.loader.loadMap.addOrUpdate(this.player, centerChunkX, centerChunkZ, loadViewDistance);
              this.loader.loadTicketCleanup.addOrUpdate(this.player, centerChunkX, centerChunkZ, loadViewDistance + 1);
              this.loader.tickMap.addOrUpdate(this.player, centerChunkX, centerChunkZ, tickViewDistance);
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 78fda0c982810b8b881a87099f355247566e513a..1069c3e592749ff4aab5c9e89cee1f3ec1e7d37c 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -168,6 +168,8 @@ import org.bukkit.event.player.PlayerPortalEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
+ import org.bukkit.inventory.MainHand;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.PlayerChangeGamemodePacket;
+ // CraftBukkit end
+ 
+ public class ServerPlayer extends Player {
+@@ -1820,6 +1822,8 @@ public class ServerPlayer extends Player {
+                 this.setCamera(this);
+             }
+ 
++            MultiPaper.broadcastPacketToExternalServers(new PlayerChangeGamemodePacket(this)); // MultiPaper
++
+             this.onUpdateAbilities();
+             this.updateEffectVisibility();
+             return event; // Paper
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 index 744f7b717f14a070d5a4be0b35e7f422694fb407..210f0714534cb4c2e9701199666811112a201117 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
@@ -148,10 +170,10 @@ index eaa005c1c9b4386bcdbe1d6eb28c3eca7635066c..1f962cf94e6e6b592281fca5fb8c5eea
              // CraftBukkit start
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..cadbd24322a2bea589d6d83b22d8cc0f5619d074
+index 0000000000000000000000000000000000000000..4b23eba0af2518c164f1c3a39853abb718384783
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,66 @@
 +package puregero.multipaper;
 +
 +import com.mojang.authlib.GameProfile;
@@ -163,6 +185,7 @@ index 0000000000000000000000000000000000000000..cadbd24322a2bea589d6d83b22d8cc0f
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.server.network.ServerGamePacketListenerImpl;
++import net.minecraft.world.level.GameType;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
@@ -177,11 +200,11 @@ index 0000000000000000000000000000000000000000..cadbd24322a2bea589d6d83b22d8cc0f
 +    private static final Logger LOGGER = LogManager.getLogger(ExternalPlayer.class.getSimpleName());
 +    public ExternalServerConnection externalServerConnection;
 +
-+    public static void create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z) {
-+        new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z);
++    public static void create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, GameType gamemode) {
++        new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, gamemode);
 +    }
 +
-+    public ExternalPlayer(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z) {
++    public ExternalPlayer(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, GameType gamemode) {
 +        super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), new GameProfile(uuid, name));
 +        this.externalServerConnection = externalServerConnection;
 +        this.isRealPlayer = true;
@@ -193,6 +216,7 @@ index 0000000000000000000000000000000000000000..cadbd24322a2bea589d6d83b22d8cc0f
 +        ((ServerLevel) level).addNewPlayer(this);
 +        containerMenu.transferTo(containerMenu, getBukkitEntity());
 +        initInventoryMenu();
++        gameMode.changeGameModeForPlayer(gamemode);
 +    }
 +
 +    private class ExternalPlayerConnection extends Connection {
@@ -366,27 +390,74 @@ index 81d61a2d671fedd031eb2725ac3ab45622e196b1..ae0855ca9cc5328b2fad1cd505a28ce4
 +
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index c21f3dc975820b3d979a4fc5c0fa981296375f0b..135253cbc89fa5bd4fb7cd95bc58051fc8d17de5 100644
+index c21f3dc975820b3d979a4fc5c0fa981296375f0b..2628e9c36aa00a6e934b0495100eeac64d43886c 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -13,6 +13,8 @@ public class ExternalServerPacketSerializer {
+@@ -13,6 +13,9 @@ public class ExternalServerPacketSerializer {
      private static final List<IOExceptionFunction<DataInputStream, ExternalServerPacket>> PACKET_DESERIALIZERS = new ArrayList<>();
      static {
          addPacket(HelloPacket.class, HelloPacket::new);
 +        addPacket(PlayerCreatePacket.class, PlayerCreatePacket::new);
 +        addPacket(PlayerRemovePacket.class, PlayerRemovePacket::new);
++        addPacket(PlayerChangeGamemodePacket.class, PlayerChangeGamemodePacket::new);
      }
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..23acee115e2c7f3d7bfc9605b6f067c30f526ac2
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java
+@@ -0,0 +1,39 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.level.GameType;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.UUID;
++
++public class PlayerChangeGamemodePacket extends ExternalServerPacket {
++
++    private final UUID uuid;
++    private final GameType gamemode;
++
++    public PlayerChangeGamemodePacket(ServerPlayer player) {
++        this.uuid = player.getUUID();
++        this.gamemode = player.gameMode.getGameModeForPlayer();
++    }
++
++    public PlayerChangeGamemodePacket(DataInputStream in) throws IOException {
++        uuid = readUUID(in);
++        gamemode = GameType.byId(in.read());
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        writeUUID(out, uuid);
++        out.write(gamemode.getId());
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> MinecraftServer.getServer().getPlayerList().getPlayer(uuid).gameMode.changeGameModeForPlayer(gamemode));
++    }
++}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..152f91480a3a453a7dd55c1c28c5c6e5bea41cc0
+index 0000000000000000000000000000000000000000..f87c7dff5450a8d84b3cbf4fd1c4c86fbfb7a71e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,64 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.level.GameType;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.ExternalPlayer;
@@ -408,6 +479,7 @@ index 0000000000000000000000000000000000000000..152f91480a3a453a7dd55c1c28c5c6e5
 +    private final double x;
 +    private final double y;
 +    private final double z;
++    private final GameType gamemode;
 +
 +    public PlayerCreatePacket(ServerPlayer player) {
 +        this.name = player.getScoreboardName();
@@ -416,6 +488,7 @@ index 0000000000000000000000000000000000000000..152f91480a3a453a7dd55c1c28c5c6e5
 +        this.x = player.getX();
 +        this.y = player.getY();
 +        this.z = player.getZ();
++        this.gamemode = player.gameMode.getGameModeForPlayer();
 +    }
 +
 +    public PlayerCreatePacket(DataInputStream in) throws IOException {
@@ -425,6 +498,7 @@ index 0000000000000000000000000000000000000000..152f91480a3a453a7dd55c1c28c5c6e5
 +        x = in.readDouble();
 +        y = in.readDouble();
 +        z = in.readDouble();
++        gamemode = GameType.byId(in.read());
 +    }
 +
 +    @Override
@@ -435,12 +509,13 @@ index 0000000000000000000000000000000000000000..152f91480a3a453a7dd55c1c28c5c6e5
 +        out.writeDouble(x);
 +        out.writeDouble(y);
 +        out.writeDouble(z);
++        out.write(gamemode.getId());
 +    }
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
 +        LOGGER.info("Adding player " + name + " (" + uuid + ")");
-+        MultiPaper.runSync(() -> ExternalPlayer.create(connection, name, uuid, world, x, y, z));
++        MultiPaper.runSync(() -> ExternalPlayer.create(connection, name, uuid, world, x, y, z, gamemode));
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java

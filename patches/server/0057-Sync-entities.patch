@@ -56,7 +56,7 @@ index 76ddd2fd9aae82a75f6b2ca27aca43a45e017ab2..144d3eca8bb57de646cac1414ed9529f
  
          }
 diff --git a/src/main/java/net/minecraft/server/level/ServerEntity.java b/src/main/java/net/minecraft/server/level/ServerEntity.java
-index a453aac607f9b38f0bf90038ff2d8071687c4bae..bbce329627d71a9fa4c585ab47bfbb6923ff1ea9 100644
+index a453aac607f9b38f0bf90038ff2d8071687c4bae..214a8e2921547f3cbe8a1321530cdd207003fb91 100644
 --- a/src/main/java/net/minecraft/server/level/ServerEntity.java
 +++ b/src/main/java/net/minecraft/server/level/ServerEntity.java
 @@ -34,6 +34,7 @@ import net.minecraft.world.entity.projectile.AbstractArrow;
@@ -75,7 +75,24 @@ index a453aac607f9b38f0bf90038ff2d8071687c4bae..bbce329627d71a9fa4c585ab47bfbb69
  // CraftBukkit end
  
  public class ServerEntity {
-@@ -126,7 +128,7 @@ public class ServerEntity {
+@@ -95,6 +97,16 @@ public class ServerEntity {
+             this.broadcastAndSend(new ClientboundSetPassengersPacket(this.entity)); // CraftBukkit
+         }
+ 
++        // MultiPaper start - Entities in vehicles glitch out when crossing borders, this forces them to sync
++        if (!list.isEmpty()) {
++            for (Entity passenger : list) {
++                if (passenger.position().distanceToSqr(this.entity.position()) > 16) {
++                    passenger.setPosRaw(this.entity.getX(), this.entity.getY(), this.entity.getZ());
++                }
++            }
++        }
++        // MultiPaper end
++
+         if (this.entity instanceof ItemFrame /*&& this.tickCounter % 10 == 0*/) { // CraftBukkit - Moved below, should always enter this block
+             ItemFrame entityitemframe = (ItemFrame) this.entity;
+             ItemStack itemstack = entityitemframe.getItem();
+@@ -126,7 +138,7 @@ public class ServerEntity {
              int i;
              int j;
  
@@ -84,7 +101,7 @@ index a453aac607f9b38f0bf90038ff2d8071687c4bae..bbce329627d71a9fa4c585ab47bfbb69
                  i = Mth.floor(this.entity.getYRot() * 256.0F / 360.0F);
                  j = Mth.floor(this.entity.getXRot() * 256.0F / 360.0F);
                  boolean flag = Math.abs(i - this.yRotp) >= 1 || Math.abs(j - this.xRotp) >= 1;
-@@ -260,6 +262,7 @@ public class ServerEntity {
+@@ -260,6 +272,7 @@ public class ServerEntity {
  
      public void removePairing(ServerPlayer player) {
          this.entity.stopSeenByPlayer(player);
@@ -92,7 +109,7 @@ index a453aac607f9b38f0bf90038ff2d8071687c4bae..bbce329627d71a9fa4c585ab47bfbb69
          player.connection.send(new ClientboundRemoveEntitiesPacket(new int[]{this.entity.getId()}));
      }
  
-@@ -267,6 +270,7 @@ public class ServerEntity {
+@@ -267,6 +280,7 @@ public class ServerEntity {
          ServerGamePacketListenerImpl playerconnection = player.connection;
  
          Objects.requireNonNull(player.connection);
@@ -717,10 +734,10 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..f6fa93d6a84fb0176d164794cf3bab6d
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..5a1928bb8b546c3d1e3fe35ed30fe283f3c0e2d4
+index 0000000000000000000000000000000000000000..dfab56b23024d97f4f09d169d102b6a7ca487584
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,220 @@
+@@ -0,0 +1,243 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -741,6 +758,7 @@ index 0000000000000000000000000000000000000000..5a1928bb8b546c3d1e3fe35ed30fe283
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.phys.Vec3;
++import org.apache.commons.lang.ArrayUtils;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.externalserverprotocol.*;
@@ -773,12 +791,21 @@ index 0000000000000000000000000000000000000000..5a1928bb8b546c3d1e3fe35ed30fe283
 +            return;
 +        }
 +
++//        if (MultiPaper.isChunkLocal(chunkTo)) {
++//            // Entities get glitched out with vehicles when entering our area, this fixes it
++//            if (entity.isVehicle()) {
++//                for (Entity passenger : entity.getPassengers()) {
++//                    if (!(passenger instanceof ServerPlayer)) {
++//                        passenger.levelCallback.onMove();
++//                    }
++//                }
++//            }
++//        }
++
 +        if (MultiPaper.isChunkLocal(chunkFrom)) {
 +            if (!MultiPaper.isChunkLocal(chunkTo)) {
 +                // Leaving our jurisdiction, do a full entity update to ensure the new external server has all the required info
-+                MultiPaper.runSync(() -> {
-+                    MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity));
-+                });
++                MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity)));
 +            }
 +            for (ExternalServer fromServer : chunkFrom.externalEntitiesSubscribers) {
 +                if (fromServer.getConnection() != null && !chunkTo.externalEntitiesSubscribers.contains(fromServer)) {
@@ -798,11 +825,20 @@ index 0000000000000000000000000000000000000000..5a1928bb8b546c3d1e3fe35ed30fe283
 +        }
 +    }
 +
++    private static void setRemovedRecursive(Entity entity) {
++        for (Entity passenger : entity.getPassengers()) {
++            if (!(passenger instanceof ServerPlayer)) {
++                setRemovedRecursive(passenger);
++            }
++        }
++        entity.setRemoved(Entity.RemovalReason.UNLOADED_TO_CHUNK);
++    }
++
 +    public static void handleEntityUpdate(Entity entity, Packet<?> packet) {
 +        if (packet instanceof ClientboundMoveEntityPacket moveEntityPacket) {
 +            Vec3 vector = moveEntityPacket.updateEntityPosition(entity.position());
 +            if (!(entity instanceof ServerPlayer) && !((ServerLevel) entity.level).entityManager.areEntitiesLoaded(new ChunkPos(new BlockPos(vector)).longKey)) {
-+                entity.setRemoved(Entity.RemovalReason.UNLOADED_TO_CHUNK);
++                setRemovedRecursive(entity);
 +                return;
 +            }
 +            if (moveEntityPacket.hasRotation()) {
@@ -813,7 +849,7 @@ index 0000000000000000000000000000000000000000..5a1928bb8b546c3d1e3fe35ed30fe283
 +            }
 +        } else if (packet instanceof ClientboundTeleportEntityPacket teleportEntityPacket) {
 +            if (!(entity instanceof ServerPlayer) &&!((ServerLevel) entity.level).entityManager.areEntitiesLoaded(new ChunkPos(new BlockPos(teleportEntityPacket.getX(), teleportEntityPacket.getY(), teleportEntityPacket.getZ())).longKey)) {
-+                entity.setRemoved(Entity.RemovalReason.UNLOADED_TO_CHUNK);
++                setRemovedRecursive(entity);
 +                return;
 +            }
 +            entity.moveTo(teleportEntityPacket.getX(), teleportEntityPacket.getY(), teleportEntityPacket.getZ(), teleportEntityPacket.getyRot() * 360f / 256, teleportEntityPacket.getxRot() * 360f / 256);
@@ -864,10 +900,14 @@ index 0000000000000000000000000000000000000000..5a1928bb8b546c3d1e3fe35ed30fe283
 +    public static void handleEntityWithDependenicesUpdate(Entity entity, Entity[] entities, Packet<?> packet) {
 +        if (packet instanceof ClientboundSetPassengersPacket setPassengersPacket) {
 +            for (Entity riding : entity.getPassengers()) {
-+                riding.stopRiding();
++                if (!ArrayUtils.contains(entities, riding)) {
++                    riding.stopRiding();
++                }
 +            }
 +            for (Entity passenger : entities) {
-+                passenger.startRiding(entity);
++                if (!entity.getPassengers().contains(passenger)) {
++                    passenger.startRiding(entity, true);
++                }
 +            }
 +        } else if (packet instanceof ClientboundSetEntityLinkPacket setEntityLinkPacket) {
 +            if (entities.length == 0) {
@@ -1030,14 +1070,15 @@ index 0000000000000000000000000000000000000000..0b9fd457b215c608edc5a68ef0369f7e
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4c16882377df494514d7140752d8d0015764aebd
+index 0000000000000000000000000000000000000000..b2d78f522b4fbb43a5cc568c3b4d582d87fa9090
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,83 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.EntityType;
 +import org.apache.logging.log4j.LogManager;
@@ -1098,12 +1139,15 @@ index 0000000000000000000000000000000000000000..4c16882377df494514d7140752d8d001
 +                Entity entity = level.getEntity(uuid);
 +                CompoundTag tag = MultiPaper.nbtDecompressFromBytes(data);
 +                if (entity == null) {
-+                    Entity entity2 = EntityType.create(tag, level).get();
-+                    if (level.entityManager.isPending(entity2.chunkPosition().longKey) || level.entityManager.areEntitiesLoaded(entity2.chunkPosition().longKey)) {
-+                        level.entityManager.addNewEntity(entity2);
-+                    } else {
-+                        LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk isn't loaded: " + entity);
-+                    }
++                     EntityType.loadEntityRecursive(tag, level, entity2 -> {
++                        if (level.entityManager.isPending(entity2.chunkPosition().longKey) || level.entityManager.areEntitiesLoaded(entity2.chunkPosition().longKey)) {
++                            level.entityManager.addNewEntity(entity2);
++                            return entity2;
++                        } else {
++                            LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk aren't loaded: " + entity2);
++                            return null;
++                        }
++                    });
 +                } else {
 +                    entity.load(tag);
 +                }

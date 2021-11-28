@@ -769,10 +769,10 @@ index 19f7084c61dff18f83c16fbf52a3707ac0d27a80..89b51127fbc849fafa14c02d2192c7a9
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..1c7677f45123b34e972f27d15b706d565f964a7b
+index 0000000000000000000000000000000000000000..266816ce2e6f0d192caf3f1623368bc339f3edd9
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,233 @@
+@@ -0,0 +1,232 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -972,12 +972,6 @@ index 0000000000000000000000000000000000000000..1c7677f45123b34e972f27d15b706d56
 +    }
 +
 +    public static void onEntityUpdate(Entity entity, Packet<?> packet) {
-+        if ((packet instanceof ClientboundMoveEntityPacket || packet instanceof ClientboundTeleportEntityPacket)
-+                && MultiPaper.isRealPlayer(entity)) {
-+            MultiPaper.broadcastPacketToExternalServers(new EntityUpdatePacket(entity, packet));
-+            return;
-+        }
-+
 +        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
 +
 +        if (packet instanceof ClientboundSetPassengersPacket setPassengersPacket) {
@@ -996,6 +990,11 @@ index 0000000000000000000000000000000000000000..1c7677f45123b34e972f27d15b706d56
 +            List<Entity> entities = new ArrayList<>();
 +            entities.add(entity.level.getEntity(takeItemEntityPacket.getPlayerId()));
 +            MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityUpdateWithDependenciesPacket(entity, entities, packet));
++            return;
++        }
++
++        if (MultiPaper.isRealPlayer(entity)) {
++            MultiPaper.broadcastPacketToExternalServers(new EntityUpdatePacket(entity, packet));
 +            return;
 +        }
 +

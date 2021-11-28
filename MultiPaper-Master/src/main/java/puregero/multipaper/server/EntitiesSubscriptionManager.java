@@ -24,7 +24,6 @@ public class EntitiesSubscriptionManager {
     }
 
     public static void subscribe(ServerConnection serverConnection, String world, int cx, int cz) {
-        System.out.println(serverConnection.getBungeeCordName() + " is subscribing to entities " + world + "," + cx + "," + cz);
         ChunkKey key = new ChunkKey(world, cx, cz);
         synchronized (chunkSubscribers) {
             List<ServerConnection> serverConnections = chunkSubscribers.computeIfAbsent(key, key2 -> {
@@ -57,7 +56,6 @@ public class EntitiesSubscriptionManager {
     }
 
     public static void unsubscribe(ServerConnection serverConnection, ChunkKey key) {
-        System.out.println(serverConnection.getBungeeCordName() + " is unsubscribing to entities " + key.name + "," + key.x + "," + key.z);
         synchronized (chunkSubscribers) {
             List<ServerConnection> serverConnections = chunkSubscribers.get(key);
             if (serverConnections != null) {

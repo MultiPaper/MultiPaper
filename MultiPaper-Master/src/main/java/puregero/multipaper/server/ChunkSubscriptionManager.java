@@ -43,7 +43,6 @@ public class ChunkSubscriptionManager {
     }
 
     public static ServerConnection lock(ServerConnection serverConnection, String world, int cx, int cz) {
-        System.out.println(serverConnection.getBungeeCordName() + " is locking " + world + "," + cx + "," + cz);
         ChunkKey key = new ChunkKey(world, cx, cz);
         synchronized (chunkLocks) {
             List<ServerConnection> serverConnections = chunkLocks.computeIfAbsent(key, key2 -> {
@@ -69,8 +68,6 @@ public class ChunkSubscriptionManager {
                 }
             }
 
-            System.out.println("Owner of " + world + "," + cx + "," + cz + " is " + serverConnections.get(0).getBungeeCordName());
-
             return serverConnections.get(0);
         }
     }
@@ -80,7 +77,6 @@ public class ChunkSubscriptionManager {
     }
 
     public static void unlock(ServerConnection serverConnection, ChunkKey key) {
-        System.out.println(serverConnection.getBungeeCordName() + " is unlocking from " + key.name + "," + key.x + "," + key.z);
         synchronized (chunkLocks) {
             List<ServerConnection> serverConnections = chunkLocks.get(key);
             if (serverConnections != null) {
@@ -118,7 +114,6 @@ public class ChunkSubscriptionManager {
 
     private static void updateOwner(ServerConnection ownerConnection, List<ServerConnection> serverConnections, String world, int cx, int cz) {
         String owner = ownerConnection == null ? "" : ownerConnection.getBungeeCordName();
-        System.out.println("Owner of " + world + "," + cx + "," + cz + " is now " + owner);
         for (ServerConnection connection : serverConnections) {
             CompletableFuture.runAsync(() -> {
                 try {
@@ -138,7 +133,6 @@ public class ChunkSubscriptionManager {
 
 
     public static void subscribe(ServerConnection serverConnection, String world, int cx, int cz) {
-        System.out.println(serverConnection.getBungeeCordName() + " is subscribing to " + world + "," + cx + "," + cz);
         ChunkKey key = new ChunkKey(world, cx, cz);
         synchronized (chunkSubscribers) {
             List<ServerConnection> serverConnections = chunkSubscribers.computeIfAbsent(key, key2 -> {
@@ -175,7 +169,6 @@ public class ChunkSubscriptionManager {
     }
 
     public static void unsubscribe(ServerConnection serverConnection, ChunkKey key) {
-        System.out.println(serverConnection.getBungeeCordName() + " is unsubscribing to " + key.name + "," + key.x + "," + key.z);
         synchronized (chunkSubscribers) {
             List<ServerConnection> serverConnections = chunkSubscribers.get(key);
             if (serverConnections != null) {

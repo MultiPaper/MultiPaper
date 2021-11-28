@@ -372,19 +372,32 @@ index 2340feb8483c2478a22b78e735bcbd6759f1b011..21023743292cd1f9d6eafdee23cbf283
          } catch (Exception var4) {
              LOGGER.error("Failed to store chunk {}", pos, var4);
 diff --git a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-index 5a72ce41cc57578498c4a072a1eb04ac28958afe..9e278099597814140eaf13bdf3d08d6e6d81e7ca 100644
+index 5a72ce41cc57578498c4a072a1eb04ac28958afe..90e6376b162e0532aef547da9d89828ca400fa88 100644
 --- a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 +++ b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-@@ -34,6 +34,8 @@ import net.minecraft.world.level.ChunkPos;
+@@ -25,15 +25,21 @@ import java.util.stream.Stream;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.SectionPos;
+ import net.minecraft.server.level.ChunkHolder;
++import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.util.CsvOutput;
+ import net.minecraft.util.VisibleForDebug;
+ import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.chunk.LevelChunk;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import net.minecraft.world.level.ChunkPos;
  // CraftBukkit start
  import net.minecraft.world.level.chunk.storage.EntityStorage;
  import org.bukkit.craftbukkit.event.CraftEventFactory;
++import puregero.multipaper.ExternalServer;
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
++import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
  // CraftBukkit end
  
  public class PersistentEntitySectionManager<T extends EntityAccess> implements AutoCloseable {
-@@ -46,9 +48,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -46,9 +52,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
      final EntitySectionStorage<T> sectionStorage;
      private final LevelEntityGetter<T> entityGetter;
      private final Long2ObjectMap<Visibility> chunkVisibility = new Long2ObjectOpenHashMap();
@@ -396,7 +409,7 @@ index 5a72ce41cc57578498c4a072a1eb04ac28958afe..9e278099597814140eaf13bdf3d08d6e
      public final io.papermc.paper.world.EntitySliceManager entitySliceManager; // Paper
  
      public PersistentEntitySectionManager(Class<T> entityClass, LevelCallback<T> handler, EntityPersistentStorage<T> dataAccess, io.papermc.paper.world.EntitySliceManager entitySliceManager) { // Paper
-@@ -347,6 +349,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -347,6 +353,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
  
      private boolean processChunkUnload(long chunkPos) {
          org.spigotmc.AsyncCatcher.catchOp("Entity chunk unload process"); // Paper
@@ -411,7 +424,34 @@ index 5a72ce41cc57578498c4a072a1eb04ac28958afe..9e278099597814140eaf13bdf3d08d6e
          boolean flag = this.storeChunkSections(chunkPos, (entityaccess) -> {
              entityaccess.getPassengersAndSelf().forEach(this::unloadEntity);
          }, true); // CraftBukkit - add boolean for event call
-@@ -513,7 +523,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -375,6 +389,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+         ChunkEntities<T> chunkentities; // CraftBukkit - decompile error
+ 
+         while ((chunkentities = (ChunkEntities) this.loadingInbox.poll()) != null) {
++            // Multipaper start - Sometimes chunks already have entities loaded? Send these to subscribed chunks
++            List<Entity> existingEntities = getEntities(chunkentities.getPos()).stream().filter(entity -> !(entity instanceof ServerPlayer)).toList();
++            // MultiPaper end
+             chunkentities.getEntities().forEach((entityaccess) -> {
+                 this.addEntity(entityaccess, true);
+             });
+@@ -389,6 +406,16 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+                 level.onChunkSetTicking(chunkentities.getPos().x, chunkentities.getPos().z);
+             }
+             // Paper end
++            // Multipaper start - Sometimes chunks already have entities loaded? Send these to subscribed chunks
++            LevelChunk chunk = level.getChunkIfLoaded(chunkentities.getPos().x, chunkentities.getPos().z);
++            if (!existingEntities.isEmpty()) {
++                LOGGER.info("There were already " + existingEntities.size() + " entities in " + level.convertable.getLevelId() + "," + chunkentities.getPos().x + "," + chunkentities.getPos().z);
++                LOGGER.info("Sending these entities to: " + chunk.externalEntitiesSubscribers.stream().map(ExternalServer::getName).toList());
++                for (Entity existingEntity : existingEntities) {
++                    MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(existingEntity));
++                }
++            }
++            // MultiPaper end
+         }
+ 
+     }
+@@ -513,7 +540,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          return i + "," + this.visibleEntityStorage.count() + "," + this.sectionStorage.count() + "," + this.chunkLoadStatuses.size() + "," + this.chunkVisibility.size() + "," + this.loadingInbox.size() + "," + this.chunksToUnload.size();
      }
  

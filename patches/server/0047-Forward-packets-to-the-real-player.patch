@@ -128,10 +128,10 @@ index 0e3324d116f937f9783fdf85af8a81d24eabfa2b..269fa39d6d5f16efeda1867e47d2a14b
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8ed75a553a0de9c1dfcff9a6353a72adfededea4
+index 0000000000000000000000000000000000000000..086f6064400d03de8eb9ffe9fa1a5f349cdf8fe5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,91 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -144,7 +144,6 @@ index 0000000000000000000000000000000000000000..8ed75a553a0de9c1dfcff9a6353a72ad
 +import net.minecraft.server.level.ServerPlayer;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
-+import puregero.multipaper.ExternalPlayer;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
@@ -161,11 +160,17 @@ index 0000000000000000000000000000000000000000..8ed75a553a0de9c1dfcff9a6353a72ad
 +    private final UUID[] uuids;
 +    private final Packet<?> packet;
 +
-+    public SendPacketPacket(List<ExternalPlayer> players, Packet<?> packet) {
++    public SendPacketPacket(List<? extends ServerPlayer> players, Packet<?> packet) {
 +        this.uuids = new UUID[players.size()];
 +        for (int i = 0; i < players.size(); i++) {
 +            this.uuids[i] = players.get(i).getUUID();
 +        }
++        this.packet = packet;
++    }
++
++    public SendPacketPacket(ServerPlayer player, Packet<?> packet) {
++        this.uuids = new UUID[1];
++        this.uuids[0] = player.getUUID();
 +        this.packet = packet;
 +    }
 +
@@ -204,15 +209,17 @@ index 0000000000000000000000000000000000000000..8ed75a553a0de9c1dfcff9a6353a72ad
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        for (UUID uuid : uuids) {
-+            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++        MultiPaper.runSync(() -> {
++            for (UUID uuid : uuids) {
++                ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
 +
-+            if (player == null) {
-+                LOGGER.warn("Tried to send a packet to a non-existent player uuid " + player);
-+                return;
++                if (player == null) {
++                    LOGGER.warn("Tried to send a packet to a non-existent player uuid " + player);
++                    return;
++                }
++
++                player.connection.send(packet);
 +            }
-+
-+            player.connection.send(packet);
-+        }
++        });
 +    }
 +}

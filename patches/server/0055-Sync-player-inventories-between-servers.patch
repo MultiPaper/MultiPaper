@@ -202,18 +202,27 @@ index 8d329bca0818033df41fbd781028919c73e052a6..8a01433c65f5d24acb4501bd59a233c4
              }
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 5daf2468f4615a3a96fbf947cc4bbd8bf4dd58e6..520af7b627b04cfc51b9bb7fbe7a69485a10caae 100644
+index 5daf2468f4615a3a96fbf947cc4bbd8bf4dd58e6..2c6af1a9689a7cbc447edb571c6149184ce77e92 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,6 +1,7 @@
+@@ -1,6 +1,8 @@
  package puregero.multipaper;
  
  import net.minecraft.core.BlockPos;
++import net.minecraft.network.protocol.game.ClientboundSetCarriedItemPacket;
 +import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.nbt.CompoundTag;
  import net.minecraft.nbt.NbtIo;
-@@ -99,6 +100,8 @@ public class MultiPaper {
+@@ -27,6 +29,7 @@ import puregero.multipaper.externalserverprotocol.*;
+ import java.io.*;
+ import java.nio.file.Files;
+ import java.util.Collection;
++import java.util.Collections;
+ import java.util.HashSet;
+ import java.util.function.Supplier;
+ import java.util.concurrent.ConcurrentHashMap;
+@@ -99,6 +102,8 @@ public class MultiPaper {
                  });
              }
          });
@@ -222,7 +231,15 @@ index 5daf2468f4615a3a96fbf947cc4bbd8bf4dd58e6..520af7b627b04cfc51b9bb7fbe7a6948
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -322,7 +325,7 @@ public class MultiPaper {
+@@ -120,6 +125,7 @@ public class MultiPaper {
+     }
+     public static void onPlayerJoin(ServerPlayer player) {
+         broadcastPacketToExternalServers(new PlayerCreatePacket(player));
++        broadcastPacketToExternalServers(new SendPacketPacket(player, new ClientboundSetCarriedItemPacket(player.getInventory().selected)));
+     }
+     public static void onPlayerDisconnect(ServerPlayer player) {
+         if (!(player instanceof ExternalPlayer)) {
+@@ -322,7 +328,7 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -231,7 +248,7 @@ index 5daf2468f4615a3a96fbf947cc4bbd8bf4dd58e6..520af7b627b04cfc51b9bb7fbe7a6948
      public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
          if (compoundTag == null) {
              return new byte[0];
-@@ -384,4 +387,12 @@ public class MultiPaper {
+@@ -384,4 +390,12 @@ public class MultiPaper {
  
          return holder;
      }
@@ -246,10 +263,10 @@ index 5daf2468f4615a3a96fbf947cc4bbd8bf4dd58e6..520af7b627b04cfc51b9bb7fbe7a6948
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..6437c5e31e9e5bf97cbdc6bd97b43e8a9207ae4b
+index 0000000000000000000000000000000000000000..c1c13bea7bbcd10d3763916b00fda56bfe515c33
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-@@ -0,0 +1,149 @@
+@@ -0,0 +1,147 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -296,11 +313,9 @@ index 0000000000000000000000000000000000000000..6437c5e31e9e5bf97cbdc6bd97b43e8a
 +            double z = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.Z) ? player.getZ() : 0.0D;
 +            float yaw = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.Y_ROT) ? player.getYRot() : 0.0F;
 +            float pitch = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.X_ROT) ? player.getXRot() : 0.0F;
-+            MultiPaper.runSync(() -> {
-+                player.setPosRaw(x + playerPositionPacket.getX(), y + playerPositionPacket.getY(), z + playerPositionPacket.getZ());
-+                player.setYRot(yaw + playerPositionPacket.getYRot());
-+                player.setXRot(pitch + playerPositionPacket.getXRot());
-+            });
++            player.setPosRaw(x + playerPositionPacket.getX(), y + playerPositionPacket.getY(), z + playerPositionPacket.getZ());
++            player.setYRot(yaw + playerPositionPacket.getYRot());
++            player.setXRot(pitch + playerPositionPacket.getXRot());
 +        }
 +    }
 +
@@ -637,22 +652,22 @@ index 0000000000000000000000000000000000000000..8ccc6e591fa0d2eab520f426bf49ab9b
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
-index 8ed75a553a0de9c1dfcff9a6353a72adfededea4..01f9ce5e1ab7986be6fd560847680d316d393c72 100644
+index 086f6064400d03de8eb9ffe9fa1a5f349cdf8fe5..f72af4c244d3b2dfd7f14c6acf64a4cd80deff05 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
-@@ -13,6 +13,7 @@ import org.apache.logging.log4j.Logger;
- import puregero.multipaper.ExternalPlayer;
+@@ -12,6 +12,7 @@ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
  import puregero.multipaper.ExternalServerConnection;
  import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperInventoryHandler;
  
  import java.io.DataInputStream;
  import java.io.DataOutputStream;
-@@ -78,6 +79,7 @@ public class SendPacketPacket extends ExternalServerPacket {
-                 return;
-             }
+@@ -84,6 +85,7 @@ public class SendPacketPacket extends ExternalServerPacket {
+                     return;
+                 }
  
-+            MultiPaperInventoryHandler.handlePacketFromExternalServer(connection.externalServer, player, packet);
-             player.connection.send(packet);
-         }
-     }
++                MultiPaperInventoryHandler.handlePacketFromExternalServer(connection.externalServer, player, packet);
+                 player.connection.send(packet);
+             }
+         });

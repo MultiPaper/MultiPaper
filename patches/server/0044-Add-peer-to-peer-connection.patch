@@ -220,7 +220,7 @@ index 5ddb4c40c42f94b6a4b76dc0479c51dbcfe65f6e..2382f0980bef9704f227a331b5a441d7
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 4aaa90a7023245791003dfe274af04bcf42ca1d9..6366cd1defa3de59963e8fd5ec4e87a567b81b54 100644
+index 4aaa90a7023245791003dfe274af04bcf42ca1d9..f6f7d74d354373fc21dd988757792ab575e3ad64 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -9,6 +9,7 @@ import java.net.Socket;
@@ -231,7 +231,25 @@ index 4aaa90a7023245791003dfe274af04bcf42ca1d9..6366cd1defa3de59963e8fd5ec4e87a5
  import java.util.concurrent.ConcurrentHashMap;
  import java.util.function.Consumer;
  
-@@ -128,6 +129,20 @@ public class MultiPaperConnection extends Thread {
+@@ -66,6 +67,10 @@ public class MultiPaperConnection extends Thread {
+         }
+     }
+ 
++    public ExternalServer getOrCreateServer(String name) {
++        return serversMap.computeIfAbsent(name, key -> new ExternalServer(key, key.equals(myName)));
++    }
++
+     @Override
+     public void run() {
+         while (true) {
+@@ -122,12 +127,26 @@ public class MultiPaperConnection extends Thread {
+     }
+ 
+     public void serverInfo(DataInputStream in, DataOutputSender out) throws IOException {
+-        ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
++        ExternalServer server = getOrCreateServer(in.readUTF());
+         server.setAverageTickTime(in.readInt());
+         server.setTps(in.readFloat());
          server.setLastAlive(System.currentTimeMillis());
      }
  
@@ -252,7 +270,7 @@ index 4aaa90a7023245791003dfe274af04bcf42ca1d9..6366cd1defa3de59963e8fd5ec4e87a5
      public void writeTickTime(long time, double tps) throws IOException {
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeTickTime");
-@@ -135,4 +150,11 @@ public class MultiPaperConnection extends Thread {
+@@ -135,4 +154,11 @@ public class MultiPaperConnection extends Thread {
          out.writeFloat((float) tps);
          out.send(null);
      }
@@ -331,15 +349,14 @@ index 0000000000000000000000000000000000000000..c21f3dc975820b3d979a4fc5c0fa9812
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..98df09ee6eb37797ce764bbca69f482f4b90ab4d
+index 0000000000000000000000000000000000000000..21a57d5fcb66211e6a42d6d1b21940b25e9d1382
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,37 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
-+import puregero.multipaper.ExternalServer;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
@@ -369,7 +386,7 @@ index 0000000000000000000000000000000000000000..98df09ee6eb37797ce764bbca69f482f
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
 +        LOGGER.info("Connected to external server " + bungeecordName);
-+        connection.externalServer = MultiPaper.getConnection().getServersMap().computeIfAbsent(bungeecordName, key -> new ExternalServer(key, key.equals(MultiPaper.getBungeeCordName())));
++        connection.externalServer = MultiPaper.getConnection().getOrCreateServer(bungeecordName);
 +        connection.externalServer.setConnection(connection);
 +    }
 +}

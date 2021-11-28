@@ -927,7 +927,7 @@ index 0000000000000000000000000000000000000000..d005a38ecbbf449ab28af593e22eb2b6
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 6366cd1defa3de59963e8fd5ec4e87a567b81b54..09815dcf20899e8915a8bf86c4857c3d8ed564e2 100644
+index f6f7d74d354373fc21dd988757792ab575e3ad64..db203c8423b2cc33b6bdab0d123cdbc7085d0e39 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -1,17 +1,25 @@
@@ -956,7 +956,7 @@ index 6366cd1defa3de59963e8fd5ec4e87a567b81b54..09815dcf20899e8915a8bf86c4857c3d
  
  public class MultiPaperConnection extends Thread {
  
-@@ -129,6 +137,64 @@ public class MultiPaperConnection extends Thread {
+@@ -133,6 +141,64 @@ public class MultiPaperConnection extends Thread {
          server.setLastAlive(System.currentTimeMillis());
      }
  
@@ -965,7 +965,7 @@ index 6366cd1defa3de59963e8fd5ec4e87a567b81b54..09815dcf20899e8915a8bf86c4857c3d
 +        int cx = in.readInt();
 +        int cz = in.readInt();
 +        String owner = in.readUTF();
-+        ExternalServer server = owner.isEmpty() ? null : serversMap.computeIfAbsent(owner, key -> new ExternalServer(key, key.equals(myName)));
++        ExternalServer server = owner.isEmpty() ? null : getOrCreateServer(owner);
 +
 +        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
 +        if (chunk != null) {
@@ -991,7 +991,7 @@ index 6366cd1defa3de59963e8fd5ec4e87a567b81b54..09815dcf20899e8915a8bf86c4857c3d
 +        String world = in.readUTF();
 +        int cx = in.readInt();
 +        int cz = in.readInt();
-+        ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
++        ExternalServer server = getOrCreateServer(in.readUTF());
 +
 +        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
 +        if (chunk instanceof LevelChunk) {
@@ -1005,7 +1005,7 @@ index 6366cd1defa3de59963e8fd5ec4e87a567b81b54..09815dcf20899e8915a8bf86c4857c3d
 +        String world = in.readUTF();
 +        int cx = in.readInt();
 +        int cz = in.readInt();
-+        ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
++        ExternalServer server = getOrCreateServer(in.readUTF());
 +
 +        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
 +        if (chunk instanceof LevelChunk) {
@@ -1021,7 +1021,7 @@ index 6366cd1defa3de59963e8fd5ec4e87a567b81b54..09815dcf20899e8915a8bf86c4857c3d
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -157,4 +223,122 @@ public class MultiPaperConnection extends Thread {
+@@ -161,4 +227,122 @@ public class MultiPaperConnection extends Thread {
          out.writeInt(port);
          out.send(null);
      }

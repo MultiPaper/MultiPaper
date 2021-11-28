@@ -611,7 +611,7 @@ index e69f5750bd4003cf08ea6de73e54fae6d7a639ac..cdeef29cd561b6962baa1156c8a7b426
              }
              getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 28257d68a53400e59e82826c14e7688c1093f9cc..f6fa93d6a84fb0176d164794cf3bab6da446d757 100644
+index 19f7084c61dff18f83c16fbf52a3707ac0d27a80..89b51127fbc849fafa14c02d2192c7a9ad2d5632 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -1,6 +1,9 @@
@@ -633,7 +633,7 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..f6fa93d6a84fb0176d164794cf3bab6d
  
  import javax.annotation.Nullable;
  import java.io.*;
-@@ -249,6 +254,41 @@ public class MultiPaperConnection extends Thread {
+@@ -253,6 +258,41 @@ public class MultiPaperConnection extends Thread {
          }
      }
  
@@ -641,7 +641,7 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..f6fa93d6a84fb0176d164794cf3bab6d
 +        String world = in.readUTF();
 +        int cx = in.readInt();
 +        int cz = in.readInt();
-+        ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
++        ExternalServer server = getOrCreateServer(in.readUTF());
 +
 +        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
 +        if (chunk instanceof LevelChunk) {
@@ -662,7 +662,7 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..f6fa93d6a84fb0176d164794cf3bab6d
 +        String world = in.readUTF();
 +        int cx = in.readInt();
 +        int cz = in.readInt();
-+        ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
++        ExternalServer server = getOrCreateServer(in.readUTF());
 +
 +        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
 +        if (chunk instanceof LevelChunk) {
@@ -675,7 +675,7 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..f6fa93d6a84fb0176d164794cf3bab6d
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -333,6 +373,11 @@ public class MultiPaperConnection extends Thread {
+@@ -337,6 +377,11 @@ public class MultiPaperConnection extends Thread {
                      server.getConnection().requestChunk(world, cx, cz, data2 -> {
                          future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
                      });
@@ -687,7 +687,7 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..f6fa93d6a84fb0176d164794cf3bab6d
                  } else {
                      future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
                  }
-@@ -353,10 +398,13 @@ public class MultiPaperConnection extends Thread {
+@@ -357,10 +402,13 @@ public class MultiPaperConnection extends Thread {
      }
  
      public void writeChunk(String world, String path, int cx, int cz, byte[] data) throws IOException {
@@ -705,7 +705,7 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..f6fa93d6a84fb0176d164794cf3bab6d
  
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeChunk");
-@@ -364,8 +412,8 @@ public class MultiPaperConnection extends Thread {
+@@ -368,8 +416,8 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(path);
          out.writeInt(cx);
          out.writeInt(cz);
@@ -716,7 +716,7 @@ index 28257d68a53400e59e82826c14e7688c1093f9cc..f6fa93d6a84fb0176d164794cf3bab6d
          out.send(in -> { /* Do nothing */ });
      }
      
-@@ -601,4 +649,13 @@ public class MultiPaperConnection extends Thread {
+@@ -605,4 +653,13 @@ public class MultiPaperConnection extends Thread {
          out.writeInt(cz);
          out.send(null);
      }
@@ -1469,10 +1469,10 @@ index 0000000000000000000000000000000000000000..8482ed16ef089d1b2b882672ee4d82da
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..672e5477153e2743550b7a832af6e72a2f297563
+index 0000000000000000000000000000000000000000..6215a9b547e36ea51fd1f42c066d8b09c28d63ae
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
-@@ -0,0 +1,138 @@
+@@ -0,0 +1,139 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.SharedConstants;
@@ -1556,6 +1556,7 @@ index 0000000000000000000000000000000000000000..672e5477153e2743550b7a832af6e72a
 +        world = in.readUTF();
 +        cx = in.readInt();
 +        cz = in.readInt();
++
 +        int byteLength = in.readInt();
 +        data = new byte[byteLength];
 +        in.readFully(data);

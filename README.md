@@ -1,58 +1,58 @@
 MultiPaper
 ==
 
-[Airplane](https://github.com/TECHNOVE/Airplane) fork
+1.18 [Airplane](https://github.com/TECHNOVE/Airplane) fork
 that enables a server admin to run a single world across multiple
-servers. Multiple MultiPaper servers run the same work and use a
+servers. Multiple MultiPaper servers run the same world and use a
 MultiPaper-Master to coordinate with eachother and store server data. While the
 MultiPaper-Master is usually run as a standalone server, it can also be run as a
 BungeeCord plugin, which has some benefits including being able to send players
-to the least busiest server when they first join.
+to the least busiest server when they join.
 
 MultiPaper 2.0:
 
 - Works like a CDN
     - Each server caches chunks that are needed by the players it's serving
-    - The servers also work together to ensure every chunk gets ticked
-    - Does not need BungeeCord, just a way to distribute players evenly across
-      the server
+    - The servers work together to ensure every chunk gets ticked
+    - Does not need BungeeCord, just some method to evenly distribute players
+      across the servers
 
-- Master server
+- MultiPaper-Master
     - Stores the world and data on it
     - Coordinates the servers
         - Decides who gets to tick the chunk (first in first served basis)
-    - Prevents conflicts
-        - Ensures there's no conflicting entity ids
-        - Syncs map and other data between the servers
     - Runs as a standalone process
-        - For convenience, it can also run as a BungeeCord plugin
-
-- Every server has a copy of every player on the server
-    - Players that are on different servers are ExternalPlayers
-- ExternalPlayers do not load chunks, but can receive packets if there's another
-  player nearby to load the chunks, and forwards these packets to the
-  ExternalPlayer's server so that they are sent to the real player
-- Servers do not send packets for chunks that they are not ticking
+        - For your convenience, it can also run as a BungeeCord plugin
 
 How chunk syncing works:
 
 - When a server reads a chunk, it asks the Master to load the chunk from the
   region file. If another server has ownership of the chunk, the Master will
-  tell the server to load the chunk from the other server and subscribe to it.
+  tell the server to load the chunk from the other server.
 - If the chunk has no owner and is loaded, it won't immediately be taken
   ownership of as it could be an edge chunk that won't get ticked.
-- When the server wants to tick an unowned chunk, it won't but will send a
-  request to the Master to take ownership of it. If ownership is granted, the
-  chunk will be ticked next tick. If ownership is denied since another server
-  owns it, the server will redownload the chunk from that server and subscribe
-  to it.
-- Each tick the server will keep track of what chunks it has ticked. If a chunk
-  it owns hasn't been ticked, it'll remove ownership of the chunk. The Master
-  will check if any other servers are subscribed to the chunk, and update them
-  with a new owner.
-- If a server is subscribed to another server's chunk, that means any block
-  changes will be sent to that server to keep it in sync.
-  
+- When the server wants to tick an unowned chunk, it won't, but will instead
+  send a request to the Master to take ownership of it. If ownership is
+  granted, the chunk will be ticked on next tick. If ownership is denied since
+  another server owns it, the server will redownload the chunk from that
+  server.
+- When a server has a chunk laoded into memory, it will be subscribed to
+  any changes made in that chunk. That means if any server changes a block
+  within the chunk, it will be updated on all servers subscribed to that chunk.
+
+Commands
+------
+MultiPaper includes a few commands mainly for debug purposes:
+
+`/servers`  
+List all servers running on this MultiPaper cluster. Includes performance
+indicators such as TPS, tick duration, and player count.
+
+`/mpdebug`  
+Toggle a debug visualisation showing chunks that your server is ticking (aqua)
+and chunks being ticked by another server (red). The server ticking the chunk
+you are standing in is displayed above the action bar.
+
 Setting up MultiPaper
 ------
   * Place your worlds inside the directory being used for MultiPaper-Master
@@ -81,17 +81,13 @@ database.
 Some other things to look out for:
 
   * Caches can prevent the plugin from getting the most up to date data.
-  * Due to the nature of BungeeCord, when a player swaps servers, 
-    `PlayerJoinEvent` will usually be called on the arriving server before
-    `PlayerQuitEvent` is called on the departing server.
+  * `PlayerJoinEvent` and `PlayerQuitEvent` will only be called on one server,
+    however other events for the player could be called on any server.
   * `Bukkit.broadcastMessage` will send the message to all players on all
-    MultiPaper servers, while `Bukkit.getOnlinePlayers` will only return the
-    players on your singular MultiPaper server.
-
-## How To (Server Admins)
-MultiPaper uses the same paperclip jar system that Paper uses.
-
-You can also [build it yourself](https://github.com/PureGero/MultiPaper#building)
+    MultiPaper servers.
+  * `Bukkit.getOnlinePlayers` will return the players on all MultiPaper
+    servers, an API will be made available for determining which players are
+    on your server, and which players are on other servers.
 
 ## Building
 Requirements:
@@ -109,22 +105,6 @@ Build instructions:
 
 ## Publishing to maven local
 Publish to your local maven repository with: `./gradlew publishToMavenLocal`
-
-## Tasks
-
-```
-Paperweight tasks
------------------
-./gradlew applyPatches
-./gradlew cleanCache - Delete the project setup cache and task outputs.
-./gradlew patchPaperApi
-./gradlew patchPaperServer
-./gradlew rebuildPaperApi
-./gradlew rebuildPaperServer
-./gradlew rebuildPatches
-./gradlew runDev - Spin up a non-shaded non-remapped test server
-./gradlew runShadow - Spin up a test server from the shadowJar archiveFile
-```
 
 ### Note
 

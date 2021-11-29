@@ -4,6 +4,37 @@ Date: Sun, 21 Nov 2021 22:41:15 +1000
 Subject: [PATCH] Sync entities
 
 
+diff --git a/src/main/java/net/minecraft/network/protocol/game/ClientboundSetEntityDataPacket.java b/src/main/java/net/minecraft/network/protocol/game/ClientboundSetEntityDataPacket.java
+index 3e17f6131bf590d7c4a16b79c1c145cb4f565bc9..dbf837d5c97337b7422f4fcf67d332ce41a99414 100644
+--- a/src/main/java/net/minecraft/network/protocol/game/ClientboundSetEntityDataPacket.java
++++ b/src/main/java/net/minecraft/network/protocol/game/ClientboundSetEntityDataPacket.java
+@@ -11,6 +11,13 @@ public class ClientboundSetEntityDataPacket implements Packet<ClientGamePacketLi
+     @Nullable
+     private final List<SynchedEntityData.DataItem<?>> packedItems;
+ 
++    // MultiPaper start
++    public ClientboundSetEntityDataPacket(int id, List<SynchedEntityData.DataItem<?>> packedItems) {
++        this.id = id;
++        this.packedItems = packedItems;
++    }
++    // MultiPaper end
++
+     public ClientboundSetEntityDataPacket(int id, SynchedEntityData tracker, boolean forceUpdateAll) {
+         this.id = id;
+         if (forceUpdateAll) {
+diff --git a/src/main/java/net/minecraft/network/syncher/SynchedEntityData.java b/src/main/java/net/minecraft/network/syncher/SynchedEntityData.java
+index 4df12454001f0de5f358c88d876e34c35a736c42..43e489b5d79649904208a516447bf7413867000f 100644
+--- a/src/main/java/net/minecraft/network/syncher/SynchedEntityData.java
++++ b/src/main/java/net/minecraft/network/syncher/SynchedEntityData.java
+@@ -106,7 +106,7 @@ public class SynchedEntityData {
+         // this.lock.writeLock().unlock(); // Spigot - not required
+     }
+ 
+-    private <T> SynchedEntityData.DataItem<T> getItem(EntityDataAccessor<T> datawatcherobject) {
++    public <T> SynchedEntityData.DataItem<T> getItem(EntityDataAccessor<T> datawatcherobject) { // MultiPaper - make public
+         // Spigot start
+         /*
+         this.lock.readLock().lock();
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
 index 76ddd2fd9aae82a75f6b2ca27aca43a45e017ab2..144d3eca8bb57de646cac1414ed9529f39b61176 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
@@ -458,18 +489,39 @@ index 5a72ce41cc57578498c4a072a1eb04ac28958afe..48f78d2add9e6a7002a69df05c77d6be
          FRESH, PENDING, LOADED;
  
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index a40ee070a72d7428713a32d12118bb1317fdc5f0..ce817104e8f7e7d8bc0a620eb70dbd0ad33c0f46 100644
+index a40ee070a72d7428713a32d12118bb1317fdc5f0..648127865f7d00eff21461df5c1df7658b4a1dc1 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -6,6 +6,7 @@ import io.netty.util.concurrent.GenericFutureListener;
+@@ -6,6 +6,9 @@ import io.netty.util.concurrent.GenericFutureListener;
  import net.minecraft.network.Connection;
  import net.minecraft.network.protocol.Packet;
  import net.minecraft.network.protocol.PacketFlow;
 +import net.minecraft.network.protocol.game.ClientboundPlayerInfoPacket;
++import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
++import net.minecraft.network.syncher.EntityDataAccessor;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
  import net.minecraft.server.network.ServerGamePacketListenerImpl;
-@@ -38,6 +39,17 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -15,8 +18,10 @@ import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
+ import org.bukkit.craftbukkit.CraftServer;
+ import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.externalserverprotocol.EntityUpdatePacket;
+ 
+ import javax.annotation.Nullable;
++import java.util.Collections;
+ import java.util.UUID;
+ 
+ public class ExternalPlayer extends ServerPlayer {
+@@ -24,6 +29,7 @@ public class ExternalPlayer extends ServerPlayer {
+     private static final Logger LOGGER = LogManager.getLogger(ExternalPlayer.class.getSimpleName());
+     public ExternalServerConnection externalServerConnection;
+     private boolean sendPackets = true;
++    public boolean updatingData = false;
+ 
+     public static void create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, GameType gamemode) {
+         new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, gamemode);
+@@ -38,6 +44,17 @@ public class ExternalPlayer extends ServerPlayer {
          this.onGround = true;
          connection = new ServerGamePacketListenerImpl(getServer(), new ExternalPlayerConnection(PacketFlow.CLIENTBOUND), this);
          setPos(x, y, z);
@@ -487,7 +539,22 @@ index a40ee070a72d7428713a32d12118bb1317fdc5f0..ce817104e8f7e7d8bc0a620eb70dbd0a
          getServer().getPlayerList().addPlayer(this);
          ((ServerLevel) level).addNewPlayer(this);
          sendPackets = false;
-@@ -72,9 +84,4 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -47,6 +64,14 @@ public class ExternalPlayer extends ServerPlayer {
+         gameMode.changeGameModeForPlayer(gamemode);
+     }
+ 
++    @Override
++    public void onSyncedDataUpdated(EntityDataAccessor<?> data) {
++        if (!updatingData) {
++            MultiPaper.broadcastPacketToExternalServers(new EntityUpdatePacket(this,
++                    new ClientboundSetEntityDataPacket(getId(), Collections.singletonList(getEntityData().getItem(data)))));
++        }
++    }
++
+     private class ExternalPlayerConnection extends Connection {
+         public ExternalPlayerConnection(PacketFlow side) {
+             super(side);
+@@ -72,9 +97,4 @@ public class ExternalPlayer extends ServerPlayer {
              }
          }
      }
@@ -774,10 +841,10 @@ index 19f7084c61dff18f83c16fbf52a3707ac0d27a80..89b51127fbc849fafa14c02d2192c7a9
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..266816ce2e6f0d192caf3f1623368bc339f3edd9
+index 0000000000000000000000000000000000000000..76b237edacffc90e1c26f37cdd30213639d4af11
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,238 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -887,12 +954,18 @@ index 0000000000000000000000000000000000000000..266816ce2e6f0d192caf3f1623368bc3
 +        } else if (packet instanceof ClientboundRotateHeadPacket rotateHeadPacket) {
 +            entity.setYHeadRot(rotateHeadPacket.getYHeadRot() * 360f / 256);
 +        } else if (packet instanceof ClientboundSetEntityDataPacket setEntityDataPacket) {
++            if (entity instanceof ExternalPlayer) {
++                ((ExternalPlayer) entity).updatingData = true;
++            }
 +            if (setEntityDataPacket.getUnpackedData() != null) {
 +                for (SynchedEntityData.DataItem item : setEntityDataPacket.getUnpackedData()) {
 +                    entity.getEntityData().set(item.getAccessor(), item.getValue());
 +                }
 +            } else {
 +                LOGGER.warn("ClientboundSetEntityDataPacket.getUnpackedData() was null");
++            }
++            if (entity instanceof ExternalPlayer) {
++                ((ExternalPlayer) entity).updatingData = false;
 +            }
 +        } else if (packet instanceof ClientboundUpdateAttributesPacket updateAttributesPacket) {
 +            for (ClientboundUpdateAttributesPacket.AttributeSnapshot snapshot : updateAttributesPacket.getValues()) {

@@ -23,7 +23,7 @@ void execBalanceCommand(Player player) {
 }
 ```
 
-## Option 2: Polling with MySQL (Not preferred)
+## Option 2: Polling with MySQL (not preferred)
 
 These database operations can be slow, so sometimes they'll need to be kept
 in memory to speed up tasks. A common example of this is storing the player's
@@ -78,5 +78,79 @@ every second, but that would just be even more inefficient.
 
 To solve this, we will use a notification model. This is where another client
 notifies us whenever data is changed. Unfortunately, MySQL does not support
-notifications, so we'll have to use another service such as PostgreSQL. See
-[Using PostgreSQL with a Bukkit plugin](https://github.com/PureGero/PostgreSQLTestPlugin/blob/main/README.md).
+notifications, so we'll have to use another service such as PostgreSQL.
+
+To set up PostgreSQL with your Bukkit plugin, first add the following to the
+plugin.yml to load the PostgreSQL library into Spigot:
+
+```yaml
+libraries:
+  - com.impossibl.pgjdbc-ng:pgjdbc-ng:0.8.9
+```
+
+Then, add the following dependency to your pom.xml (note that this dependency
+is on maven central, so you don't need to add a repository):
+
+```xml
+<dependencies>
+  <dependency>
+    <groupId>com.impossibl.pgjdbc-ng</groupId>
+    <artifactId>pgjdbc-ng</artifactId>
+    <version>0.8.9</version>
+  </dependency>
+</dependencies>
+```
+
+Finally, set up the notification model in your plugin:
+
+```java
+// Multi-server compatible
+
+private PGConnection connection;
+
+@Override
+public void onEnable() {
+  try {
+    // Create the connection
+    PGDataSource ds = new PGDataSource();
+    ds.setServerName("localhost");
+    ds.setDatabaseName("test");
+    ds.setUser("postgres");
+    ds.setPassword("password");
+
+    connection = (PGConnection) ds.getConnection();
+
+    // Listen for notifications
+    connection.addNotificationListener(new PGNotificationListener() {
+      public void notification(int processId, String channelName, String payload) {
+        getLogger().info("notification for " + channelName + ": " + payload);
+        // This is where you'd handle notifications from other servers
+      }
+    });
+
+    // Listen to the `test` channel
+    try (Statement statement = connection.createStatement()) {
+      statement.execute("LISTEN test");
+    }
+
+    // Send a notification to the `test` channel
+    // This will send the notification to every server listening to the `test` channel
+    sendNotification("test", "payload goes here");
+  } catch (Exception e) {
+    throw new RuntimeException(e);
+  }
+}
+
+public void sendNotification(String channel, String payload) throws SQLException {
+  try (Statement statement = connection.createStatement()) {
+    statement.execute("NOTIFY " + channel + ", '" + payload + "'");
+  }
+}
+```
+
+## Options 4: Subscriptions with Firestore (not covered)
+
+The final option is a subscription-based model. This is where the database will
+send you data as it changes. Firestore is one such service that provides this
+model, but unfortunately it can't be self-hosted and thus will not be covered
+here.

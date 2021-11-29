@@ -191,10 +191,10 @@ index eaa005c1c9b4386bcdbe1d6eb28c3eca7635066c..dc32c5711e5982a446572b54c97011b7
              // CraftBukkit start
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4b23eba0af2518c164f1c3a39853abb718384783
+index 0000000000000000000000000000000000000000..eb30e9ab62e6e3f9b28c6612732266d074203db5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,73 @@
 +package puregero.multipaper;
 +
 +import com.mojang.authlib.GameProfile;
@@ -220,6 +220,7 @@ index 0000000000000000000000000000000000000000..4b23eba0af2518c164f1c3a39853abb7
 +
 +    private static final Logger LOGGER = LogManager.getLogger(ExternalPlayer.class.getSimpleName());
 +    public ExternalServerConnection externalServerConnection;
++    private boolean sendPackets = true;
 +
 +    public static void create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, GameType gamemode) {
 +        new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, gamemode);
@@ -235,8 +236,10 @@ index 0000000000000000000000000000000000000000..4b23eba0af2518c164f1c3a39853abb7
 +        setPos(x, y, z);
 +        getServer().getPlayerList().addPlayer(this);
 +        ((ServerLevel) level).addNewPlayer(this);
++        sendPackets = false;
 +        containerMenu.transferTo(containerMenu, getBukkitEntity());
 +        initInventoryMenu();
++        sendPackets = true;
 +        gameMode.changeGameModeForPlayer(gamemode);
 +    }
 +
@@ -257,7 +260,11 @@ index 0000000000000000000000000000000000000000..4b23eba0af2518c164f1c3a39853abb7
 +
 +        @Override
 +        public void send(Packet<?> packet, @Nullable GenericFutureListener<? extends Future<? super Void>> callback) {
++            if (sendPackets) {
 +
++            } else {
++//                LOGGER.info("Not sending packet " + packet.getClass().getSimpleName());
++            }
 +        }
 +    }
 +}

@@ -7,7 +7,7 @@ document will describe the options available to keeping data in sync.
 
 ## Option 1: Have only 1 source of truth
 
-Do not keep any copies of the data within your application, whenever you need
+Do not keep any copies of the data within your application. Whenever you need
 to access the data, query it from the database. For example, if Steve wants to
 check his balance, the plugin would get his balance directly from the database.
 
@@ -25,9 +25,9 @@ void execBalanceCommand(Player player) {
 
 ## Option 2: Polling with MySQL (not preferred)
 
-These database operations can be slow, so sometimes they'll need to be kept
-in memory to speed up tasks. A common example of this is storing the player's
-data when they log into the server.
+These database operations can be quite slow, so sometimes they'll need to be
+kept  in memory to speed up tasks. A common example of this is storing the
+player's data when they log into the server.
 
 ```java
 // Not multi-server compatible
@@ -106,7 +106,8 @@ Finally, set up the notification model in your plugin:
 ```java
 // Multi-server compatible
 
-private PGConnection connection;
+Map<String, Integer> playerBalances = new HashMap<>();
+PGConnection connection;
 
 @Override
 public void onEnable() {
@@ -125,17 +126,19 @@ public void onEnable() {
       public void notification(int processId, String channelName, String payload) {
         getLogger().info("notification for " + channelName + ": " + payload);
         // This is where you'd handle notifications from other servers
+        if (channelName.equals("balances")) {
+          // The payload is the uuid for the `balances` channel
+          // Update the uuid's balance
+          int updatedBalance = Database.getBalance(payload);
+          playerBalances.put(payload, updatedBalance);
+        }
       }
     });
 
-    // Listen to the `test` channel
+    // Listen to the `balances` channel
     try (Statement statement = connection.createStatement()) {
-      statement.execute("LISTEN test");
+      statement.execute("LISTEN balances");
     }
-
-    // Send a notification to the `test` channel
-    // This will send the notification to every server listening to the `test` channel
-    sendNotification("test", "payload goes here");
   } catch (Exception e) {
     throw new RuntimeException(e);
   }
@@ -145,6 +148,22 @@ public void sendNotification(String channel, String payload) throws SQLException
   try (Statement statement = connection.createStatement()) {
     statement.execute("NOTIFY " + channel + ", '" + payload + "'");
   }
+}
+
+/**
+ * Update a balance for a player to be a certain value
+ */
+public void updateBalance(Player player, int value) throws SQLException {
+  String uuid = player.getUUID().toString();
+  
+  // Put the new value in our cache
+  playerBalances.put(uuid, value);
+  
+  // Set the balance on the database
+  Database.setBalance(uuid, value);
+  
+  // Send a notification to all servers to update the uuid's balance
+  sendNotification("balances", uuid);
 }
 ```
 

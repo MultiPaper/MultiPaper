@@ -5,10 +5,10 @@ Subject: [PATCH] Reduce entity allocations
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 83c026a699ad0dfe95f1a370667eb9e9040207dc..bb50f5593b90652563460f0d15a06616c689c7f0 100644
+index ff49b16905012894d13e6c73456bf447570eac33..76068864a2311dbe5dd58107daffca5f7bd1b0c5 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -340,6 +340,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+@@ -343,6 +343,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
      // Spigot end
      // Airplane start
      public int activatedPriority = gg.airplane.AirplaneConfig.maximumActivationPrio; // golf score
@@ -16,17 +16,6 @@ index 83c026a699ad0dfe95f1a370667eb9e9040207dc..bb50f5593b90652563460f0d15a06616
      // Airplane end
  
      public float getBukkitYaw() {
-@@ -2466,9 +2467,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
- 
-             // Paper start
-             return io.papermc.paper.util.CollisionUtil.getCollisionsForBlocksOrWorldBorder(this.level, this, axisalignedbb, null,
--                false, false, false, true, (iblockdata, blockposition) -> {
--                    return iblockdata.isSuffocating(this.level, blockposition);
--            });
-+                false, false, false, true, this.level.isAlmostSuffocating); // Airplane - don't allocate lambda here
-             // Paper end
-         }
-     }
 diff --git a/src/main/java/net/minecraft/world/entity/ai/attributes/AttributeMap.java b/src/main/java/net/minecraft/world/entity/ai/attributes/AttributeMap.java
 index 9cbfda029782385d1a7987f5be46d450bd8a758e..d3e97858dacc850012e5585ac44a1aeafc82b8f4 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/attributes/AttributeMap.java
@@ -58,10 +47,10 @@ index 9cbfda029782385d1a7987f5be46d450bd8a758e..d3e97858dacc850012e5585ac44a1aea
  
      public boolean hasAttribute(Attribute attribute) {
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 36a25a1e7b5aa6c605100febcf5acccf6e5a3c3c..ed4e80895d21c266df7ff83243b4c3bc76c760ab 100644
+index 27eaa8433e047ab83d28c9183ea816d7791b9c80..5b86437d1dd51cc16060eff8135d8efe2ad7661d 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
-@@ -176,6 +176,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -177,6 +177,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
      public final Map<Explosion.CacheKey, Float> explosionDensityCache = new HashMap<>(); // Paper - Optimize explosions
      public java.util.ArrayDeque<net.minecraft.world.level.block.RedstoneTorchBlock.Toggle> redstoneUpdateInfos; // Paper - Move from Map in BlockRedstoneTorch to here
  

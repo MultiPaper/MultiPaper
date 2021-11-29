@@ -5,10 +5,10 @@ Subject: [PATCH] Sync time
 
 
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index b39db9051bef0b42a9dc8cf82e3830bc45f83a69..a01ae5f2820a2aed02047dc65915fd76f525c1f4 100644
+index 29c5df60f90ce0ad1bf8a20116b063bdf72ad68e..89b370397af638f6bc3c5ec89dcea5c980e83048 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -1589,6 +1589,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1571,6 +1571,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
              long worldTime = world.getGameTime();
              final ClientboundSetTimePacket worldPacket = new ClientboundSetTimePacket(worldTime, dayTime, doDaylight);
              for (Player entityhuman : world.players()) {
@@ -17,10 +17,10 @@ index b39db9051bef0b42a9dc8cf82e3830bc45f83a69..a01ae5f2820a2aed02047dc65915fd76
                      continue;
                  }
 diff --git a/src/main/java/net/minecraft/server/commands/TimeCommand.java b/src/main/java/net/minecraft/server/commands/TimeCommand.java
-index dca61ccc2dfc15f0ee18034283812ab478c0fd32..955ffaffb4a06e0610173706f9d6515dcefcdf79 100644
+index 29ccc4286786cdf0b11d7c28f6bfc453fb27fd45..7294bc593c7a24c1645e0e89dd7e7365dab118d1 100644
 --- a/src/main/java/net/minecraft/server/commands/TimeCommand.java
 +++ b/src/main/java/net/minecraft/server/commands/TimeCommand.java
-@@ -12,6 +12,8 @@ import net.minecraft.server.level.ServerLevel;
+@@ -11,6 +11,8 @@ import net.minecraft.server.level.ServerLevel;
  // CraftBukkit start
  import org.bukkit.Bukkit;
  import org.bukkit.event.world.TimeSkipEvent;
@@ -29,7 +29,7 @@ index dca61ccc2dfc15f0ee18034283812ab478c0fd32..955ffaffb4a06e0610173706f9d6515d
  // CraftBukkit end
  
  public class TimeCommand {
-@@ -62,6 +64,7 @@ public class TimeCommand {
+@@ -61,6 +63,7 @@ public class TimeCommand {
              Bukkit.getPluginManager().callEvent(event);
              if (!event.isCancelled()) {
                  worldserver.setDayTime((long) worldserver.getDayTime() + event.getSkipAmount());
@@ -37,7 +37,7 @@ index dca61ccc2dfc15f0ee18034283812ab478c0fd32..955ffaffb4a06e0610173706f9d6515d
              }
              // CraftBukkit end
          }
-@@ -81,6 +84,7 @@ public class TimeCommand {
+@@ -80,6 +83,7 @@ public class TimeCommand {
              Bukkit.getPluginManager().callEvent(event);
              if (!event.isCancelled()) {
                  worldserver.setDayTime(worldserver.getDayTime() + event.getSkipAmount());
@@ -46,10 +46,10 @@ index dca61ccc2dfc15f0ee18034283812ab478c0fd32..955ffaffb4a06e0610173706f9d6515d
              // CraftBukkit end
          }
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index f8e29035de239718cec7640c8df03639c31457dc..04098de654aa0e72b35ae18e2a041ea661cc0be2 100644
+index 4445e0f91293c28767986626e01bd38d217d1dc1..e76787b6ab3083ebf5105dc1887a44c2f086353d 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -162,7 +162,9 @@ import org.bukkit.event.weather.LightningStrikeEvent;
+@@ -159,7 +159,9 @@ import org.bukkit.event.weather.LightningStrikeEvent;
  import org.bukkit.event.world.TimeSkipEvent;
  // CraftBukkit end
  import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
@@ -59,19 +59,19 @@ index f8e29035de239718cec7640c8df03639c31457dc..04098de654aa0e72b35ae18e2a041ea6
  
  public class ServerLevel extends Level implements WorldGenLevel {
  
-@@ -700,6 +702,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -588,6 +590,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
                  getCraftServer().getPluginManager().callEvent(event);
                  if (!event.isCancelled()) {
                      this.setDayTime(this.getDayTime() + event.getSkipAmount());
 +                    MultiPaper.broadcastPacketToExternalServers(new TimeUpdatePacket(this, true)); // MultiPaper
                  }
- 
              }
+ 
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index 00d8b61c04ac91770b0ff3b846d3ff70bef2e8e7..a9063440f4a06913e9afcbd2eded04325bb0363a 100644
+index ac41bc23d2f7e16bbacdc9b33fcf6c0d706fa023..e4efac7522292897911eb822c7c6786eb01aa4bf 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-@@ -114,6 +114,8 @@ import org.bukkit.util.BoundingBox;
+@@ -116,6 +116,8 @@ import org.bukkit.util.BoundingBox;
  import org.bukkit.util.Consumer;
  import org.bukkit.util.RayTraceResult;
  import org.bukkit.util.Vector;
@@ -80,7 +80,7 @@ index 00d8b61c04ac91770b0ff3b846d3ff70bef2e8e7..a9063440f4a06913e9afcbd2eded0432
  
  public class CraftWorld extends CraftRegionAccessor implements World {
      public static final int CUSTOM_DIMENSION_OFFSET = 10;
-@@ -790,6 +792,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -794,6 +796,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
          }
  
          this.world.setDayTime(this.world.getDayTime() + event.getSkipAmount());

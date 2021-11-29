@@ -11,19 +11,19 @@ saved for later, so this should be safe assuming plugins don't use it
 for some strange reason.
 
 diff --git a/src/main/java/net/minecraft/world/phys/shapes/EntityCollisionContext.java b/src/main/java/net/minecraft/world/phys/shapes/EntityCollisionContext.java
-index fcb7bd9f3b6b6ada0f2e5692bce32ab76b8798a7..61c2096f2c034dbc3ad33b193b058c7d0d05e909 100644
+index f1a961b2ff28744d1a32fb1feaa6b1939114c878..8fe8dde41eed1fb4419386a1dbdd26cfa9836967 100644
 --- a/src/main/java/net/minecraft/world/phys/shapes/EntityCollisionContext.java
 +++ b/src/main/java/net/minecraft/world/phys/shapes/EntityCollisionContext.java
-@@ -22,55 +22,82 @@ public class EntityCollisionContext implements CollisionContext {
+@@ -21,51 +21,73 @@ public class EntityCollisionContext implements CollisionContext {
              return defaultValue;
          }
      };
 -    private final boolean descending;
 -    private final double entityBottom;
 -    private final ItemStack heldItem;
--    private final ItemStack footItem;
 -    private final Predicate<Fluid> canStandOnFluid;
--    private final Optional<Entity> entity;
+-    @Nullable
+-    private final Entity entity;
 +    // Airplane start - remove these and pray no plugin uses them
 +    //private final boolean descending;
 +    //private final double entityBottom;
@@ -33,12 +33,11 @@ index fcb7bd9f3b6b6ada0f2e5692bce32ab76b8798a7..61c2096f2c034dbc3ad33b193b058c7d
 +    // Airplane end
 +    private final @org.jetbrains.annotations.Nullable Entity entity; // Airplane
  
-     protected EntityCollisionContext(boolean descending, double minY, ItemStack boots, ItemStack heldItem, Predicate<Fluid> walkOnFluidPredicate, Optional<Entity> entity) {
+     protected EntityCollisionContext(boolean descending, double minY, ItemStack heldItem, Predicate<Fluid> walkOnFluidPrecicate, @Nullable Entity entity) {
 -        this.descending = descending;
 -        this.entityBottom = minY;
--        this.footItem = boots;
 -        this.heldItem = heldItem;
--        this.canStandOnFluid = walkOnFluidPredicate;
+-        this.canStandOnFluid = walkOnFluidPrecicate;
 -        this.entity = entity;
 +        // Airplane start
 +        //this.descending = descending;
@@ -50,27 +49,16 @@ index fcb7bd9f3b6b6ada0f2e5692bce32ab76b8798a7..61c2096f2c034dbc3ad33b193b058c7d
 +        // Airplane end
      }
  
+     /** @deprecated */
      @Deprecated
      protected EntityCollisionContext(Entity entity) {
 +        // Airplane start - remove unneeded things
 +        /*
-         this(entity.isDescending(), entity.getY(), entity instanceof LivingEntity ? ((LivingEntity)entity).getItemBySlot(EquipmentSlot.FEET) : ItemStack.EMPTY, entity instanceof LivingEntity ? ((LivingEntity)entity).getMainHandItem() : ItemStack.EMPTY, entity instanceof LivingEntity ? ((LivingEntity)entity)::canStandOnFluid : (fluid) -> {
+         this(entity.isDescending(), entity.getY(), entity instanceof LivingEntity ? ((LivingEntity)entity).getMainHandItem() : ItemStack.EMPTY, entity instanceof LivingEntity ? ((LivingEntity)entity)::canStandOnFluid : (fluid) -> {
              return false;
-         }, Optional.of(entity));
+         }, entity);
 +         */
 +        this.entity = entity;
-+        // Airplane end
-     }
- 
-     @Override
-     public boolean hasItemOnFeet(Item item) {
--        return this.footItem.is(item);
-+        // Airplane start
-+        Entity entity = this.entity;
-+        if (entity instanceof LivingEntity livingEntity) {
-+            return livingEntity.getItemBySlot(EquipmentSlot.FEET).is(item);
-+        }
-+        return ItemStack.EMPTY.is(item);
 +        // Airplane end
      }
  
@@ -110,7 +98,8 @@ index fcb7bd9f3b6b6ada0f2e5692bce32ab76b8798a7..61c2096f2c034dbc3ad33b193b058c7d
 +        return (this.entity == null ? -Double.MAX_VALUE : entity.getY()) > (double)pos.getY() + shape.max(Direction.Axis.Y) - (double)1.0E-5F; // Airplane
      }
  
-     public Optional<Entity> getEntity() {
+     @Nullable
+     public Entity getEntity() {
 -        return this.entity;
 +        return Optional.ofNullable(this.entity); // Airplane
      }

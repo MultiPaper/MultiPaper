@@ -5,36 +5,36 @@ Subject: [PATCH] Remove lambda from ticking guard
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index bc8471bce49de0aa35bfa74dd81249b1ce7877cc..1ae7a10df7460f223413c38ac6bd85dba15fb347 100644
+index 95469f404cfa0cfe10f43b0fcd9d42a80452f8be..fb9665356dd4e1fc01ecc30cf9c2b459711c745f 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -772,7 +772,20 @@ public class ServerLevel extends Level implements WorldGenLevel {
-                         }
+@@ -664,7 +664,20 @@ public class ServerLevel extends Level implements WorldGenLevel {
+                             }
  
-                         gameprofilerfiller.push("tick");
--                        this.guardEntityTick(this::tickNonPassenger, entity);
-+                        // Airplane start - copied from this.guardEntityTick
-+                        try {
-+                            this.tickNonPassenger(entity); // Airplane - changed
-+                            MinecraftServer.getServer().executeMidTickTasks(); // Tuinity - execute chunk tasks mid tick
-+                        } catch (Throwable throwable) {
-+                            if (throwable instanceof ThreadDeath) throw throwable; // Paper
-+                            // Paper start - Prevent tile entity and entity crashes
-+                            final String msg = String.format("Entity threw exception at %s:%s,%s,%s", entity.level.getWorld().getName(), entity.getX(), entity.getY(), entity.getZ());
-+                            MinecraftServer.LOGGER.error(msg, throwable);
-+                            getCraftServer().getPluginManager().callEvent(new com.destroystokyo.paper.event.server.ServerExceptionEvent(new com.destroystokyo.paper.exception.ServerInternalException(msg, throwable)));
-+                            entity.discard();
-+                            // Paper end
-+                        }
-+                        // Airplane end
-                         gameprofilerfiller.pop();
+                             gameprofilerfiller.push("tick");
+-                            this.guardEntityTick(this::tickNonPassenger, entity);
++                            // Airplane start - copied from this.guardEntityTick
++                            try {
++                                this.tickNonPassenger(entity); // Airplane - changed
++                                MinecraftServer.getServer().executeMidTickTasks(); // Paper - execute chunk tasks mid tick
++                            } catch (Throwable throwable) {
++                                if (throwable instanceof ThreadDeath) throw throwable; // Paper
++                                // Paper start - Prevent tile entity and entity crashes
++                                final String msg = String.format("Entity threw exception at %s:%s,%s,%s", entity.level.getWorld().getName(), entity.getX(), entity.getY(), entity.getZ());
++                                MinecraftServer.LOGGER.error(msg, throwable);
++                                getCraftServer().getPluginManager().callEvent(new com.destroystokyo.paper.event.server.ServerExceptionEvent(new com.destroystokyo.paper.exception.ServerInternalException(msg, throwable)));
++                                entity.discard();
++                                // Paper end
++                            }
++                            // Airplane end
+                             gameprofilerfiller.pop();
+                         }
                      }
-                 }
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index ed4e80895d21c266df7ff83243b4c3bc76c760ab..24d772c18d5a448154909e4a51964ba29485a5c2 100644
+index 5b86437d1dd51cc16060eff8135d8efe2ad7661d..4db17badb6f957f758fa4731c9bbeab02b9761fb 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
-@@ -1090,13 +1090,13 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1072,13 +1072,13 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
          try {
              tickConsumer.accept(entity);
              MinecraftServer.getServer().executeMidTickTasks(); // Paper - execute chunk tasks mid tick

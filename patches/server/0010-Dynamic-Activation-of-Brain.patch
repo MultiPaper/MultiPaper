@@ -87,10 +87,10 @@ index 8d5d5f2cc52227d4302160094d8c93ca59505c19..2ac3e88cf166a3e944f0a02fb8a37923
 +
  }
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 996f09eaf7d1d6c5e27e2bb2630a6bcb18854172..e223225f3a084e46963358a4bad132184a81ecb4 100644
+index 3febcc7e88b74d4bdb45e633fdaa9d3313a6ae0b..70ce1720d11423017779845861f291b8cbff372d 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -338,6 +338,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, n
+@@ -341,6 +341,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
      protected int numCollisions = 0; // Paper
      public void inactiveTick() { }
      // Spigot end
@@ -101,10 +101,10 @@ index 996f09eaf7d1d6c5e27e2bb2630a6bcb18854172..e223225f3a084e46963358a4bad13218
      public float getBukkitYaw() {
          return this.yRot;
 diff --git a/src/main/java/net/minecraft/world/entity/EntityType.java b/src/main/java/net/minecraft/world/entity/EntityType.java
-index 1c446dba5de89698397041ee38a2e1a00bec8a56..03371c99c34ba4b2ffde3f6da36f171b582e3c3f 100644
+index 419a7e9614af2328ed401fc954196056243a984c..c4e21c22189ee1ded7606c51d5af3453dab96286 100644
 --- a/src/main/java/net/minecraft/world/entity/EntityType.java
 +++ b/src/main/java/net/minecraft/world/entity/EntityType.java
-@@ -294,6 +294,7 @@ public class EntityType<T extends Entity> implements EntityTypeTest<Entity, T> {
+@@ -293,6 +293,7 @@ public class EntityType<T extends Entity> implements EntityTypeTest<Entity, T> {
          return Registry.ENTITY_TYPE.getOptional(ResourceLocation.tryParse(id));
      }
  
@@ -113,10 +113,10 @@ index 1c446dba5de89698397041ee38a2e1a00bec8a56..03371c99c34ba4b2ffde3f6da36f171b
      public final String id;
  
 diff --git a/src/main/java/net/minecraft/world/entity/Mob.java b/src/main/java/net/minecraft/world/entity/Mob.java
-index 8a864238e154e2131834d013652746b7e7a78c97..b8e512e1c4b00b468b2d22add5653b98f4a2c81a 100644
+index 0b46066d35d9bb38d98a9d6e5ca8dbdc0ba1dc5a..3aade626190408cd0c5a3f625ccab332f71d4f0d 100644
 --- a/src/main/java/net/minecraft/world/entity/Mob.java
 +++ b/src/main/java/net/minecraft/world/entity/Mob.java
-@@ -207,10 +207,10 @@ public abstract class Mob extends LivingEntity {
+@@ -210,10 +210,10 @@ public abstract class Mob extends LivingEntity {
      @Override
      public void inactiveTick() {
          super.inactiveTick();
@@ -129,18 +129,18 @@ index 8a864238e154e2131834d013652746b7e7a78c97..b8e512e1c4b00b468b2d22add5653b98
              this.targetSelector.tick();
          }
      }
-@@ -838,9 +838,11 @@ public abstract class Mob extends LivingEntity {
-         this.sensing.tick();
-         this.level.getProfiler().pop();
-         this.level.getProfiler().push("targetSelector");
-+        if (this.targetSelector.inactiveTick(this.activatedPriority, false)) // Airplane - use this to alternate ticking
-         this.targetSelector.tick();
-         this.level.getProfiler().pop();
-         this.level.getProfiler().push("goalSelector");
-+        if (this.goalSelector.inactiveTick(this.activatedPriority, false)) // Airplane - use this to alternate ticking
-         this.goalSelector.tick();
-         this.level.getProfiler().pop();
-         this.level.getProfiler().push("navigation");
+@@ -851,9 +851,11 @@ public abstract class Mob extends LivingEntity {
+             this.level.getProfiler().pop();
+         } else {
+             this.level.getProfiler().push("targetSelector");
++            if (this.targetSelector.inactiveTick(this.activatedPriority, false)) // Airplane - use this to alternate ticking
+             this.targetSelector.tick();
+             this.level.getProfiler().pop();
+             this.level.getProfiler().push("goalSelector");
++            if (this.goalSelector.inactiveTick(this.activatedPriority, false)) // Airplane - use this to alternate ticking
+             this.goalSelector.tick();
+             this.level.getProfiler().pop();
+         }
 diff --git a/src/main/java/net/minecraft/world/entity/ai/behavior/VillagerPanicTrigger.java b/src/main/java/net/minecraft/world/entity/ai/behavior/VillagerPanicTrigger.java
 index 42d466f7f162943886078eba3db18f2dfc2d7bee..32da2d3f87758bee359522769ebbee73f4f3256a 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/behavior/VillagerPanicTrigger.java
@@ -159,10 +159,10 @@ index 42d466f7f162943886078eba3db18f2dfc2d7bee..32da2d3f87758bee359522769ebbee73
          }
  
 diff --git a/src/main/java/net/minecraft/world/entity/ai/goal/GoalSelector.java b/src/main/java/net/minecraft/world/entity/ai/goal/GoalSelector.java
-index a96831d5df2b88203aec8fe2a5909708764b38ee..441e2edd8357c4f11093b4dee2192780ac3f3579 100644
+index ad82395c46943e91e7f65d8d67824cc0c965362b..21d8b158ba142ee2c376976a489c59d391da8e2b 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/goal/GoalSelector.java
 +++ b/src/main/java/net/minecraft/world/entity/ai/goal/GoalSelector.java
-@@ -49,9 +49,12 @@ public class GoalSelector {
+@@ -51,9 +51,12 @@ public class GoalSelector {
      }
  
      // Paper start
@@ -178,10 +178,10 @@ index a96831d5df2b88203aec8fe2a5909708764b38ee..441e2edd8357c4f11093b4dee2192780
      public boolean hasTasks() {
          for (WrappedGoal task : this.availableGoals) {
 diff --git a/src/main/java/net/minecraft/world/entity/animal/axolotl/Axolotl.java b/src/main/java/net/minecraft/world/entity/animal/axolotl/Axolotl.java
-index 2b8725087fd3bfeca7162bda2783fdacd13a8390..16adf07774d568852b289ae8507779dd78110fc3 100644
+index 86acf89ce875e215da8469947b382f70e42314b0..3fa3bfc1f49da4dd5b36386f882cb83a89f96b28 100644
 --- a/src/main/java/net/minecraft/world/entity/animal/axolotl/Axolotl.java
 +++ b/src/main/java/net/minecraft/world/entity/animal/axolotl/Axolotl.java
-@@ -275,9 +275,11 @@ public class Axolotl extends Animal implements LerpingModel, Bucketable {
+@@ -276,9 +276,11 @@ public class Axolotl extends Animal implements LerpingModel, Bucketable {
          return true;
      }
  
@@ -189,15 +189,15 @@ index 2b8725087fd3bfeca7162bda2783fdacd13a8390..16adf07774d568852b289ae8507779dd
      @Override
      protected void customServerAiStep() {
          this.level.getProfiler().push("axolotlBrain");
-+        if (this.behaviorTick++ % this.activatedPriority == 0) // Airplane
-         this.getBrain().tick((ServerLevel) this.level, this); // CraftBukkit - decompile error
++        if (this.behaviorTick++ % this.activatedPriority == 0)
+         this.getBrain().tick((ServerLevel) this.level, this);
          this.level.getProfiler().pop();
          this.level.getProfiler().push("axolotlActivityUpdate");
 diff --git a/src/main/java/net/minecraft/world/entity/animal/goat/Goat.java b/src/main/java/net/minecraft/world/entity/animal/goat/Goat.java
-index 32d0387b6c66462ca965add78a562dec3c4b95a9..82a363c5141cd00eec9b7e03e7ac6522b9b3c527 100644
+index cc5687f43f8ac99995667fdc53c5c0586f70f367..3878d4e576bc2b8f48e1a20faa3ba5e1eb07bf78 100644
 --- a/src/main/java/net/minecraft/world/entity/animal/goat/Goat.java
 +++ b/src/main/java/net/minecraft/world/entity/animal/goat/Goat.java
-@@ -144,9 +144,11 @@ public class Goat extends Animal {
+@@ -146,9 +146,11 @@ public class Goat extends Animal {
          return (Brain<Goat>) super.getBrain(); // CraftBukkit - decompile error
      }
  
@@ -206,7 +206,7 @@ index 32d0387b6c66462ca965add78a562dec3c4b95a9..82a363c5141cd00eec9b7e03e7ac6522
      protected void customServerAiStep() {
          this.level.getProfiler().push("goatBrain");
 +        if (this.behaviorTick++ % this.activatedPriority == 0) // Airplane
-         this.getBrain().tick((ServerLevel) this.level, this); // CraftBukkit - decompile error
+         this.getBrain().tick((ServerLevel) this.level, this);
          this.level.getProfiler().pop();
          this.level.getProfiler().push("goatActivityUpdate");
 diff --git a/src/main/java/net/minecraft/world/entity/monster/hoglin/Hoglin.java b/src/main/java/net/minecraft/world/entity/monster/hoglin/Hoglin.java
@@ -226,10 +226,10 @@ index ee0981d2a99c0cebc0a53ac02d2dc5a551b2f7f0..4c111bc335ab8cafe6674b77dcd7a22c
          this.level.getProfiler().pop();
          HoglinAi.updateActivity(this);
 diff --git a/src/main/java/net/minecraft/world/entity/monster/piglin/Piglin.java b/src/main/java/net/minecraft/world/entity/monster/piglin/Piglin.java
-index 37712fe8585ede00569026bba5377ab61ad08ff5..758558c1e312edc730d1f5d7ffdbc5a41356a6e5 100644
+index 8a2c2b4bd603aae37055abd058feb7ee759078ce..94da293325369551c4b3a067de8167fe3bea3fdc 100644
 --- a/src/main/java/net/minecraft/world/entity/monster/piglin/Piglin.java
 +++ b/src/main/java/net/minecraft/world/entity/monster/piglin/Piglin.java
-@@ -289,9 +289,11 @@ public class Piglin extends AbstractPiglin implements CrossbowAttackMob, Invento
+@@ -288,9 +288,11 @@ public class Piglin extends AbstractPiglin implements CrossbowAttackMob, Invento
          return !this.cannotHunt;
      }
  
@@ -237,15 +237,15 @@ index 37712fe8585ede00569026bba5377ab61ad08ff5..758558c1e312edc730d1f5d7ffdbc5a4
      @Override
      protected void customServerAiStep() {
          this.level.getProfiler().push("piglinBrain");
-+        if (this.behaviorTick++ % this.activatedPriority == 0) // Airplane
-         this.getBrain().tick((ServerLevel) this.level, (Piglin) this); // CraftBukkit - decompile error
++        if (this.behaviorTick++ % this.activatedPriority == 0)
+         this.getBrain().tick((ServerLevel) this.level, this);
          this.level.getProfiler().pop();
          PiglinAi.updateActivity(this);
 diff --git a/src/main/java/net/minecraft/world/entity/npc/Villager.java b/src/main/java/net/minecraft/world/entity/npc/Villager.java
-index b746453774054dd2db023b7eea265a395cfc7cc9..4904971710acbb2855ed9ed96fead4aed189c494 100644
+index dbd17107f08c218d88ef075fc04823b83083648b..b69bc047460a475c4a6a87e578f68a621be1066d 100644
 --- a/src/main/java/net/minecraft/world/entity/npc/Villager.java
 +++ b/src/main/java/net/minecraft/world/entity/npc/Villager.java
-@@ -142,6 +142,8 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+@@ -138,6 +138,8 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
          return villageplacetype == PoiType.MEETING;
      });
  
@@ -254,7 +254,7 @@ index b746453774054dd2db023b7eea265a395cfc7cc9..4904971710acbb2855ed9ed96fead4ae
      public Villager(EntityType<? extends Villager> entityType, Level world) {
          this(entityType, world, VillagerType.PLAINS);
      }
-@@ -245,11 +247,17 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
+@@ -241,11 +243,17 @@ public class Villager extends AbstractVillager implements ReputationEventHandler
      }
      // Spigot End
  
@@ -263,7 +263,7 @@ index b746453774054dd2db023b7eea265a395cfc7cc9..4904971710acbb2855ed9ed96fead4ae
      protected void customServerAiStep() { mobTick(false); }
      protected void mobTick(boolean inactive) {
          this.level.getProfiler().push("villagerBrain");
--        if (!inactive) this.getBrain().tick((ServerLevel) this.level, this); // CraftBukkit - decompile error // Paper
+-        if (!inactive) this.getBrain().tick((ServerLevel) this.level, this); // Paper
 +        // Airplane start
 +        if (!inactive) {
 +            if (this.behaviorTick++ % this.activatedPriority == 0) // Airplane
@@ -274,7 +274,7 @@ index b746453774054dd2db023b7eea265a395cfc7cc9..4904971710acbb2855ed9ed96fead4ae
          if (this.assignProfessionWhenSpawned) {
              this.assignProfessionWhenSpawned = false;
 diff --git a/src/main/java/org/spigotmc/ActivationRange.java b/src/main/java/org/spigotmc/ActivationRange.java
-index 9c456cce42ef9d1654df9047d6fc1e0da13dc1c9..305b06fe0ce9a4d031ff37cb50042385162b462c 100644
+index 72400204fbeea41e4af8d3a0d5eef6f2e75e7518..4e326932b194cfab3c330866a59f2fc53be254c6 100644
 --- a/src/main/java/org/spigotmc/ActivationRange.java
 +++ b/src/main/java/org/spigotmc/ActivationRange.java
 @@ -37,6 +37,10 @@ import co.aikar.timings.MinecraftTimings;

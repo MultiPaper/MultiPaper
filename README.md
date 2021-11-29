@@ -94,7 +94,7 @@ Requirements:
 - You need `git` installed, with a configured user name and email. 
    On windows you need to run from git bash.
 - You need `maven` installed
-- You need `jdk` 16+ installed to compile (and `jre` 16+ to run)
+- You need `jdk` 17+ installed to compile (and `jre` 17+ to run)
 
 Build instructions:
 1. Patch paper with: `./gradlew applyPatches`

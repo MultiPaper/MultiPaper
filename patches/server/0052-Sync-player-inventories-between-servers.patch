@@ -5,10 +5,10 @@ Subject: [PATCH] Sync player inventories between servers
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 59f932cb5ae727962851f27a50a7d85bc0683a69..dd2ee961cc35d3e95fcbedb3f20ec0506827e655 100644
+index 792e56f79366256352383ae136f0ab4ede9e1ed9..a8b40897a894173f424697be63e68b2044a7d80f 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-@@ -168,6 +168,7 @@ import org.bukkit.event.player.PlayerPortalEvent;
+@@ -164,6 +164,7 @@ import org.bukkit.event.player.PlayerPortalEvent;
  import org.bukkit.event.player.PlayerTeleportEvent;
  import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
  import org.bukkit.inventory.MainHand;
@@ -16,7 +16,7 @@ index 59f932cb5ae727962851f27a50a7d85bc0683a69..dd2ee961cc35d3e95fcbedb3f20ec050
  import puregero.multipaper.MultiPaper;
  import puregero.multipaper.externalserverprotocol.PlayerChangeDimensionPacket;
  import puregero.multipaper.externalserverprotocol.PlayerChangeGamemodePacket;
-@@ -229,6 +230,7 @@ public class ServerPlayer extends Player {
+@@ -225,6 +226,7 @@ public class ServerPlayer extends Player {
      private final ContainerSynchronizer containerSynchronizer;
      private final ContainerListener containerListener;
      private int containerCounter;
@@ -25,22 +25,22 @@ index 59f932cb5ae727962851f27a50a7d85bc0683a69..dd2ee961cc35d3e95fcbedb3f20ec050
      public boolean wonGame;
      private int containerUpdateDelay; // Paper
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
-index 12998d0e9ae0e148a155faa4468b0f78b8462cc9..007eb44f078628b437dc7fb547e60acf6f66935b 100644
+index dd92cc53f0e6247508c6ce494dd45b4829344b2a..249b1283b3033c08c813b0ca3b71984183f6d3fc 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
-@@ -602,6 +602,7 @@ public class ServerPlayerGameMode {
+@@ -600,6 +600,7 @@ public class ServerPlayerGameMode {
                      stack.setCount(i);
                  } else {
-                     enuminteractionresult1 = stack.placeItem(itemactioncontext, hand);
+                     enuminteractionresult1 = stack.useOn(itemactioncontext, hand);
 +                    player.getInventory().markHandDirty(hand); // MultiPaper
                  }
  
                  if (enuminteractionresult1.consumesAction()) {
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 210f0714534cb4c2e9701199666811112a201117..dd3f99e6a50d9d719d3b53a27424cf3e8fd7d702 100644
+index 0bb9d80af60f0260de974896a1fc2b7fbf705f0c..6ba24e698648dd643a65a950a6853646b4617769 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -215,6 +215,7 @@ import org.bukkit.inventory.SmithingInventory;
+@@ -214,6 +214,7 @@ import org.bukkit.inventory.SmithingInventory;
  import org.bukkit.util.NumberConversions;
  import co.aikar.timings.MinecraftTimings; // Paper
  import puregero.multipaper.MultiPaper;
@@ -48,7 +48,7 @@ index 210f0714534cb4c2e9701199666811112a201117..dd3f99e6a50d9d719d3b53a27424cf3e
  // CraftBukkit end
  
  public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
-@@ -1082,6 +1083,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -1048,6 +1049,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleSelectTrade(ServerboundSelectTradePacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -56,7 +56,7 @@ index 210f0714534cb4c2e9701199666811112a201117..dd3f99e6a50d9d719d3b53a27424cf3e
          int i = packet.getItem();
          AbstractContainerMenu container = this.player.containerMenu;
  
-@@ -1804,6 +1806,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -1743,6 +1745,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
          }
          // Paper end - move check up
  
@@ -65,7 +65,7 @@ index 210f0714534cb4c2e9701199666811112a201117..dd3f99e6a50d9d719d3b53a27424cf3e
          this.player.resetLastActionTime();
          int i = this.player.level.getMaxBuildHeight();
  
-@@ -2027,6 +2031,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -1966,6 +1970,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
  
              this.player.getInventory().selected = packet.getSlot();
              this.player.resetLastActionTime();
@@ -73,7 +73,7 @@ index 210f0714534cb4c2e9701199666811112a201117..dd3f99e6a50d9d719d3b53a27424cf3e
          } else {
              ServerGamePacketListenerImpl.LOGGER.warn("{} tried to set an invalid carried item", this.player.getName().getString());
              this.disconnect("Invalid hotbar selection (Hacking?)", org.bukkit.event.player.PlayerKickEvent.Cause.ILLEGAL_ACTION); // CraftBukkit // Paper - kick event cause
-@@ -2574,6 +2579,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2517,6 +2522,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      public void handleContainerClose(ServerboundContainerClosePacket packetplayinclosewindow, InventoryCloseEvent.Reason reason) {
          // Paper end
          PacketUtils.ensureRunningOnSameThread(packetplayinclosewindow, this, this.player.getLevel());
@@ -81,7 +81,7 @@ index 210f0714534cb4c2e9701199666811112a201117..dd3f99e6a50d9d719d3b53a27424cf3e
  
          if (this.player.isImmobile()) return; // CraftBukkit
          CraftEventFactory.handleInventoryCloseEvent(this.player, reason); // CraftBukkit // Paper
-@@ -2584,6 +2590,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2527,6 +2533,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleContainerClick(ServerboundContainerClickPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -89,7 +89,7 @@ index 210f0714534cb4c2e9701199666811112a201117..dd3f99e6a50d9d719d3b53a27424cf3e
          if (this.player.isImmobile()) return; // CraftBukkit
          this.player.resetLastActionTime();
          if (this.player.containerMenu.containerId == packet.getContainerId() && this.player.containerMenu.stillValid(this.player)) { // CraftBukkit
-@@ -2919,6 +2926,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2862,6 +2869,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleContainerButtonClick(ServerboundContainerButtonClickPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -98,10 +98,10 @@ index 210f0714534cb4c2e9701199666811112a201117..dd3f99e6a50d9d719d3b53a27424cf3e
          this.player.resetLastActionTime();
          if (this.player.containerMenu.containerId == packet.getContainerId() && !this.player.isSpectator()) {
 diff --git a/src/main/java/net/minecraft/world/entity/animal/Animal.java b/src/main/java/net/minecraft/world/entity/animal/Animal.java
-index 43841b5c77beb73169e2ff1645afe1234d8f74c7..10317ec5e9f0e539cd77c5560138e8305f353cb6 100644
+index 2bc77858b4a78e24227b4b096fd44177202d5292..e2ea1740c36dfb0760d4c7c52d7a5802967e21f8 100644
 --- a/src/main/java/net/minecraft/world/entity/animal/Animal.java
 +++ b/src/main/java/net/minecraft/world/entity/animal/Animal.java
-@@ -170,6 +170,7 @@ public abstract class Animal extends AgeableMob {
+@@ -178,6 +178,7 @@ public abstract class Animal extends AgeableMob {
      protected void usePlayerItem(Player player, InteractionHand hand, ItemStack stack) {
          if (!player.getAbilities().instabuild) {
              stack.shrink(1);

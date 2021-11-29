@@ -1,36 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Paul Sauve <paul@technove.co>
-Date: Sat, 31 Oct 2020 18:43:02 -0500
+From: PureGero <puregero@gmail.com>
+Date: Mon, 29 Nov 2021 22:20:53 +1000
 Subject: [PATCH] Strip raytracing for EntityLiving#hasLineOfSight
 
-The IBlockAccess#rayTrace method is very wasteful in both allocations,
-and in logic. While EntityLiving#hasLineOfSight provides static
-parameters for collisions with blocks and fluids, the method still does
-a lot of dynamic checks for both of these, which result in extra work.
-As well, since the fluid collision option is set to NONE, the entire
-fluid collision system is completely unneeded, yet used anyways.
-
-Airplane
-Copyright (C) 2020 Technove LLC
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index 465dab588e770bf4d1e645e1f451a066f388014a..0b787ae1fd72507560589d27ac901111e46814b0 100644
+index 62daf918d4ab00963041ca869ae718f14f2e3337..38dbd31bd0a45847985e95c0db38a9b23567695d 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-@@ -3444,7 +3444,10 @@ public abstract class LivingEntity extends Entity {
+@@ -3448,7 +3448,10 @@ public abstract class LivingEntity extends Entity {
              Vec3 vec3d1 = new Vec3(entity.getX(), entity.getEyeY(), entity.getZ());
  
              // Paper - diff on change - used in CraftLivingEntity#hasLineOfSight(Location) and CraftWorld#lineOfSightExists
@@ -43,7 +21,7 @@ index 465dab588e770bf4d1e645e1f451a066f388014a..0b787ae1fd72507560589d27ac901111
      }
  
 diff --git a/src/main/java/net/minecraft/world/level/BlockGetter.java b/src/main/java/net/minecraft/world/level/BlockGetter.java
-index 6200a8ab4f7b2c40e7139cfb90a62f42c5828de2..f6a8e10347b9a374e2da9d28734b72443555459d 100644
+index ae8800a37ecd117126d976bcce1b91d56e7587b8..9894b9c8fa8ae8263065418f770ad42e9b05ff5a 100644
 --- a/src/main/java/net/minecraft/world/level/BlockGetter.java
 +++ b/src/main/java/net/minecraft/world/level/BlockGetter.java
 @@ -73,6 +73,16 @@ public interface BlockGetter extends LevelHeightAccessor {
@@ -61,13 +39,13 @@ index 6200a8ab4f7b2c40e7139cfb90a62f42c5828de2..f6a8e10347b9a374e2da9d28734b7244
 +    // Airplane end
 +
      // CraftBukkit start - moved block handling into separate method for use by Block#rayTrace
-     default BlockHitResult rayTraceBlock(ClipContext raytrace1, BlockPos blockposition) {
+     default BlockHitResult clip(ClipContext raytrace1, BlockPos blockposition) {
              // Paper start - Prevent raytrace from loading chunks
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index f936e9f9a9fa655fa997d6862b5ed54c04169d35..40b8a8fc9a9cf4eca4ea68141c8b696e59acb906 100644
+index c2220d5157d3065a256cd17410760c6aedf24987..c9fc650e2f7f9120b58390890187f5553eca842f 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
-@@ -452,6 +452,91 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -438,6 +438,91 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
          return null;
      }
  

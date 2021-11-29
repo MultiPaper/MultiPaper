@@ -1,9 +1,34 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: PureGero <puregero@gmail.com>
 Date: Sun, 28 Nov 2021 22:07:06 +1000
-Subject: [PATCH] Hurt external players
+Subject: [PATCH] Hurt external entities
 
 
+diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+index c33ce00ed8dc4251fbe035abeae9137004bf716a..d9e1147aa8035b1b4b05495c65ffcb7f7e8bb902 100644
+--- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
++++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+@@ -141,6 +141,7 @@ import org.bukkit.event.entity.EntityResurrectEvent;
+ import org.bukkit.event.entity.EntityTeleportEvent;
+ import org.bukkit.event.player.PlayerItemConsumeEvent;
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.HurtEntityPacket;
+ // CraftBukkit end
+ 
+ 
+@@ -1295,6 +1296,12 @@ public abstract class LivingEntity extends Entity {
+ 
+     @Override
+     public boolean hurt(DamageSource source, float amount) {
++        // MultiPaper start
++        if (!(this instanceof ServerPlayer) && MultiPaper.isChunkExternal(level.getChunkIfLoaded(blockPosition()))) {
++            level.getChunkIfLoaded(blockPosition()).externalOwner.getConnection().send(new HurtEntityPacket(this, source, amount));
++            return false;
++        }
++        // MultiPaper end
+         if (this.isInvulnerableTo(source)) {
+             return false;
+         } else if (this.level.isClientSide) {
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 index 10eec2657fd0dd62a52919d7c51ce8e479f2cbdc..15b3fea3c00e2c6a15b7a95d7018a61cce5ccf2b 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java

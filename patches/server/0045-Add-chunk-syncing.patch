@@ -63,7 +63,7 @@ index 873a9767687ee78a852e2392d12bafa25e4ddca3..60f61aadd23dd65149495db83cd224c2
              }
              // Paper end - entity ticking chunk set
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 034c90bbe64affc806301bc1c806af30e1f2abef..65cf0a09d894a2ecef8abd9fb65bfc68913c5d3b 100644
+index d6b92e9618133ebd43424685d12b6904ddab862a..75152d30010cc8d4fcf00d332d724b3f9725f0f9 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -109,6 +109,8 @@ import org.apache.logging.log4j.Logger;
@@ -115,7 +115,7 @@ index 034c90bbe64affc806301bc1c806af30e1f2abef..65cf0a09d894a2ecef8abd9fb65bfc68
  
          return regionFile.getStatusIfCached(chunkPos.x, chunkPos.z);
 diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
-index 3d3451f4465aa112c64e71781ede286de7546a4c..0a2f089458d24198ee4cdf01eb4cea6271c00eec 100644
+index 1dd03324b44a5339fc2568bc067cebd01dd4fd83..be288a861bee04d35ee0bbf076d2c588cf52ab1f 100644
 --- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 +++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 @@ -50,6 +50,8 @@ import org.apache.logging.log4j.LogManager;
@@ -127,7 +127,7 @@ index 3d3451f4465aa112c64e71781ede286de7546a4c..0a2f089458d24198ee4cdf01eb4cea62
  
  public class ServerChunkCache extends ChunkSource {
  
-@@ -1014,6 +1016,8 @@ public class ServerChunkCache extends ChunkSource {
+@@ -1027,6 +1029,8 @@ public class ServerChunkCache extends ChunkSource {
                  LevelChunk chunk1 = chunkproviderserver_a.chunk;
                  ChunkPos chunkcoordintpair = chunk1.getPos();
  
@@ -346,23 +346,6 @@ index 834fa7048e3affb4fcc734d56526b9fba5fa69ca..70a68b0a8bacbc1a527b72f6fba4403f
          // Paper start - Prevent regionfiles from being closed during use
          this.fileLock.lock();
          synchronized (this) {
-diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
-index 2dde10324e515bd58fc6ba7e93156ae783492cc2..fa4493c6a9b586b24ecd7704b9016879d5933f21 100644
---- a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
-+++ b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
-@@ -38,6 +38,12 @@ public class RegionFileStorage implements AutoCloseable {
-         this.folder = directory;
-         this.sync = dsync;
-     }
-+    
-+    // MultiPaper start
-+    public File getFolder() {
-+        return folder;
-+    }
-+    // MultiPaper end
- 
-     // Paper start
-     public static @Nullable ChunkPos getRegionFileCoordinates(Path file) {
 diff --git a/src/main/java/puregero/multipaper/ChunkKey.java b/src/main/java/puregero/multipaper/ChunkKey.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8dbe4a2f3d
@@ -1294,24 +1277,22 @@ index 0000000000000000000000000000000000000000..e2f33ad7ea22a414861082cf2496d659
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..bc85ed8883ce94f00bc26cd45e3e81c78de48a5c
+index 0000000000000000000000000000000000000000..9a968e8b7fd194afcf568f5e620fbcfe27aabe90
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,81 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.core.Registry;
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.nbt.Tag;
++import net.minecraft.resources.ResourceLocation;
 +import net.minecraft.server.level.ServerLevel;
-+import net.minecraft.world.level.ChunkTickList;
-+import net.minecraft.world.level.block.Block;
 +import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.level.chunk.ProtoChunk;
-+import net.minecraft.world.level.chunk.ProtoTickList;
-+import net.minecraft.world.level.material.Fluid;
-+import net.minecraft.world.level.material.Fluids;
++import net.minecraft.world.ticks.LevelChunkTicks;
++import net.minecraft.world.ticks.ProtoChunkTicks;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
@@ -1337,12 +1318,9 @@ index 0000000000000000000000000000000000000000..bc85ed8883ce94f00bc26cd45e3e81c7
 +        this.cx = chunk.locX;
 +        this.cz = chunk.locZ;
 +
-+        ChunkTickList<Block> blockTicks = new ChunkTickList<>(Registry.BLOCK::getKey, chunk.level.getBlockTicks().fetchTicksInChunk(chunk.getPos(), false, false), chunk.level.getGameTime());
-+        ChunkTickList<Fluid> fluidTicks = new ChunkTickList<>(Registry.FLUID::getKey, chunk.level.getFluidTicks().fetchTicksInChunk(chunk.getPos(), false, false), chunk.level.getGameTime());
-+
 +        tag = new CompoundTag();
-+        tag.put("block_ticks", blockTicks.save());
-+        tag.put("fluid_ticks", fluidTicks.save());
++        tag.put("block_ticks", chunk.blockTicks.save(chunk.level.getLevelData().getGameTime(), (block) -> Registry.BLOCK.getKey(block).toString()));
++        tag.put("fluid_ticks", chunk.fluidTicks.save(chunk.level.getLevelData().getGameTime(), (fluidtype) -> Registry.FLUID.getKey(fluidtype).toString()));
 +    }
 +
 +    public SendTickListPacket(DataInputStream in) throws IOException {
@@ -1373,13 +1351,12 @@ index 0000000000000000000000000000000000000000..bc85ed8883ce94f00bc26cd45e3e81c7
 +        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
 +        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
 +        if (chunk instanceof LevelChunk levelChunk) {
-+            levelChunk.packTicks(level);
-+            levelChunk.blockTicks = ChunkTickList.create(tag.getList("block_ticks", Tag.TAG_COMPOUND), Registry.BLOCK::getKey, Registry.BLOCK::get);
-+            levelChunk.fluidTicks = ChunkTickList.create(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), Registry.FLUID::getKey, Registry.FLUID::get);
-+            levelChunk.unpackTicks();
++            levelChunk.blockTicks = LevelChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
++            levelChunk.fluidTicks = LevelChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> Registry.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
++            levelChunk.unpackTicks(level.getLevelData().getGameTime());
 +        } else if (chunk instanceof ProtoChunk protoChunk) {
-+            protoChunk.blockTicks = new ProtoTickList<>(block -> block == null || block.defaultBlockState().isAir(), chunk.getPos(), tag.getList("block_ticks", Tag.TAG_COMPOUND), level);
-+            protoChunk.fluidTicks = new ProtoTickList<>(fluidtype -> fluidtype == null || fluidtype == Fluids.EMPTY, chunk.getPos(), tag.getList("fluid_ticks", Tag.TAG_COMPOUND), level);
++            protoChunk.blockTicks = ProtoChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
++            protoChunk.fluidTicks = ProtoChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> Registry.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
 +        } else {
 +            LOGGER.warn("Received tick lists for an unloaded chunk " + world + "," + cx + "," + cz);
 +        }

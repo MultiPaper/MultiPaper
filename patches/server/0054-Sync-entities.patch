@@ -18,7 +18,7 @@ index 2e2bfccfc6cec6582a5b595e0343c27be5267b7a..c686026fe455fbc2c4ba692fbd7f2ca8
          /*
          this.lock.readLock().lock();
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 65cf0a09d894a2ecef8abd9fb65bfc68913c5d3b..792de5e3148b8799b01ace3fbf7637d8122fec29 100644
+index 75152d30010cc8d4fcf00d332d724b3f9725f0f9..6045a23536d65cc6c5f7a7d11188430596e4365b 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -61,11 +61,7 @@ import net.minecraft.core.Registry;
@@ -278,7 +278,7 @@ index 694c3476e792d3f0a6668fb5de669745f41c8d01..991f1bae1987a4b15c4bcab558f990f7
          ClientboundPlayerInfoPacket packet = new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.ADD_PLAYER, player);
  
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 5912fad65686aaafa814fe75e9a2aca141bdd045..d9e581b91ee09b862b4c753145d1da4f8b3a68c8 100644
+index dc5307efeadb7c1ac9dbb7edf1b9bf7084a99b7b..efc2a5e3238fb34cfcd4f3fe074bd6ecf04770aa 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -146,6 +146,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -516,7 +516,7 @@ index a40ee070a72d7428713a32d12118bb1317fdc5f0..648127865f7d00eff21461df5c1df765
 -    }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 9b0e84b22db7beb26455be117e28a848b0b41df3..3ca8923082b69199b44e813b51adb319a92f8250 100644
+index 9b0e84b22db7beb26455be117e28a848b0b41df3..d4ff09cc4adf5989c0d18a43eb37784a5f34b541 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -1,8 +1,13 @@
@@ -541,7 +541,7 @@ index 9b0e84b22db7beb26455be117e28a848b0b41df3..3ca8923082b69199b44e813b51adb319
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
-@@ -42,6 +48,27 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -42,6 +48,28 @@ public class ExternalServerConnection extends Thread implements Closeable {
          try {
              send(new HelloPacket(MultiPaper.getBungeeCordName()));
  
@@ -561,7 +561,8 @@ index 9b0e84b22db7beb26455be117e28a848b0b41df3..3ca8923082b69199b44e813b51adb319
 +                            player.canChatInColor(),
 +                            player.getEntityData().get(ServerPlayer.DATA_PLAYER_MODE_CUSTOMISATION),
 +                            player.getEntityData().get(ServerPlayer.DATA_PLAYER_MAIN_HAND) == 0 ? HumanoidArm.LEFT : HumanoidArm.RIGHT,
-+                            player.isTextFilteringEnabled()
++                            player.isTextFilteringEnabled(),
++                            player.allowsListing()
 +                    )));
 +                }
 +            }
@@ -569,7 +570,7 @@ index 9b0e84b22db7beb26455be117e28a848b0b41df3..3ca8923082b69199b44e813b51adb319
              DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
              while (!socket.isClosed()) {
                  ExternalServerPacket packet = ExternalServerPacketSerializer.deserialize(in);
-@@ -121,4 +148,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -121,4 +149,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
              }
          }
      }
@@ -585,7 +586,7 @@ index 9b0e84b22db7beb26455be117e28a848b0b41df3..3ca8923082b69199b44e813b51adb319
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index f032b23a266d12e4f2c331185d3a30f6a0abc0cf..3101fc82413e270079b1f341221cb035072b471e 100644
+index f032b23a266d12e4f2c331185d3a30f6a0abc0cf..390da3100df08cca13faf3a98386bdf7640ddf2c 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,15 +1,15 @@
@@ -630,7 +631,7 @@ index f032b23a266d12e4f2c331185d3a30f6a0abc0cf..3101fc82413e270079b1f341221cb035
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -128,9 +134,31 @@ public class MultiPaper {
+@@ -128,9 +134,32 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -648,7 +649,8 @@ index f032b23a266d12e4f2c331185d3a30f6a0abc0cf..3101fc82413e270079b1f341221cb035
 +                    player.canChatInColor(),
 +                    player.getEntityData().get(ServerPlayer.DATA_PLAYER_MODE_CUSTOMISATION),
 +                    player.getEntityData().get(ServerPlayer.DATA_PLAYER_MAIN_HAND) == 0 ? HumanoidArm.LEFT : HumanoidArm.RIGHT,
-+                    player.isTextFilteringEnabled()
++                    player.isTextFilteringEnabled(),
++                    player.allowsListing()
 +            )));
 +        }
 +
@@ -662,7 +664,7 @@ index f032b23a266d12e4f2c331185d3a30f6a0abc0cf..3101fc82413e270079b1f341221cb035
      }
      public static void onPlayerDisconnect(ServerPlayer player) {
          if (!(player instanceof ExternalPlayer)) {
-@@ -324,6 +352,7 @@ public class MultiPaper {
+@@ -324,6 +353,7 @@ public class MultiPaper {
      public static void unlockChunk(LevelChunk chunk) {
          try {
              if (MultiPaper.isChunkLocal(chunk)) {

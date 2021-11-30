@@ -4,6 +4,24 @@ Date: Sun, 21 Nov 2021 22:41:15 +1000
 Subject: [PATCH] Sync entities
 
 
+diff --git a/src/main/java/net/minecraft/network/protocol/game/ClientboundSetEntityDataPacket.java b/src/main/java/net/minecraft/network/protocol/game/ClientboundSetEntityDataPacket.java
+index 3e17f6131bf590d7c4a16b79c1c145cb4f565bc9..1707513fedc6d4fa0b88e56d08accc887b490afd 100644
+--- a/src/main/java/net/minecraft/network/protocol/game/ClientboundSetEntityDataPacket.java
++++ b/src/main/java/net/minecraft/network/protocol/game/ClientboundSetEntityDataPacket.java
+@@ -10,6 +10,13 @@ public class ClientboundSetEntityDataPacket implements Packet<ClientGamePacketLi
+     private final int id;
+     @Nullable
+     private final List<SynchedEntityData.DataItem<?>> packedItems;
++    
++    // MultiPaper start
++    public ClientboundSetEntityDataPacket(int id, List<SynchedEntityData.DataItem<?>> packedItems) {
++        this.id = id;
++        this.packedItems = packedItems;
++    }
++    // MultiPaper end
+ 
+     public ClientboundSetEntityDataPacket(int id, SynchedEntityData tracker, boolean forceUpdateAll) {
+         this.id = id;
 diff --git a/src/main/java/net/minecraft/network/syncher/SynchedEntityData.java b/src/main/java/net/minecraft/network/syncher/SynchedEntityData.java
 index 2e2bfccfc6cec6582a5b595e0343c27be5267b7a..c686026fe455fbc2c4ba692fbd7f2ca8cc30e017 100644
 --- a/src/main/java/net/minecraft/network/syncher/SynchedEntityData.java
@@ -205,34 +223,10 @@ index a8b40897a894173f424697be63e68b2044a7d80f..d3c70311dae09ddc837c4bad6b6565a1
          this.clientViewDistance = packet.viewDistance;
          // CraftBukkit end
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 6ba24e698648dd643a65a950a6853646b4617769..001e6284053179a95b6f3e0129da935fa72d648f 100644
+index 6ba24e698648dd643a65a950a6853646b4617769..01b8d676d26d0404721bee091f7e7689c5409c29 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -148,7 +148,6 @@ import net.minecraft.world.level.block.entity.CommandBlockEntity;
- import net.minecraft.world.level.block.entity.JigsawBlockEntity;
- import net.minecraft.world.level.block.entity.SignBlockEntity;
- import net.minecraft.world.level.block.entity.StructureBlockEntity;
--import net.minecraft.world.level.block.state.BlockBehaviour;
- import net.minecraft.world.level.block.state.BlockState;
- import net.minecraft.world.phys.AABB;
- import net.minecraft.world.phys.BlockHitResult;
-@@ -176,7 +175,6 @@ import org.bukkit.Location;
- import org.bukkit.craftbukkit.entity.CraftPlayer;
- import org.bukkit.craftbukkit.event.CraftEventFactory;
- import org.bukkit.craftbukkit.inventory.CraftItemStack;
--import org.bukkit.craftbukkit.util.CraftChatMessage;
- import org.bukkit.craftbukkit.util.CraftMagicNumbers;
- import org.bukkit.craftbukkit.util.LazyPlayerSet;
- import org.bukkit.craftbukkit.util.Waitable;
-@@ -193,7 +191,6 @@ import org.bukkit.event.inventory.InventoryCreativeEvent;
- import org.bukkit.event.inventory.InventoryType.SlotType;
- import org.bukkit.event.inventory.SmithItemEvent;
- import org.bukkit.event.player.AsyncPlayerChatEvent;
--import org.bukkit.event.player.PlayerAnimationEvent;
- import org.bukkit.event.player.PlayerChatEvent;
- import org.bukkit.event.player.PlayerCommandPreprocessEvent;
- import org.bukkit.event.player.PlayerInteractAtEntityEvent;
-@@ -215,6 +212,7 @@ import org.bukkit.util.NumberConversions;
+@@ -215,6 +215,7 @@ import org.bukkit.util.NumberConversions;
  import co.aikar.timings.MinecraftTimings; // Paper
  import puregero.multipaper.MultiPaper;
  import puregero.multipaper.MultiPaperInventoryHandler;
@@ -240,7 +234,7 @@ index 6ba24e698648dd643a65a950a6853646b4617769..001e6284053179a95b6f3e0129da935f
  // CraftBukkit end
  
  public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
-@@ -3043,6 +3041,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -3043,6 +3044,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handlePlayerAbilities(ServerboundPlayerAbilitiesPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -248,7 +242,7 @@ index 6ba24e698648dd643a65a950a6853646b4617769..001e6284053179a95b6f3e0129da935f
          // CraftBukkit start
          if (this.player.getAbilities().mayfly && this.player.getAbilities().flying != packet.isFlying()) {
              PlayerToggleFlightEvent event = new PlayerToggleFlightEvent(this.player.getBukkitEntity(), packet.isFlying());
-@@ -3059,6 +3058,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -3059,6 +3061,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleClientInformation(ServerboundClientInformationPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -354,7 +348,7 @@ index 9ad9937a795a27842e8bc17b3d124d1a0c970db1..6a6d4d28ab59476ea9214f2a4d38655f
      private Supplier<ChunkHolder.FullChunkStatus> fullStatus;
      @Nullable
 diff --git a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-index bd7967680d7a75caff98a827895c795f2d101f99..2af8f96e036277bc8a33bf833e7b0e31c4b61fdf 100644
+index bd7967680d7a75caff98a827895c795f2d101f99..174d1c0e6474b7ec422039c19a7974e2f32a2e84 100644
 --- a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 +++ b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 @@ -25,15 +25,20 @@ import java.util.stream.Stream;
@@ -390,22 +384,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..2af8f96e036277bc8a33bf833e7b0e31
      public final io.papermc.paper.world.EntitySliceManager entitySliceManager; // Paper
  
      public PersistentEntitySectionManager(Class<T> entityClass, LevelCallback<T> handler, EntityPersistentStorage<T> dataAccess, io.papermc.paper.world.EntitySliceManager entitySliceManager) { // Paper
-@@ -133,6 +138,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
-     void removeSectionIfEmpty(long sectionPos, EntitySection<T> section) {
-         if (section.isEmpty()) {
-             this.sectionStorage.remove(sectionPos);
-+            // Multipaper start - Sometimes chunks already have entities loaded? Send these to subscribed chunks
-+            LevelChunk chunk = level.getChunkIfLoaded(chunkentities.getPos().x, chunkentities.getPos().z);
-+            if (chunk != null) {
-+                for (Entity existingEntity : existingEntities) {
-+                    MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(existingEntity));
-+                }
-+            }
-+            // MultiPaper end
-         }
- 
-     }
-@@ -347,6 +360,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -347,6 +352,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
  
      private boolean processChunkUnload(long chunkPos) {
          org.spigotmc.AsyncCatcher.catchOp("Entity chunk unload process"); // Paper
@@ -420,7 +399,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..2af8f96e036277bc8a33bf833e7b0e31
          boolean flag = this.storeChunkSections(chunkPos, (entityaccess) -> {
              entityaccess.getPassengersAndSelf().forEach(this::unloadEntity);
          }, true); // CraftBukkit - add boolean for event call
-@@ -375,6 +396,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -375,6 +388,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          ChunkEntities<T> chunkentities; // CraftBukkit - decompile error
  
          while ((chunkentities = (ChunkEntities) this.loadingInbox.poll()) != null) {
@@ -430,6 +409,21 @@ index bd7967680d7a75caff98a827895c795f2d101f99..2af8f96e036277bc8a33bf833e7b0e31
              chunkentities.getEntities().forEach((entityaccess) -> {
                  this.addEntity(entityaccess, true);
              });
+@@ -383,6 +399,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+             List<Entity> entities = this.getEntities(chunkentities.getPos());
+             CraftEventFactory.callEntitiesLoadEvent(((EntityStorage) this.permanentStorage).level, chunkentities.getPos(), entities);
+             // CraftBukkit end
++            // Multipaper start - Sometimes chunks already have entities loaded? Send these to subscribed chunks
++            LevelChunk chunk = entitySliceManager.world.getChunkIfLoaded(chunkentities.getPos().x, chunkentities.getPos().z);
++            if (chunk != null) {
++                for (Entity existingEntity : existingEntities) {
++                    MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(existingEntity));
++                }
++            }
++            // MultiPaper end
+         }
+ 
+     }
 @@ -507,7 +531,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          return i + "," + this.visibleEntityStorage.count() + "," + this.sectionStorage.count() + "," + this.chunkLoadStatuses.size() + "," + this.chunkVisibility.size() + "," + this.loadingInbox.size() + "," + this.chunksToUnload.size();
      }

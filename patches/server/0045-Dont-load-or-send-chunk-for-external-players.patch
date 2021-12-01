@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 2 Dec 2021 09:17:26 +1000
+Subject: [PATCH] Dont load or send chunk for external players
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index d6b92e9618133ebd43424685d12b6904ddab862a..36793167b0abcf4fe85dc039f8c1d0c991fbc595 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -1837,7 +1837,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+     }
+ 
+     private boolean skipPlayer(ServerPlayer player) {
+-        return player.isSpectator() && !this.level.getGameRules().getBoolean(GameRules.RULE_SPECTATORSGENERATECHUNKS);
++        return MultiPaper.isExternalPlayer(player) || (player.isSpectator() && !this.level.getGameRules().getBoolean(GameRules.RULE_SPECTATORSGENERATECHUNKS)); // MultiPaper - skip external players
+     }
+ 
+     void updatePlayerStatus(ServerPlayer player, boolean added) {
+@@ -1863,6 +1863,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+             this.removePlayerFromDistanceMaps(player); // Paper - distance maps
+         }
+ 
++        if (MultiPaper.isExternalPlayer(player)) return; // MultiPaper - don't send chunks to external players
++
+         for (int k = i - this.viewDistance; k <= i + this.viewDistance; ++k) {
+             for (int l = j - this.viewDistance; l <= j + this.viewDistance; ++l) {
+                 if (ChunkMap.isChunkInEuclideanRange(k, l, i, j, this.viewDistance)) {
+@@ -1980,7 +1982,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         while (iterator.hasNext()) {
+             ServerPlayer entityplayer = (ServerPlayer) iterator.next();
+ 
+-            if (onlyOnWatchDistanceEdge && ChunkMap.isChunkOnEuclideanBorder(chunkPos, entityplayer, true, this.viewDistance) || !onlyOnWatchDistanceEdge && ChunkMap.isChunkInEuclideanRange(chunkPos, entityplayer, true, this.viewDistance)) {
++            if (MultiPaper.isRealPlayer(entityplayer) && (onlyOnWatchDistanceEdge && ChunkMap.isChunkOnEuclideanBorder(chunkPos, entityplayer, true, this.viewDistance) || !onlyOnWatchDistanceEdge && ChunkMap.isChunkInEuclideanRange(chunkPos, entityplayer, true, this.viewDistance))) { // MultiPaper - only send chunks to real players
+                 builder.add(entityplayer);
+             }
+         }
+@@ -2348,7 +2350,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+ 
+         public void updatePlayer(ServerPlayer player) {
+             org.spigotmc.AsyncCatcher.catchOp("player tracker update"); // Spigot
+-            if (player != this.entity) {
++            if (player != this.entity && MultiPaper.isRealPlayer(player)) { // MultiPaper - don't track for external players
+                 // Paper start - remove allocation of Vec3D here
+                 //Vec3 vec3d = player.position().subtract(this.entity.position()); // MC-155077, SPIGOT-5113
+                 double vec3d_dx = player.getX() - this.entity.getX();

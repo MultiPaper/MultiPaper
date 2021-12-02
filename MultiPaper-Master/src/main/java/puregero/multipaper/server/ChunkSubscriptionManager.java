@@ -244,4 +244,8 @@ public class ChunkSubscriptionManager {
             }
         }
     }
+
+    public static List<ServerConnection> getSubscribers(String world, int cx, int cz) {
+        return chunkSubscribers.getOrDefault(new ChunkKey(world, cx, cz), Collections.emptyList());
+    }
 }

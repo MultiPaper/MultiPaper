@@ -223,7 +223,7 @@ index a8b40897a894173f424697be63e68b2044a7d80f..d3c70311dae09ddc837c4bad6b6565a1
          this.clientViewDistance = packet.viewDistance;
          // CraftBukkit end
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 6ba24e698648dd643a65a950a6853646b4617769..01b8d676d26d0404721bee091f7e7689c5409c29 100644
+index f9271bb704dc83e01f40f3c43635e689368fa4b1..3a2761e7e864d8f99242936b73ab63234f0b9d16 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -215,6 +215,7 @@ import org.bukkit.util.NumberConversions;
@@ -272,18 +272,18 @@ index 694c3476e792d3f0a6668fb5de669745f41c8d01..991f1bae1987a4b15c4bcab558f990f7
          ClientboundPlayerInfoPacket packet = new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.ADD_PLAYER, player);
  
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index dc5307efeadb7c1ac9dbb7edf1b9bf7084a99b7b..efc2a5e3238fb34cfcd4f3fe074bd6ecf04770aa 100644
+index 8f2cff1864bd2336457b1290e5927d59d616535f..d2527a6049f5d5c5a53707834dba3cc025882d33 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -146,6 +146,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
- import org.bukkit.event.entity.EntityPoseChangeEvent;
+@@ -147,6 +147,7 @@ import org.bukkit.event.entity.EntityPoseChangeEvent;
  import org.bukkit.event.player.PlayerTeleportEvent;
  import org.bukkit.plugin.PluginManager;
+ import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource, io.papermc.paper.util.KeyedObject { // Paper
-@@ -629,6 +630,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -630,6 +631,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
      }
  
      public void remove(Entity.RemovalReason reason) {
@@ -291,7 +291,7 @@ index dc5307efeadb7c1ac9dbb7edf1b9bf7084a99b7b..efc2a5e3238fb34cfcd4f3fe074bd6ec
          this.setRemoved(reason);
          if (reason == Entity.RemovalReason.KILLED) {
              this.gameEvent(GameEvent.ENTITY_KILLED);
-@@ -4048,6 +4050,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4051,6 +4053,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
              int j = Mth.floor(y);
              int k = Mth.floor(z);
  
@@ -462,7 +462,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..174d1c0e6474b7ec422039c19a7974e2
          FRESH, PENDING, LOADED;
  
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index a40ee070a72d7428713a32d12118bb1317fdc5f0..648127865f7d00eff21461df5c1df7658b4a1dc1 100644
+index fd7148ed953b6465885433dc4d0a73053ba9e255..c67d853d3d266996e3e208f8820a7585bec86da9 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
 @@ -6,6 +6,9 @@ import io.netty.util.concurrent.GenericFutureListener;
@@ -527,16 +527,18 @@ index a40ee070a72d7428713a32d12118bb1317fdc5f0..648127865f7d00eff21461df5c1df765
      private class ExternalPlayerConnection extends Connection {
          public ExternalPlayerConnection(PacketFlow side) {
              super(side);
-@@ -72,9 +97,4 @@ public class ExternalPlayer extends ServerPlayer {
-             }
+@@ -73,11 +98,6 @@ public class ExternalPlayer extends ServerPlayer {
          }
      }
--
+ 
 -    @Override
 -    public boolean broadcastToPlayer(ServerPlayer spectator) {
 -        return false;
 -    }
- }
+-
+     @Override
+     public void checkInsideBlocks() {
+         super.checkInsideBlocks();
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 index 9b0e84b22db7beb26455be117e28a848b0b41df3..d4ff09cc4adf5989c0d18a43eb37784a5f34b541 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
@@ -608,7 +610,7 @@ index 9b0e84b22db7beb26455be117e28a848b0b41df3..d4ff09cc4adf5989c0d18a43eb37784a
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index aabc035381c025604a34232c2de5d7aa7f753511..4bf85eb9fd9fe0bee8bb20bdcc5ec1e4a6171dd7 100644
+index 2d993500542c12feaf4cf1934cdca9cde1de4fb7..a406370a324bebee9e28fa2caf98ecf647171167 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -7,10 +7,12 @@ import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
@@ -634,7 +636,7 @@ index aabc035381c025604a34232c2de5d7aa7f753511..4bf85eb9fd9fe0bee8bb20bdcc5ec1e4
  import java.util.zip.DeflaterOutputStream;
  import java.util.zip.InflaterInputStream;
  
-@@ -117,6 +119,12 @@ public class MultiPaper {
+@@ -124,6 +126,12 @@ public class MultiPaper {
                  broadcastPacketToExternalServers(new TimeUpdatePacket(level));
              }
          }
@@ -647,7 +649,7 @@ index aabc035381c025604a34232c2de5d7aa7f753511..4bf85eb9fd9fe0bee8bb20bdcc5ec1e4
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -136,9 +144,32 @@ public class MultiPaper {
+@@ -143,9 +151,32 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -680,7 +682,7 @@ index aabc035381c025604a34232c2de5d7aa7f753511..4bf85eb9fd9fe0bee8bb20bdcc5ec1e4
      }
      public static void onPlayerDisconnect(ServerPlayer player) {
          if (!(player instanceof ExternalPlayer)) {
-@@ -332,6 +363,7 @@ public class MultiPaper {
+@@ -339,6 +370,7 @@ public class MultiPaper {
      public static void unlockChunk(LevelChunk chunk) {
          try {
              if (MultiPaper.isChunkLocal(chunk)) {

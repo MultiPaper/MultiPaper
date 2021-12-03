@@ -97,6 +97,27 @@ index e3d11aab3ec2d4f67acf8d40743542230cc0b23b..f9271bb704dc83e01f40f3c43635e689
          if (this.player.isImmobile()) return; // CraftBukkit
          this.player.resetLastActionTime();
          if (this.player.containerMenu.containerId == packet.getContainerId() && !this.player.isSpectator()) {
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 7c681b6c8b90c8e38016f037a16edc7e6220b018..8f2cff1864bd2336457b1290e5927d59d616535f 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -146,6 +146,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
+ import org.bukkit.event.entity.EntityPoseChangeEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.plugin.PluginManager;
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public abstract class Entity implements Nameable, EntityAccess, CommandSource, io.papermc.paper.util.KeyedObject { // Paper
+@@ -1348,6 +1349,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+                         blockposition_mutableblockposition.set(i, j, k);
+                         BlockState iblockdata = this.level.getBlockState(blockposition_mutableblockposition);
+ 
++                        if (MultiPaper.isChunkExternal(this.level.getChunkAt(blockposition_mutableblockposition))) continue; // MultiPaper - Only check for blocks on our server
++
+                         try {
+                             iblockdata.entityInside(this.level, blockposition_mutableblockposition, this);
+                             this.onInsideBlock(iblockdata);
 diff --git a/src/main/java/net/minecraft/world/entity/animal/Animal.java b/src/main/java/net/minecraft/world/entity/animal/Animal.java
 index 2bc77858b4a78e24227b4b096fd44177202d5292..e2ea1740c36dfb0760d4c7c52d7a5802967e21f8 100644
 --- a/src/main/java/net/minecraft/world/entity/animal/Animal.java
@@ -209,8 +230,22 @@ index 8d329bca0818033df41fbd781028919c73e052a6..8a01433c65f5d24acb4501bd59a233c4
                  }
              }
  
+diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
+index a40ee070a72d7428713a32d12118bb1317fdc5f0..fd7148ed953b6465885433dc4d0a73053ba9e255 100644
+--- a/src/main/java/puregero/multipaper/ExternalPlayer.java
++++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
+@@ -77,4 +77,9 @@ public class ExternalPlayer extends ServerPlayer {
+     public boolean broadcastToPlayer(ServerPlayer spectator) {
+         return false;
+     }
++
++    @Override
++    public void checkInsideBlocks() {
++        super.checkInsideBlocks();
++    }
+ }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 14e6fc107583e14474904bc9358839e24bbef865..d00001b5cba555bb6c2e79997a8e0efcaff08c2b 100644
+index 14e6fc107583e14474904bc9358839e24bbef865..3d6f4633985476486d6da8f34f13022419709c1f 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -2,6 +2,8 @@ package puregero.multipaper;
@@ -230,16 +265,22 @@ index 14e6fc107583e14474904bc9358839e24bbef865..d00001b5cba555bb6c2e79997a8e0efc
  import java.util.HashSet;
  import java.util.function.Supplier;
  import java.util.concurrent.ConcurrentHashMap;
-@@ -107,6 +110,8 @@ public class MultiPaper {
+@@ -107,6 +110,14 @@ public class MultiPaper {
                  });
              }
          });
 +
 +        MultiPaperInventoryHandler.tick();
++
++        for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
++            if (player instanceof ExternalPlayer externalPlayer) {
++                externalPlayer.checkInsideBlocks();
++            }
++        }
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -128,6 +133,7 @@ public class MultiPaper {
+@@ -128,6 +139,7 @@ public class MultiPaper {
      }
      public static void onPlayerJoin(ServerPlayer player) {
          broadcastPacketToExternalServers(new PlayerCreatePacket(player));
@@ -247,7 +288,7 @@ index 14e6fc107583e14474904bc9358839e24bbef865..d00001b5cba555bb6c2e79997a8e0efc
      }
      public static void onPlayerDisconnect(ServerPlayer player) {
          if (!(player instanceof ExternalPlayer)) {
-@@ -330,7 +336,7 @@ public class MultiPaper {
+@@ -330,7 +342,7 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -256,7 +297,7 @@ index 14e6fc107583e14474904bc9358839e24bbef865..d00001b5cba555bb6c2e79997a8e0efc
      public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
          if (compoundTag == null) {
              return new byte[0];
-@@ -400,4 +406,12 @@ public class MultiPaper {
+@@ -400,4 +412,12 @@ public class MultiPaper {
              e.printStackTrace();
          };
      }

@@ -1191,10 +1191,10 @@ index 269fa39d6d5f16efeda1867e47d2a14bfa94770c..ba9525c0ed1d0bb65a408980a9e6905a
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b529d3d80ef7a9a34813000fedf1ef1bd3de7041
+index 0000000000000000000000000000000000000000..c648c2eafb997c95bf71229f70172cc542fc6017
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,83 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1214,6 +1214,7 @@ index 0000000000000000000000000000000000000000..b529d3d80ef7a9a34813000fedf1ef1b
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
 +import java.io.IOException;
++import java.util.ConcurrentModificationException;
 +
 +public class RequestChunkPacket extends ExternalServerPacket {
 +
@@ -1266,8 +1267,14 @@ index 0000000000000000000000000000000000000000..b529d3d80ef7a9a34813000fedf1ef1b
 +                connection.send(new SendChunkPacket(world, cx, cz, null));
 +            }
 +        } else {
-+            CompoundTag tag = ChunkSerializer.write(level, chunk);
-+            connection.send(new SendChunkPacket(world, cx, cz, tag));
++            try {
++                CompoundTag tag = ChunkSerializer.write(level, chunk);
++                connection.send(new SendChunkPacket(world, cx, cz, tag));
++            } catch (ConcurrentModificationException e) {
++                LOGGER.warn("Got ConcurrentModificationException while sending chunk, sending it in main thread instead");
++                e.printStackTrace();
++                MultiPaper.runSync(() -> sendChunkLater(connection, world, cx, cz, depth));
++            }
 +        }
 +    }
 +}

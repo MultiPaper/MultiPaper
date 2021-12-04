@@ -1,0 +1,171 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 4 Dec 2021 18:34:35 +1000
+Subject: [PATCH] Sync hoppers
+
+
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+index cfe967c9206a344f9368d9f357729f0f607d66c2..47d1dd59c81a95e83c1e7801e4aae72f397a3c7c 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+@@ -38,6 +38,7 @@ import org.bukkit.entity.HumanEntity;
+ import org.bukkit.event.inventory.InventoryMoveItemEvent;
+ import org.bukkit.event.inventory.InventoryPickupItemEvent;
+ import org.bukkit.inventory.Inventory;
++import puregero.multipaper.MultiPaperContainerHandler;
+ // CraftBukkit end
+ 
+ public class HopperBlockEntity extends RandomizableContainerBlockEntity implements Hopper {
+@@ -252,7 +253,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+                         origItemStack.setCount(origCount - moved + remaining);
+                     }
+                     hopper.setItem(i, origItemStack);
+-                    destination.setChanged();
++                    hopper.setChanged(); // destination.setChanged(); // MultiPaper - redundant to have destination, handled in addItem, changed to hopper
+                     return true;
+                 }
+                 origItemStack.setCount(origCount);
+@@ -612,6 +613,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+ 
+     private static ItemStack tryMoveInItem(@Nullable Container from, Container to, ItemStack stack, int slot, @Nullable Direction side) {
+         ItemStack itemstack1 = to.getItem(slot);
++        int startingStackSize = itemstack1.getCount(); // MultiPaper
+ 
+         if (HopperBlockEntity.canPlaceItemInContainer(to, stack, slot, side)) {
+             boolean flag = false;
+@@ -658,6 +660,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+                     }
+                 }
+ 
++                if (!MultiPaperContainerHandler.increaseItemExternal(to, slot, to.getItem(slot), to.getItem(slot).getCount() - startingStackSize)) // MultiPaper - don't change external containers
+                 to.setChanged();
+             }
+         }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperContainerHandler.java b/src/main/java/puregero/multipaper/MultiPaperContainerHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..5b6fbbf2e2dc0e25b48215f592d6c455010a547d
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperContainerHandler.java
+@@ -0,0 +1,24 @@
++package puregero.multipaper;
++
++import net.minecraft.world.Container;
++import net.minecraft.world.item.ItemStack;
++import net.minecraft.world.level.block.entity.BlockEntity;
++import net.minecraft.world.level.chunk.LevelChunk;
++import puregero.multipaper.externalserverprotocol.AddItemToContainerPacket;
++
++public class MultiPaperContainerHandler {
++    public static boolean increaseItemExternal(Container to, int slot, ItemStack stack, int count) {
++        BlockEntity block = (BlockEntity) to;
++
++        LevelChunk chunk = block.getLevel().getChunkIfLoaded(block.getBlockPos());
++        if (MultiPaper.isChunkExternal(chunk)) {
++            stack = stack.copy();
++            stack.setCount(count);
++            chunk.externalOwner.getConnection().send(new AddItemToContainerPacket(block, slot, stack));
++
++            return true;
++        } else {
++            return false;
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..681aeade5a780962e4f8901b6047746689d14666
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java
+@@ -0,0 +1,80 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Direction;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.Container;
++import net.minecraft.world.entity.item.ItemEntity;
++import net.minecraft.world.item.ItemStack;
++import net.minecraft.world.level.block.entity.BlockEntity;
++import net.minecraft.world.level.block.entity.HopperBlockEntity;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++public class AddItemToContainerPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(AddItemToContainerPacket.class.getSimpleName());
++
++    private final String world;
++    private final BlockPos pos;
++    private final int slot;
++    private final ItemStack itemStack;
++
++    public AddItemToContainerPacket(BlockEntity blockEntity, int slot, ItemStack itemStack) {
++        this.world = ((ServerLevel) blockEntity.getLevel()).convertable.getLevelId();
++        this.pos = blockEntity.getBlockPos();
++        this.slot = slot;
++        this.itemStack = itemStack;
++    }
++
++    public AddItemToContainerPacket(DataInputStream in) throws IOException {
++        world = in.readUTF();
++        pos = BlockPos.of(in.readLong());
++        slot = in.read();
++
++        int length = in.readInt();
++        byte[] bytes = new byte[length];
++        in.readFully(bytes);
++        itemStack = ItemStack.of(MultiPaper.nbtDecompressFromBytes(bytes));
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        out.writeLong(pos.asLong());
++        out.write(slot);
++
++        byte[] bytes = MultiPaper.nbtCompressToBytes(itemStack.save(new CompoundTag()));
++        out.writeInt(bytes.length);
++        out.write(bytes);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++            Container container = HopperBlockEntity.getContainerAt(level, pos);
++
++            if (container == null) {
++                LOGGER.warn("Tried to set a " + itemStack + " in slot " + slot + " in a non-existant container at " + world + " " + pos);
++            } else {
++                // We can assume the item is being added from the side as it's cross servers, so any side direction such as north will do
++                ItemStack leftOver = HopperBlockEntity.addItem(null, container, itemStack, Direction.NORTH);
++                if (!leftOver.isEmpty()) {
++                    LOGGER.warn("There was a left over " + leftOver + " after adding an item to " + container.getClass().getSimpleName() + "@" + world + pos);
++                    ItemEntity item = new ItemEntity(level, pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, leftOver);
++                    level.addFreshEntity(item);
++                }
++            }
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 8ce43e4ddb5f4fe1ce9ca038915f701b81347c02..180e23d1b35d08dc227e79d14924a7328b504b3c 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -34,6 +34,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerActionOnEntityPacket.class, PlayerActionOnEntityPacket::new);
+         addPacket(PlayerTouchEntityPacket.class, PlayerTouchEntityPacket::new);
+         addPacket(HurtEntityPacket.class, HurtEntityPacket::new);
++        addPacket(AddItemToContainerPacket.class, AddItemToContainerPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {

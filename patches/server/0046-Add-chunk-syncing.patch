@@ -5,7 +5,7 @@ Subject: [PATCH] Add chunk syncing
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
-index 873a9767687ee78a852e2392d12bafa25e4ddca3..c0a2e42074733e63ea7a768648b00d6e33a7a869 100644
+index d271871563fa883efb77b35ec3b1dfbba87f0b62..be9dd2e04834c96330a04d6469e04b97a99f032b 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
 @@ -16,6 +16,7 @@ import net.minecraft.Util;
@@ -96,7 +96,7 @@ index 873a9767687ee78a852e2392d12bafa25e4ddca3..c0a2e42074733e63ea7a768648b00d6e
      public interface LevelChangeListener {
  
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 36793167b0abcf4fe85dc039f8c1d0c991fbc595..6d90bd1f597c95af631a01fb03ac178ff9dce3b8 100644
+index eb2ffda7441daf3e7a4a42260b6f0adbb06d0e80..b3d7190b10fd2993d3cf7b4099ac8381113d92e4 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -109,6 +109,8 @@ import org.apache.logging.log4j.Logger;
@@ -108,7 +108,7 @@ index 36793167b0abcf4fe85dc039f8c1d0c991fbc595..6d90bd1f597c95af631a01fb03ac178f
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -1048,6 +1050,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1050,6 +1052,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                          ((LevelChunk) ichunkaccess).setLoaded(false);
                      }
  
@@ -117,7 +117,7 @@ index 36793167b0abcf4fe85dc039f8c1d0c991fbc595..6d90bd1f597c95af631a01fb03ac178f
                      // Paper start - async chunk saving
                      try {
                          this.asyncSave(ichunkaccess);
-@@ -1246,6 +1250,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1250,6 +1254,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                          return this.protoChunkToFullChunk(holder);
                      }, list, false);
  
@@ -126,7 +126,7 @@ index 36793167b0abcf4fe85dc039f8c1d0c991fbc595..6d90bd1f597c95af631a01fb03ac178f
                      this.progressListener.onStatusChange(chunkcoordintpair, requiredStatus);
                      return completablefuture1;
                  } catch (Exception exception) {
-@@ -1685,6 +1691,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1689,6 +1695,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              }
              return ret;
          }
@@ -134,7 +134,7 @@ index 36793167b0abcf4fe85dc039f8c1d0c991fbc595..6d90bd1f597c95af631a01fb03ac178f
          return super.read(chunkcoordintpair);
      }
  
-@@ -1696,6 +1703,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1700,6 +1707,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                  com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread());
              return;
          }
@@ -147,7 +147,7 @@ index 36793167b0abcf4fe85dc039f8c1d0c991fbc595..6d90bd1f597c95af631a01fb03ac178f
          super.write(chunkcoordintpair, nbttagcompound);
      }
      // Paper end
-@@ -1739,6 +1752,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1743,6 +1756,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              return status;
          }
  
@@ -157,7 +157,7 @@ index 36793167b0abcf4fe85dc039f8c1d0c991fbc595..6d90bd1f597c95af631a01fb03ac178f
  
          return regionFile.getStatusIfCached(chunkPos.x, chunkPos.z);
 diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
-index 1dd03324b44a5339fc2568bc067cebd01dd4fd83..159e94e57cafa91a7cb28d07e755acc1eab5b3c7 100644
+index 3b024dc9b5f2d7fdde84ff083b7ac588f261fcbb..9169fa9fab669abc870991619c552549fbddf5d2 100644
 --- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 +++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 @@ -50,6 +50,7 @@ import org.apache.logging.log4j.LogManager;
@@ -168,17 +168,17 @@ index 1dd03324b44a5339fc2568bc067cebd01dd4fd83..159e94e57cafa91a7cb28d07e755acc1
  
  public class ServerChunkCache extends ChunkSource {
  
-@@ -1027,6 +1028,8 @@ public class ServerChunkCache extends ChunkSource {
-                 LevelChunk chunk1 = chunkproviderserver_a.chunk;
+@@ -1040,6 +1041,8 @@ public class ServerChunkCache extends ChunkSource {
+                 // Paper end - optimise chunk tick iteration
                  ChunkPos chunkcoordintpair = chunk1.getPos();
  
 +                if (!MultiPaper.isChunkLocal(chunk1)) continue; // MultiPaper - Don't tick this chunk if we don't own it
 +
-                 if (this.level.isPositionEntityTicking(chunkcoordintpair) && this.chunkMap.anyPlayerCloseEnoughForSpawning(chunkproviderserver_a.holder, chunkcoordintpair, false)) { // Paper - optimise anyPlayerCloseEnoughForSpawning
+                 if ((true || this.level.isPositionEntityTicking(chunkcoordintpair)) && this.chunkMap.anyPlayerCloseEnoughForSpawning(holder, chunkcoordintpair, false)) { // Paper - optimise anyPlayerCloseEnoughForSpawning & optimise chunk tick iteration
                      chunk1.incrementInhabitedTime(j);
-                     if (flag2 && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair) && this.chunkMap.anyPlayerCloseEnoughForSpawning(chunkproviderserver_a.holder, chunkcoordintpair, true)) { // Spigot // Paper - optimise anyPlayerCloseEnoughForSpawning
+                     if (flag2 && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair) && this.chunkMap.anyPlayerCloseEnoughForSpawning(holder, chunkcoordintpair, true)) { // Spigot // Paper - optimise anyPlayerCloseEnoughForSpawning & optimise chunk tick iteration
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index fb9665356dd4e1fc01ecc30cf9c2b459711c745f..4445e0f91293c28767986626e01bd38d217d1dc1 100644
+index b90bd1a1a93fc0c883b692f4fc692dfee88ad0dd..ebf3b958f4dc04ff71479809199f0f47f19e6a59 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -159,6 +159,7 @@ import org.bukkit.event.weather.LightningStrikeEvent;
@@ -208,10 +208,10 @@ index fb9665356dd4e1fc01ecc30cf9c2b459711c745f..4445e0f91293c28767986626e01bd38d
  
          if (iblockdata.is(block)) {
 diff --git a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
-index 8a569e3300543cb171c3befae59969628adc424c..6a98602041e599af47717701841aebe4f3586584 100644
+index bbd9fdaa4b12543307b144da72b0604eae638cbb..9c88f14a6f17bb054887f236f1b2711202dadfa2 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
 +++ b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
-@@ -31,6 +31,7 @@ import net.minecraft.world.level.block.state.BlockState;
+@@ -32,6 +32,7 @@ import net.minecraft.world.level.block.state.BlockState;
  import net.minecraft.world.level.chunk.ChunkStatus;
  import net.minecraft.world.level.chunk.LevelChunkSection;
  import net.minecraft.world.level.chunk.storage.SectionStorage;
@@ -219,7 +219,7 @@ index 8a569e3300543cb171c3befae59969628adc424c..6a98602041e599af47717701841aebe4
  
  public class PoiManager extends SectionStorage<PoiSection> {
      public static final int MAX_VILLAGE_DISTANCE = 6;
-@@ -312,6 +313,7 @@ public class PoiManager extends SectionStorage<PoiSection> {
+@@ -447,6 +448,7 @@ public class PoiManager extends SectionStorage<PoiSection> {
              }
              return ret;
          }
@@ -227,7 +227,7 @@ index 8a569e3300543cb171c3befae59969628adc424c..6a98602041e599af47717701841aebe4
          return super.read(chunkcoordintpair);
      }
  
-@@ -323,6 +325,7 @@ public class PoiManager extends SectionStorage<PoiSection> {
+@@ -458,6 +460,7 @@ public class PoiManager extends SectionStorage<PoiSection> {
                  com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread());
              return;
          }
@@ -236,7 +236,7 @@ index 8a569e3300543cb171c3befae59969628adc424c..6a98602041e599af47717701841aebe4
      }
      // Paper end
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 4db17badb6f957f758fa4731c9bbeab02b9761fb..b7aadbfd03305d7b2de2e3bb571142e39694db4f 100644
+index ab38b0e0394f53979dc3a32270814bf3cb41a330..c53190203f18e9ae40466454e1a3b76e7b8511d3 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
 @@ -99,6 +99,7 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
@@ -276,7 +276,7 @@ index 5601d0c2fe635a2a4f073c333531e1a8adf1833c..b72f2e73ee6e75be619afabefd544331
          }
  
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index 87048256635692a20a728978a4ea667a14583e47..9ad9937a795a27842e8bc17b3d124d1a0c970db1 100644
+index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..36469472f09683a4897e6d297d5778367d13ef3c 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -7,8 +7,8 @@ import com.google.common.collect.UnmodifiableIterator;
@@ -335,7 +335,7 @@ index 87048256635692a20a728978a4ea667a14583e47..9ad9937a795a27842e8bc17b3d124d1a
      // CraftBukkit end
  
 diff --git a/src/main/java/net/minecraft/world/level/chunk/ProtoChunk.java b/src/main/java/net/minecraft/world/level/chunk/ProtoChunk.java
-index e7676e86c08affa8e730c13f11d4b269ca896ee8..f81dd8241ab5dc69e3fe05034b315e6094551f99 100644
+index e947a47dd8c6906bc36eca757c4b9f9f2ab3cedc..bdaa97438993c21997e7aa570d418926fb9d53a4 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/ProtoChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/ProtoChunk.java
 @@ -45,8 +45,8 @@ public class ProtoChunk extends ChunkAccess {

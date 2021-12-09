@@ -1,0 +1,240 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 9 Dec 2021 18:10:03 +1000
+Subject: [PATCH] Add MultiPaper API
+
+
+diff --git a/src/main/java/org/bukkit/Chunk.java b/src/main/java/org/bukkit/Chunk.java
+index 5a4884db36d448c885e49c965ae329a0638dd628..d5cb9a2de7532ad95f3d89f55927a0906b8b2da6 100644
+--- a/src/main/java/org/bukkit/Chunk.java
++++ b/src/main/java/org/bukkit/Chunk.java
+@@ -182,6 +182,26 @@ public interface Chunk extends PersistentDataHolder {
+      */
+     boolean unload();
+ 
++    // MultiPaper start
++
++    /**
++     * Returns whether the chunk is running on an external server or not.
++     *
++     * @return True if the chunk is an external chunk, or false if the chunk
++     * is running on this server or if it's unloaded.
++     */
++    public boolean isExternalChunk();
++
++    /**
++     * Returns whether the chunk is running on this server or not.
++     *
++     * @return True if the chunk is a local chunk, or false if the chunk
++     * is running on an external server or if it's unloaded.
++     */
++    public boolean isLocalChunk();
++
++    // MultiPaper end
++
+     /**
+      * Checks if this chunk can spawn slimes without being a swamp biome.
+      *
+diff --git a/src/main/java/org/bukkit/Location.java b/src/main/java/org/bukkit/Location.java
+index 8321441b8f528a05e297f485672f928e76fe017d..15b646c6cbf74ddbb3290bc0a0b95a2483fa9284 100644
+--- a/src/main/java/org/bukkit/Location.java
++++ b/src/main/java/org/bukkit/Location.java
+@@ -346,6 +346,30 @@ public class Location implements Cloneable, ConfigurationSerializable {
+         return this;
+     }
+ 
++    // MultiPaper start
++
++    /**
++     * Returns whether the chunk is running on an external server or not.
++     *
++     * @return True if the chunk is an external chunk, or false if the chunk
++     * is running on this server or if it's unloaded.
++     */
++    public boolean isChunkExternal() {
++        return this.getWorld().isChunkExternal(locToBlock(x) >> 4, locToBlock(z) >> 4);
++    }
++
++    /**
++     * Returns whether the chunk is running on this server or not.
++     *
++     * @return True if the chunk is a local chunk, or false if the chunk
++     * is running on an external server or if it's unloaded.
++     */
++    public boolean isChunkLocal() {
++        return this.getWorld().isChunkLocal(locToBlock(x) >> 4, locToBlock(z) >> 4);
++    }
++
++    // MultiPaper end
++
+     /**
+      * Adds the location by another.
+      *
+diff --git a/src/main/java/org/bukkit/World.java b/src/main/java/org/bukkit/World.java
+index 1f8a51897d9de00f0004ab1de479198390483f7d..e27e496da21c81a2f2c9ef96426f256beb3a0d83 100644
+--- a/src/main/java/org/bukkit/World.java
++++ b/src/main/java/org/bukkit/World.java
+@@ -421,6 +421,26 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
+     @Deprecated
+     public boolean isChunkInUse(int x, int z);
+ 
++    // MultiPaper start
++
++    /**
++     * Returns whether the chunk is running on an external server or not.
++     *
++     * @return True if the chunk is an external chunk, or false if the chunk
++     * is running on this server or if it's unloaded.
++     */
++    public boolean isChunkExternal(int x, int z);
++
++    /**
++     * Returns whether the chunk is running on this server or not.
++     *
++     * @return True if the chunk is a local chunk, or false if the chunk
++     * is running on an external server or if it's unloaded.
++     */
++    public boolean isChunkLocal(int x, int z);
++
++    // MultiPaper end
++
+     /**
+      * Loads the {@link Chunk} at the specified coordinates.
+      * <p>
+diff --git a/src/main/java/org/bukkit/block/Block.java b/src/main/java/org/bukkit/block/Block.java
+index 0dd0beee6800fb34520dfa2d05e5bdda76624d64..195974d1e5de11f3b08dd536667e50503998c95b 100644
+--- a/src/main/java/org/bukkit/block/Block.java
++++ b/src/main/java/org/bukkit/block/Block.java
+@@ -417,6 +417,28 @@ public interface Block extends Metadatable, net.kyori.adventure.translation.Tran
+      */
+     int getBlockPower();
+ 
++    // MultiPaper start
++
++    /**
++     * Returns whether the block is in a chunk that's running on an external
++     * server or not.
++     *
++     * @return True if the block is in an external chunk, or false if the chunk
++     * is running on this server or if it's unloaded.
++     */
++    public boolean isInExternalChunk();
++
++    /**
++     * Returns whether the block is in a chunk that's running on this server
++     * or not.
++     *
++     * @return True if the block is in a local chunk, or false if the chunk
++     * is running on an external server or if it's unloaded.
++     */
++    public boolean isInLocalChunk();
++
++    // MultiPaper end
++
+     /**
+      * Checks if this block is empty.
+      * <p>
+diff --git a/src/main/java/org/bukkit/entity/Entity.java b/src/main/java/org/bukkit/entity/Entity.java
+index bafad5764cc3933fcd9602d37bd2e68424cbd575..3d048e330ae65a0fd53b9d1232b5f8b5668d66cf 100644
+--- a/src/main/java/org/bukkit/entity/Entity.java
++++ b/src/main/java/org/bukkit/entity/Entity.java
+@@ -209,6 +209,26 @@ public interface Entity extends Metadatable, CommandSender, Nameable, Persistent
+      */
+     public int getEntityId();
+ 
++    // MultiPaper start
++
++    /**
++     * Returns whether the entity is in a chunk that's running on an external
++     * server or not.
++     *
++     * @return True if the entity is in an external chunk.
++     */
++    public boolean isInExternalChunk();
++
++    /**
++     * Returns whether the entity is in a chunk that's running on this server
++     * or not.
++     *
++     * @return True if the entity is in a local chunk.
++     */
++    public boolean isInLocalChunk();
++
++    // MultiPaper end
++
+     /**
+      * Returns the entity's current fire ticks (ticks before the entity stops
+      * being on fire).
+diff --git a/src/main/java/org/bukkit/entity/Player.java b/src/main/java/org/bukkit/entity/Player.java
+index f5ded992672dde910cd4e1be50c238b142157ff8..d363a6242a0a3447705ba91b28211a3a8089e305 100644
+--- a/src/main/java/org/bukkit/entity/Player.java
++++ b/src/main/java/org/bukkit/entity/Player.java
+@@ -368,6 +368,68 @@ public interface Player extends HumanEntity, Conversable, OfflinePlayer, PluginM
+      */
+     public void setBedSpawnLocation(@Nullable Location location, boolean force);
+ 
++    // MultiPaper start
++
++    /**
++     * Returns whether the player is on an external server or not.
++     *
++     * @return True if the player is on an external server.
++     */
++    public boolean isExternalPlayer();
++
++    /**
++     * Returns whether the player is on this server or not.
++     *
++     * @return True if the player is on this server.
++     */
++    public boolean isLocalPlayer();
++
++    /**
++     * Returns cross-server data that is stored under the specified key. Note
++     * that all plugins share the same set of keys. This data is
++     * non-persistent, it will be lost when the player disconnects.
++     *
++     * @param key The key the data is stored under.
++     * @return The data stored under the key, or null if the key isn't set.
++     */
++    @Nullable
++    public String getData(String key);
++
++    /**
++     * Store cross-server data under the specified key. Note that all plugins
++     * share the same set of keys. This data is non-persistent, it will be
++     * lost when the player disconnects.
++     *
++     * @param key The key to store the data under.
++     * @param value The data to store under the key.
++     */
++    public void setData(String key, String value);
++
++    /**
++     * Returns cross-server data that is stored under the specified key. Note
++     * that all plugins share the same set of keys. This data is persistent,
++     * it will be saved even if the player disconnects. This persistent data is
++     * saved onto the player's .dat file.
++     *
++     * @param key The key the data is stored under.
++     * @return The data stored under the key, or null if the key isn't set.
++     */
++    @Nullable
++    public String getPersistentData(String key);
++
++    /**
++     * Store cross-server data under the specified key. Note that all plugins
++     * share the same set of keys. This data is persistent, it will be saved
++     * even if the player disconnects. This persistent data is saved onto the
++     * player's .dat file.
++     *
++     * @param key The key to store the data under.
++     * @param value The data to store under the key.
++     */
++    public void setPersistentData(String key, String value);
++
++    // MultiPaper end
++
+     /**
+      * Play a note for a player at a location. This requires a note block
+      * at the particular location (as far as the client is concerned). This

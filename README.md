@@ -72,8 +72,7 @@ For a plugin to work with MultiPaper, it needs to support multiple servers. A
 good indication of this, but not a guarantee, is if a plugin uses a MySQL
 database.
 
-Developing a plugin for MultiPaper
-------
+### Developing a plugin for MultiPaper
 To make a plugin compatible with MultiPaper, no data must be stored on the
 server itself and must instead be stored on an external server such as a MySQL
 database.
@@ -88,6 +87,45 @@ Some other things to look out for:
   * `Bukkit.getOnlinePlayers` will return the players on all MultiPaper
     servers, an API will be made available for determining which players are
     on your server, and which players are on other servers.
+
+### Using the MultiPaper API as a dependency
+
+[![Clojars Project](https://img.shields.io/clojars/v/com.github.puregero/multipaper-api.svg)](https://clojars.org/com.github.puregero/multipaper-api)
+
+If you want your plugin to still support regular Spigot and Paper servers, we
+recommend using [MultiLib](https://github.com/PureGero/MultiLib) instead.
+
+Add the following into your build.gradle:
+
+```
+repositories {
+  maven {
+    url "https://repo.clojars.org/"
+  }
+}
+
+dependencies {
+  compile "com.github.puregero:multipaper-api:1.18-R0.1-SNAPSHOT"
+}
+```
+
+Or in your pom.xml:
+
+```
+<repositories>
+    <repository>
+        <id>clojars</id>
+        <url>https://repo.clojars.org/</url>
+    </repository>
+</repositories>
+<dependencies>
+    <dependency>
+        <groupId>com.github.puregero</groupId>
+        <artifactId>multipaper-api</artifactId>
+        <version>1.18-R0.1-SNAPSHOT</version>
+    </dependency>
+</dependencies>
+```
 
 ## Building
 Requirements:

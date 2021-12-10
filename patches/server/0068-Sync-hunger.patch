@@ -1,0 +1,174 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 10 Dec 2021 22:34:14 +1000
+Subject: [PATCH] Sync hunger
+
+
+diff --git a/src/main/java/net/minecraft/world/food/FoodData.java b/src/main/java/net/minecraft/world/food/FoodData.java
+index 2934b6de1f1fb914a532ee20184df99d1acd8e65..d12e8b20e3b305569c2fd57b2dbe3951c0522697 100644
+--- a/src/main/java/net/minecraft/world/food/FoodData.java
++++ b/src/main/java/net/minecraft/world/food/FoodData.java
+@@ -9,6 +9,8 @@ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.Item;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.level.GameRules;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.PlayerFoodUpdatePacket;
+ 
+ public class FoodData {
+ 
+@@ -36,6 +38,7 @@ public class FoodData {
+     public void eat(int food, float saturationModifier) {
+         this.foodLevel = Math.min(food + this.foodLevel, 20);
+         this.saturationLevel = Math.min(this.saturationLevel + (float) food * saturationModifier * 2.0F, (float) this.foodLevel);
++        MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
+     }
+ 
+     public void eat(Item item, ItemStack stack) {
+@@ -64,12 +67,14 @@ public class FoodData {
+             this.exhaustionLevel -= 4.0F;
+             if (this.saturationLevel > 0.0F) {
+                 this.saturationLevel = Math.max(this.saturationLevel - 1.0F, 0.0F);
++                MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
+             } else if (enumdifficulty != Difficulty.PEACEFUL) {
+                 // CraftBukkit start
+                 org.bukkit.event.entity.FoodLevelChangeEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callFoodLevelChangeEvent(player, Math.max(this.foodLevel - 1, 0));
+ 
+                 if (!event.isCancelled()) {
+                     this.foodLevel = event.getFoodLevel();
++                    MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
+                 }
+ 
+                 ((ServerPlayer) player).connection.send(new ClientboundSetHealthPacket(((ServerPlayer) player).getBukkitEntity().getScaledHealth(), this.foodLevel, this.saturationLevel));
+@@ -155,10 +160,12 @@ public class FoodData {
+ 
+     public void setFoodLevel(int foodLevel) {
+         this.foodLevel = foodLevel;
++        MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
+     }
+ 
+     public void setSaturation(float saturationLevel) {
+         this.saturationLevel = saturationLevel;
++        MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
+     }
+ 
+     public void setExhaustion(float exhaustion) {
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
+index b39117c4505926da0be9c8248964a233393e8e2d..c452146b05dc4ebd17654a8c49c8fb396db5246c 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
+@@ -62,6 +62,8 @@ import org.bukkit.permissions.Permission;
+ import org.bukkit.permissions.PermissionAttachment;
+ import org.bukkit.permissions.PermissionAttachmentInfo;
+ import org.bukkit.plugin.Plugin;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.PlayerFoodUpdatePacket;
+ 
+ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
+     private CraftInventoryPlayer inventory;
+@@ -734,6 +736,7 @@ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
+     @Override
+     public void setSaturation(float value) {
+         this.getHandle().getFoodData().saturationLevel = value;
++        MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(getHandle())); // MultiPaper
+     }
+ 
+     @Override
+@@ -744,6 +747,7 @@ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
+     @Override
+     public void setFoodLevel(int value) {
+         this.getHandle().getFoodData().foodLevel = value;
++        MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(getHandle())); // MultiPaper
+     }
+ 
+     @Override
+diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+index d4ff09cc4adf5989c0d18a43eb37784a5f34b541..bc45b065182a582c0de85af92d2b73e0f4165d37 100644
+--- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
++++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+@@ -67,6 +67,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
+                             player.isTextFilteringEnabled(),
+                             player.allowsListing()
+                     )));
++                    send(new PlayerFoodUpdatePacket(player));
+                 }
+             }
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index cdc66bece8725d43c1a9547f7f37c29daa8efb9a..bb8196c77e181874c6c691704aeedf3c65ee86ee 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -157,6 +157,7 @@ public class MultiPaper {
+         broadcastPacketToExternalServers(new PlayerCreatePacket(player));
+         broadcastPacketToExternalServers(new SendPacketPacket(player, new ClientboundSetCarriedItemPacket(player.getInventory().selected)));
+         broadcastPacketToExternalServers(new EntityUpdatePacket(player, new ClientboundSetEntityDataPacket(player.getId(), player.getEntityData(), true)));
++        broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(player));
+ 
+         if (player.clientViewDistance != null) {
+             broadcastPacketToExternalServers(new PlayerActionPacket(player, new ServerboundClientInformationPacket(
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 19752deec4f5a71d45c1d685c46624ffd816684f..f3c90a47d66b2eb425e83692d3847b961e062931 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -37,6 +37,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(AddItemToContainerPacket.class, AddItemToContainerPacket::new);
+         addPacket(MobSetNavigationGoalPacket.class, MobSetNavigationGoalPacket::new);
+         addPacket(PlayerDataUpdatePacket.class, PlayerDataUpdatePacket::new);
++        addPacket(PlayerFoodUpdatePacket.class, PlayerFoodUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerFoodUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerFoodUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..8b697213512ecd3f1e0608c007d14db0e898e235
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerFoodUpdatePacket.java
+@@ -0,0 +1,48 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.player.Player;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.UUID;
++
++public class PlayerFoodUpdatePacket extends ExternalServerPacket {
++
++    private final UUID uuid;
++    private final int foodLevel;
++    private final float saturationLevel;
++
++    public PlayerFoodUpdatePacket(Player player) {
++        this.uuid = player.getUUID();
++        this.foodLevel = player.getFoodData().foodLevel;
++        this.saturationLevel = player.getFoodData().saturationLevel;
++    }
++
++    public PlayerFoodUpdatePacket(DataInputStream in) throws IOException {
++        uuid = readUUID(in);
++        foodLevel = in.readShort();
++        saturationLevel = in.readFloat();
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        writeUUID(out, uuid);
++        out.writeShort(foodLevel);
++        out.writeFloat(saturationLevel);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            player.getFoodData().foodLevel = foodLevel;
++            player.getFoodData().saturationLevel = saturationLevel;
++        });
++    }
++}

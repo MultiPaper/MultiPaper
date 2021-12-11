@@ -96,19 +96,18 @@ index d271871563fa883efb77b35ec3b1dfbba87f0b62..be9dd2e04834c96330a04d6469e04b97
      public interface LevelChangeListener {
  
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index eb2ffda7441daf3e7a4a42260b6f0adbb06d0e80..b3d7190b10fd2993d3cf7b4099ac8381113d92e4 100644
+index baf673272ee6cb972e5e8cbc7a062d213c686a0b..8fed019530775e2ebffccf48ef04acfdb0afe79e 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
-@@ -109,6 +109,8 @@ import org.apache.logging.log4j.Logger;
- import org.bukkit.entity.Player;
+@@ -110,6 +110,7 @@ import org.bukkit.entity.Player;
  // CraftBukkit end
  import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet; // Paper
-+import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperChunkHandler;
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -1050,6 +1052,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1013,6 +1014,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                          ((LevelChunk) ichunkaccess).setLoaded(false);
                      }
  
@@ -117,7 +116,7 @@ index eb2ffda7441daf3e7a4a42260b6f0adbb06d0e80..b3d7190b10fd2993d3cf7b4099ac8381
                      // Paper start - async chunk saving
                      try {
                          this.asyncSave(ichunkaccess);
-@@ -1250,6 +1254,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1213,6 +1216,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                          return this.protoChunkToFullChunk(holder);
                      }, list, false);
  
@@ -126,7 +125,7 @@ index eb2ffda7441daf3e7a4a42260b6f0adbb06d0e80..b3d7190b10fd2993d3cf7b4099ac8381
                      this.progressListener.onStatusChange(chunkcoordintpair, requiredStatus);
                      return completablefuture1;
                  } catch (Exception exception) {
-@@ -1689,6 +1695,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1653,6 +1658,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              }
              return ret;
          }
@@ -134,7 +133,7 @@ index eb2ffda7441daf3e7a4a42260b6f0adbb06d0e80..b3d7190b10fd2993d3cf7b4099ac8381
          return super.read(chunkcoordintpair);
      }
  
-@@ -1700,6 +1707,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1664,6 +1670,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                  com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread());
              return;
          }
@@ -147,7 +146,7 @@ index eb2ffda7441daf3e7a4a42260b6f0adbb06d0e80..b3d7190b10fd2993d3cf7b4099ac8381
          super.write(chunkcoordintpair, nbttagcompound);
      }
      // Paper end
-@@ -1743,6 +1756,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1707,6 +1719,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              return status;
          }
  
@@ -178,10 +177,10 @@ index 3b024dc9b5f2d7fdde84ff083b7ac588f261fcbb..9169fa9fab669abc870991619c552549
                      chunk1.incrementInhabitedTime(j);
                      if (flag2 && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair) && this.chunkMap.anyPlayerCloseEnoughForSpawning(holder, chunkcoordintpair, true)) { // Spigot // Paper - optimise anyPlayerCloseEnoughForSpawning & optimise chunk tick iteration
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index b90bd1a1a93fc0c883b692f4fc692dfee88ad0dd..ebf3b958f4dc04ff71479809199f0f47f19e6a59 100644
+index 93471417e8c6e0c67131005e7e0f63339d96e555..3267d874771d948e39d6e9b94e850a0434c794ff 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -159,6 +159,7 @@ import org.bukkit.event.weather.LightningStrikeEvent;
+@@ -161,6 +161,7 @@ import org.bukkit.event.weather.LightningStrikeEvent;
  import org.bukkit.event.world.TimeSkipEvent;
  // CraftBukkit end
  import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
@@ -189,7 +188,7 @@ index b90bd1a1a93fc0c883b692f4fc692dfee88ad0dd..ebf3b958f4dc04ff71479809199f0f47
  
  public class ServerLevel extends Level implements WorldGenLevel {
  
-@@ -1073,6 +1074,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1076,6 +1077,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
      }
  
      private void tickFluid(BlockPos pos, Fluid fluid) {
@@ -198,7 +197,7 @@ index b90bd1a1a93fc0c883b692f4fc692dfee88ad0dd..ebf3b958f4dc04ff71479809199f0f47
          FluidState fluid1 = this.getFluidState(pos);
  
          if (fluid1.is(fluid)) {
-@@ -1082,6 +1085,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1085,6 +1088,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
      }
  
      private void tickBlock(BlockPos pos, Block block) {

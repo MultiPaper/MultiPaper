@@ -1,0 +1,195 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 11 Dec 2021 22:31:23 +1000
+Subject: [PATCH] Sync potion effects
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+index 8ed56bd2777e82b8edf637111268e9ff0b5e09d8..afbb056d69716b5c784fabee5a13f0b99a23e75f 100644
+--- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
++++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+@@ -138,6 +138,7 @@ import org.bukkit.event.entity.EntityResurrectEvent;
+ import org.bukkit.event.entity.EntityTeleportEvent;
+ import org.bukkit.event.player.PlayerItemConsumeEvent;
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperEffectsHandler;
+ import puregero.multipaper.externalserverprotocol.HurtEntityPacket;
+ // CraftBukkit end
+ 
+@@ -1202,6 +1203,7 @@ public abstract class LivingEntity extends Entity {
+             effect.getEffect().addAttributeModifiers(this, this.getAttributes(), effect.getAmplifier());
+         }
+ 
++        MultiPaperEffectsHandler.onEffectAdd(this, effect); // MultiPaper
+     }
+ 
+     protected void onEffectUpdated(MobEffectInstance effect, boolean reapplyEffect, @Nullable Entity source) {
+@@ -1213,6 +1215,7 @@ public abstract class LivingEntity extends Entity {
+             mobeffectlist.addAttributeModifiers(this, this.getAttributes(), effect.getAmplifier());
+         }
+ 
++        MultiPaperEffectsHandler.onEffectAdd(this, effect); // MultiPaper
+     }
+ 
+     protected void onEffectRemoved(MobEffectInstance effect) {
+@@ -1221,6 +1224,7 @@ public abstract class LivingEntity extends Entity {
+             effect.getEffect().removeAttributeModifiers(this, this.getAttributes(), effect.getAmplifier());
+         }
+ 
++        MultiPaperEffectsHandler.onEffectRemove(this, effect); // MultiPaper
+     }
+ 
+     // CraftBukkit start - Delegate so we can handle providing a reason for health being regained
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEffectsHandler.java b/src/main/java/puregero/multipaper/MultiPaperEffectsHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..d0aacf35c7d10113dca9f37dd2c9c71a593f0eac
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperEffectsHandler.java
+@@ -0,0 +1,54 @@
++package puregero.multipaper;
++
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.effect.MobEffectInstance;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.LivingEntity;
++import net.minecraft.world.level.chunk.LevelChunk;
++import puregero.multipaper.externalserverprotocol.EntityUpdateEffectPacket;
++import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
++
++import java.util.function.Supplier;
++
++public class MultiPaperEffectsHandler {
++    private static boolean updatingEffects = false;
++
++    public static void onEffectAdd(LivingEntity entity, MobEffectInstance effect) {
++        if (updatingEffects) {
++            return;
++        }
++
++        broadcast(entity, () -> new EntityUpdateEffectPacket(entity, effect, false));
++    }
++
++    public static void onEffectRemove(LivingEntity entity, MobEffectInstance effect) {
++        if (updatingEffects) {
++            return;
++        }
++
++        broadcast(entity, () -> new EntityUpdateEffectPacket(entity, effect, true));
++
++
++    }
++
++    private static void broadcast(LivingEntity entity, Supplier<ExternalServerPacket> packetSupplier) {
++        if (entity instanceof ServerPlayer) {
++            MultiPaper.broadcastPacketToExternalServers(packetSupplier.get());
++        } else {
++            LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
++            if (chunk != null) {
++                MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, packetSupplier);
++            }
++        }
++    }
++
++    public static void handle(Entity entity, MobEffectInstance effect, boolean remove) {
++        updatingEffects = true;
++        if (remove) {
++            ((LivingEntity) entity).removeEffect(effect.getEffect());
++        } else {
++            ((LivingEntity) entity).addEffect(effect);
++        }
++        updatingEffects = false;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateEffectPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateEffectPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..78de83e4b5791e5159af482a54cf4f672ffa5c61
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateEffectPacket.java
+@@ -0,0 +1,75 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.effect.MobEffectInstance;
++import net.minecraft.world.entity.Entity;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperEffectsHandler;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.UUID;
++
++public class EntityUpdateEffectPacket extends ExternalServerPacket {
++
++    private final String world;
++    private final UUID uuid;
++    private final boolean remove;
++    private final byte[] data;
++
++    public EntityUpdateEffectPacket(Entity entity, MobEffectInstance effect, boolean remove) {
++        this.world = ((ServerLevel) entity.level).convertable.getLevelId();
++        this.uuid = entity.getUUID();
++        this.remove = remove;
++
++        CompoundTag tag = effect.save(new CompoundTag());
++
++        try {
++            this.data = MultiPaper.nbtCompressToBytes(tag);
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
++    }
++
++    public EntityUpdateEffectPacket(DataInputStream in) throws IOException {
++        this.world = in.readUTF();
++        this.uuid = readUUID(in);
++        this.remove = in.readBoolean();
++
++        int byteLength = in.readInt();
++        this.data = new byte[byteLength];
++        in.readFully(data);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        writeUUID(out, uuid);
++        out.writeBoolean(remove);
++
++        out.writeInt(data.length);
++        out.write(data);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            try {
++                ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++                Entity entity = level.getEntity(uuid);
++                CompoundTag tag = MultiPaper.nbtDecompressFromBytes(data);
++                MobEffectInstance effect = MobEffectInstance.load(tag);
++                if (entity != null) {
++                    MultiPaperEffectsHandler.handle(entity, effect, remove);
++                }
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index f3c90a47d66b2eb425e83692d3847b961e062931..0b4200c4890f5e7ed4a8089636017b405c5aaa62 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -38,6 +38,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(MobSetNavigationGoalPacket.class, MobSetNavigationGoalPacket::new);
+         addPacket(PlayerDataUpdatePacket.class, PlayerDataUpdatePacket::new);
+         addPacket(PlayerFoodUpdatePacket.class, PlayerFoodUpdatePacket::new);
++        addPacket(EntityUpdateEffectPacket.class, EntityUpdateEffectPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {

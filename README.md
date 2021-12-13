@@ -136,7 +136,7 @@ Requirements:
 
 Build instructions:
 1. Patch paper with: `./gradlew applyPatches`
-2. Build the multipaper jar with: `./gradlew paperclipJar`
+2. Build the multipaper jar with: `./gradlew createReobfPaperclipJar`
 3. Get the multipaper jar from `build/libs`
 4. Build the multipaper-master jar with: `cd MultiPaper-Master && mvn package`
 5. Get the multipaper-master jar from `MultiPaper-Master/target`

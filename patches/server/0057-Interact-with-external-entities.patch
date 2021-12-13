@@ -20,7 +20,7 @@ index c45b5ab6776f3ac79f856c3a6467c510e20db25a..53ca673c9a98c580403232972d11a02f
          this.action = type;
          this.usingSecondaryAction = playerSneaking;
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index cc77ce1d4f1e073e396e4c6ba668c3d9d793fa2b..676c04e78443dd862b5a5d1cfdae6d4529af58b7 100644
+index cc77ce1d4f1e073e396e4c6ba668c3d9d793fa2b..fc7413417e53cb5289e56b349e602c9eb56301e8 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -213,9 +213,7 @@ import org.bukkit.inventory.InventoryView;
@@ -34,7 +34,17 @@ index cc77ce1d4f1e073e396e4c6ba668c3d9d793fa2b..676c04e78443dd862b5a5d1cfdae6d45
  // CraftBukkit end
  
  public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
-@@ -513,6 +511,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -495,7 +493,9 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+     @Override
+     public void handlePlayerInput(ServerboundPlayerInputPacket packet) {
+         PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
++        if (MultiPaperEntityInteractHandler.handleSteerVehicle(player, packet)) return; // MultiPaper
+         this.player.setPlayerInput(packet.getXxa(), packet.getZza(), packet.isJumping(), packet.isShiftKeyDown());
++        MultiPaperEntityInteractHandler.handlePostSteerVehicle(player);
+     }
+ 
+     private static boolean containsInvalidValues(double x, double y, double z, float yaw, float pitch) {
+@@ -513,6 +513,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleMoveVehicle(ServerboundMoveVehiclePacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -42,7 +52,7 @@ index cc77ce1d4f1e073e396e4c6ba668c3d9d793fa2b..676c04e78443dd862b5a5d1cfdae6d45
          if (ServerGamePacketListenerImpl.containsInvalidValues(packet.getX(), packet.getY(), packet.getZ(), packet.getYRot(), packet.getXRot())) {
              this.disconnect(new TranslatableComponent("multiplayer.disconnect.invalid_vehicle_movement"), org.bukkit.event.player.PlayerKickEvent.Cause.INVALID_VEHICLE_MOVEMENT); // Paper - kick event cause
          } else {
-@@ -1942,6 +1941,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -1942,6 +1943,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handlePaddleBoat(ServerboundPaddleBoatPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -50,7 +60,7 @@ index cc77ce1d4f1e073e396e4c6ba668c3d9d793fa2b..676c04e78443dd862b5a5d1cfdae6d45
          Entity entity = this.player.getVehicle();
  
          if (entity instanceof Boat) {
-@@ -2423,6 +2423,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2423,6 +2425,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
          }
          // Spigot End
  
@@ -81,19 +91,21 @@ index 823d249db72e2430e78da9db0d3fed6c12687ed6..c3e40d95f1a5d9587cf5018b6960d32c
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c6d0e52e475609f70346b0e77969725c346b8ea5
+index 0000000000000000000000000000000000000000..a2a7a8ae0f7b1a2157313be942365d1d3310fc1c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,117 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 +import net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
 +import net.minecraft.network.protocol.game.ServerboundPaddleBoatPacket;
++import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.player.Player;
 +import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.phys.Vec3;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.externalserverprotocol.PlayerActionOnEntityPacket;
@@ -142,6 +154,28 @@ index 0000000000000000000000000000000000000000..c6d0e52e475609f70346b0e77969725c
 +//        }
 +
 +        return false;
++    }
++
++    public static boolean handleSteerVehicle(ServerPlayer player, ServerboundPlayerInputPacket packet) {
++        LevelChunk chunk = player.getRootVehicle().level.getChunkIfLoaded(player.getRootVehicle().blockPosition());
++        if (MultiPaper.isChunkExternal(chunk)) {
++            if (MultiPaper.isExternalPlayer(player)) {
++                LOGGER.warn("External player " + player.getScoreboardName() + " is steering an external entity " + player.getRootVehicle());
++            }
++
++            chunk.externalOwner.getConnection().send(new PlayerActionPacket(player, packet));
++
++            return true;
++        }
++
++        return false;
++    }
++
++    public static void handlePostSteerVehicle(ServerPlayer player) {
++        if (MultiPaper.isExternalPlayer(player)) {
++            // Since the player isn't ticked, we need to call this manually to steer the vehicle
++            player.travel(new Vec3(player.xxa, player.yya, player.zza));
++        }
 +    }
 +
 +    public static boolean handlePaddleBoat(ServerPlayer player, ServerboundPaddleBoatPacket packet) {

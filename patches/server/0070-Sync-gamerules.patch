@@ -1,0 +1,136 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 13 Dec 2021 21:27:25 +1000
+Subject: [PATCH] Sync gamerules
+
+
+diff --git a/src/main/java/net/minecraft/world/level/GameRules.java b/src/main/java/net/minecraft/world/level/GameRules.java
+index 833ad6fbedfc275b3fde640b0e873f23e61acc3b..cbbcdb17f8d24325e5d2f675a9cba0e92de030fd 100644
+--- a/src/main/java/net/minecraft/world/level/GameRules.java
++++ b/src/main/java/net/minecraft/world/level/GameRules.java
+@@ -27,6 +27,7 @@ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.ServerPlayer;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.externalserverprotocol.GameRuleUpdatePacket;
+ 
+ public class GameRules {
+ 
+@@ -346,6 +347,7 @@ public class GameRules {
+         protected void updateFromArgument(CommandContext<CommandSourceStack> context, String name, GameRules.Key<BooleanValue> gameRuleKey) { // Paper start
+             io.papermc.paper.event.world.WorldGameRuleChangeEvent event = new io.papermc.paper.event.world.WorldGameRuleChangeEvent(context.getSource().getBukkitWorld(), context.getSource().getBukkitSender(), (org.bukkit.GameRule<Boolean>) org.bukkit.GameRule.getByName(gameRuleKey.toString()), String.valueOf(BoolArgumentType.getBool(context, name)));
+             if (!event.callEvent()) return;
++           GameRuleUpdatePacket.onGameRuleChange(event.getWorld(), event.getGameRule().getName(), event.getValue()); // MultiPaper
+             this.value = Boolean.parseBoolean(event.getValue());
+             // Paper end
+         }
+@@ -414,6 +416,7 @@ public class GameRules {
+         protected void updateFromArgument(CommandContext<CommandSourceStack> context, String name, GameRules.Key<IntegerValue> gameRuleKey) { // Paper start
+             io.papermc.paper.event.world.WorldGameRuleChangeEvent event = new io.papermc.paper.event.world.WorldGameRuleChangeEvent(context.getSource().getBukkitWorld(), context.getSource().getBukkitSender(), (org.bukkit.GameRule<Integer>) org.bukkit.GameRule.getByName(gameRuleKey.toString()), String.valueOf(IntegerArgumentType.getInteger(context, name)));
+             if (!event.callEvent()) return;
++            GameRuleUpdatePacket.onGameRuleChange(event.getWorld(), event.getGameRule().getName(), event.getValue()); // MultiPaper
+             this.value = Integer.parseInt(event.getValue());
+             // Paper end
+         }
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+index 369d3e19a8cb05d07f820da9466fa8753a0581d7..f631342bee2e08fdc8f4f4ffb7301f30bfecf214 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+@@ -117,6 +117,7 @@ import org.bukkit.util.Consumer;
+ import org.bukkit.util.RayTraceResult;
+ import org.bukkit.util.Vector;
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.GameRuleUpdatePacket;
+ import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
+ 
+ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -1805,6 +1806,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+         GameRule<?> gameRule = GameRule.getByName(rule);
+         io.papermc.paper.event.world.WorldGameRuleChangeEvent event = new io.papermc.paper.event.world.WorldGameRuleChangeEvent(this, null, gameRule, value);
+         if (!event.callEvent()) return false;
++        GameRuleUpdatePacket.onGameRuleChange(event.getWorld(), event.getGameRule().getName(), event.getValue()); // MultiPaper
+         // Paper end
+         GameRules.Value<?> handle = this.getHandle().getGameRules().getRule(CraftWorld.getGameRulesNMS().get(rule));
+         handle.deserialize(event.getValue()); // Paper
+@@ -1845,6 +1847,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+         // Paper start
+         io.papermc.paper.event.world.WorldGameRuleChangeEvent event = new io.papermc.paper.event.world.WorldGameRuleChangeEvent(this, null, rule, String.valueOf(newValue));
+         if (!event.callEvent()) return false;
++        GameRuleUpdatePacket.onGameRuleChange(event.getWorld(), event.getGameRule().getName(), event.getValue()); // MultiPaper
+         // Paper end
+         GameRules.Value<?> handle = this.getHandle().getGameRules().getRule(CraftWorld.getGameRulesNMS().get(rule.getName()));
+         handle.deserialize(event.getValue()); // Paper
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 0b4200c4890f5e7ed4a8089636017b405c5aaa62..074b1a6525d18e14e42d49b86be7773fe7880b87 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -39,6 +39,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerDataUpdatePacket.class, PlayerDataUpdatePacket::new);
+         addPacket(PlayerFoodUpdatePacket.class, PlayerFoodUpdatePacket::new);
+         addPacket(EntityUpdateEffectPacket.class, EntityUpdateEffectPacket::new);
++        addPacket(GameRuleUpdatePacket.class, GameRuleUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/GameRuleUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/GameRuleUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..4f4ab28cd905bb8737bd99b893d014d7fda9bf8e
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/GameRuleUpdatePacket.java
+@@ -0,0 +1,56 @@
++package puregero.multipaper.externalserverprotocol;
++
++import org.bukkit.Bukkit;
++import org.bukkit.World;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++public class GameRuleUpdatePacket extends ExternalServerPacket {
++
++    private static boolean updatingGamerules = false;
++
++    private final String world;
++    private final String name;
++    private final String value;
++
++    public GameRuleUpdatePacket(World world, String name, String value) {
++        this.world = world.getName();
++        this.name = name;
++        this.value = value;
++    }
++
++    public GameRuleUpdatePacket(DataInputStream in) throws IOException {
++        world = in.readUTF();
++        name = in.readUTF();
++        value = in.readUTF();
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        out.writeUTF(name);
++        out.writeUTF(value);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            World bukkitWorld = Bukkit.getWorld(world);
++            if (bukkitWorld != null) {
++                updatingGamerules = true;
++                bukkitWorld.setGameRuleValue(name, value);
++                updatingGamerules = false;
++            }
++        });
++    }
++
++    public static void onGameRuleChange(World world, String name, String value) {
++        if (!updatingGamerules) {
++            MultiPaper.broadcastPacketToExternalServers(new GameRuleUpdatePacket(world, name, value));
++        }
++    }
++}

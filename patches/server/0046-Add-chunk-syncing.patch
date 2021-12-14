@@ -275,7 +275,7 @@ index 5601d0c2fe635a2a4f073c333531e1a8adf1833c..b72f2e73ee6e75be619afabefd544331
          }
  
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..36469472f09683a4897e6d297d5778367d13ef3c 100644
+index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..f4ddc9172a3951fa59e0ed9345fd2e69e1d8c7bc 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -7,8 +7,8 @@ import com.google.common.collect.UnmodifiableIterator;
@@ -289,7 +289,15 @@ index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..36469472f09683a4897e6d297d577836
  import java.util.Map.Entry;
  import java.util.function.Consumer;
  import java.util.function.Supplier;
-@@ -53,6 +53,7 @@ import net.minecraft.world.ticks.LevelChunkTicks;
+@@ -22,6 +22,7 @@ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Registry;
+ import net.minecraft.core.SectionPos;
+ import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.ListTag;
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
+ import net.minecraft.server.level.ChunkHolder;
+@@ -53,6 +54,7 @@ import net.minecraft.world.ticks.LevelChunkTicks;
  import net.minecraft.world.ticks.TickContainerAccess;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
@@ -297,7 +305,7 @@ index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..36469472f09683a4897e6d297d577836
  
  public class LevelChunk extends ChunkAccess {
  
-@@ -80,13 +81,16 @@ public class LevelChunk extends ChunkAccess {
+@@ -80,13 +82,18 @@ public class LevelChunk extends ChunkAccess {
      public boolean loaded;
      private boolean clientLightReady;
      public final ServerLevel level; // CraftBukkit - type
@@ -308,6 +316,8 @@ index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..36469472f09683a4897e6d297d577836
      private Supplier<ChunkHolder.FullChunkStatus> fullStatus;
      @Nullable
      private LevelChunk.PostLoadProcessor postLoad;
++    @Nullable public ListTag entitiesToLoad; // MultiPaper
++    @Nullable public ListTag blockEntitiesToLoad; // MultiPaper
      private final Int2ObjectMap<GameEventDispatcher> gameEventDispatcherSections;
 -    private final LevelChunkTicks<Block> blockTicks;
 -    private final LevelChunkTicks<Fluid> fluidTicks;
@@ -316,7 +326,7 @@ index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..36469472f09683a4897e6d297d577836
      // Paper start - track last save time
      public long lastSaveTime;
      public void setLastSaved(long ticks) {
-@@ -813,6 +817,7 @@ public class LevelChunk extends ChunkAccess {
+@@ -813,6 +820,7 @@ public class LevelChunk extends ChunkAccess {
          // Paper end - neighbour cache
          org.bukkit.Server server = this.level.getCraftServer();
          this.level.getChunkSource().addLoadedChunk(this); // Paper
@@ -324,7 +334,7 @@ index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..36469472f09683a4897e6d297d577836
          if (server != null) {
              /*
               * If it's a new world, the first few chunks are generated inside
-@@ -874,7 +879,7 @@ public class LevelChunk extends ChunkAccess {
+@@ -874,7 +882,7 @@ public class LevelChunk extends ChunkAccess {
  
      @Override
      public boolean isUnsaved() {
@@ -348,6 +358,32 @@ index e947a47dd8c6906bc36eca757c4b9f9f2ab3cedc..bdaa97438993c21997e7aa570d418926
  
      public ProtoChunk(ChunkPos pos, UpgradeData upgradeData, LevelHeightAccessor world, Registry<Biome> biomeRegistry, @Nullable BlendingData blendingData) {
          this(pos, upgradeData, (LevelChunkSection[])null, new ProtoChunkTicks<>(), new ProtoChunkTicks<>(), world, biomeRegistry, blendingData);
+diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
+index 300c95a3839954b9e631aa4d76c131a5c2d96394..bb321348fe47db1f9502b6a0dd4e921b9df4352a 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
++++ b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
+@@ -271,6 +271,10 @@ public class ChunkSerializer {
+             object = new LevelChunk(world.getLevel(), chunkPos, chunkconverter, levelchunkticks, levelchunkticks1, l, achunksection, ChunkSerializer.postLoadChunk(world, nbt), blendingdata);
+             ((LevelChunk)object).setBlockNibbles(blockNibbles); // Paper - replace light impl
+             ((LevelChunk)object).setSkyNibbles(skyNibbles); // Paper - replace light impl
++            // MultiPaper start - Keep a copy of entities and block entities until they're loaded
++            ((LevelChunk)object).entitiesToLoad = ChunkSerializer.getListOfCompoundsOrNull(nbt, "entities");
++            ((LevelChunk)object).blockEntitiesToLoad = ChunkSerializer.getListOfCompoundsOrNull(nbt, "block_entities");
++            // MultiPaper end
+         } else {
+             ProtoChunkTicks<Block> protochunkticklist = ProtoChunkTicks.load(nbt.getList("block_ticks", 10), (s) -> {
+                 return Registry.BLOCK.getOptional(ResourceLocation.tryParse(s));
+@@ -739,6 +743,10 @@ public class ChunkSerializer {
+                 }
+             }
+ 
++            // MultiPaper start - Keep a copy of entities and block entities until they're loaded
++            chunk.entitiesToLoad = null;
++            chunk.blockEntitiesToLoad = null;
++            // MultiPaper end
+         };
+     }
+ 
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
 index fec7d5c6a7b7a20ac9aecec1d3187f5c61fc430c..8af4b259850e69513c580fc1f5315a2372782d8b 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
@@ -1198,10 +1234,10 @@ index 269fa39d6d5f16efeda1867e47d2a14bfa94770c..ba9525c0ed1d0bb65a408980a9e6905a
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c648c2eafb997c95bf71229f70172cc542fc6017
+index 0000000000000000000000000000000000000000..3b418791f9473ad4c4a7e4e0264c528435096679
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
-@@ -0,0 +1,83 @@
+@@ -0,0 +1,103 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1209,6 +1245,8 @@ index 0000000000000000000000000000000000000000..c648c2eafb997c95bf71229f70172cc5
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.ChunkAccess;
++import net.minecraft.world.level.chunk.ImposterProtoChunk;
++import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.level.chunk.storage.ChunkSerializer;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
@@ -1256,9 +1294,17 @@ index 0000000000000000000000000000000000000000..c648c2eafb997c95bf71229f70172cc5
 +    }
 +
 +    private void sendChunkLater(ExternalServerConnection connection, String world, int cx, int cz, int depth) {
-+        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
 +        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++        ChunkAccess chunk = level.getChunkIfLoaded(cx, cz);
++
 +        if (chunk == null) {
++            ChunkHolder holder = level.chunkSource.chunkMap.getUpdatingChunkIfPresent(ChunkPos.asLong(cx, cz));
++            if (holder != null) {
++                chunk = holder.getAvailableChunkNow();
++            }
++        }
++
++        if (chunk == null || (chunk instanceof LevelChunk levelChunk && !levelChunk.loaded)) {
 +            ChunkHolder holder = level.chunkSource.chunkMap.getUpdatingChunkIfPresent(ChunkPos.asLong(cx, cz));
 +            if (holder != null) {
 +                if (depth == 20) {
@@ -1276,6 +1322,16 @@ index 0000000000000000000000000000000000000000..c648c2eafb997c95bf71229f70172cc5
 +        } else {
 +            try {
 +                CompoundTag tag = ChunkSerializer.write(level, chunk);
++
++                if (chunk instanceof ImposterProtoChunk imposterProtoChunk) {
++                    if (imposterProtoChunk.getWrapped().entitiesToLoad != null) {
++                        tag.put("entities", imposterProtoChunk.getWrapped().entitiesToLoad);
++                    }
++                    if (imposterProtoChunk.getWrapped().blockEntitiesToLoad != null) {
++                        tag.put("block_entities", imposterProtoChunk.getWrapped().blockEntitiesToLoad);
++                    }
++                }
++
 +                connection.send(new SendChunkPacket(world, cx, cz, tag));
 +            } catch (ConcurrentModificationException e) {
 +                LOGGER.warn("Got ConcurrentModificationException while sending chunk, sending it in main thread instead");

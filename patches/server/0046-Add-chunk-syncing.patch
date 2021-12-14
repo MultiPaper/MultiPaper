@@ -366,7 +366,7 @@ index 300c95a3839954b9e631aa4d76c131a5c2d96394..bb321348fe47db1f9502b6a0dd4e921b
              object = new LevelChunk(world.getLevel(), chunkPos, chunkconverter, levelchunkticks, levelchunkticks1, l, achunksection, ChunkSerializer.postLoadChunk(world, nbt), blendingdata);
              ((LevelChunk)object).setBlockNibbles(blockNibbles); // Paper - replace light impl
              ((LevelChunk)object).setSkyNibbles(skyNibbles); // Paper - replace light impl
-+            // MultiPaper start - Keep a copy of entities and block entities until they're loaded
++            // MultiPaper start - Keep copy of entities and block entities until they're loaded
 +            ((LevelChunk)object).entitiesToLoad = ChunkSerializer.getListOfCompoundsOrNull(nbt, "entities");
 +            ((LevelChunk)object).blockEntitiesToLoad = ChunkSerializer.getListOfCompoundsOrNull(nbt, "block_entities");
 +            // MultiPaper end
@@ -377,7 +377,7 @@ index 300c95a3839954b9e631aa4d76c131a5c2d96394..bb321348fe47db1f9502b6a0dd4e921b
                  }
              }
  
-+            // MultiPaper start - Keep a copy of entities and block entities until they're loaded
++            // MultiPaper start - Keep copy of entities and block entities until they're loaded
 +            chunk.entitiesToLoad = null;
 +            chunk.blockEntitiesToLoad = null;
 +            // MultiPaper end
@@ -1234,10 +1234,10 @@ index 269fa39d6d5f16efeda1867e47d2a14bfa94770c..ba9525c0ed1d0bb65a408980a9e6905a
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3b418791f9473ad4c4a7e4e0264c528435096679
+index 0000000000000000000000000000000000000000..688ef68a086e9a3e8214199edd50e6bb6a3fd00a
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
-@@ -0,0 +1,103 @@
+@@ -0,0 +1,95 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1245,7 +1245,6 @@ index 0000000000000000000000000000000000000000..3b418791f9473ad4c4a7e4e0264c5284
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.ChunkAccess;
-+import net.minecraft.world.level.chunk.ImposterProtoChunk;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.level.chunk.storage.ChunkSerializer;
 +import org.apache.logging.log4j.LogManager;
@@ -1295,16 +1294,9 @@ index 0000000000000000000000000000000000000000..3b418791f9473ad4c4a7e4e0264c5284
 +
 +    private void sendChunkLater(ExternalServerConnection connection, String world, int cx, int cz, int depth) {
 +        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
-+        ChunkAccess chunk = level.getChunkIfLoaded(cx, cz);
++        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
 +
 +        if (chunk == null) {
-+            ChunkHolder holder = level.chunkSource.chunkMap.getUpdatingChunkIfPresent(ChunkPos.asLong(cx, cz));
-+            if (holder != null) {
-+                chunk = holder.getAvailableChunkNow();
-+            }
-+        }
-+
-+        if (chunk == null || (chunk instanceof LevelChunk levelChunk && !levelChunk.loaded)) {
 +            ChunkHolder holder = level.chunkSource.chunkMap.getUpdatingChunkIfPresent(ChunkPos.asLong(cx, cz));
 +            if (holder != null) {
 +                if (depth == 20) {
@@ -1323,12 +1315,12 @@ index 0000000000000000000000000000000000000000..3b418791f9473ad4c4a7e4e0264c5284
 +            try {
 +                CompoundTag tag = ChunkSerializer.write(level, chunk);
 +
-+                if (chunk instanceof ImposterProtoChunk imposterProtoChunk) {
-+                    if (imposterProtoChunk.getWrapped().entitiesToLoad != null) {
-+                        tag.put("entities", imposterProtoChunk.getWrapped().entitiesToLoad);
++                if (chunk instanceof LevelChunk levelChunk) {
++                    if (levelChunk.entitiesToLoad != null) {
++                        tag.put("entities", levelChunk.entitiesToLoad);
 +                    }
-+                    if (imposterProtoChunk.getWrapped().blockEntitiesToLoad != null) {
-+                        tag.put("block_entities", imposterProtoChunk.getWrapped().blockEntitiesToLoad);
++                    if (levelChunk.blockEntitiesToLoad != null) {
++                        tag.put("block_entities", levelChunk.blockEntitiesToLoad);
 +                    }
 +                }
 +

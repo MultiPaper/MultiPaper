@@ -5,7 +5,7 @@ Subject: [PATCH] Add MultiPaper API
 
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftChunk.java b/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
-index b4f7b91ac165e3171ffcf7d6a993af248d268959..a6fe5562f35d6c3fc1b54225794a0de256ec1013 100644
+index d51476ca2aad08a0dd93a2e772dd7750afc939dc..fb1397078e188b2c8dc14ce3e27bafbbc96002ae 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftChunk.java
 @@ -46,6 +46,7 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
@@ -37,6 +37,40 @@ index b4f7b91ac165e3171ffcf7d6a993af248d268959..a6fe5562f35d6c3fc1b54225794a0de2
      @Override
      public boolean isForceLoaded() {
          return this.getWorld().isChunkForceLoaded(this.getX(), this.getZ());
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 8c9a0fdb5d1893d26985514ff3cc43332684f37b..328c963cec07e64ee3fbecfc4ae19ad054b7e12b 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -248,6 +248,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
+ import org.yaml.snakeyaml.error.MarkedYAMLException;
+ 
+ import net.md_5.bungee.api.chat.BaseComponent; // Spigot
++import puregero.multipaper.CraftMultiPaperNotificationManager;
+ 
+ import javax.annotation.Nullable; // Paper
+ import javax.annotation.Nonnull; // Paper
+@@ -274,6 +275,7 @@ public final class CraftServer implements Server {
+     private final EntityMetadataStore entityMetadata = new EntityMetadataStore();
+     private final PlayerMetadataStore playerMetadata = new PlayerMetadataStore();
+     private final WorldMetadataStore worldMetadata = new WorldMetadataStore();
++    private final CraftMultiPaperNotificationManager multipaperNotificationManager = new CraftMultiPaperNotificationManager(); // MultiPaper
+     private int monsterSpawn = -1;
+     private int animalSpawn = -1;
+     private int waterAnimalSpawn = -1;
+@@ -815,6 +817,13 @@ public final class CraftServer implements Server {
+         return this.servicesManager;
+     }
+ 
++    // MultiPaper start
++    @Override
++    public CraftMultiPaperNotificationManager getMultiPaperNotificationManager() {
++        return this.multipaperNotificationManager;
++    }
++    // MultiPaper end
++
+     @Override
+     public List<World> getWorlds() {
+         return new ArrayList<World>(this.worlds.values());
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 index e4efac7522292897911eb822c7c6786eb01aa4bf..369d3e19a8cb05d07f820da9466fa8753a0581d7 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
@@ -251,6 +285,94 @@ index 83e1c9aabba0d1b3b3c6c7a76a87bdb5bbb9fc7b..da56441dd2a20164bb6617f747839890
      }
  
      @Override
+diff --git a/src/main/java/puregero/multipaper/CraftMultiPaperNotificationManager.java b/src/main/java/puregero/multipaper/CraftMultiPaperNotificationManager.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..f07e921f4f0eb281dd76422ab6f0fb92919874c7
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/CraftMultiPaperNotificationManager.java
+@@ -0,0 +1,82 @@
++package puregero.multipaper;
++
++import net.minecraft.world.level.chunk.LevelChunk;
++import org.bukkit.Chunk;
++import org.bukkit.MultiPaperNotificationManager;
++import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.plugin.Plugin;
++import org.bukkit.util.Consumer;
++import puregero.multipaper.externalserverprotocol.PluginNotificationPacket;
++
++import java.lang.ref.WeakReference;
++import java.util.ArrayList;
++import java.util.HashMap;
++import java.util.Iterator;
++import java.util.List;
++import java.util.function.BiConsumer;
++
++public class CraftMultiPaperNotificationManager implements MultiPaperNotificationManager {
++
++    private final HashMap<String, List<Listener>> listeners = new HashMap<>();
++
++    @Override
++    public void on(Plugin plugin, String channel, Consumer<byte[]> callback) {
++        on(plugin, channel, (data, replyFunction) -> callback.accept(data));
++    }
++
++    @Override
++    public void on(Plugin plugin, String channel, BiConsumer<byte[], BiConsumer<String, byte[]>> callbackWithReply) {
++        listeners.computeIfAbsent(channel, key -> new ArrayList<>()).add(new Listener(plugin, callbackWithReply));
++    }
++
++    @Override
++    public void notify(String channel, byte[] data) {
++        MultiPaper.broadcastPacketToExternalServers(new PluginNotificationPacket(channel, data));
++    }
++
++    @Override
++    public void notify(Chunk chunk, String channel, byte[] data) {
++        LevelChunk levelChunk = ((CraftWorld) chunk.getWorld()).getHandle().getChunkIfLoaded(chunk.getX(), chunk.getZ());
++
++        if (levelChunk == null) {
++            new IllegalStateException("Chunk " + chunk.getWorld().getName() + "," + chunk.getX() + "," + chunk.getZ() + " is not loaded, could not send notification").printStackTrace();
++            return;
++        }
++
++        MultiPaper.broadcastPacketToExternalServers(levelChunk.externalSubscribers, () -> new PluginNotificationPacket(channel, data));
++    }
++
++    public void onNotification(ExternalServerConnection sender, String channel, byte[] data) {
++        List<Listener> listenerList = listeners.get(channel);
++        if (listenerList != null) {
++            Iterator<Listener> iterator = listenerList.iterator();
++
++            while (iterator.hasNext()) {
++                Listener listener = iterator.next();
++                Plugin plugin = listener.plugin.get();
++
++                if (plugin == null || !plugin.isEnabled()) {
++                    // Remove disabled plugins
++                    iterator.remove();
++                } else {
++                    listener.consumer.accept(data, (replyChannel, replyData) -> sender.send(new PluginNotificationPacket(replyChannel, replyData)));
++                }
++            }
++
++            if (listenerList.isEmpty()) {
++                listeners.remove(channel);
++            }
++        }
++    }
++
++    private static class Listener {
++        // Weak reference the plugin so that we don't keep an entire plugin loaded in memory after a reload
++        private final WeakReference<Plugin> plugin;
++        private final BiConsumer<byte[], BiConsumer<String, byte[]>> consumer;
++
++        public Listener(Plugin plugin, BiConsumer<byte[], BiConsumer<String, byte[]>> consumer) {
++            this.plugin = new WeakReference<>(plugin);
++            this.consumer = consumer;
++        }
++    }
++}
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 index 3649cb2a86213a5311be1218f1d7922f992b90fd..ecfd849c943fde805ab1ba29d69bd697d7ef8360 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
@@ -267,14 +389,15 @@ index 3649cb2a86213a5311be1218f1d7922f992b90fd..ecfd849c943fde805ab1ba29d69bd697
  
      public ExternalPlayer(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, GameType gamemode) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 16d4dc1748efaf1d8ddac9eacf651f8a4f84c944..19752deec4f5a71d45c1d685c46624ffd816684f 100644
+index 16d4dc1748efaf1d8ddac9eacf651f8a4f84c944..82a43a9ba9d50105ea9612263f852b0d74b3442c 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -36,6 +36,7 @@ public class ExternalServerPacketSerializer {
+@@ -36,6 +36,8 @@ public class ExternalServerPacketSerializer {
          addPacket(HurtEntityPacket.class, HurtEntityPacket::new);
          addPacket(AddItemToContainerPacket.class, AddItemToContainerPacket::new);
          addPacket(MobSetNavigationGoalPacket.class, MobSetNavigationGoalPacket::new);
 +        addPacket(PlayerDataUpdatePacket.class, PlayerDataUpdatePacket::new);
++        addPacket(PluginNotificationPacket.class, PluginNotificationPacket::new);
      }
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
@@ -431,5 +554,50 @@ index 0000000000000000000000000000000000000000..ecefd031e3e8ea2ceaed5de8e025e326
 +                }
 +            }
 +        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PluginNotificationPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PluginNotificationPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..3f3c2a1be48364c54a045e3a9d5715710b3cdb08
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PluginNotificationPacket.java
+@@ -0,0 +1,39 @@
++package puregero.multipaper.externalserverprotocol;
++
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftServer;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++public class PluginNotificationPacket extends ExternalServerPacket {
++    private final String channel;
++    private final byte[] data;
++
++    public PluginNotificationPacket(String channel, byte[] data) {
++        this.channel = channel;
++        this.data = data;
++    }
++
++    public PluginNotificationPacket(DataInputStream in) throws IOException {
++        channel = in.readUTF();
++
++        data = new byte[in.readInt()];
++        in.readFully(data);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(channel);
++        out.writeInt(data.length);
++        out.write(data);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> ((CraftServer) Bukkit.getServer()).getMultiPaperNotificationManager().onNotification(connection, channel, data));
 +    }
 +}

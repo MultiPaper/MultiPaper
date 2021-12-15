@@ -4,6 +4,29 @@ Date: Thu, 9 Dec 2021 18:10:03 +1000
 Subject: [PATCH] Add MultiPaper API
 
 
+diff --git a/src/main/java/org/bukkit/Bukkit.java b/src/main/java/org/bukkit/Bukkit.java
+index b7c45aa5d5f79fd16e59401acfa9c2bed0a5d78c..1798af8fd6d120629a2a01fbe2c3ee5bdef23c6f 100644
+--- a/src/main/java/org/bukkit/Bukkit.java
++++ b/src/main/java/org/bukkit/Bukkit.java
+@@ -659,6 +659,18 @@ public final class Bukkit {
+         return server.getServicesManager();
+     }
+ 
++    // MultiPaper start
++    /**
++     * Gets a multipaper notification manager.
++     *
++     * @return a multipaper notification manager
++     */
++    @NotNull
++    public static MultiPaperNotificationManager getMultiPaperNotificationManager() {
++        return server.getMultiPaperNotificationManager();
++    }
++    // MultiPaper end
++
+     /**
+      * Gets a list of all worlds on this server.
+      *
 diff --git a/src/main/java/org/bukkit/Chunk.java b/src/main/java/org/bukkit/Chunk.java
 index 5a4884db36d448c885e49c965ae329a0638dd628..d5cb9a2de7532ad95f3d89f55927a0906b8b2da6 100644
 --- a/src/main/java/org/bukkit/Chunk.java
@@ -69,6 +92,124 @@ index 8321441b8f528a05e297f485672f928e76fe017d..15b646c6cbf74ddbb3290bc0a0b95a24
 +
      /**
       * Adds the location by another.
+      *
+diff --git a/src/main/java/org/bukkit/MultiPaperNotificationManager.java b/src/main/java/org/bukkit/MultiPaperNotificationManager.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e6e1b5d79d25140b2fbf6b7716c2cb56e453d018
+--- /dev/null
++++ b/src/main/java/org/bukkit/MultiPaperNotificationManager.java
+@@ -0,0 +1,91 @@
++package org.bukkit;
++
++import org.bukkit.plugin.Plugin;
++import org.bukkit.util.Consumer;
++
++import java.nio.charset.StandardCharsets;
++import java.util.function.BiConsumer;
++
++public interface MultiPaperNotificationManager {
++
++    /**
++     * Listen to notifications sent by other servers.
++     * 
++     * @param plugin The plugin listening to these notifications
++     * @param channel The notification channel to listen to
++     * @param callback A handler for any data received
++     */
++    void on(Plugin plugin, String channel, Consumer<byte[]> callback);
++
++    /**
++     * Listen to notifications sent by other servers.
++     *
++     * @param plugin The plugin listening to these notifications
++     * @param channel The notification channel to listen to
++     * @param callback A handler for any data received
++     */
++    default void onString(Plugin plugin, String channel, Consumer<String> callback) {
++        on(plugin, channel, bytes -> callback.accept(new String(bytes, StandardCharsets.UTF_8)));
++    }
++
++    /**
++     * Listen to notifications sent by other servers.
++     *
++     * @param plugin The plugin listening to these notifications
++     * @param channel The notification channel to listen to
++     * @param callbackWithReply A handler for any data received, and a method to reply to the server on a specified channel
++     */
++    void on(Plugin plugin, String channel, BiConsumer<byte[], BiConsumer<String, byte[]>> callbackWithReply);
++
++    /**
++     * Listen to notifications sent by other servers.
++     *
++     * @param plugin The plugin listening to these notifications
++     * @param channel The notification channel to listen to
++     * @param callbackWithReply A handler for any data received, and a method to reply to the server on a specified channel
++     */
++    default void onString(Plugin plugin, String channel, BiConsumer<String, BiConsumer<String, String>> callbackWithReply) {
++        on(plugin, channel, (bytes, reply) -> callbackWithReply.accept(
++                new String(bytes, StandardCharsets.UTF_8),
++                (replyChannel, string) -> reply.accept(replyChannel, string.getBytes(StandardCharsets.UTF_8)))
++        );
++    }
++
++    /**
++     * Notify other servers.
++     *
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    void notify(String channel, byte[] data);
++
++    /**
++     * Notify other servers.
++     *
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    default void notify(String channel, String data) {
++        notify(channel, data.getBytes(StandardCharsets.UTF_8));
++    }
++
++    /**
++     * Notify other servers with the specified chunk loaded
++     *
++     * @param chunk The chunk that's loaded
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    void notify(Chunk chunk, String channel, byte[] data);
++
++    /**
++     * Notify other servers with the specified chunk loaded
++     *
++     * @param chunk The chunk that's loaded
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    default void notify(Chunk chunk, String channel, String data) {
++        notify(chunk, channel, data.getBytes(StandardCharsets.UTF_8));
++    }
++}
+diff --git a/src/main/java/org/bukkit/Server.java b/src/main/java/org/bukkit/Server.java
+index 6996a61534bbdd34729f1dcd988ae2666bfad2c4..181ff84ee9a91c236d6cfa14d76ef59a742a81b3 100644
+--- a/src/main/java/org/bukkit/Server.java
++++ b/src/main/java/org/bukkit/Server.java
+@@ -544,6 +544,16 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
+     @NotNull
+     public ServicesManager getServicesManager();
+ 
++    // MultiPaper start
++    /**
++     * Gets a multipaper notification manager.
++     *
++     * @return a multipaper notification manager
++     */
++    @NotNull
++    public MultiPaperNotificationManager getMultiPaperNotificationManager();
++    // MultiPaper end
++
+     /**
+      * Gets a list of all worlds on this server.
       *
 diff --git a/src/main/java/org/bukkit/World.java b/src/main/java/org/bukkit/World.java
 index 1f8a51897d9de00f0004ab1de479198390483f7d..e27e496da21c81a2f2c9ef96426f256beb3a0d83 100644

@@ -1338,10 +1338,10 @@ index 0000000000000000000000000000000000000000..a5ddd8d2a41311658a4e18269113b938
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2587a9bc72dafab4480e8db612518c0685d3e381
+index 0000000000000000000000000000000000000000..75ac4b1fc21a9bb7f698b5e1c9a7bef5951041da
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,126 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1356,6 +1356,7 @@ index 0000000000000000000000000000000000000000..2587a9bc72dafab4480e8db612518c06
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.craftbukkit.scheduler.CraftScheduler;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
@@ -1425,28 +1426,46 @@ index 0000000000000000000000000000000000000000..2587a9bc72dafab4480e8db612518c06
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        MultiPaper.runSync(() -> {
-+            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
-+            Entity entity = level.getEntity(uuid);
++        MultiPaper.runSync(() -> handleLater(connection, 0));
++    }
 +
-+            if (entity == null) {
++    private void handleLater(ExternalServerConnection connection, int depth) {
++        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++        Entity entity = level.getEntity(uuid);
++
++        if (entity == null) {
++            // If we can't find the entity, try again later,
++            // the spawn entity packet is probably coming later
++            if (depth > 5) {
 +                LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName());
 +                return;
 +            }
 +
-+            Entity[] entities = new Entity[uuids.length];
++            ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
++                handleLater(connection, depth + 1);
++            }, 1, "EntityUpdateWithDependenciesPacket-handleLater");
++            return;
++        }
 +
-+            for (int i = 0; i < uuids.length; i++) {
-+                entities[i] = level.getEntity(uuids[i]);
++        Entity[] entities = new Entity[uuids.length];
 +
-+                if (entities[i] == null) {
++        for (int i = 0; i < uuids.length; i++) {
++            entities[i] = level.getEntity(uuids[i]);
++
++            if (entities[i] == null) {
++                if (depth > 5) {
 +                    LOGGER.warn("Could not find dependent entity " + uuids[i] + " for " + packet.getClass().getSimpleName());
 +                    return;
 +                }
-+            }
 +
-+            MultiPaperEntitiesHandler.handleEntityWithDependenicesUpdate(entity, entities, packet);
-+        });
++                ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
++                    handleLater(connection, depth + 1);
++                }, 1, "EntityUpdateWithDependenciesPacket-handleLater");
++                return;
++            }
++        }
++
++        MultiPaperEntitiesHandler.handleEntityWithDependenicesUpdate(entity, entities, packet);
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java

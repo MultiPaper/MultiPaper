@@ -1255,10 +1255,10 @@ index 269fa39d6d5f16efeda1867e47d2a14bfa94770c..ba9525c0ed1d0bb65a408980a9e6905a
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..138a3ba15a5adb9e85f4316dd834bb3b29cf17e0
+index 0000000000000000000000000000000000000000..8e09745da02175baa5fdfac24eae7a00fc5b1d00
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,99 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1312,6 +1312,12 @@ index 0000000000000000000000000000000000000000..138a3ba15a5adb9e85f4316dd834bb3b
 +    public void handle(ExternalServerConnection connection) {
 +        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
 +        ChunkHolder holder = MultiPaper.getChunkHolder(world, cx, cz);
++
++        if (holder == null) {
++            LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we aren't trying to load it.");
++            connection.send(new SendChunkPacket(world, cx, cz, null));
++            return;
++        }
 +
 +        holder.getLastAvailableChunkFuture().thenAccept(either -> {
 +            if (either.left().isEmpty()) {

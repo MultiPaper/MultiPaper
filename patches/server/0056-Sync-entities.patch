@@ -813,10 +813,10 @@ index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..5a1c10df5c3bbeafc59a54e75444e2da
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b9813750bd695dbcd54287e1f2b0afd965c7500e
+index 0000000000000000000000000000000000000000..9fa8d275a5f72b9b46a785c83d8e57e0d45b1ec7
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,246 @@
+@@ -0,0 +1,250 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -1000,6 +1000,10 @@ index 0000000000000000000000000000000000000000..b9813750bd695dbcd54287e1f2b0afd9
 +        if (!entity.shouldBeSaved()) return;
 +
 +        MultiPaper.runSync(() -> { // Run this after the entity has finished spawning
++            if (entity.isRemoved()) {
++                return;
++            }
++
 +            LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
 +            if (chunk != null) {
 +                MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity));
@@ -1150,10 +1154,10 @@ index 0000000000000000000000000000000000000000..b36449ced06d41ac158cdc1c83f482fd
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b2d78f522b4fbb43a5cc568c3b4d582d87fa9090
+index 0000000000000000000000000000000000000000..f850b67c5092bf13d3ce2229f97478be069aa291
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,83 @@
+@@ -0,0 +1,87 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1187,6 +1191,10 @@ index 0000000000000000000000000000000000000000..b2d78f522b4fbb43a5cc568c3b4d582d
 +
 +        CompoundTag tag = new CompoundTag();
 +        entity.save(tag);
++
++        if (tag.getAllKeys().isEmpty()) {
++            new Exception("Sending an empty entity " + entity).printStackTrace();
++        }
 +
 +        try {
 +            this.data = MultiPaper.nbtCompressToBytes(tag);

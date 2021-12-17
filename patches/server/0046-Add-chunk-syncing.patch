@@ -5,7 +5,7 @@ Subject: [PATCH] Add chunk syncing
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
-index d271871563fa883efb77b35ec3b1dfbba87f0b62..be9dd2e04834c96330a04d6469e04b97a99f032b 100644
+index d271871563fa883efb77b35ec3b1dfbba87f0b62..40e74c91d79eab808b5bed3954a67624188cc003 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
 @@ -16,6 +16,7 @@ import net.minecraft.Util;
@@ -62,7 +62,7 @@ index d271871563fa883efb77b35ec3b1dfbba87f0b62..be9dd2e04834c96330a04d6469e04b97
                  this.chunkMap.level.getChunkSource().entityTickingChunks.remove(chunkIfCached);
              }
              // Paper end - entity ticking chunk set
-@@ -747,6 +761,32 @@ public class ChunkHolder {
+@@ -747,6 +761,40 @@ public class ChunkHolder {
          this.updateChunkToSave(CompletableFuture.completedFuture(Either.left(chunk.getWrapped())), "replaceProto");
      }
  
@@ -72,14 +72,8 @@ index d271871563fa883efb77b35ec3b1dfbba87f0b62..be9dd2e04834c96330a04d6469e04b97
 +            protoChunk = imposterProtoChunk.getWrapped();
 +        }
 +
-+        Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure> eitherFail = Either.right(new ChunkHolder.ChunkLoadingFailure() {
-+            public String toString() {
-+                return "Unloaded ticket level " + ChunkHolder.this.pos;
-+            }
-+        });
-+
 +        for (int i = protoChunk.getStatus().getIndex() + 1; i < this.futures.length(); ++i) {
-+            this.futures.set(i, CompletableFuture.completedFuture(eitherFail));
++            this.futures.set(i, null);
 +        }
 +
 +        Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure> either = Either.left(protoChunk);
@@ -89,6 +83,20 @@ index d271871563fa883efb77b35ec3b1dfbba87f0b62..be9dd2e04834c96330a04d6469e04b97
 +        }
 +
 +        this.updateChunkToSave(CompletableFuture.completedFuture(Either.left(protoChunk)), "replaceProtoWithProto");
++    }
++
++    public CompletableFuture<Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>> getLastAvailableChunkFuture() {
++        for (int i = ChunkHolder.CHUNK_STATUSES.size() - 1; i >= 0; --i) {
++            ChunkStatus chunkstatus = ChunkHolder.CHUNK_STATUSES.get(i);
++            CompletableFuture<Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>> completablefuture = this.getFutureIfPresentUnchecked(chunkstatus);
++
++            if (completablefuture.getNow(Either.left(null)).right().isEmpty()) {
++                // If there's no error, this chunk must be loading
++                return completablefuture;
++            }
++        }
++
++        return ChunkHolder.UNLOADED_CHUNK_FUTURE;
 +    }
 +    // MultiPaper end
 +
@@ -463,10 +471,10 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 17621d5fd36f0b17ab2c4d1736583d9eb9c79153..9b0e84b22db7beb26455be117e28a848b0b41df3 100644
+index 17621d5fd36f0b17ab2c4d1736583d9eb9c79153..f21044ea3fbec0eb1d8d26ae88691b38098090eb 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -3,22 +3,25 @@ package puregero.multipaper;
+@@ -3,22 +3,26 @@ package puregero.multipaper;
  import net.minecraft.network.protocol.Packet;
  import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ServerPlayer;
@@ -481,6 +489,7 @@ index 17621d5fd36f0b17ab2c4d1736583d9eb9c79153..9b0e84b22db7beb26455be117e28a848
  import java.io.*;
  import java.net.Socket;
  import java.util.*;
++import java.util.concurrent.ConcurrentHashMap;
 +import java.util.function.Consumer;
  
  public class ExternalServerConnection extends Thread implements Closeable {
@@ -492,23 +501,23 @@ index 17621d5fd36f0b17ab2c4d1736583d9eb9c79153..9b0e84b22db7beb26455be117e28a848
  
      private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
-+    public final HashMap<ChunkKey, Consumer<byte[]>> chunkCallbacks = new HashMap<>();
++    public final ConcurrentHashMap<ChunkKey, Consumer<byte[]>> chunkCallbacks = new ConcurrentHashMap<>();
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
-@@ -108,4 +111,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -108,4 +112,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
              players.add(player);
          }
      }
 +
 +    public void requestChunk(String world, int cx, int cz, Consumer<byte[]> callback) {
-+        send(new RequestChunkPacket(world, cx, cz));
-+
 +        if (callback != null) {
 +            if (chunkCallbacks.put(new ChunkKey(world, cx, cz), callback) != null) {
 +                LOGGER.warn("A chunk callback already existed for " + world + ", " + cx + ", " + cz);
 +            }
 +        }
++
++        send(new RequestChunkPacket(world, cx, cz));
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
@@ -980,14 +989,15 @@ index 0000000000000000000000000000000000000000..57b648a053b9638a34de4513cfb28906
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index f6f7d74d354373fc21dd988757792ab575e3ad64..2aa8f7cdbb63311984f7e817b1735dca95e99645 100644
+index f6f7d74d354373fc21dd988757792ab575e3ad64..474f93aa139c7838364c1d2f43cd14e20f904216 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -1,17 +1,28 @@
+@@ -1,17 +1,29 @@
  package puregero.multipaper;
  
 +import net.minecraft.core.Registry;
 +import net.minecraft.resources.ResourceLocation;
++import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.ChunkStatus;
 +import net.minecraft.world.level.chunk.LevelChunk;
@@ -1012,7 +1022,7 @@ index f6f7d74d354373fc21dd988757792ab575e3ad64..2aa8f7cdbb63311984f7e817b1735dca
  
  public class MultiPaperConnection extends Thread {
  
-@@ -133,6 +144,57 @@ public class MultiPaperConnection extends Thread {
+@@ -133,6 +145,57 @@ public class MultiPaperConnection extends Thread {
          server.setLastAlive(System.currentTimeMillis());
      }
  
@@ -1070,7 +1080,7 @@ index f6f7d74d354373fc21dd988757792ab575e3ad64..2aa8f7cdbb63311984f7e817b1735dca
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -147,6 +209,24 @@ public class MultiPaperConnection extends Thread {
+@@ -147,6 +210,24 @@ public class MultiPaperConnection extends Thread {
          });
      }
  
@@ -1083,10 +1093,10 @@ index f6f7d74d354373fc21dd988757792ab575e3ad64..2aa8f7cdbb63311984f7e817b1735dca
 +        ChunkStatus status = Registry.CHUNK_STATUS.get(new ResourceLocation(statusString));
 +
 +        if (!server.isMe()) {
-+            ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
-+            if (chunk == null) {
++            ChunkHolder holder = MultiPaper.getChunkHolder(world, cx, cz);
++            if (holder == null) {
 +                LOGGER.warn("Received a chunk change status notification for an unloaded chunk " + world + ";" + cx + ";" + cz + " from " + server.getName());
-+            } else if (!chunk.getStatus().isOrAfter(status)) {
++            } else if (holder.getAvailableChunkNow() != null && !holder.getAvailableChunkNow().getStatus().isOrAfter(status)) {
 +                MultiPaper.reloadChunks.put(new ChunkKey(world, cx, cz), () -> server.getConnection().send(new RequestChunkPacket(world, cx, cz)));
 +            }
 +        }
@@ -1095,7 +1105,7 @@ index f6f7d74d354373fc21dd988757792ab575e3ad64..2aa8f7cdbb63311984f7e817b1735dca
      public void writeTickTime(long time, double tps) throws IOException {
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeTickTime");
-@@ -161,4 +241,132 @@ public class MultiPaperConnection extends Thread {
+@@ -161,4 +242,132 @@ public class MultiPaperConnection extends Thread {
          out.writeInt(port);
          out.send(null);
      }
@@ -1245,16 +1255,15 @@ index 269fa39d6d5f16efeda1867e47d2a14bfa94770c..ba9525c0ed1d0bb65a408980a9e6905a
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..688ef68a086e9a3e8214199edd50e6bb6a3fd00a
+index 0000000000000000000000000000000000000000..1e62464760e0e0e8f0939fe60af2a530bf2d78eb
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,82 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
-+import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.level.chunk.storage.ChunkSerializer;
@@ -1262,7 +1271,6 @@ index 0000000000000000000000000000000000000000..688ef68a086e9a3e8214199edd50e6bb
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
-+import org.bukkit.craftbukkit.scheduler.CraftScheduler;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
@@ -1300,29 +1308,18 @@ index 0000000000000000000000000000000000000000..688ef68a086e9a3e8214199edd50e6bb
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        sendChunkLater(connection, world, cx, cz, 0);
-+    }
-+
-+    private void sendChunkLater(ExternalServerConnection connection, String world, int cx, int cz, int depth) {
 +        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
-+        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
++        ChunkHolder holder = MultiPaper.getChunkHolder(world, cx, cz);
 +
-+        if (chunk == null) {
-+            ChunkHolder holder = level.chunkSource.chunkMap.getUpdatingChunkIfPresent(ChunkPos.asLong(cx, cz));
-+            if (holder != null) {
-+                if (depth == 20) {
-+                    LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we timed out waiting for it to load.");
-+                    connection.send(new SendChunkPacket(world, cx, cz, null));
-+                    return;
-+                }
-+                ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
-+                    sendChunkLater(connection, world, cx, cz, depth + 1);
-+                }, 1, "ExternalServerConnection-sendChunkLater");
-+            } else {
++        holder.getLastAvailableChunkFuture().thenAccept(either -> {
++            if (either.left().isEmpty()) {
 +                LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we don't have it loaded.");
 +                connection.send(new SendChunkPacket(world, cx, cz, null));
++                return;
 +            }
-+        } else {
++
++            ChunkAccess chunk = either.left().get();
++
 +            try {
 +                CompoundTag tag = ChunkSerializer.write(level, chunk);
 +
@@ -1339,9 +1336,9 @@ index 0000000000000000000000000000000000000000..688ef68a086e9a3e8214199edd50e6bb
 +            } catch (ConcurrentModificationException e) {
 +                LOGGER.warn("Got ConcurrentModificationException while sending chunk, sending it in main thread instead");
 +                e.printStackTrace();
-+                MultiPaper.runSync(() -> sendChunkLater(connection, world, cx, cz, depth));
++                MultiPaper.runSync(() -> handle(connection));
 +            }
-+        }
++        });
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java

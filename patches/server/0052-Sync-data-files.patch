@@ -59,7 +59,7 @@ index 77209dfe179f97a5be89bdf812622773b90e6214..ed1689972acae701ea6ca78654496e3c
          this.carriedBy.forEach(MapItemSavedData.HoldingPlayer::markDecorationsDirty);
      }
 diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
-index e84b99ca10621cb1021d7ec17ba21df24e8c7474..b157f61daa602bd6c99603b66bf16a56c00fa6c1 100644
+index e84b99ca10621cb1021d7ec17ba21df24e8c7474..e3446424a7ef518aaf499b1857621085d0cfcbe0 100644
 --- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
 +++ b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
 @@ -2,11 +2,8 @@ package net.minecraft.world.level.storage;
@@ -76,7 +76,7 @@ index e84b99ca10621cb1021d7ec17ba21df24e8c7474..b157f61daa602bd6c99603b66bf16a56
  import java.util.Map;
  import java.util.function.Function;
  import java.util.function.Supplier;
-@@ -19,10 +16,11 @@ import net.minecraft.util.datafix.DataFixTypes;
+@@ -19,6 +16,7 @@ import net.minecraft.util.datafix.DataFixTypes;
  import net.minecraft.world.level.saveddata.SavedData;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
@@ -84,11 +84,6 @@ index e84b99ca10621cb1021d7ec17ba21df24e8c7474..b157f61daa602bd6c99603b66bf16a56
  
  public class DimensionDataStorage {
      private static final Logger LOGGER = LogManager.getLogger();
--    public final Map<String, SavedData> cache = Maps.newHashMap();
-+    public final Map<String, SavedData> cache = new java.util.concurrent.ConcurrentHashMap<>(); // MultiPaper - fix ConcurrentModificationException crash
-     private final DataFixer fixerUpper;
-     private final File dataFolder;
- 
 @@ -61,8 +59,11 @@ public class DimensionDataStorage {
      private <T extends SavedData> T readSavedData(Function<CompoundTag, T> readFunction, String id) {
          try {
@@ -130,7 +125,7 @@ index e84b99ca10621cb1021d7ec17ba21df24e8c7474..b157f61daa602bd6c99603b66bf16a56
 +    // MultiPaper end
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index a6076d33a05943e79b61fb7011c1d35c98bfe2f3..10da5e243806047bc71ab9e178842b60bb30da1a 100644
+index a6076d33a05943e79b61fb7011c1d35c98bfe2f3..134c023fe25a6bb6c7967e7c8957fd2e53529c59 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -14,6 +14,9 @@ import net.minecraft.world.level.chunk.ChunkAccess;
@@ -151,7 +146,7 @@ index a6076d33a05943e79b61fb7011c1d35c98bfe2f3..10da5e243806047bc71ab9e178842b60
      public static MultiPaperConnection getConnection() {
          if (multiPaperConnection == null) {
              multiPaperConnection = new MultiPaperConnection();
-@@ -88,6 +92,21 @@ public class MultiPaper {
+@@ -88,6 +92,19 @@ public class MultiPaper {
                  level.saveIncrementally(true);
              }
          }
@@ -162,18 +157,16 @@ index a6076d33a05943e79b61fb7011c1d35c98bfe2f3..10da5e243806047bc71ab9e178842b60
 +
 +        Bukkit.getWorlds().forEach(world -> {
 +            DimensionDataStorage persistentData = ((CraftWorld) world).getHandle().getDataStorage();
-+            synchronized (persistentData.cache) {
-+                persistentData.cache.forEach((key, value) -> {
-+                    if (value instanceof MapIndex || (value instanceof MapItemSavedData && hasBeen1Seconds)) {
-+                        persistentData.save(key, value);
-+                    }
-+                });
-+            }
++            persistentData.cache.forEach((key, value) -> {
++                if (value instanceof MapIndex || (value instanceof MapItemSavedData && hasBeen1Seconds)) {
++                    persistentData.save(key, value);
++                }
++            });
 +        });
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -265,6 +284,26 @@ public class MultiPaper {
+@@ -265,6 +282,26 @@ public class MultiPaper {
          getConnection().writeUid(world, data);
      }
  
@@ -201,7 +194,7 @@ index a6076d33a05943e79b61fb7011c1d35c98bfe2f3..10da5e243806047bc71ab9e178842b60
          do {
              path = path.getParentFile();
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index a3345198c3f70f6a540322ed0344868bf125a55d..42812fce2cc65f756d2cf9cce7c922b30c2bcf00 100644
+index a3345198c3f70f6a540322ed0344868bf125a55d..fa4c54065ab411d5f5dabce473d80d5c20d8416a 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -9,6 +9,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
@@ -231,9 +224,9 @@ index a3345198c3f70f6a540322ed0344868bf125a55d..42812fce2cc65f756d2cf9cce7c922b3
 +        }
 +
 +        // Clear the data from the world's data cache
-+        synchronized (((CraftWorld) world).getHandle().getDataStorage().cache) {
++        MultiPaper.runSync(() -> {
 +            ((CraftWorld) world).getHandle().getDataStorage().cache.remove(file);
-+        }
++        });
 +    }
 +
      public void chunkOwner(DataInputStream in, DataOutputSender out) throws IOException {

@@ -59,7 +59,7 @@ index 77209dfe179f97a5be89bdf812622773b90e6214..ed1689972acae701ea6ca78654496e3c
          this.carriedBy.forEach(MapItemSavedData.HoldingPlayer::markDecorationsDirty);
      }
 diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
-index e84b99ca10621cb1021d7ec17ba21df24e8c7474..e3446424a7ef518aaf499b1857621085d0cfcbe0 100644
+index e84b99ca10621cb1021d7ec17ba21df24e8c7474..b157f61daa602bd6c99603b66bf16a56c00fa6c1 100644
 --- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
 +++ b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
 @@ -2,11 +2,8 @@ package net.minecraft.world.level.storage;
@@ -76,7 +76,7 @@ index e84b99ca10621cb1021d7ec17ba21df24e8c7474..e3446424a7ef518aaf499b1857621085
  import java.util.Map;
  import java.util.function.Function;
  import java.util.function.Supplier;
-@@ -19,6 +16,7 @@ import net.minecraft.util.datafix.DataFixTypes;
+@@ -19,10 +16,11 @@ import net.minecraft.util.datafix.DataFixTypes;
  import net.minecraft.world.level.saveddata.SavedData;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
@@ -84,6 +84,11 @@ index e84b99ca10621cb1021d7ec17ba21df24e8c7474..e3446424a7ef518aaf499b1857621085
  
  public class DimensionDataStorage {
      private static final Logger LOGGER = LogManager.getLogger();
+-    public final Map<String, SavedData> cache = Maps.newHashMap();
++    public final Map<String, SavedData> cache = new java.util.concurrent.ConcurrentHashMap<>(); // MultiPaper - fix ConcurrentModificationException crash
+     private final DataFixer fixerUpper;
+     private final File dataFolder;
+ 
 @@ -61,8 +59,11 @@ public class DimensionDataStorage {
      private <T extends SavedData> T readSavedData(Function<CompoundTag, T> readFunction, String id) {
          try {

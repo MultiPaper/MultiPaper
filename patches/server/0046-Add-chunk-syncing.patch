@@ -768,10 +768,10 @@ index dfbb4c47f0308e8395057014ca14dec0152eec07..a5332c1991bc5a0a3c37624cbee6fef8
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2e4d5e24c1d0a30f14a70540cec7cc4fef243718
+index 0000000000000000000000000000000000000000..57b648a053b9638a34de4513cfb289060b0c8016
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,204 @@
+@@ -0,0 +1,207 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -912,7 +912,10 @@ index 0000000000000000000000000000000000000000..2e4d5e24c1d0a30f14a70540cec7cc4f
 +                    blockUpdateChunk.removeBlockEntity(update.getPos());
 +                    blockUpdateChunk.setBlockEntityNbt(update.getTag());
 +                    blockUpdateChunk.getBlockEntity(update.getPos());
-+                    ((LevelChunk) blockUpdateChunk).playerChunk.blockChanged(update.getPos());
++
++                    if (((LevelChunk) blockUpdateChunk).playerChunk != null) {
++                        ((LevelChunk) blockUpdateChunk).playerChunk.blockChanged(update.getPos());
++                    }
 +                }
 +            }
 +        } else if (blockUpdateChunk != null) {
@@ -1343,10 +1346,10 @@ index 0000000000000000000000000000000000000000..688ef68a086e9a3e8214199edd50e6bb
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..851d03f79ac92216e5953c0b8ee1242475ed38dd
+index 0000000000000000000000000000000000000000..270c2c5dd97911557dd5edbcb38ebf7c4dd7f604
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,124 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1355,7 +1358,6 @@ index 0000000000000000000000000000000000000000..851d03f79ac92216e5953c0b8ee12424
 +import net.minecraft.server.level.ChunkMap;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.level.ChunkPos;
-+import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.ImposterProtoChunk;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.level.chunk.storage.ChunkSerializer;
@@ -1434,12 +1436,37 @@ index 0000000000000000000000000000000000000000..851d03f79ac92216e5953c0b8ee12424
 +                ChunkMap chunkMap = level.chunkSource.chunkMap;
 +                ChunkHolder holder = MultiPaper.getChunkHolder(world, cx, cz);
 +                if (holder == null) {
-+                    LOGGER.info("Received chunk data " + world + "," + cx + "," + cz + " but no chunk is loaded here");
++                    LOGGER.warn("Received chunk data " + world + "," + cx + "," + cz + " but no chunk is loaded here");
 +                } else if (holder.getAvailableChunkNow() instanceof LevelChunk) {
-+                    LOGGER.info("Received chunk data " + world + "," + cx + "," + cz + " but it is a level chunk (" + holder.getChunkHolderStatus() + ")");
++                    LOGGER.warn("Received chunk data " + world + "," + cx + "," + cz + " but it is a level chunk (" + holder.getChunkHolderStatus() + ")");
++//                    MultiPaper.runSync(() -> {
++//                        level.getChunkSource().removeLoadedChunk(levelChunk);
++//                        newChunk.tasks.forEach(Runnable::run);
++//                        holder.replaceProtoChunk((ImposterProtoChunk) newChunk.protoChunk);
++//                        chunkMap.protoChunkToFullChunk(holder).thenComposeAsync(either -> {
++//                            either.ifLeft(chunk -> {
++//                                ((LevelChunk) chunk).loadCallback();
++//                                level.getWorld().refreshChunk(cx, cz);
++//                            });
++//                            return CompletableFuture.completedFuture(either);
++//                        }, chunkMap.mainThreadExecutor).thenRun(() -> {
++//                            if (cx == 5 && cz == -18) {
++//                                LOGGER.info("Loaded full chunk " + holder.getFullChunk() + " at " + holder.getPos() + " with " + holder.getAvailableChunkNow().getBlockEntitiesPos().size() + " block entities");
++//                            }
++//                        });
++//                        if (newChunk.protoChunk.getBlockEntitiesPos().isEmpty() && cx == 5 && cz == -18) {
++//                            LOGGER.warn("Received chunk " + newChunk.protoChunk + " with empty block entites " + newChunk.protoChunk.getPos() + " " + newChunk.protoChunk.getStatus() + " " + tag.getList("block_entities", 10).size());
++//                        }
++//                    });
 +                } else {
 +                    ChunkSerializer.InProgressChunkHolder newChunk = ChunkSerializer.loadChunk(level, level.getPoiManager(), new ChunkPos(cx, cz), tag, true);
-+                    holder.replaceProtoChunk(newChunk.protoChunk);
++                    MultiPaper.runSync(() -> newChunk.tasks.forEach(Runnable::run));
++
++                    if (newChunk.protoChunk instanceof ImposterProtoChunk imposterProtoChunk) {
++                        holder.replaceProtoChunk(imposterProtoChunk);
++                    } else {
++                        holder.replaceProtoChunk(newChunk.protoChunk);
++                    }
 +                }
 +            }
 +        } catch (IOException e) {

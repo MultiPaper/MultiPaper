@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 17 Dec 2021 20:07:06 +1000
+Subject: [PATCH] Ensure Villager getOffers is run on the main thread
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/npc/AbstractVillager.java b/src/main/java/net/minecraft/world/entity/npc/AbstractVillager.java
+index bd283f71cb05ffbe1fed39afb41ae54dc52ec297..bb2ff3e158d3bb7d392b11913eace559356c0bd0 100644
+--- a/src/main/java/net/minecraft/world/entity/npc/AbstractVillager.java
++++ b/src/main/java/net/minecraft/world/entity/npc/AbstractVillager.java
+@@ -10,6 +10,7 @@ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.network.syncher.EntityDataAccessor;
+ import net.minecraft.network.syncher.EntityDataSerializers;
+ import net.minecraft.network.syncher.SynchedEntityData;
++import net.minecraft.server.MCUtil;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.sounds.SoundEvent;
+@@ -125,6 +126,7 @@ public abstract class AbstractVillager extends AgeableMob implements InventoryCa
+     @Override
+     public MerchantOffers getOffers() {
+         if (this.offers == null) {
++            if (!MCUtil.isMainThread()) return MCUtil.ensureMain(this::getOffers); // MultiPaper
+             this.offers = new MerchantOffers();
+             this.updateTrades();
+         }

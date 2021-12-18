@@ -5,7 +5,7 @@ Subject: [PATCH] Dont update external blocks
 
 
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index c53190203f18e9ae40466454e1a3b76e7b8511d3..ea189361132a9c9e65128463be48a5cf20815de8 100644
+index c53190203f18e9ae40466454e1a3b76e7b8511d3..7bc773cd8a3e597e381a91943b8c9923e37f5a90 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
 @@ -99,6 +99,7 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
@@ -31,15 +31,15 @@ index c53190203f18e9ae40466454e1a3b76e7b8511d3..ea189361132a9c9e65128463be48a5cf
              // Paper start - while the above setAir method is named same and looks very similar
              // they are NOT used with same intent and the above should not fire this event. The above method is more of a BlockSetToAirEvent,
              // it doesn't imply destruction of a block that plays a sound effect / drops an item.
-@@ -895,6 +904,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
-     }
- 
-     public void neighborChanged(BlockPos pos, Block sourceBlock, BlockPos neighborPos) {
-+        if (MultiPaper.isChunkExternal(getChunkIfLoaded(pos))) return; // MultiPaper - don't update blocks not owned by us
-+
+@@ -898,6 +907,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
          if (!this.isClientSide) {
              BlockState iblockdata = this.getBlockState(pos);
  
++            if (!iblockdata.is(Blocks.REDSTONE_WIRE) && MultiPaper.isChunkExternal(getChunkIfLoaded(pos))) return; // MultiPaper - don't update blocks not owned by us (except for redstone)
++
+             try {
+                 // CraftBukkit start
+                 CraftWorld world = ((ServerLevel) this).getWorld();
 @@ -1057,7 +1068,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
                  toRemove.add(tickingblockentity); // Paper - use removeAll
                  // Spigot end

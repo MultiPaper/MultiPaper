@@ -5,7 +5,7 @@ Subject: [PATCH] Dont load or send chunk for external players
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 4bdaead740682fa623cef7f04f651ada05901c29..baf673272ee6cb972e5e8cbc7a062d213c686a0b 100644
+index 4bdaead740682fa623cef7f04f651ada05901c29..a5fcfb34141090b400132a36b2dc8eb7d2ce2789 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -109,6 +109,7 @@ import org.apache.logging.log4j.Logger;
@@ -16,7 +16,7 @@ index 4bdaead740682fa623cef7f04f651ada05901c29..baf673272ee6cb972e5e8cbc7a062d21
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -1804,7 +1805,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1804,10 +1805,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
      }
  
      private boolean skipPlayer(ServerPlayer player) {
@@ -25,16 +25,21 @@ index 4bdaead740682fa623cef7f04f651ada05901c29..baf673272ee6cb972e5e8cbc7a062d21
      }
  
      void updatePlayerStatus(ServerPlayer player, boolean added) {
-@@ -1830,6 +1831,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
-             this.removePlayerFromDistanceMaps(player); // Paper - distance maps
-         }
++        if (MultiPaper.isExternalPlayer(player)) return; // MultiPaper - don't send chunks to external players
++
+         boolean flag1 = this.skipPlayer(player);
+         boolean flag2 = this.playerMap.ignoredOrUnknown(player);
+         int i = SectionPos.blockToSectionCoord(player.getBlockX());
+@@ -1853,6 +1856,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+     public void move(ServerPlayer player) {
+         // Paper - delay this logic for the entity tracker tick, no need to duplicate it
  
 +        if (MultiPaper.isExternalPlayer(player)) return; // MultiPaper - don't send chunks to external players
 +
-         for (int k = i - this.viewDistance - 1; k <= i + this.viewDistance + 1; ++k) {
-             for (int l = j - this.viewDistance - 1; l <= j + this.viewDistance + 1; ++l) {
-                 if (ChunkMap.isChunkInRange(k, l, i, j, this.viewDistance)) {
-@@ -1944,7 +1947,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         int i = SectionPos.blockToSectionCoord(player.getBlockX());
+         int j = SectionPos.blockToSectionCoord(player.getBlockZ());
+         SectionPos sectionposition = player.getLastSectionPos();
+@@ -1944,7 +1949,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              ServerPlayer entityplayer = (ServerPlayer) iterator.next();
              SectionPos sectionposition = entityplayer.getLastSectionPos();
  
@@ -43,7 +48,7 @@ index 4bdaead740682fa623cef7f04f651ada05901c29..baf673272ee6cb972e5e8cbc7a062d21
                  builder.add(entityplayer);
              }
          }
-@@ -2312,7 +2315,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -2312,7 +2317,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
  
          public void updatePlayer(ServerPlayer player) {
              org.spigotmc.AsyncCatcher.catchOp("player tracker update"); // Spigot

@@ -37,7 +37,7 @@ index 3125af569ec2bb1cd613a9dd96c3a181d723006d..085695d8f440741f09fac09385b0ffc3
  
                  if (enuminteractionresult1.consumesAction()) {
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 2194ac8066f8093b905e88c1782b5e99aa16282e..67ea94ddedac767f0d94b6088460f3858fa810aa 100644
+index 2194ac8066f8093b905e88c1782b5e99aa16282e..fc35041cad322a9924ed20f0027e883ded060050 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -214,6 +214,7 @@ import org.bukkit.inventory.SmithingInventory;
@@ -48,7 +48,15 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..67ea94ddedac767f0d94b6088460f385
  // CraftBukkit end
  
  public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
-@@ -1082,6 +1083,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -736,6 +737,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+     @Override
+     public void handleAcceptTeleportPacket(ServerboundAcceptTeleportationPacket packet) {
+         PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
++        MultiPaperInventoryHandler.handleAcceptTeleport(this.player, packet); // MultiPaper
+         if (packet.getId() == this.awaitingTeleport && this.awaitingPositionFromClient != null) { // CraftBukkit
+             this.player.moveTo(this.awaitingPositionFromClient.x, this.awaitingPositionFromClient.y, this.awaitingPositionFromClient.z, this.player.getYRot(), this.player.getXRot()); // Paper - use proper setPositionRotation for teleportation
+             this.lastGoodX = this.awaitingPositionFromClient.x;
+@@ -1082,6 +1084,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleSelectTrade(ServerboundSelectTradePacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -56,7 +64,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..67ea94ddedac767f0d94b6088460f385
          int i = packet.getItem();
          AbstractContainerMenu container = this.player.containerMenu;
  
-@@ -1810,6 +1812,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -1810,6 +1813,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
          }
          // Paper end - move check up
  
@@ -65,7 +73,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..67ea94ddedac767f0d94b6088460f385
          this.player.resetLastActionTime();
          int i = this.player.level.getMaxBuildHeight();
  
-@@ -2033,6 +2037,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2033,6 +2038,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
  
              this.player.getInventory().selected = packet.getSlot();
              this.player.resetLastActionTime();
@@ -73,7 +81,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..67ea94ddedac767f0d94b6088460f385
          } else {
              ServerGamePacketListenerImpl.LOGGER.warn("{} tried to set an invalid carried item", this.player.getName().getString());
              this.disconnect("Invalid hotbar selection (Hacking?)", org.bukkit.event.player.PlayerKickEvent.Cause.ILLEGAL_ACTION); // CraftBukkit // Paper - kick event cause
-@@ -2584,6 +2589,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2584,6 +2590,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      public void handleContainerClose(ServerboundContainerClosePacket packetplayinclosewindow, InventoryCloseEvent.Reason reason) {
          // Paper end
          PacketUtils.ensureRunningOnSameThread(packetplayinclosewindow, this, this.player.getLevel());
@@ -81,7 +89,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..67ea94ddedac767f0d94b6088460f385
  
          if (this.player.isImmobile()) return; // CraftBukkit
          CraftEventFactory.handleInventoryCloseEvent(this.player, reason); // CraftBukkit // Paper
-@@ -2594,6 +2600,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2594,6 +2601,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleContainerClick(ServerboundContainerClickPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -89,7 +97,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..67ea94ddedac767f0d94b6088460f385
          if (this.player.isImmobile()) return; // CraftBukkit
          this.player.resetLastActionTime();
          if (this.player.containerMenu.containerId == packet.getContainerId() && this.player.containerMenu.stillValid(this.player)) { // CraftBukkit
-@@ -2929,6 +2936,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2929,6 +2937,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleContainerButtonClick(ServerboundContainerButtonClickPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -321,10 +329,10 @@ index 134c023fe25a6bb6c7967e7c8957fd2e53529c59..bce54e16de48ca6a3ba27daee8b58088
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f147286d20ff74a1e1258835a8cd1d9a81ed5c2f
+index 0000000000000000000000000000000000000000..d3ee3ded87c2046d1ad7ff97f171a6013b501306
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,172 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -332,22 +340,20 @@ index 0000000000000000000000000000000000000000..f147286d20ff74a1e1258835a8cd1d9a
 +import net.minecraft.network.protocol.Packet;
 +import net.minecraft.network.protocol.game.*;
 +import net.minecraft.server.level.ServerPlayer;
-+import net.minecraft.world.Container;
 +import net.minecraft.world.item.ItemStack;
-+import net.minecraft.world.level.block.entity.BlockEntity;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
 +import puregero.multipaper.externalserverprotocol.PlayerInventoryUpdatePacket;
 +
-+import java.util.HashSet;
-+import java.util.Iterator;
++import java.util.*;
 +
 +public class MultiPaperInventoryHandler {
 +
 +    private static final HashSet<NonNullListFilter<? extends ItemStack>> dirtyInventories = new HashSet<>();
 +    private static boolean updatingInventory = false;
++    private static final HashMap<UUID, ArrayList<AwaitingTeleport>> awaitingTeleports = new HashMap<>();
 +
-+    public static void handlePacketFromExternalServer(ExternalServer server, ServerPlayer player, Packet<?> packet) {
++    public static boolean handlePacketFromExternalServer(ExternalServer server, ServerPlayer player, Packet<?> packet) {
 +        if (packet instanceof ClientboundOpenScreenPacket) {
 +            // An external server has requested to open a window on a player
 +            player.openContainer = server;
@@ -365,16 +371,18 @@ index 0000000000000000000000000000000000000000..f147286d20ff74a1e1258835a8cd1d9a
 +            player.experienceProgress = setExperiencePacket.getExperienceProgress();
 +            player.totalExperience = setExperiencePacket.getTotalExperience();
 +        } else if (packet instanceof ClientboundPlayerPositionPacket playerPositionPacket) {
-+            // An external server is changing the player's position
++            // An external server is teleporting the player
 +            double x = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.X) ? player.getX() : 0.0D;
 +            double y = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.Y) ? player.getY() : 0.0D;
 +            double z = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.Z) ? player.getZ() : 0.0D;
 +            float yaw = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.Y_ROT) ? player.getYRot() : 0.0F;
 +            float pitch = playerPositionPacket.getRelativeArguments().contains(ClientboundPlayerPositionPacket.RelativeArgument.X_ROT) ? player.getXRot() : 0.0F;
-+            player.setPosRaw(x + playerPositionPacket.getX(), y + playerPositionPacket.getY(), z + playerPositionPacket.getZ());
-+            player.setYRot(yaw + playerPositionPacket.getYRot());
-+            player.setXRot(pitch + playerPositionPacket.getXRot());
++            player.connection.teleport(x + playerPositionPacket.getX(), y + playerPositionPacket.getY(), z + playerPositionPacket.getZ(), yaw + playerPositionPacket.getYRot(), pitch + playerPositionPacket.getXRot(), playerPositionPacket.getRelativeArguments());
++            server.getConnection().send(new PlayerActionPacket(player, new ServerboundAcceptTeleportationPacket(playerPositionPacket.getId())));
++            return true;
 +        }
++
++        return false;
 +    }
 +
 +    /**
@@ -465,6 +473,35 @@ index 0000000000000000000000000000000000000000..f147286d20ff74a1e1258835a8cd1d9a
 +                }
 +                iterator.remove();
 +            }
++        }
++    }
++
++    public static void handleAcceptTeleport(ServerPlayer player, ServerboundAcceptTeleportationPacket packet) {
++        ArrayList<AwaitingTeleport> accepts = awaitingTeleports.get(player.getUUID());
++
++        if (accepts != null) {
++            accepts.removeIf(accept -> {
++               if (accept.id == packet.getId()) {
++                   accept.externalServer.getConnection().send(new PlayerActionPacket(player, packet));
++                   return true;
++               } else {
++                   return false;
++               }
++            });
++
++            if (accepts.isEmpty()) {
++                awaitingTeleports.remove(player.getUUID());
++            }
++        }
++    }
++
++    private static class AwaitingTeleport {
++        private final ExternalServer externalServer;
++        private final int id;
++
++        private AwaitingTeleport(ExternalServer externalServer, int id) {
++            this.externalServer = externalServer;
++            this.id = id;
 +        }
 +    }
 +}
@@ -706,7 +743,7 @@ index 0000000000000000000000000000000000000000..8ccc6e591fa0d2eab520f426bf49ab9b
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
-index 086f6064400d03de8eb9ffe9fa1a5f349cdf8fe5..f72af4c244d3b2dfd7f14c6acf64a4cd80deff05 100644
+index 086f6064400d03de8eb9ffe9fa1a5f349cdf8fe5..f23869ed3b55d8667edeb4f11b8adda07a542be0 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
 @@ -12,6 +12,7 @@ import org.apache.logging.log4j.LogManager;
@@ -717,11 +754,14 @@ index 086f6064400d03de8eb9ffe9fa1a5f349cdf8fe5..f72af4c244d3b2dfd7f14c6acf64a4cd
  
  import java.io.DataInputStream;
  import java.io.DataOutputStream;
-@@ -84,6 +85,7 @@ public class SendPacketPacket extends ExternalServerPacket {
+@@ -84,6 +85,10 @@ public class SendPacketPacket extends ExternalServerPacket {
                      return;
                  }
  
-+                MultiPaperInventoryHandler.handlePacketFromExternalServer(connection.externalServer, player, packet);
++                if (MultiPaperInventoryHandler.handlePacketFromExternalServer(connection.externalServer, player, packet)) {
++                    return;
++                }
++
                  player.connection.send(packet);
              }
          });

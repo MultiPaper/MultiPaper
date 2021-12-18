@@ -691,7 +691,7 @@ index b5cc759304ee3793b5774c3945b6683f3abd4cca..3619fc0cff893b8181dc7067dc8f190b
              }
              getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..5a1c10df5c3bbeafc59a54e75444e2daa04a6c4f 100644
+index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..784356dd71fec11863f8dbd5d87534033ef6e365 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -2,8 +2,10 @@ package puregero.multipaper;
@@ -714,7 +714,7 @@ index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..5a1c10df5c3bbeafc59a54e75444e2da
  import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
  
  import javax.annotation.Nullable;
-@@ -250,6 +254,41 @@ public class MultiPaperConnection extends Thread {
+@@ -250,6 +254,43 @@ public class MultiPaperConnection extends Thread {
          }
      }
  
@@ -728,12 +728,14 @@ index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..5a1c10df5c3bbeafc59a54e75444e2da
 +        if (chunk instanceof LevelChunk) {
 +            ((LevelChunk) chunk).externalEntitiesSubscribers.add(server);
 +
-+            for (Entity entity : ((LevelChunk) chunk).level.entityManager.getEntities(chunk.getPos())) {
-+                if (MultiPaper.isRealPlayer(entity) && entity.getVehicle() != null) {
-+                    server.getConnection().send(new EntityUpdateNBTPacket(entity.getVehicle()));
-+                    server.getConnection().send(new EntityUpdateWithDependenciesPacket(entity.getVehicle(), entity.getVehicle().getPassengers(), new ClientboundSetPassengersPacket(entity.getVehicle())));
++            MultiPaper.runSync(() -> {
++                for (Entity entity : ((LevelChunk) chunk).level.entityManager.getEntities(chunk.getPos())) {
++                    if (MultiPaper.isRealPlayer(entity) && entity.getVehicle() != null) {
++                        server.getConnection().send(new EntityUpdateNBTPacket(entity.getVehicle()));
++                        server.getConnection().send(new EntityUpdateWithDependenciesPacket(entity.getVehicle(), entity.getVehicle().getPassengers(), new ClientboundSetPassengersPacket(entity.getVehicle())));
++                    }
 +                }
-+            }
++            });
 +        } else {
 +            LOGGER.warn("Received an entities subscribe notification for an unloaded chunk " + world + ";" + cx + ";" + cz);
 +        }
@@ -756,7 +758,7 @@ index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..5a1c10df5c3bbeafc59a54e75444e2da
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -352,6 +391,11 @@ public class MultiPaperConnection extends Thread {
+@@ -352,6 +393,11 @@ public class MultiPaperConnection extends Thread {
                      server.getConnection().requestChunk(world, cx, cz, data2 -> {
                          future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
                      });
@@ -768,7 +770,7 @@ index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..5a1c10df5c3bbeafc59a54e75444e2da
                  } else {
                      future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
                  }
-@@ -372,10 +416,13 @@ public class MultiPaperConnection extends Thread {
+@@ -372,10 +418,13 @@ public class MultiPaperConnection extends Thread {
      }
  
      public void writeChunk(String world, String path, int cx, int cz, byte[] data) throws IOException {
@@ -786,7 +788,7 @@ index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..5a1c10df5c3bbeafc59a54e75444e2da
  
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeChunk");
-@@ -383,8 +430,8 @@ public class MultiPaperConnection extends Thread {
+@@ -383,8 +432,8 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(path);
          out.writeInt(cx);
          out.writeInt(cz);
@@ -797,7 +799,7 @@ index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..5a1c10df5c3bbeafc59a54e75444e2da
          out.send(in -> { /* Do nothing */ });
      }
      
-@@ -630,4 +677,13 @@ public class MultiPaperConnection extends Thread {
+@@ -630,4 +679,13 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(resource);
          out.send(null);
      }
@@ -1096,16 +1098,14 @@ index 0000000000000000000000000000000000000000..a69c0ab8a07a32020946489acf97b9bd
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b36449ced06d41ac158cdc1c83f482fd6157cac1
+index 0000000000000000000000000000000000000000..80cb78ad61bbf74ca4eadd056052ba81185ccb5d
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,46 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
-+import org.apache.logging.log4j.LogManager;
-+import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
 +import puregero.multipaper.ExternalServerConnection;
@@ -1117,8 +1117,6 @@ index 0000000000000000000000000000000000000000..b36449ced06d41ac158cdc1c83f482fd
 +import java.util.UUID;
 +
 +public class EntityRemovePacket extends ExternalServerPacket {
-+
-+    private static final Logger LOGGER = LogManager.getLogger(EntityRemovePacket.class.getSimpleName());
 +
 +    private final String world;
 +    private final UUID uuid;
@@ -1146,8 +1144,6 @@ index 0000000000000000000000000000000000000000..b36449ced06d41ac158cdc1c83f482fd
 +            Entity entity = level.getEntity(uuid);
 +            if (entity != null) {
 +                entity.setRemoved(Entity.RemovalReason.DISCARDED);
-+            } else {
-+                LOGGER.warn("Tried to remove a non-existent entity with uuid " + uuid);
 +            }
 +        });
 +    }

@@ -1,0 +1,148 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 19 Dec 2021 14:51:13 +1000
+Subject: [PATCH] Sync weather
+
+
+diff --git a/src/main/java/net/minecraft/world/level/storage/PrimaryLevelData.java b/src/main/java/net/minecraft/world/level/storage/PrimaryLevelData.java
+index 30cd6dc004ef1d1518c9a10304ea2a20c0616831..2c1289e9835a20671db3168e8d90420270b7ddde 100644
+--- a/src/main/java/net/minecraft/world/level/storage/PrimaryLevelData.java
++++ b/src/main/java/net/minecraft/world/level/storage/PrimaryLevelData.java
+@@ -45,6 +45,7 @@ import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
+ import org.bukkit.event.weather.ThunderChangeEvent;
+ import org.bukkit.event.weather.WeatherChangeEvent;
++import puregero.multipaper.MultiPaperRainHandler;
+ // CraftBukkit end
+ 
+ public class PrimaryLevelData implements ServerLevelData, WorldData {
+@@ -351,6 +352,8 @@ public class PrimaryLevelData implements ServerLevelData, WorldData {
+         }
+         // CraftBukkit end
+         this.thundering = thundering;
++
++        MultiPaperRainHandler.onWeatherChange(this, this.getLevelName());
+     }
+ 
+     @Override
+@@ -391,6 +394,8 @@ public class PrimaryLevelData implements ServerLevelData, WorldData {
+         }
+         // CraftBukkit end
+         this.raining = raining;
++
++        MultiPaperRainHandler.onWeatherChange(this, this.getLevelName());
+     }
+ 
+     @Override
+diff --git a/src/main/java/puregero/multipaper/MultiPaperRainHandler.java b/src/main/java/puregero/multipaper/MultiPaperRainHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..7c4d005365c051f2699d0cda0f434c5ca25b6c29
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperRainHandler.java
+@@ -0,0 +1,27 @@
++package puregero.multipaper;
++
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.storage.PrimaryLevelData;
++import puregero.multipaper.externalserverprotocol.WeatherUpdatePacket;
++
++public class MultiPaperRainHandler {
++    private static boolean updatingWeather = false;
++
++    public static void onWeatherChange(PrimaryLevelData levelData, String world) {
++        if (!updatingWeather) {
++            // Run after all rain parameters have been set
++            MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(new WeatherUpdatePacket(world, levelData)));
++        }
++    }
++
++    public static void handle(ServerLevel level, boolean raining, boolean thundering, int clearWeatherTime, int rainingTime, int thunderingTime) {
++        updatingWeather = true;
++        PrimaryLevelData levelData = (PrimaryLevelData) level.getLevelData();
++        levelData.setRaining(raining);
++        levelData.setThundering(thundering);
++        levelData.setClearWeatherTime(clearWeatherTime);
++        levelData.setRainTime(rainingTime);
++        levelData.setThunderTime(thunderingTime);
++        updatingWeather = false;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index ec782730921eb27e5a5dae22637b138f236efb5f..b1b1000dccaf386cace3d93b643c1e5fbaa913fd 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -43,6 +43,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(EntityUpdateEffectPacket.class, EntityUpdateEffectPacket::new);
+         addPacket(GameRuleUpdatePacket.class, GameRuleUpdatePacket::new);
+         addPacket(AdvancementGrantProgressPacket.class, AdvancementGrantProgressPacket::new);
++        addPacket(WeatherUpdatePacket.class, WeatherUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/WeatherUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/WeatherUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..85c3698703c9dccde624c041d39e4524202bb045
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/WeatherUpdatePacket.java
+@@ -0,0 +1,61 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.storage.PrimaryLevelData;
++import org.bukkit.Bukkit;
++import org.bukkit.World;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperRainHandler;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++public class WeatherUpdatePacket extends ExternalServerPacket {
++    private final String world;
++    private final boolean raining;
++    private final boolean thundering;
++    private final int clearWeatherTime;
++    private final int rainingTime;
++    private final int thunderingTime;
++
++    public WeatherUpdatePacket(String world, PrimaryLevelData levelData) {
++        this.world = world;
++        this.raining = levelData.isRaining();
++        this.thundering = levelData.isThundering();
++        this.clearWeatherTime = levelData.getClearWeatherTime();
++        this.rainingTime = levelData.getRainTime();
++        this.thunderingTime = levelData.getThunderTime();
++    }
++
++    public WeatherUpdatePacket(DataInputStream in) throws IOException {
++        this.world = in.readUTF();
++        this.raining = in.readBoolean();
++        this.thundering = in.readBoolean();
++        this.clearWeatherTime = in.readInt();
++        this.rainingTime = in.readInt();
++        this.thunderingTime = in.readInt();
++    }
++
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(this.world);
++        out.writeBoolean(this.raining);
++        out.writeBoolean(this.thundering);
++        out.writeInt(this.clearWeatherTime);
++        out.writeInt(this.rainingTime);
++        out.writeInt(this.thunderingTime);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            World bukkitWorld = Bukkit.getWorld(this.world);
++            if (bukkitWorld != null) {
++                ServerLevel level = ((CraftWorld) bukkitWorld).getHandle();
++                MultiPaperRainHandler.handle(level, this.raining, this.thundering, this.clearWeatherTime, this.rainingTime, this.thunderingTime);
++            }
++        });
++    }
++}

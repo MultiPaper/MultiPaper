@@ -691,7 +691,7 @@ index b5cc759304ee3793b5774c3945b6683f3abd4cca..3619fc0cff893b8181dc7067dc8f190b
              }
              getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..784356dd71fec11863f8dbd5d87534033ef6e365 100644
+index fcdd064e23faf8ded36484f92be59357503ed843..0977035ea3aa6a3571b25709271b240d47551d2b 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -2,8 +2,10 @@ package puregero.multipaper;
@@ -725,11 +725,11 @@ index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..784356dd71fec11863f8dbd5d8753403
 +        ExternalServer server = getOrCreateServer(in.readUTF());
 +
 +        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
-+        if (chunk instanceof LevelChunk) {
-+            ((LevelChunk) chunk).externalEntitiesSubscribers.add(server);
++        if (chunk instanceof LevelChunk levelChunk) {
++            levelChunk.externalEntitiesSubscribers.add(server);
 +
 +            MultiPaper.runSync(() -> {
-+                for (Entity entity : ((LevelChunk) chunk).level.entityManager.getEntities(chunk.getPos())) {
++                for (Entity entity : levelChunk.level.entityManager.getEntities(chunk.getPos())) {
 +                    if (MultiPaper.isRealPlayer(entity) && entity.getVehicle() != null) {
 +                        server.getConnection().send(new EntityUpdateNBTPacket(entity.getVehicle()));
 +                        server.getConnection().send(new EntityUpdateWithDependenciesPacket(entity.getVehicle(), entity.getVehicle().getPassengers(), new ClientboundSetPassengersPacket(entity.getVehicle())));
@@ -748,8 +748,8 @@ index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..784356dd71fec11863f8dbd5d8753403
 +        ExternalServer server = getOrCreateServer(in.readUTF());
 +
 +        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
-+        if (chunk instanceof LevelChunk) {
-+            ((LevelChunk) chunk).externalEntitiesSubscribers.remove(server);
++        if (chunk instanceof LevelChunk levelChunk) {
++            levelChunk.externalEntitiesSubscribers.remove(server);
 +        } else {
 +            LOGGER.warn("Received an entities unsubscribe notification for an unloaded chunk " + world + ";" + cx + ";" + cz);
 +        }
@@ -815,10 +815,10 @@ index 13ffe1d43d6fe447ee2f6d863ecc262aeaaf8e82..784356dd71fec11863f8dbd5d8753403
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8c0e3a92f31ec05a62379f6336b9775368c6fea8
+index 0000000000000000000000000000000000000000..f5db0216eea3c91c927cae7fc80ea73cb40438a5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,254 @@
+@@ -0,0 +1,263 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -837,6 +837,7 @@ index 0000000000000000000000000000000000000000..8c0e3a92f31ec05a62379f6336b97753
 +import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 +import net.minecraft.world.item.ItemStack;
 +import net.minecraft.world.level.ChunkPos;
++import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.phys.Vec3;
 +import org.apache.commons.lang.ArrayUtils;
@@ -855,6 +856,12 @@ index 0000000000000000000000000000000000000000..8c0e3a92f31ec05a62379f6336b97753
 +    public static void onEntitiesUnload(ServerLevel level, ChunkPos pos) {
 +        try {
 +            MultiPaper.getConnection().unsubscribeEntities(level.convertable.getLevelId(), pos.x, pos.z);
++
++            // Clear our cache of other servers that are subscribed to this chunk
++            ChunkAccess chunk = MultiPaper.getChunkAccess(level.convertable.getLevelId(), pos.x, pos.z);
++            if (chunk instanceof LevelChunk levelChunk) {
++                levelChunk.externalEntitiesSubscribers.clear();
++            }
 +        } catch (IOException e) {
 +            e.printStackTrace();
 +        }
@@ -880,16 +887,18 @@ index 0000000000000000000000000000000000000000..8c0e3a92f31ec05a62379f6336b97753
 +            for (ExternalServer fromServer : chunkFrom.externalEntitiesSubscribers) {
 +                if (fromServer.getConnection() != null && !chunkTo.externalEntitiesSubscribers.contains(fromServer)) {
 +                    // Entity is leaving another server's area, make sure they know this
-+                    fromServer.getConnection().send(new EntityUpdatePacket(entity, new ClientboundTeleportEntityPacket(entity)));
++                    MultiPaper.runSync(() -> fromServer.getConnection().send(new EntityUpdatePacket(entity, new ClientboundTeleportEntityPacket(entity))));
 +                }
 +            }
 +            for (ExternalServer toServer : chunkTo.externalEntitiesSubscribers) {
 +                if (toServer.getConnection() != null && !chunkFrom.externalEntitiesSubscribers.contains(toServer)) {
 +                    // Entity is entering another server's area, send them the full entity
-+                    MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity));
-+                    if (entity.isVehicle() && entity.hasExactlyOnePlayerPassenger()) {
-+                        MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateWithDependenciesPacket(entity, entity.getPassengers(), new ClientboundSetPassengersPacket(entity)));
-+                    }
++                    MultiPaper.runSync(() -> {
++                        MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity));
++                        if (entity.isVehicle() && entity.hasExactlyOnePlayerPassenger()) {
++                            MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateWithDependenciesPacket(entity, entity.getPassengers(), new ClientboundSetPassengersPacket(entity)));
++                        }
++                    });
 +                }
 +            }
 +        }
@@ -1102,22 +1111,24 @@ index 0000000000000000000000000000000000000000..a69c0ab8a07a32020946489acf97b9bd
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..80cb78ad61bbf74ca4eadd056052ba81185ccb5d
+index 0000000000000000000000000000000000000000..c840d16aba20426e70f0b9003bc6154b541e8d27
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,55 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.craftbukkit.scheduler.CraftScheduler;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
 +import java.io.IOException;
++import java.util.HashSet;
 +import java.util.UUID;
 +
 +public class EntityRemovePacket extends ExternalServerPacket {
@@ -1141,6 +1152,8 @@ index 0000000000000000000000000000000000000000..80cb78ad61bbf74ca4eadd056052ba81
 +        writeUUID(out, uuid);
 +    }
 +
++    public static HashSet<UUID> removedEntities = new HashSet<>();
++
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
 +        MultiPaper.runSync(() -> {
@@ -1148,6 +1161,11 @@ index 0000000000000000000000000000000000000000..80cb78ad61bbf74ca4eadd056052ba81
 +            Entity entity = level.getEntity(uuid);
 +            if (entity != null) {
 +                entity.setRemoved(Entity.RemovalReason.DISCARDED);
++            } else {
++                removedEntities.add(uuid);
++                ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
++                    removedEntities.remove(uuid);
++                }, 5, "EntityRemovePacket-removeEntryIntoRemovedEntities");
 +            }
 +        });
 +    }
@@ -1247,10 +1265,10 @@ index 0000000000000000000000000000000000000000..f850b67c5092bf13d3ce2229f97478be
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a5ddd8d2a41311658a4e18269113b938b29d8304
+index 0000000000000000000000000000000000000000..7a3366575ed16a18c0e997108d023840417c5726
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,98 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1328,10 +1346,15 @@ index 0000000000000000000000000000000000000000..a5ddd8d2a41311658a4e18269113b938
 +        Entity entity = level.getEntity(uuid);
 +
 +        if (entity == null) {
++            if (EntityRemovePacket.removedEntities.contains(uuid)) {
++                return;
++            }
++
 +            // If we can't find the entity, try again later,
 +            // the spawn entity packet is probably coming later
 +            if (depth > 5) {
-+                LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName());
++                LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName() + ", requesting it");
++                connection.send(new RequestEntityPacket(world, uuid));
 +                return;
 +            }
 +
@@ -1346,10 +1369,10 @@ index 0000000000000000000000000000000000000000..a5ddd8d2a41311658a4e18269113b938
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..75ac4b1fc21a9bb7f698b5e1c9a7bef5951041da
+index 0000000000000000000000000000000000000000..a6f2a07b54624eb3590fa7f53a7e592e792a5bbf
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,128 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1445,7 +1468,8 @@ index 0000000000000000000000000000000000000000..75ac4b1fc21a9bb7f698b5e1c9a7bef5
 +            // If we can't find the entity, try again later,
 +            // the spawn entity packet is probably coming later
 +            if (depth > 5) {
-+                LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName());
++                LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName() + ", requesting it");
++                connection.send(new RequestEntityPacket(world, uuid));
 +                return;
 +            }
 +
@@ -1462,7 +1486,8 @@ index 0000000000000000000000000000000000000000..75ac4b1fc21a9bb7f698b5e1c9a7bef5
 +
 +            if (entities[i] == null) {
 +                if (depth > 5) {
-+                    LOGGER.warn("Could not find dependent entity " + uuids[i] + " for " + packet.getClass().getSimpleName());
++                    LOGGER.warn("Could not find dependent entity " + uuids[i] + " for " + packet.getClass().getSimpleName() + ", requesting it");
++                    connection.send(new RequestEntityPacket(world, uuids[i]));
 +                    return;
 +                }
 +
@@ -1477,10 +1502,10 @@ index 0000000000000000000000000000000000000000..75ac4b1fc21a9bb7f698b5e1c9a7bef5
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 526d780f0309b0b081761cf143c5fd547e6eea57..a3313c5edf5e8a4a78accd830eede0e39d4f4e84 100644
+index 526d780f0309b0b081761cf143c5fd547e6eea57..978206dba9be1998b6f227e9145d5b7334fdb915 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -25,6 +25,12 @@ public class ExternalServerPacketSerializer {
+@@ -25,6 +25,13 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerActionPacket.class, PlayerActionPacket::new);
          addPacket(PlayerInventoryUpdatePacket.class, PlayerInventoryUpdatePacket::new);
          addPacket(TimeUpdatePacket.class, TimeUpdatePacket::new);
@@ -1489,6 +1514,7 @@ index 526d780f0309b0b081761cf143c5fd547e6eea57..a3313c5edf5e8a4a78accd830eede0e3
 +        addPacket(EntityUpdateNBTPacket.class, EntityUpdateNBTPacket::new);
 +        addPacket(EntityUpdatePacket.class, EntityUpdatePacket::new);
 +        addPacket(EntityUpdateWithDependenciesPacket.class, EntityUpdateWithDependenciesPacket::new);
++        addPacket(RequestEntityPacket.class, RequestEntityPacket::new);
 +        addPacket(EntityRemovePacket.class, EntityRemovePacket::new);
      }
  
@@ -1586,6 +1612,64 @@ index 0000000000000000000000000000000000000000..8482ed16ef089d1b2b882672ee4d82da
 +        } else {
 +            connection.send(new SendEntitiesPacket(level, new ChunkPos(cx, cz)));
 +        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..86cc0ed3dde39796b9001aef403c21bb0ed31b6f
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
+@@ -0,0 +1,52 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.UUID;
++
++public class RequestEntityPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(RequestEntityPacket.class.getSimpleName());
++
++    private final String world;
++    private final UUID uuid;
++
++    public RequestEntityPacket(String world, UUID uuid) {
++        this.world = world;
++        this.uuid =uuid;
++    }
++
++    public RequestEntityPacket(DataInputStream in) throws IOException {
++        this.world = in.readUTF();
++        this.uuid = readUUID(in);
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        writeUUID(out, uuid);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++            Entity entity = level.getEntity(uuid);
++            if (entity != null) {
++                connection.send(new EntityUpdateNBTPacket(entity));
++            } else {
++                LOGGER.warn(connection.externalServer.getName() + " requested entity " + uuid + ", but that entity doesn't exist");
++            }
++        });
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java

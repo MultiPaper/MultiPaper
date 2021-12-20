@@ -1,0 +1,132 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 21 Dec 2021 00:37:18 +1000
+Subject: [PATCH] Sync experience
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 2747f1a1065719caa96f1a28010b82a87eac7977..88f5195a5e0f0f12e998a1df929f8ed32f28e10f 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -164,10 +164,7 @@ import org.bukkit.event.player.PlayerPortalEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
+ import org.bukkit.inventory.MainHand;
+-import puregero.multipaper.ExternalPlayer;
+-import puregero.multipaper.ExternalServer;
+-import puregero.multipaper.MultiPaper;
+-import puregero.multipaper.MultiPaperEnderChestHandler;
++import puregero.multipaper.*;
+ import puregero.multipaper.externalserverprotocol.PlayerChangeDimensionPacket;
+ import puregero.multipaper.externalserverprotocol.PlayerChangeGamemodePacket;
+ // CraftBukkit end
+@@ -592,6 +589,20 @@ public class ServerPlayer extends Player {
+         this.lastSentExp = -1;
+     }
+ 
++    // MultiPaper start - sync xp
++    public float lastExperienceProgress = 0;
++    public int lastTotalExperience = 0;
++    public int lastExperienceLevel = 0;
++    public void syncExperience() {
++        if (experienceProgress != lastExperienceProgress || totalExperience != lastTotalExperience || experienceLevel != lastExperienceLevel) {
++            lastExperienceProgress = experienceProgress;
++            lastTotalExperience = totalExperience;
++            lastExperienceLevel = experienceLevel;
++            MultiPaper.broadcastPacketToExternalServers(new PlayerExperienceUpdatePacket(this, experienceProgress, totalExperience, experienceLevel));
++        }
++    }
++    // MultiPaper end
++
+     public void initMenu(AbstractContainerMenu screenHandler) {
+         screenHandler.addSlotListener(this.containerListener);
+         screenHandler.setSynchronizer(this.containerSynchronizer);
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 467687ca614fa8b839f970585240d5e33bc4d5e4..a2fbe61a824b1e428742005ec35cf79569843ab2 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -131,6 +131,8 @@ public class MultiPaper {
+                 player.detectEquipmentUpdates();
+                 player.tickAttackStrength();
+             }
++
++            player.syncExperience();
+         }
+ 
+         boolean hasBeen10Seconds = last10Seconds < System.currentTimeMillis() - 10000;
+diff --git a/src/main/java/puregero/multipaper/PlayerExperienceUpdatePacket.java b/src/main/java/puregero/multipaper/PlayerExperienceUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..fd9348fad3113766b0f5cfb3067d45f83b6c5def
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/PlayerExperienceUpdatePacket.java
+@@ -0,0 +1,50 @@
++package puregero.multipaper;
++
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.UUID;
++
++public class PlayerExperienceUpdatePacket extends ExternalServerPacket {
++    private final UUID uuid;
++    private final float progress;
++    private final int total;
++    private final int level;
++
++    public PlayerExperienceUpdatePacket(ServerPlayer player, float progress, int total, int level) {
++        this.uuid = player.getUUID();
++        this.progress = progress;
++        this.total = total;
++        this.level = level;
++    }
++
++    public PlayerExperienceUpdatePacket(DataInputStream in) throws IOException {
++        uuid = readUUID(in);
++        progress = in.readFloat();
++        total = in.readInt();
++        level = in.readInt();
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        writeUUID(out, uuid);
++        out.writeFloat(progress);
++        out.writeInt(total);
++        out.writeInt(level);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            player.experienceProgress = player.lastExperienceProgress = progress;
++            player.totalExperience = player.lastTotalExperience = total;
++            player.experienceLevel = player.lastExperienceLevel = level;
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index f088e9ca850ed2fbe8d243db0033600e6210b584..1469d1e283bba25e5e1cba220bce1f20bbf9b751 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -1,5 +1,7 @@
+ package puregero.multipaper.externalserverprotocol;
+ 
++import puregero.multipaper.PlayerExperienceUpdatePacket;
++
+ import java.io.DataInputStream;
+ import java.io.DataOutputStream;
+ import java.io.EOFException;
+@@ -46,6 +48,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(AdvancementGrantProgressPacket.class, AdvancementGrantProgressPacket::new);
+         addPacket(WeatherUpdatePacket.class, WeatherUpdatePacket::new);
+         addPacket(PlayerStatsIncreasePacket.class, PlayerStatsIncreasePacket::new);
++        addPacket(PlayerExperienceUpdatePacket.class, PlayerExperienceUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {

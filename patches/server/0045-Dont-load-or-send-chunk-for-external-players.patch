@@ -5,7 +5,7 @@ Subject: [PATCH] Dont load or send chunk for external players
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 4bdaead740682fa623cef7f04f651ada05901c29..a5fcfb34141090b400132a36b2dc8eb7d2ce2789 100644
+index 4bdaead740682fa623cef7f04f651ada05901c29..40a43bcb4bde488dbe742fc9e688014dee801942 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -109,6 +109,7 @@ import org.apache.logging.log4j.Logger;
@@ -16,7 +16,7 @@ index 4bdaead740682fa623cef7f04f651ada05901c29..a5fcfb34141090b400132a36b2dc8eb7
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -1804,10 +1805,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1804,7 +1805,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
      }
  
      private boolean skipPlayer(ServerPlayer player) {
@@ -25,20 +25,24 @@ index 4bdaead740682fa623cef7f04f651ada05901c29..a5fcfb34141090b400132a36b2dc8eb7
      }
  
      void updatePlayerStatus(ServerPlayer player, boolean added) {
-+        if (MultiPaper.isExternalPlayer(player)) return; // MultiPaper - don't send chunks to external players
-+
-         boolean flag1 = this.skipPlayer(player);
-         boolean flag2 = this.playerMap.ignoredOrUnknown(player);
-         int i = SectionPos.blockToSectionCoord(player.getBlockX());
-@@ -1853,6 +1856,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
-     public void move(ServerPlayer player) {
-         // Paper - delay this logic for the entity tracker tick, no need to duplicate it
+@@ -1830,6 +1831,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+             this.removePlayerFromDistanceMaps(player); // Paper - distance maps
+         }
  
 +        if (MultiPaper.isExternalPlayer(player)) return; // MultiPaper - don't send chunks to external players
 +
-         int i = SectionPos.blockToSectionCoord(player.getBlockX());
-         int j = SectionPos.blockToSectionCoord(player.getBlockZ());
-         SectionPos sectionposition = player.getLastSectionPos();
+         for (int k = i - this.viewDistance - 1; k <= i + this.viewDistance + 1; ++k) {
+             for (int l = j - this.viewDistance - 1; l <= j + this.viewDistance + 1; ++l) {
+                 if (ChunkMap.isChunkInRange(k, l, i, j, this.viewDistance)) {
+@@ -1891,6 +1894,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         int k1;
+         int l1;
+ 
++
++        if (!MultiPaper.isExternalPlayer(player)) // MultiPaper - don't send chunks to external players
+         if (Math.abs(i1 - i) <= this.viewDistance * 2 && Math.abs(j1 - j) <= this.viewDistance * 2) {
+             k1 = Math.min(i, i1) - this.viewDistance - 1;
+             l1 = Math.min(j, j1) - this.viewDistance - 1;
 @@ -1944,7 +1949,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              ServerPlayer entityplayer = (ServerPlayer) iterator.next();
              SectionPos sectionposition = entityplayer.getLastSectionPos();

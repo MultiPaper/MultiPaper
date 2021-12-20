@@ -376,7 +376,7 @@ index 2dde10324e515bd58fc6ba7e93156ae783492cc2..64f5ab9e5e79ed799fc285f27121beb8
          try { // Paper
          int attempts = 0; Exception laste = null; while (attempts++ < 5) { try { // Paper
 diff --git a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-index bd7967680d7a75caff98a827895c795f2d101f99..174d1c0e6474b7ec422039c19a7974e2f32a2e84 100644
+index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee9717488c640 100644
 --- a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 +++ b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 @@ -25,15 +25,20 @@ import java.util.stream.Stream;
@@ -432,7 +432,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..174d1c0e6474b7ec422039c19a7974e2
  
          while ((chunkentities = (ChunkEntities) this.loadingInbox.poll()) != null) {
 +            // Multipaper start - Sometimes chunks already have entities loaded? Send these to subscribed chunks
-+            List<Entity> existingEntities = getEntities(chunkentities.getPos()).stream().filter(entity -> !(entity instanceof ServerPlayer)).toList();
++            List<Entity> existingEntities = getEntities(chunkentities.getPos()).stream().filter(entity -> entity.shouldBeSaved()).toList();
 +            // MultiPaper end
              chunkentities.getEntities().forEach((entityaccess) -> {
                  this.addEntity(entityaccess, true);
@@ -1172,15 +1172,15 @@ index 0000000000000000000000000000000000000000..c840d16aba20426e70f0b9003bc6154b
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f850b67c5092bf13d3ce2229f97478be069aa291
+index 0000000000000000000000000000000000000000..a5123041f2b22be0519439387ed98c60dc80ed02
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,107 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.ListTag;
 +import net.minecraft.server.level.ServerLevel;
-+import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.EntityType;
 +import org.apache.logging.log4j.LogManager;
@@ -1242,25 +1242,45 @@ index 0000000000000000000000000000000000000000..f850b67c5092bf13d3ce2229f97478be
 +        MultiPaper.runSync(() -> {
 +            try {
 +                ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
-+                Entity entity = level.getEntity(uuid);
 +                CompoundTag tag = MultiPaper.nbtDecompressFromBytes(data);
-+                if (entity == null) {
-+                     EntityType.loadEntityRecursive(tag, level, entity2 -> {
-+                        if (level.entityManager.isPending(entity2.chunkPosition().longKey) || level.entityManager.areEntitiesLoaded(entity2.chunkPosition().longKey)) {
-+                            level.entityManager.addNewEntity(entity2);
-+                            return entity2;
-+                        } else {
-+                            LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk aren't loaded: " + entity2);
-+                            return null;
-+                        }
-+                    });
-+                } else {
-+                    entity.load(tag);
-+                }
++                loadEntity(level, tag, uuid);
 +            } catch (IOException e) {
 +                e.printStackTrace();
 +            }
 +        });
++    }
++
++    public Entity loadEntity(ServerLevel level, CompoundTag tag, UUID uuid) {
++        Entity entity = level.getEntity(uuid);
++
++        if (entity == null) {
++            entity = EntityType.loadEntityRecursive(tag, level, entity2 -> {
++                if (level.entityManager.isPending(entity2.chunkPosition().longKey) || level.entityManager.areEntitiesLoaded(entity2.chunkPosition().longKey)) {
++                    level.entityManager.addNewEntity(entity2);
++                    return entity2;
++                } else {
++                    LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk aren't loaded: " + entity2);
++                    return null;
++                }
++            });
++        } else {
++            entity.load(tag);
++        }
++
++        if (tag.contains("Passengers", 9)) {
++            ListTag nbttaglist = tag.getList("Passengers", 10);
++
++            for (int i = 0; i < nbttaglist.size(); ++i) {
++                CompoundTag passengerTag = nbttaglist.getCompound(i);
++                Entity passenger = loadEntity(level, passengerTag, passengerTag.getUUID("UUID"));
++
++                if (passenger != null) {
++                    passenger.startRiding(entity, true);
++                }
++            }
++        }
++
++        return entity;
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
@@ -1616,10 +1636,10 @@ index 0000000000000000000000000000000000000000..8482ed16ef089d1b2b882672ee4d82da
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..86cc0ed3dde39796b9001aef403c21bb0ed31b6f
+index 0000000000000000000000000000000000000000..df56adcd898e83362371ca27640fd719c37feb3b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,57 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.level.ServerLevel;
@@ -1665,6 +1685,11 @@ index 0000000000000000000000000000000000000000..86cc0ed3dde39796b9001aef403c21bb
 +            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
 +            Entity entity = level.getEntity(uuid);
 +            if (entity != null) {
++                // Send the vehicle the entity is in
++                while (entity.getVehicle() != null && !entity.shouldBeSaved()) {
++                    entity = entity.getVehicle();
++                }
++
 +                connection.send(new EntityUpdateNBTPacket(entity));
 +            } else {
 +                LOGGER.warn(connection.externalServer.getName() + " requested entity " + uuid + ", but that entity doesn't exist");
@@ -1674,10 +1699,10 @@ index 0000000000000000000000000000000000000000..86cc0ed3dde39796b9001aef403c21bb
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4715c551607d8f5bd368ec0eade486e5f63fed87
+index 0000000000000000000000000000000000000000..0696868c141ab606cccd195100d941ecfbfd8525
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,144 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.SharedConstants;
@@ -1802,8 +1827,10 @@ index 0000000000000000000000000000000000000000..4715c551607d8f5bd368ec0eade486e5
 +                        // Remove existing entities in this chunk
 +                        for (Entity entity : level.entityManager.getEntities(new ChunkPos(cx, cz))) {
 +                            if (entity.shouldBeSaved()) {
-+                                entity.setRemoved(Entity.RemovalReason.UNLOADED_TO_CHUNK);
-+                                entity.setLevelCallback(EntityInLevelCallback.NULL);
++                                entity.getPassengersAndSelf().forEach(e -> {
++                                    e.setRemoved(Entity.RemovalReason.UNLOADED_TO_CHUNK);
++                                    e.setLevelCallback(EntityInLevelCallback.NULL);
++                                });
 +                            }
 +                        }
 +                        // Add our entities to be loaded

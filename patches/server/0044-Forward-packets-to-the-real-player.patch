@@ -5,14 +5,24 @@ Subject: [PATCH] Forward packets to the real player
 
 
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index ca0cda5d46237bba4592b3e7d5a67cb83edf0269..a40ee070a72d7428713a32d12118bb1317fdc5f0 100644
+index ca0cda5d46237bba4592b3e7d5a67cb83edf0269..528c3536247ac4476db106cd53bde4782122f508 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -65,10 +65,16 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -6,6 +6,7 @@ import io.netty.util.concurrent.GenericFutureListener;
+ import net.minecraft.network.Connection;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.game.ClientboundPlayerAbilitiesPacket;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.server.network.ServerGamePacketListenerImpl;
+@@ -64,11 +65,17 @@ public class ExternalPlayer extends ServerPlayer {
+ 
          @Override
          public void send(Packet<?> packet, @Nullable GenericFutureListener<? extends Future<? super Void>> callback) {
-             if (sendPackets) {
+-            if (sendPackets) {
 -
++            if (sendPackets && !(packet instanceof ClientboundPlayerAbilitiesPacket)) {
 +//                LOGGER.info("Forwarding packet " + packet);
 +                externalServerConnection.sendPacket(ExternalPlayer.this, packet);
              } else {

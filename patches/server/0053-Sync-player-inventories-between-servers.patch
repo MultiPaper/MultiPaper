@@ -25,10 +25,18 @@ index a8a8404fd17c7bb00205dac6b1a8910f5e71e4d6..11ff76168ed83b54a191237a31f0ceef
      public boolean wonGame;
      private int containerUpdateDelay; // Paper
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
-index 3125af569ec2bb1cd613a9dd96c3a181d723006d..085695d8f440741f09fac09385b0ffc3b2640373 100644
+index 3125af569ec2bb1cd613a9dd96c3a181d723006d..2e05b8a40fb72f4b3bc3a03f632eaac6189b3859 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
-@@ -600,6 +600,7 @@ public class ServerPlayerGameMode {
+@@ -457,6 +457,7 @@ public class ServerPlayerGameMode {
+                     if (flag && flag1 && event.isDropItems()) { // CraftBukkit - Check if block should drop items
+                         block.playerDestroy(this.level, this.player, pos, iblockdata, tileentity, itemstack1);
+                     }
++                    player.getInventory().markHandDirty(InteractionHand.MAIN_HAND); // MultiPaper
+ 
+                     // return true; // CraftBukkit
+                 }
+@@ -600,6 +601,7 @@ public class ServerPlayerGameMode {
                      stack.setCount(i);
                  } else {
                      enuminteractionresult1 = stack.useOn(itemactioncontext, hand);
@@ -134,6 +142,34 @@ index 0a0c970f610b57c166d6938d01c63429ff3bddf6..3493f67cad4248a6751c52b120160cfa
                          try {
                              iblockdata.entityInside(this.level, blockposition_mutableblockposition, this);
                              this.onInsideBlock(iblockdata);
+diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+index 6b386abec31da6071f09e70fd632df8a22ad90fe..55c5c31d1c5d93aac25198e4fd4a049895465bf5 100644
+--- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
++++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+@@ -548,6 +548,7 @@ public abstract class LivingEntity extends Entity {
+                     itemstack.hurtAndBreak(1, this, (entityliving) -> {
+                         entityliving.broadcastBreakEvent(EquipmentSlot.FEET);
+                     });
++                    if (this instanceof ServerPlayer) ((ServerPlayer) this).getInventory().markEquipmentDirty(EquipmentSlot.FEET); // MultiPaper
+                 }
+             }
+         }
+@@ -3374,6 +3375,7 @@ public abstract class LivingEntity extends Entity {
+                         itemstack.hurtAndBreak(1, this, (entityliving) -> {
+                             entityliving.broadcastBreakEvent(EquipmentSlot.CHEST);
+                         });
++                        if (this instanceof ServerPlayer) ((ServerPlayer) this).getInventory().markEquipmentDirty(EquipmentSlot.CHEST); // MultiPaper
+                     }
+ 
+                     this.gameEvent(GameEvent.ELYTRA_FREE_FALL);
+@@ -3874,6 +3876,7 @@ public abstract class LivingEntity extends Entity {
+     public void releaseUsingItem() {
+         if (!this.useItem.isEmpty()) {
+             this.useItem.releaseUsing(this.level, this, this.getUseItemRemainingTicks());
++            if (this instanceof ServerPlayer player) player.getInventory().markHandDirty(InteractionHand.MAIN_HAND); // MultiPaper
+             if (this.useItem.useOnRelease()) {
+                 this.updatingUsingItem();
+             }
 diff --git a/src/main/java/net/minecraft/world/entity/animal/Animal.java b/src/main/java/net/minecraft/world/entity/animal/Animal.java
 index 2bc77858b4a78e24227b4b096fd44177202d5292..e2ea1740c36dfb0760d4c7c52d7a5802967e21f8 100644
 --- a/src/main/java/net/minecraft/world/entity/animal/Animal.java
@@ -147,7 +183,7 @@ index 2bc77858b4a78e24227b4b096fd44177202d5292..e2ea1740c36dfb0760d4c7c52d7a5802
  
      }
 diff --git a/src/main/java/net/minecraft/world/entity/player/Inventory.java b/src/main/java/net/minecraft/world/entity/player/Inventory.java
-index 8d329bca0818033df41fbd781028919c73e052a6..2a781a38af51c3ac4695aaa0c4dc1d0fc73aac02 100644
+index 8d329bca0818033df41fbd781028919c73e052a6..11cac7bb709d35805ba7a43b5f9c8524d3913c90 100644
 --- a/src/main/java/net/minecraft/world/entity/player/Inventory.java
 +++ b/src/main/java/net/minecraft/world/entity/player/Inventory.java
 @@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
@@ -183,7 +219,7 @@ index 8d329bca0818033df41fbd781028919c73e052a6..2a781a38af51c3ac4695aaa0c4dc1d0f
      public int selected;
      public final Player player;
      private int timesChanged;
-@@ -98,13 +102,43 @@ public class Inventory implements Container, Nameable {
+@@ -98,13 +102,47 @@ public class Inventory implements Container, Nameable {
      // CraftBukkit end
  
      public Inventory(Player player) {
@@ -225,12 +261,16 @@ index 8d329bca0818033df41fbd781028919c73e052a6..2a781a38af51c3ac4695aaa0c4dc1d0f
 +            default -> throw new IllegalArgumentException("Unknown hand " + hand);
 +        }
 +    }
++
++    public void markEquipmentDirty(EquipmentSlot slot) {
++        this.armor.markDirty(slot.getIndex());
++    }
 +    // MultiPaper end
 +
      public ItemStack getSelected() {
          return Inventory.isHotbarSlot(this.selected) ? (ItemStack) this.items.get(this.selected) : ItemStack.EMPTY;
      }
-@@ -277,6 +311,7 @@ public class Inventory implements Container, Nameable {
+@@ -277,6 +315,7 @@ public class Inventory implements Container, Nameable {
          Item item = stack.getItem();
          int j = stack.getCount();
          ItemStack itemstack1 = this.getItem(slot);
@@ -238,7 +278,7 @@ index 8d329bca0818033df41fbd781028919c73e052a6..2a781a38af51c3ac4695aaa0c4dc1d0f
  
          if (itemstack1.isEmpty()) {
              itemstack1 = new ItemStack(item, 0);
-@@ -439,6 +474,8 @@ public class Inventory implements Container, Nameable {
+@@ -439,6 +478,8 @@ public class Inventory implements Container, Nameable {
              }
          }
  
@@ -247,7 +287,7 @@ index 8d329bca0818033df41fbd781028919c73e052a6..2a781a38af51c3ac4695aaa0c4dc1d0f
          return list != null && !((ItemStack) list.get(slot)).isEmpty() ? ContainerHelper.removeItem(list, slot, amount) : ItemStack.EMPTY;
      }
  
-@@ -649,6 +686,7 @@ public class Inventory implements Container, Nameable {
+@@ -649,6 +690,7 @@ public class Inventory implements Container, Nameable {
                      itemstack.hurtAndBreak((int) amount, this.player, (entityhuman) -> {
                          entityhuman.broadcastBreakEvent(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, k));
                      });
@@ -255,6 +295,26 @@ index 8d329bca0818033df41fbd781028919c73e052a6..2a781a38af51c3ac4695aaa0c4dc1d0f
                  }
              }
  
+diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
+index 2c00a766130a7f682fc6c4c74321e10637ca7932..7807785f3157697fd1d142757baf4ab0425161c6 100644
+--- a/src/main/java/net/minecraft/world/entity/player/Player.java
++++ b/src/main/java/net/minecraft/world/entity/player/Player.java
+@@ -994,6 +994,7 @@ public abstract class Player extends LivingEntity {
+                 this.useItem.hurtAndBreak(i, this, (entityhuman) -> {
+                     entityhuman.broadcastBreakEvent(enumhand);
+                 });
++                this.getInventory().markHandDirty(enumhand); // MultiPaper
+                 if (this.useItem.isEmpty()) {
+                     if (enumhand == InteractionHand.MAIN_HAND) {
+                         this.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+@@ -1354,6 +1355,7 @@ public abstract class Player extends LivingEntity {
+ 
+                         if (!this.level.isClientSide && !itemstack1.isEmpty() && object instanceof LivingEntity) {
+                             itemstack1.hurtEnemy((LivingEntity) object, this);
++                            getInventory().markHandDirty(InteractionHand.MAIN_HAND); // MultiPaper
+                             if (itemstack1.isEmpty()) {
+                                 this.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+                             }
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 index 528c3536247ac4476db106cd53bde4782122f508..1a6e3d489c103fcb9109aad76bd100635af42fbe 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java

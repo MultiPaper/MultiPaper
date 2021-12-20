@@ -480,7 +480,7 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 17621d5fd36f0b17ab2c4d1736583d9eb9c79153..f21044ea3fbec0eb1d8d26ae88691b38098090eb 100644
+index 17621d5fd36f0b17ab2c4d1736583d9eb9c79153..a6140bdfaef4e53456fe5205a30fd4dc73736228 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -3,22 +3,26 @@ package puregero.multipaper;
@@ -526,7 +526,7 @@ index 17621d5fd36f0b17ab2c4d1736583d9eb9c79153..f21044ea3fbec0eb1d8d26ae88691b38
 +            }
 +        }
 +
-+        send(new RequestChunkPacket(world, cx, cz));
++        send(new RequestChunkPacket(world, cx, cz, externalServer));
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
@@ -1269,10 +1269,10 @@ index 269fa39d6d5f16efeda1867e47d2a14bfa94770c..ba9525c0ed1d0bb65a408980a9e6905a
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8e09745da02175baa5fdfac24eae7a00fc5b1d00
+index 0000000000000000000000000000000000000000..c21b7931cc4e7247fe96c217b24440d3a25bcd4b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,108 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1285,6 +1285,7 @@ index 0000000000000000000000000000000000000000..8e09745da02175baa5fdfac24eae7a00
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServer;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
@@ -1298,10 +1299,16 @@ index 0000000000000000000000000000000000000000..8e09745da02175baa5fdfac24eae7a00
 +public class RequestChunkPacket extends ExternalServerPacket {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(RequestChunkPacket.class.getSimpleName());
++    private static ExternalServer blocker = null;
 +
 +    private final String world;
 +    private final int cx;
 +    private final int cz;
++
++    public RequestChunkPacket(String world, int cx, int cz, ExternalServer blocker) {
++        this(world, cx, cz);
++        RequestChunkPacket.blocker = blocker;
++    }
 +
 +    public RequestChunkPacket(String world, int cx, int cz) {
 +        this.world = world;
@@ -1360,7 +1367,9 @@ index 0000000000000000000000000000000000000000..8e09745da02175baa5fdfac24eae7a00
 +                e.printStackTrace();
 +                MultiPaper.runSync(() -> handle(connection));
 +            }
-+        }).orTimeout(15, TimeUnit.SECONDS).exceptionally(throwable -> {
++        })
++        // Timeout instantly if this server is blocking our chunk loading, as this is probably also blocking their chunk loading
++        .orTimeout(blocker == connection.externalServer ? 0 : 15, TimeUnit.SECONDS).exceptionally(throwable -> {
 +            if (throwable instanceof TimeoutException) {
 +                LOGGER.warn("Timed out while sending chunk " + world + "," + cx + "," + cz);
 +            } else {

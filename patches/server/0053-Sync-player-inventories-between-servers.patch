@@ -110,10 +110,26 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..c70582e900e919e41f19b18ba78660a2
          this.player.resetLastActionTime();
          if (this.player.containerMenu.containerId == packet.getContainerId() && !this.player.isSpectator()) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 0a0c970f610b57c166d6938d01c63429ff3bddf6..3493f67cad4248a6751c52b120160cfa83bb40fc 100644
+index 0a0c970f610b57c166d6938d01c63429ff3bddf6..e20954acedfd36941f8ffa013cd00ff6de5f2202 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -146,6 +146,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
+@@ -84,14 +84,7 @@ import net.minecraft.world.level.Explosion;
+ import net.minecraft.world.level.GameRules;
+ import net.minecraft.world.level.ItemLike;
+ import net.minecraft.world.level.Level;
+-import net.minecraft.world.level.block.Block;
+-import net.minecraft.world.level.block.Blocks;
+-import net.minecraft.world.level.block.FenceGateBlock;
+-import net.minecraft.world.level.block.HoneyBlock;
+-import net.minecraft.world.level.block.Mirror;
+-import net.minecraft.world.level.block.RenderShape;
+-import net.minecraft.world.level.block.Rotation;
+-import net.minecraft.world.level.block.SoundType;
++import net.minecraft.world.level.block.*;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+@@ -146,6 +139,7 @@ import org.bukkit.event.entity.EntityPortalEvent;
  import org.bukkit.event.entity.EntityPoseChangeEvent;
  import org.bukkit.event.player.PlayerTeleportEvent;
  import org.bukkit.plugin.PluginManager;
@@ -121,11 +137,12 @@ index 0a0c970f610b57c166d6938d01c63429ff3bddf6..3493f67cad4248a6751c52b120160cfa
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource, io.papermc.paper.util.KeyedObject { // Paper
-@@ -1434,6 +1435,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -1434,6 +1428,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
                          blockposition_mutableblockposition.set(i, j, k);
                          BlockState iblockdata = this.level.getBlockState(blockposition_mutableblockposition);
  
-+                        if (MultiPaper.isChunkExternal(this.level.getChunkAt(blockposition_mutableblockposition))) continue; // MultiPaper - Only check for blocks on our server
++                        boolean shouldTickOurPlayer = MultiPaper.isRealPlayer(this) && (iblockdata.getBlock() instanceof NetherPortalBlock || iblockdata.getBlock() instanceof EndPortalBlock); // MultiPaper - tick portals
++                        if (!shouldTickOurPlayer && MultiPaper.isChunkExternal(this.level.getChunkAt(blockposition_mutableblockposition))) continue; // MultiPaper - Only check for blocks on our server
 +
                          try {
                              iblockdata.entityInside(this.level, blockposition_mutableblockposition, this);

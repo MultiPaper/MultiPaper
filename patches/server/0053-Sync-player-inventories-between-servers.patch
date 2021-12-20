@@ -25,7 +25,7 @@ index a8a8404fd17c7bb00205dac6b1a8910f5e71e4d6..11ff76168ed83b54a191237a31f0ceef
      public boolean wonGame;
      private int containerUpdateDelay; // Paper
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 2194ac8066f8093b905e88c1782b5e99aa16282e..f50441e7fe0c856ee79d68633ec804197c0d38d7 100644
+index 2194ac8066f8093b905e88c1782b5e99aa16282e..c70582e900e919e41f19b18ba78660a22e8bfeb0 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -214,6 +214,7 @@ import org.bukkit.inventory.SmithingInventory;
@@ -52,7 +52,15 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..f50441e7fe0c856ee79d68633ec80419
          if (this.player.containerMenu instanceof AnvilMenu) {
              AnvilMenu containeranvil = (AnvilMenu) this.player.containerMenu;
              String s = SharedConstants.filterText(packet.getName());
-@@ -1082,6 +1085,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -976,6 +979,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+     @Override
+     public void handleSetBeaconPacket(ServerboundSetBeaconPacket packet) {
+         PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
++        if (MultiPaperInventoryHandler.handleContainerEvent(this.player, packet)) return; // MultiPaper
+         if (this.player.containerMenu instanceof BeaconMenu) {
+             ((BeaconMenu) this.player.containerMenu).updateEffects(packet.getPrimary(), packet.getSecondary());
+         }
+@@ -1082,6 +1086,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleSelectTrade(ServerboundSelectTradePacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -60,7 +68,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..f50441e7fe0c856ee79d68633ec80419
          int i = packet.getItem();
          AbstractContainerMenu container = this.player.containerMenu;
  
-@@ -1810,6 +1814,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -1810,6 +1815,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
          }
          // Paper end - move check up
  
@@ -69,7 +77,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..f50441e7fe0c856ee79d68633ec80419
          this.player.resetLastActionTime();
          int i = this.player.level.getMaxBuildHeight();
  
-@@ -2033,6 +2039,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2033,6 +2040,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
  
              this.player.getInventory().selected = packet.getSlot();
              this.player.resetLastActionTime();
@@ -77,7 +85,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..f50441e7fe0c856ee79d68633ec80419
          } else {
              ServerGamePacketListenerImpl.LOGGER.warn("{} tried to set an invalid carried item", this.player.getName().getString());
              this.disconnect("Invalid hotbar selection (Hacking?)", org.bukkit.event.player.PlayerKickEvent.Cause.ILLEGAL_ACTION); // CraftBukkit // Paper - kick event cause
-@@ -2584,6 +2591,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2584,6 +2592,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      public void handleContainerClose(ServerboundContainerClosePacket packetplayinclosewindow, InventoryCloseEvent.Reason reason) {
          // Paper end
          PacketUtils.ensureRunningOnSameThread(packetplayinclosewindow, this, this.player.getLevel());
@@ -85,7 +93,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..f50441e7fe0c856ee79d68633ec80419
  
          if (this.player.isImmobile()) return; // CraftBukkit
          CraftEventFactory.handleInventoryCloseEvent(this.player, reason); // CraftBukkit // Paper
-@@ -2594,6 +2602,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2594,6 +2603,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleContainerClick(ServerboundContainerClickPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -93,7 +101,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..f50441e7fe0c856ee79d68633ec80419
          if (this.player.isImmobile()) return; // CraftBukkit
          this.player.resetLastActionTime();
          if (this.player.containerMenu.containerId == packet.getContainerId() && this.player.containerMenu.stillValid(this.player)) { // CraftBukkit
-@@ -2929,6 +2938,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2929,6 +2939,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleContainerButtonClick(ServerboundContainerButtonClickPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());

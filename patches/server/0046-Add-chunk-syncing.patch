@@ -104,7 +104,7 @@ index d271871563fa883efb77b35ec3b1dfbba87f0b62..40e74c91d79eab808b5bed3954a67624
      public interface LevelChangeListener {
  
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index a5fcfb34141090b400132a36b2dc8eb7d2ce2789..00dac38ea3bc73d2da4a29d6d5f62c8214fb7c28 100644
+index 40a43bcb4bde488dbe742fc9e688014dee801942..e2f9e1510ebb80e39107a928fdd30caf8661af93 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -110,6 +110,7 @@ import org.bukkit.entity.Player;
@@ -283,10 +283,10 @@ index 5601d0c2fe635a2a4f073c333531e1a8adf1833c..b72f2e73ee6e75be619afabefd544331
          }
  
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..f4ddc9172a3951fa59e0ed9345fd2e69e1d8c7bc 100644
+index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..a1cb320b82d63c22380b725096078fb104dfebbb 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-@@ -7,8 +7,8 @@ import com.google.common.collect.UnmodifiableIterator;
+@@ -7,9 +7,10 @@ import com.google.common.collect.UnmodifiableIterator;
  import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
  import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
  import it.unimi.dsi.fastutil.shorts.ShortListIterator;
@@ -295,9 +295,11 @@ index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..f4ddc9172a3951fa59e0ed9345fd2e69
 +
 +import java.util.*;
  import java.util.Map.Entry;
++import java.util.concurrent.ConcurrentHashMap;
  import java.util.function.Consumer;
  import java.util.function.Supplier;
-@@ -22,6 +22,7 @@ import net.minecraft.core.BlockPos;
+ import java.util.stream.Stream;
+@@ -22,6 +23,7 @@ import net.minecraft.core.BlockPos;
  import net.minecraft.core.Registry;
  import net.minecraft.core.SectionPos;
  import net.minecraft.nbt.CompoundTag;
@@ -305,7 +307,7 @@ index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..f4ddc9172a3951fa59e0ed9345fd2e69
  import net.minecraft.network.FriendlyByteBuf;
  import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
  import net.minecraft.server.level.ChunkHolder;
-@@ -53,6 +54,7 @@ import net.minecraft.world.ticks.LevelChunkTicks;
+@@ -53,6 +55,7 @@ import net.minecraft.world.ticks.LevelChunkTicks;
  import net.minecraft.world.ticks.TickContainerAccess;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
@@ -313,12 +315,12 @@ index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..f4ddc9172a3951fa59e0ed9345fd2e69
  
  public class LevelChunk extends ChunkAccess {
  
-@@ -80,13 +82,18 @@ public class LevelChunk extends ChunkAccess {
+@@ -80,13 +83,18 @@ public class LevelChunk extends ChunkAccess {
      public boolean loaded;
      private boolean clientLightReady;
      public final ServerLevel level; // CraftBukkit - type
 +    @Nullable public ExternalServer externalOwner; // MultiPaper - Chunk owner
-+    public HashSet<ExternalServer> externalSubscribers = new HashSet<>(); // MultiPaper - Chunk subscribers
++    public Set<ExternalServer> externalSubscribers = ConcurrentHashMap.newKeySet(); // MultiPaper - Chunk subscribers
 +    public boolean hasExternalLockRequest = false; // MultiPaper - Have we sent a request to lock this chunk?
      @Nullable
      private Supplier<ChunkHolder.FullChunkStatus> fullStatus;
@@ -334,7 +336,7 @@ index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..f4ddc9172a3951fa59e0ed9345fd2e69
      // Paper start - track last save time
      public long lastSaveTime;
      public void setLastSaved(long ticks) {
-@@ -813,6 +820,7 @@ public class LevelChunk extends ChunkAccess {
+@@ -813,6 +821,7 @@ public class LevelChunk extends ChunkAccess {
          // Paper end - neighbour cache
          org.bukkit.Server server = this.level.getCraftServer();
          this.level.getChunkSource().addLoadedChunk(this); // Paper
@@ -342,7 +344,7 @@ index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..f4ddc9172a3951fa59e0ed9345fd2e69
          if (server != null) {
              /*
               * If it's a new world, the first few chunks are generated inside
-@@ -874,7 +882,7 @@ public class LevelChunk extends ChunkAccess {
+@@ -874,7 +883,7 @@ public class LevelChunk extends ChunkAccess {
  
      @Override
      public boolean isUnsaved() {

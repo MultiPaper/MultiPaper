@@ -185,18 +185,19 @@ index 3b024dc9b5f2d7fdde84ff083b7ac588f261fcbb..9169fa9fab669abc870991619c552549
                      chunk1.incrementInhabitedTime(j);
                      if (flag2 && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair) && this.chunkMap.anyPlayerCloseEnoughForSpawning(holder, chunkcoordintpair, true)) { // Spigot // Paper - optimise anyPlayerCloseEnoughForSpawning & optimise chunk tick iteration
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 93471417e8c6e0c67131005e7e0f63339d96e555..3267d874771d948e39d6e9b94e850a0434c794ff 100644
+index 93471417e8c6e0c67131005e7e0f63339d96e555..bac95a932d25cb6e5bcc47a8e1d1a166b5cec238 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -161,6 +161,7 @@ import org.bukkit.event.weather.LightningStrikeEvent;
+@@ -161,6 +161,8 @@ import org.bukkit.event.weather.LightningStrikeEvent;
  import org.bukkit.event.world.TimeSkipEvent;
  // CraftBukkit end
  import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
++import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperChunkHandler;
  
  public class ServerLevel extends Level implements WorldGenLevel {
  
-@@ -1076,6 +1077,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1076,6 +1078,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
      }
  
      private void tickFluid(BlockPos pos, Fluid fluid) {
@@ -205,7 +206,7 @@ index 93471417e8c6e0c67131005e7e0f63339d96e555..3267d874771d948e39d6e9b94e850a04
          FluidState fluid1 = this.getFluidState(pos);
  
          if (fluid1.is(fluid)) {
-@@ -1085,6 +1088,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1085,6 +1089,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
      }
  
      private void tickBlock(BlockPos pos, Block block) {
@@ -214,6 +215,18 @@ index 93471417e8c6e0c67131005e7e0f63339d96e555..3267d874771d948e39d6e9b94e850a04
          BlockState iblockdata = this.getBlockState(pos);
  
          if (iblockdata.is(block)) {
+@@ -2237,6 +2243,11 @@ public class ServerLevel extends Level implements WorldGenLevel {
+                 return;
+             }
+             // CraftBukkit end
++            // MultiPaper start - run neighbour updates later if we're handling block changes
++            if (MultiPaperChunkHandler.blockUpdateChunk != null) {
++                MultiPaper.runSync(() -> this.updateNeighborsAt(pos, block));
++            } else
++            // MultiPaper end - run neighbour updates later if we're handling block changes
+             this.updateNeighborsAt(pos, block);
+         }
+ 
 diff --git a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
 index bbd9fdaa4b12543307b144da72b0604eae638cbb..9c88f14a6f17bb054887f236f1b2711202dadfa2 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
@@ -788,7 +801,7 @@ index dfbb4c47f0308e8395057014ca14dec0152eec07..a5332c1991bc5a0a3c37624cbee6fef8
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..65884a18bdb5744e84c1d6e21cb8f91e39c3a0fa
+index 0000000000000000000000000000000000000000..f25b2a2a57aa9a76f7655287a57bedb0131cf1dc
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 @@ -0,0 +1,212 @@
@@ -887,7 +900,7 @@ index 0000000000000000000000000000000000000000..65884a18bdb5744e84c1d6e21cb8f91e
 +        }
 +    }
 +
-+    private static ChunkAccess blockUpdateChunk = null;
++    public static ChunkAccess blockUpdateChunk = null;
 +    private static ChunkHolder holder = null;
 +    public static void handleBlockUpdate(String world, Packet<?> packet) {
 +        holder = null;

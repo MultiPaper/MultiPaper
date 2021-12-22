@@ -25,7 +25,7 @@ index a8a8404fd17c7bb00205dac6b1a8910f5e71e4d6..11ff76168ed83b54a191237a31f0ceef
      public boolean wonGame;
      private int containerUpdateDelay; // Paper
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 2194ac8066f8093b905e88c1782b5e99aa16282e..c70582e900e919e41f19b18ba78660a22e8bfeb0 100644
+index 2194ac8066f8093b905e88c1782b5e99aa16282e..46060a0036bca2d31aabbb2331f6c594a3dfd669 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -214,6 +214,7 @@ import org.bukkit.inventory.SmithingInventory;
@@ -77,7 +77,16 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..c70582e900e919e41f19b18ba78660a2
          this.player.resetLastActionTime();
          int i = this.player.level.getMaxBuildHeight();
  
-@@ -2033,6 +2040,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -1848,6 +1855,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+         InteractionHand enumhand = packet.getHand();
+         ItemStack itemstack = this.player.getItemInHand(enumhand);
+ 
++        if (MultiPaperInventoryHandler.handleUseItemEvent(this.player, packet)) return; // MultiPaper
++
+         this.player.resetLastActionTime();
+         if (!itemstack.isEmpty()) {
+             // CraftBukkit start
+@@ -2033,6 +2042,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
  
              this.player.getInventory().selected = packet.getSlot();
              this.player.resetLastActionTime();
@@ -85,7 +94,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..c70582e900e919e41f19b18ba78660a2
          } else {
              ServerGamePacketListenerImpl.LOGGER.warn("{} tried to set an invalid carried item", this.player.getName().getString());
              this.disconnect("Invalid hotbar selection (Hacking?)", org.bukkit.event.player.PlayerKickEvent.Cause.ILLEGAL_ACTION); // CraftBukkit // Paper - kick event cause
-@@ -2584,6 +2592,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2584,6 +2594,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      public void handleContainerClose(ServerboundContainerClosePacket packetplayinclosewindow, InventoryCloseEvent.Reason reason) {
          // Paper end
          PacketUtils.ensureRunningOnSameThread(packetplayinclosewindow, this, this.player.getLevel());
@@ -93,7 +102,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..c70582e900e919e41f19b18ba78660a2
  
          if (this.player.isImmobile()) return; // CraftBukkit
          CraftEventFactory.handleInventoryCloseEvent(this.player, reason); // CraftBukkit // Paper
-@@ -2594,6 +2603,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2594,6 +2605,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleContainerClick(ServerboundContainerClickPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -101,7 +110,7 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..c70582e900e919e41f19b18ba78660a2
          if (this.player.isImmobile()) return; // CraftBukkit
          this.player.resetLastActionTime();
          if (this.player.containerMenu.containerId == packet.getContainerId() && this.player.containerMenu.stillValid(this.player)) { // CraftBukkit
-@@ -2929,6 +2939,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2929,6 +2941,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleContainerButtonClick(ServerboundContainerButtonClickPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -408,10 +417,10 @@ index 134c023fe25a6bb6c7967e7c8957fd2e53529c59..bce54e16de48ca6a3ba27daee8b58088
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9a19b231a1240aefdbb6f01c5c05151ef6135f46
+index 0000000000000000000000000000000000000000..672bf519315646999da0527ede603fd1ca288ea0
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-@@ -0,0 +1,173 @@
+@@ -0,0 +1,188 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -421,6 +430,7 @@ index 0000000000000000000000000000000000000000..9a19b231a1240aefdbb6f01c5c05151e
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.item.BucketItem;
++import net.minecraft.world.item.EnderEyeItem;
 +import net.minecraft.world.item.ItemStack;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
@@ -472,6 +482,20 @@ index 0000000000000000000000000000000000000000..9a19b231a1240aefdbb6f01c5c05151e
 +        LevelChunk chunk = player.level.getChunkIfLoaded(packet.getHitResult().getBlockPos());
 +        ItemStack item = player.getItemInHand(packet.getHand());
 +        if (MultiPaper.isChunkExternal(chunk) && !(item.getItem() instanceof BucketItem)) {
++            chunk.externalOwner.getConnection().send(new PlayerActionPacket(player, packet));
++            return true;
++        }
++
++        return false;
++    }
++
++    /**
++     * Returns true if the even should be cancelled
++     */
++    public static boolean handleUseItemEvent(ServerPlayer player, ServerboundUseItemPacket packet) {
++        LevelChunk chunk = player.level.getChunkIfLoaded(player.blockPosition());
++        ItemStack item = player.getItemInHand(packet.getHand());
++        if (MultiPaper.isChunkExternal(chunk) && item.getItem() instanceof EnderEyeItem) {
 +            chunk.externalOwner.getConnection().send(new PlayerActionPacket(player, packet));
 +            return true;
 +        }

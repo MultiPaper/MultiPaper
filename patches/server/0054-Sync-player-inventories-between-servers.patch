@@ -5,7 +5,7 @@ Subject: [PATCH] Sync player inventories between servers
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index a8a8404fd17c7bb00205dac6b1a8910f5e71e4d6..11ff76168ed83b54a191237a31f0ceeff2475a89 100644
+index ec71daaddd359276db1d16abcbeb93da6fc3cfdb..9ef56fc6f3322144bf171206b42ebb76e0d08d0d 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -164,6 +164,7 @@ import org.bukkit.event.player.PlayerPortalEvent;
@@ -16,7 +16,7 @@ index a8a8404fd17c7bb00205dac6b1a8910f5e71e4d6..11ff76168ed83b54a191237a31f0ceef
  import puregero.multipaper.MultiPaper;
  import puregero.multipaper.externalserverprotocol.PlayerChangeDimensionPacket;
  import puregero.multipaper.externalserverprotocol.PlayerChangeGamemodePacket;
-@@ -225,6 +226,7 @@ public class ServerPlayer extends Player {
+@@ -227,6 +228,7 @@ public class ServerPlayer extends Player {
      private final ContainerSynchronizer containerSynchronizer;
      private final ContainerListener containerListener;
      private int containerCounter;
@@ -350,27 +350,26 @@ index 2c0df286dce1262a3db05407a9a4cb9bd4c7bfd8..853c02d4f690d71d36d2a88ca08fbdff
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 134c023fe25a6bb6c7967e7c8957fd2e53529c59..bce54e16de48ca6a3ba27daee8b58088b13480e2 100644
+index fdd6cd4aa3a660029b480f5ee0986155ee9f3c46..e67814221c057c05fc796a9cd698048d034d4946 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -2,6 +2,8 @@ package puregero.multipaper;
+@@ -2,6 +2,7 @@ package puregero.multipaper;
  
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.Registry;
-+import net.minecraft.network.protocol.game.ClientboundSetCarriedItemPacket;
 +import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.nbt.CompoundTag;
  import net.minecraft.nbt.NbtIo;
-@@ -29,6 +31,7 @@ import puregero.multipaper.externalserverprotocol.*;
+@@ -29,6 +30,7 @@ import puregero.multipaper.externalserverprotocol.*;
  import java.io.*;
  import java.nio.file.Files;
  import java.util.Collection;
 +import java.util.Collections;
  import java.util.HashSet;
- import java.util.function.Supplier;
  import java.util.concurrent.ConcurrentHashMap;
-@@ -105,6 +108,14 @@ public class MultiPaper {
+ import java.util.function.Consumer;
+@@ -105,6 +107,14 @@ public class MultiPaper {
                  }
              });
          });
@@ -385,15 +384,7 @@ index 134c023fe25a6bb6c7967e7c8957fd2e53529c59..bce54e16de48ca6a3ba27daee8b58088
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -126,6 +137,7 @@ public class MultiPaper {
-     }
-     public static void onPlayerJoin(ServerPlayer player) {
-         broadcastPacketToExternalServers(new PlayerCreatePacket(player));
-+        broadcastPacketToExternalServers(new SendPacketPacket(player, new ClientboundSetCarriedItemPacket(player.getInventory().selected)));
-     }
-     public static void onPlayerDisconnect(ServerPlayer player) {
-         if (!(player instanceof ExternalPlayer)) {
-@@ -330,7 +342,7 @@ public class MultiPaper {
+@@ -353,7 +363,7 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -402,7 +393,7 @@ index 134c023fe25a6bb6c7967e7c8957fd2e53529c59..bce54e16de48ca6a3ba27daee8b58088
      public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
          if (compoundTag == null) {
              return new byte[0];
-@@ -400,4 +412,12 @@ public class MultiPaper {
+@@ -423,4 +433,12 @@ public class MultiPaper {
              e.printStackTrace();
          };
      }
@@ -678,10 +669,10 @@ index 0000000000000000000000000000000000000000..79b5ec18fc80714daac2c70c6a385fb1
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 5bb9d03c774e618aeb0f4cf33d2915479d0f53fe..0380ae85f2770e01d7d2a2a49b20309d1485c121 100644
+index 934b75c68cc94cf39d09f086d97b88d0fe50c23c..7915ca20200bb2fff262259a7e71b618cb5d8068 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -23,6 +23,8 @@ public class ExternalServerPacketSerializer {
+@@ -24,6 +24,8 @@ public class ExternalServerPacketSerializer {
          addPacket(RequestChunkPacket.class, RequestChunkPacket::new);
          addPacket(SendChunkPacket.class, SendChunkPacket::new);
          addPacket(SendTickListPacket.class, SendTickListPacket::new);
@@ -768,6 +759,24 @@ index 0000000000000000000000000000000000000000..b242b1f00b4f4380db4d2c3d5a9c7ec6
 +        player.server.execute(() -> action.handle(player.connection));
 +    }
 +}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+index e5fa6a719e7c4c9f1ee5085c687469c5ad8ce522..5be8cf838de376f036a6b09083dcc8d5f919d990 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+@@ -1,5 +1,6 @@
+ package puregero.multipaper.externalserverprotocol;
+ 
++import net.minecraft.network.protocol.game.ClientboundSetCarriedItemPacket;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.level.GameType;
+ import org.apache.logging.log4j.LogManager;
+@@ -72,5 +73,6 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+ 
+     public static void sendPlayer(ExternalServerConnection connection, ServerPlayer player) {
+         connection.send(new PlayerCreatePacket(player));
++        connection.send(new SendPacketPacket(player, new ClientboundSetCarriedItemPacket(player.getInventory().selected)));
+     }
+ }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..8ccc6e591fa0d2eab520f426bf49ab9b377f36cd

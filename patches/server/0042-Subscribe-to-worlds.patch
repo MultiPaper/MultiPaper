@@ -1,0 +1,146 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 22 Dec 2021 21:32:25 +1000
+Subject: [PATCH] Subscribe to worlds
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 552188278f86318017273b09192234f278b84cdd..d6d93ef9615c143e1e37fb520a35a21de94ae7e6 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -249,6 +249,8 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
+ import org.yaml.snakeyaml.error.MarkedYAMLException;
+ 
+ import net.md_5.bungee.api.chat.BaseComponent; // Spigot
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.SubscribeToWorldPacket;
+ 
+ import javax.annotation.Nullable; // Paper
+ import javax.annotation.Nonnull; // Paper
+@@ -1377,6 +1379,7 @@ public final class CraftServer implements Server {
+             return;
+         }
+         this.worlds.put(world.getName().toLowerCase(java.util.Locale.ENGLISH), world);
++        MultiPaper.broadcastPacketToExternalServers(new SubscribeToWorldPacket(world.getName())); // MultiPaper
+     }
+ 
+     @Override
+diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+index 2245b1ad53a171a8f2c6bd7be9bb74b42fe0dc31..6a835e039f4a23ddc1f716924b0e416a6a680788 100644
+--- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
++++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+@@ -8,11 +8,13 @@ import puregero.multipaper.externalserverprotocol.HelloPacket;
+ 
+ import java.io.*;
+ import java.net.Socket;
++import java.util.HashSet;
+ 
+ public class ExternalServerConnection extends Thread implements Closeable {
+ 
+     private Socket socket;
+     public ExternalServer externalServer = null;
++    public HashSet<String> subscribedWorlds = new HashSet<>();
+ 
+     public ExternalServerConnection(Socket socket) {
+         this.socket = socket;
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index c246f0ae17147515d2d61c6f555af17e63c4f29b..c65cb83baea4d7e7eafab2f55d133516efbae286 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -81,4 +81,12 @@ public class MultiPaper {
+             });
+         }
+     }
++
++    public static void broadcastPacketToExternalServers(String world, ExternalServerPacket packet) {
++        forEachExternalServer(externalServer -> {
++            if (externalServer.getConnection() != null && externalServer.getConnection().subscribedWorlds.contains(world)) {
++                externalServer.getConnection().send(packet);
++            }
++        });
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index c21f3dc975820b3d979a4fc5c0fa981296375f0b..5f34f3e588debed182f77f90a315569d8b149fbd 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -13,6 +13,7 @@ public class ExternalServerPacketSerializer {
+     private static final List<IOExceptionFunction<DataInputStream, ExternalServerPacket>> PACKET_DESERIALIZERS = new ArrayList<>();
+     static {
+         addPacket(HelloPacket.class, HelloPacket::new);
++        addPacket(SubscribeToWorldPacket.class, SubscribeToWorldPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+index 21a57d5fcb66211e6a42d6d1b21940b25e9d1382..f3f3a73c847b692172640dfd12ff389f1f2404e7 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+@@ -2,6 +2,8 @@ package puregero.multipaper.externalserverprotocol;
+ 
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.World;
+ import puregero.multipaper.ExternalServerConnection;
+ import puregero.multipaper.MultiPaper;
+ 
+@@ -33,5 +35,9 @@ public class HelloPacket extends ExternalServerPacket {
+         LOGGER.info("Connected to external server " + bungeecordName);
+         connection.externalServer = MultiPaper.getConnection().getOrCreateServer(bungeecordName);
+         connection.externalServer.setConnection(connection);
++
++        for (World world : Bukkit.getWorlds()) {
++            connection.send(new SubscribeToWorldPacket(world.getName()));
++        }
+     }
+ }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..eb733582d7b401fc657b48d5bf5474fa00630b6c
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
+@@ -0,0 +1,43 @@
++package puregero.multipaper.externalserverprotocol;
++
++import org.bukkit.Bukkit;
++import org.bukkit.World;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++
++public class SubscribeToWorldPacket extends ExternalServerPacket {
++
++    private final String world;
++
++    public SubscribeToWorldPacket(String world) {
++        this.world = world;
++    }
++
++    public SubscribeToWorldPacket(DataInputStream in) throws IOException {
++        world = in.readUTF();
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            World bukkitWorld = Bukkit.getWorld(world);
++            if (connection.subscribedWorlds.add(world) && bukkitWorld instanceof CraftWorld craftWorld) {
++                onWorldSubscribe(connection, craftWorld);
++            }
++        });
++    }
++
++    private void onWorldSubscribe(ExternalServerConnection connection, CraftWorld craftWorld) {
++
++    }
++}

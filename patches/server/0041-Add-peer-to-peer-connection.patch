@@ -73,12 +73,14 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..519333b7d1629a3e8105d11e911df0b7430e00c5
+index 0000000000000000000000000000000000000000..2245b1ad53a171a8f2c6bd7be9bb74b42fe0dc31
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,76 @@
 +package puregero.multipaper;
 +
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
 +import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
 +import puregero.multipaper.externalserverprotocol.ExternalServerPacketSerializer;
 +import puregero.multipaper.externalserverprotocol.HelloPacket;
@@ -108,9 +110,14 @@ index 0000000000000000000000000000000000000000..519333b7d1629a3e8105d11e911df0b7
 +    @Override
 +    public void run() {
 +        try {
++            DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
++
++            while (MinecraftServer.getServer() == null || MinecraftServer.getServer().getPlayerList() == null || MinecraftServer.getServer().getPlayerList().players == null) {
++                Thread.sleep(50); // Wait for server to initialise
++            }
++
 +            send(new HelloPacket(MultiPaper.getBungeeCordName()));
 +
-+            DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
 +            while (!socket.isClosed()) {
 +                ExternalServerPacket packet = ExternalServerPacketSerializer.deserialize(in);
 +                packet.handle(this);
@@ -194,10 +201,21 @@ index 0000000000000000000000000000000000000000..87a0ea1ce48d9543007558df2e5326ab
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 5ddb4c40c42f94b6a4b76dc0479c51dbcfe65f6e..2382f0980bef9704f227a331b5a441d748aff268 100644
+index 5ddb4c40c42f94b6a4b76dc0479c51dbcfe65f6e..c246f0ae17147515d2d61c6f555af17e63c4f29b 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -6,6 +6,7 @@ import java.nio.file.Files;
+@@ -1,11 +1,18 @@
+ package puregero.multipaper;
+ 
++import net.minecraft.server.MinecraftServer;
++import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
++
+ import java.io.File;
+ import java.io.IOException;
+ import java.nio.file.Files;
++import java.util.Collection;
++import java.util.function.Consumer;
++import java.util.function.Supplier;
  
  public class MultiPaper {
      private static MultiPaperConnection multiPaperConnection = null;
@@ -205,7 +223,7 @@ index 5ddb4c40c42f94b6a4b76dc0479c51dbcfe65f6e..2382f0980bef9704f227a331b5a441d7
  
      public static MultiPaperConnection getConnection() {
          if (multiPaperConnection == null) {
-@@ -38,4 +39,13 @@ public class MultiPaper {
+@@ -38,4 +45,40 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -216,6 +234,33 @@ index 5ddb4c40c42f94b6a4b76dc0479c51dbcfe65f6e..2382f0980bef9704f227a331b5a441d7
 +            getConnection().sendStart(externalServerSocket.getPort());
 +        } catch (IOException e) {
 +            e.printStackTrace();
++        }
++    }
++    
++    public static void runSync(Runnable runnable) {
++        MinecraftServer.getServer().scheduleOnMain(runnable);
++    }
++
++    public static void forEachExternalServer(Consumer<ExternalServer> externalServerConsumer) {
++        getConnection().getServersMap().values().forEach(externalServerConsumer);
++    }
++
++    public static void broadcastPacketToExternalServers(ExternalServerPacket packet) {
++        broadcastPacketToExternalServers(getConnection().getServersMap().values(), packet);
++    }
++
++    public static void broadcastPacketToExternalServers(Collection<ExternalServer> externalServers, ExternalServerPacket packet) {
++        broadcastPacketToExternalServers(externalServers, () -> packet);
++    }
++
++    public static void broadcastPacketToExternalServers(Collection<ExternalServer> externalServers, Supplier<ExternalServerPacket> generatePacketIfNeeded) {
++        if (!externalServers.isEmpty()) {
++            ExternalServerPacket packet = generatePacketIfNeeded.get();
++            externalServers.forEach(externalServer -> {
++                if (externalServer.getConnection() != null) {
++                    externalServer.getConnection().send(packet);
++                }
++            });
 +        }
 +    }
  }

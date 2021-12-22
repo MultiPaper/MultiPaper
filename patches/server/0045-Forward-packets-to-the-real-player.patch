@@ -37,13 +37,14 @@ index ec509a18e6cc9937f1216b38f0f4c3f3df66c3d8..2c0df286dce1262a3db05407a9a4cb9b
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 11ee85df2d7ed546c4f7b05ff668d6278d73d1b3..17621d5fd36f0b17ab2c4d1736583d9eb9c79153 100644
+index 4ad75d2b6a773cae13fd5cd66b52dc092af17043..573a0fc42bbf510f9cb77e107f840ad8b6da6394 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -1,19 +1,25 @@
+@@ -1,15 +1,17 @@
  package puregero.multipaper;
  
 +import net.minecraft.network.protocol.Packet;
+ import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ServerPlayer;
  import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
@@ -53,12 +54,14 @@ index 11ee85df2d7ed546c4f7b05ff668d6278d73d1b3..17621d5fd36f0b17ab2c4d1736583d9e
  
  import java.io.*;
  import java.net.Socket;
+-import java.util.HashSet;
 +import java.util.*;
  
  public class ExternalServerConnection extends Thread implements Closeable {
  
-     private Socket socket;
+@@ -17,6 +19,9 @@ public class ExternalServerConnection extends Thread implements Closeable {
      public ExternalServer externalServer = null;
+     public HashSet<String> subscribedWorlds = new HashSet<>();
  
 +    private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
 +    private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
@@ -66,7 +69,7 @@ index 11ee85df2d7ed546c4f7b05ff668d6278d73d1b3..17621d5fd36f0b17ab2c4d1736583d9e
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
          start();
-@@ -74,4 +80,32 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -82,4 +87,32 @@ public class ExternalServerConnection extends Thread implements Closeable {
              e.printStackTrace();
          }
      }
@@ -100,10 +103,10 @@ index 11ee85df2d7ed546c4f7b05ff668d6278d73d1b3..17621d5fd36f0b17ab2c4d1736583d9e
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 253541e5f55b816116898ab239925c65b54da2e7..dfbb4c47f0308e8395057014ca14dec0152eec07 100644
+index 4d28a735e0d23edc898d396669e37d6f08eceeb4..3c70c8fec9bfe3042801298af4d1c8efdc59b7bb 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -48,6 +48,12 @@ public class MultiPaper {
+@@ -45,6 +45,12 @@ public class MultiPaper {
      }
  
      public static void tick() {
@@ -117,10 +120,10 @@ index 253541e5f55b816116898ab239925c65b54da2e7..dfbb4c47f0308e8395057014ca14dec0
  
      public static void sendTickTime(long time, double tps) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index fbb62fdce832fb8140c2e157db0cc7dba8014c9a..327db67b4201deb49e3886454818367a19db0f3b 100644
+index e6088d96e11356c811bd3731461d9a0b1a79254a..c1bac1bf5148126a0fcad517bf499833d31cf050 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -18,6 +18,7 @@ public class ExternalServerPacketSerializer {
+@@ -19,6 +19,7 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerChangeGamemodePacket.class, PlayerChangeGamemodePacket::new);
          addPacket(PlayerRespawnPacket.class, PlayerRespawnPacket::new);
          addPacket(PlayerChangeDimensionPacket.class, PlayerChangeDimensionPacket::new);

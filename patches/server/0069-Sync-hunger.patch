@@ -82,35 +82,11 @@ index b39117c4505926da0be9c8248964a233393e8e2d..c452146b05dc4ebd17654a8c49c8fb39
      }
  
      @Override
-diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index e02a8b8c4ab7ad0e1d25baaa1f8b88bafcbeb215..48b7919b8ea7373cdc955a2b389087598ffd8da9 100644
---- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
-+++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -68,6 +68,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
-                             player.isTextFilteringEnabled(),
-                             player.allowsListing()
-                     )));
-+                    send(new PlayerFoodUpdatePacket(player));
-                 }
-             }
- 
-diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index fed345611cc6909fe11ab589a6e725dbe467de4c..6d6914d092abb19a0d53f181cb150a884017c4a6 100644
---- a/src/main/java/puregero/multipaper/MultiPaper.java
-+++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -155,6 +155,7 @@ public class MultiPaper {
-         broadcastPacketToExternalServers(new PlayerCreatePacket(player));
-         broadcastPacketToExternalServers(new SendPacketPacket(player, new ClientboundSetCarriedItemPacket(player.getInventory().selected)));
-         broadcastPacketToExternalServers(new EntityUpdatePacket(player, new ClientboundSetEntityDataPacket(player.getId(), player.getEntityData(), true)));
-+        broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(player));
- 
-         if (player.clientViewDistance != null) {
-             broadcastPacketToExternalServers(new PlayerActionPacket(player, new ServerboundClientInformationPacket(
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 08307f240d8eb721fc833cfae3c473f2adecf599..2187734bf751b0e98e848920b92bebf7132dedd2 100644
+index 0fcd70430f7e1baedc17004506fd4852eb2b6ea4..8c45f282e7492c3adc0f0337bd569882881498cd 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -41,6 +41,7 @@ public class ExternalServerPacketSerializer {
+@@ -42,6 +42,7 @@ public class ExternalServerPacketSerializer {
          addPacket(MobSetNavigationGoalPacket.class, MobSetNavigationGoalPacket::new);
          addPacket(PlayerDataUpdatePacket.class, PlayerDataUpdatePacket::new);
          addPacket(PluginNotificationPacket.class, PluginNotificationPacket::new);
@@ -118,6 +94,18 @@ index 08307f240d8eb721fc833cfae3c473f2adecf599..2187734bf751b0e98e848920b92bebf7
      }
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+index e187fa7c67b338cb586519ceb5dc74a8239fc1cd..d9faa64b34688ae1fbd34987a0b7b116b9cffc30 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+@@ -114,6 +114,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+         connection.send(new PlayerCreatePacket(player));
+         connection.send(new SendPacketPacket(player, new ClientboundSetCarriedItemPacket(player.getInventory().selected)));
+         connection.send(new EntityUpdatePacket(player, new ClientboundSetEntityDataPacket(player.getId(), player.getEntityData(), true)));
++        connection.send(new PlayerFoodUpdatePacket(player));
+ 
+         if (player.clientViewDistance != null) {
+             connection.send(new PlayerActionPacket(player, new ServerboundClientInformationPacket(
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerFoodUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerFoodUpdatePacket.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..8b697213512ecd3f1e0608c007d14db0e898e235

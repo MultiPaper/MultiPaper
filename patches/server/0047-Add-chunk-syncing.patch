@@ -495,11 +495,11 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 17621d5fd36f0b17ab2c4d1736583d9eb9c79153..a6140bdfaef4e53456fe5205a30fd4dc73736228 100644
+index 573a0fc42bbf510f9cb77e107f840ad8b6da6394..5f9247717fb439add513056cfefe0eecfb066055 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -3,22 +3,26 @@ package puregero.multipaper;
- import net.minecraft.network.protocol.Packet;
+@@ -4,23 +4,27 @@ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ServerPlayer;
 -import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
@@ -522,6 +522,7 @@ index 17621d5fd36f0b17ab2c4d1736583d9eb9c79153..a6140bdfaef4e53456fe5205a30fd4dc
 +
      private Socket socket;
      public ExternalServer externalServer = null;
+     public HashSet<String> subscribedWorlds = new HashSet<>();
  
      private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
@@ -529,7 +530,7 @@ index 17621d5fd36f0b17ab2c4d1736583d9eb9c79153..a6140bdfaef4e53456fe5205a30fd4dc
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
-@@ -108,4 +112,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -115,4 +119,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
              players.add(player);
          }
      }
@@ -545,10 +546,10 @@ index 17621d5fd36f0b17ab2c4d1736583d9eb9c79153..a6140bdfaef4e53456fe5205a30fd4dc
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index dfbb4c47f0308e8395057014ca14dec0152eec07..a5332c1991bc5a0a3c37624cbee6fef82fd0af64 100644
+index 3c70c8fec9bfe3042801298af4d1c8efdc59b7bb..eeb5dc975b477ebbf2ae41bec7a0ad0d6cb00082 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,32 +1,48 @@
+@@ -1,22 +1,41 @@
  package puregero.multipaper;
  
 +import net.minecraft.core.BlockPos;
@@ -581,8 +582,9 @@ index dfbb4c47f0308e8395057014ca14dec0152eec07..a5332c1991bc5a0a3c37624cbee6fef8
  import java.nio.file.Files;
  import java.util.Collection;
 +import java.util.HashSet;
- import java.util.function.Supplier;
 +import java.util.concurrent.ConcurrentHashMap;
+ import java.util.function.Consumer;
+ import java.util.function.Supplier;
 +import java.util.zip.DeflaterOutputStream;
 +import java.util.zip.InflaterInputStream;
  
@@ -593,19 +595,8 @@ index dfbb4c47f0308e8395057014ca14dec0152eec07..a5332c1991bc5a0a3c37624cbee6fef8
 +    public final static ConcurrentHashMap<ChunkKey, Runnable> reloadChunks = new ConcurrentHashMap<>();
      private static MultiPaperConnection multiPaperConnection = null;
      private static ExternalServerSocket externalServerSocket = null;
--
-     public static MultiPaperConnection getConnection() {
-         if (multiPaperConnection == null) {
-             multiPaperConnection = new MultiPaperConnection();
-         }
--
-         return multiPaperConnection;
-     }
--
-     private static String bungeeCordName = null;
-     public static String getBungeeCordName() {
-         if (bungeeCordName == null) {
-@@ -54,6 +70,11 @@ public class MultiPaper {
+ 
+@@ -51,6 +70,11 @@ public class MultiPaper {
                  server.getConnection().tick();
              }
          }
@@ -617,27 +608,7 @@ index dfbb4c47f0308e8395057014ca14dec0152eec07..a5332c1991bc5a0a3c37624cbee6fef8
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -65,7 +86,6 @@ public class MultiPaper {
-             e.printStackTrace();
-         }
-     }
--
-     public static void onStart() {
-         try {
-             externalServerSocket = new ExternalServerSocket();
-@@ -74,11 +94,9 @@ public class MultiPaper {
-             e.printStackTrace();
-         }
-     }
--
-     public static void onPlayerJoin(ServerPlayer player) {
-         broadcastPacketToExternalServers(new PlayerCreatePacket(player));
-     }
--
-     public static void onPlayerDisconnect(ServerPlayer player) {
-         if (!(player instanceof ExternalPlayer)) {
-             broadcastPacketToExternalServers(new PlayerRemovePacket(player));
-@@ -119,4 +137,161 @@ public class MultiPaper {
+@@ -136,4 +160,161 @@ public class MultiPaper {
      public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
          return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
      }
@@ -1268,10 +1239,10 @@ index f6f7d74d354373fc21dd988757792ab575e3ad64..83bd88592586df13e07bcf3ec0b6d5ea
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 327db67b4201deb49e3886454818367a19db0f3b..5bb9d03c774e618aeb0f4cf33d2915479d0f53fe 100644
+index c1bac1bf5148126a0fcad517bf499833d31cf050..934b75c68cc94cf39d09f086d97b88d0fe50c23c 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -19,6 +19,10 @@ public class ExternalServerPacketSerializer {
+@@ -20,6 +20,10 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerRespawnPacket.class, PlayerRespawnPacket::new);
          addPacket(PlayerChangeDimensionPacket.class, PlayerChangeDimensionPacket::new);
          addPacket(SendPacketPacket.class, SendPacketPacket::new);

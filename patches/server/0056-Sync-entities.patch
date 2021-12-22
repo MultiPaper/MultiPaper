@@ -376,10 +376,10 @@ index c7216cf3317cbd49b032c44feb370c50928dd21e..29cccfa81f57adeb3d1de10019c896ac
          try { // Paper
          int attempts = 0; Exception laste = null; while (attempts++ < 5) { try { // Paper
 diff --git a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee9717488c640 100644
+index bd7967680d7a75caff98a827895c795f2d101f99..f8b30b4e9c200c1e22d66bb2237beb9e35a2e99e 100644
 --- a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 +++ b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-@@ -25,15 +25,20 @@ import java.util.stream.Stream;
+@@ -25,15 +25,21 @@ import java.util.stream.Stream;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.SectionPos;
  import net.minecraft.server.level.ChunkHolder;
@@ -396,11 +396,12 @@ index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee971
  import org.bukkit.craftbukkit.event.CraftEventFactory;
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
++import puregero.multipaper.externalserverprotocol.EntityRemovePacket;
 +import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
  // CraftBukkit end
  
  public class PersistentEntitySectionManager<T extends EntityAccess> implements AutoCloseable {
-@@ -46,9 +51,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -46,9 +52,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
      final EntitySectionStorage<T> sectionStorage;
      private final LevelEntityGetter<T> entityGetter;
      private final Long2ObjectMap<Visibility> chunkVisibility = new Long2ObjectOpenHashMap();
@@ -412,7 +413,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee971
      public final io.papermc.paper.world.EntitySliceManager entitySliceManager; // Paper
  
      public PersistentEntitySectionManager(Class<T> entityClass, LevelCallback<T> handler, EntityPersistentStorage<T> dataAccess, io.papermc.paper.world.EntitySliceManager entitySliceManager) { // Paper
-@@ -347,6 +352,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -347,6 +353,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
  
      private boolean processChunkUnload(long chunkPos) {
          org.spigotmc.AsyncCatcher.catchOp("Entity chunk unload process"); // Paper
@@ -427,7 +428,15 @@ index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee971
          boolean flag = this.storeChunkSections(chunkPos, (entityaccess) -> {
              entityaccess.getPassengersAndSelf().forEach(this::unloadEntity);
          }, true); // CraftBukkit - add boolean for event call
-@@ -375,6 +388,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -362,6 +376,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+     private void unloadEntity(EntityAccess entity) {
+         entity.setRemoved(Entity.RemovalReason.UNLOADED_TO_CHUNK);
+         entity.setLevelCallback(EntityInLevelCallback.NULL);
++        EntityRemovePacket.setEntityRemoved(entity.getUUID()); // MultiPaper
+     }
+ 
+     private void processUnloads() {
+@@ -375,6 +390,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          ChunkEntities<T> chunkentities; // CraftBukkit - decompile error
  
          while ((chunkentities = (ChunkEntities) this.loadingInbox.poll()) != null) {
@@ -437,7 +446,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee971
              chunkentities.getEntities().forEach((entityaccess) -> {
                  this.addEntity(entityaccess, true);
              });
-@@ -383,6 +399,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -383,6 +401,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
              List<Entity> entities = this.getEntities(chunkentities.getPos());
              CraftEventFactory.callEntitiesLoadEvent(((EntityStorage) this.permanentStorage).level, chunkentities.getPos(), entities);
              // CraftBukkit end
@@ -452,7 +461,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee971
          }
  
      }
-@@ -507,7 +531,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -507,7 +533,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          return i + "," + this.visibleEntityStorage.count() + "," + this.sectionStorage.count() + "," + this.chunkLoadStatuses.size() + "," + this.chunkVisibility.size() + "," + this.loadingInbox.size() + "," + this.chunksToUnload.size();
      }
  
@@ -1111,10 +1120,10 @@ index 0000000000000000000000000000000000000000..a69c0ab8a07a32020946489acf97b9bd
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c840d16aba20426e70f0b9003bc6154b541e8d27
+index 0000000000000000000000000000000000000000..35bd24588241421580ed1888485c85830031e0f2
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,59 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.level.ServerLevel;
@@ -1152,8 +1161,6 @@ index 0000000000000000000000000000000000000000..c840d16aba20426e70f0b9003bc6154b
 +        writeUUID(out, uuid);
 +    }
 +
-+    public static HashSet<UUID> removedEntities = new HashSet<>();
-+
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
 +        MultiPaper.runSync(() -> {
@@ -1162,12 +1169,18 @@ index 0000000000000000000000000000000000000000..c840d16aba20426e70f0b9003bc6154b
 +            if (entity != null) {
 +                entity.setRemoved(Entity.RemovalReason.DISCARDED);
 +            } else {
-+                removedEntities.add(uuid);
-+                ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
-+                    removedEntities.remove(uuid);
-+                }, 5, "EntityRemovePacket-removeEntryIntoRemovedEntities");
++                setEntityRemoved(uuid);
 +            }
 +        });
++    }
++
++    public static HashSet<UUID> removedEntities = new HashSet<>();
++
++    public static void setEntityRemoved(UUID uuid) {
++        removedEntities.add(uuid);
++        ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
++            removedEntities.remove(uuid);
++        }, 5, "EntityRemovePacket-removeEntryIntoRemovedEntities");
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java

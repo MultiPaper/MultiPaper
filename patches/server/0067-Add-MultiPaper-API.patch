@@ -97,7 +97,7 @@ index e4efac7522292897911eb822c7c6786eb01aa4bf..369d3e19a8cb05d07f820da9466fa875
      public boolean loadChunk(int x, int z, boolean generate) {
          org.spigotmc.AsyncCatcher.catchOp("chunk load"); // Spigot
 diff --git a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
-index 89cfa5093d53e1a249efc64aa1b449755c6eecd9..10addcd7cad1a38c5b5275d25b16e56ca0b930fd 100644
+index 7cf7b845620ab5b118da79f6057c0d80a254585e..7bdf395ed26dc8a4fce162b03df33df37aef87aa 100644
 --- a/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
 +++ b/src/main/java/org/bukkit/craftbukkit/block/CraftBlock.java
 @@ -55,6 +55,7 @@ import org.bukkit.util.BlockVector;
@@ -130,7 +130,7 @@ index 89cfa5093d53e1a249efc64aa1b449755c6eecd9..10addcd7cad1a38c5b5275d25b16e56c
      public boolean isEmpty() {
          return this.getNMS().isAir();
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index 5aae88e20bc04560d6ad52cfcaa872d28bfcee8f..c5ffedeef4d2e3a32f84a4ff9d4d86936bf4fc88 100644
+index 5893d2028679d23315a32433f6affa0c8d63c01c..c1c2a18ac7581da06f905bd3411d48bc24834030 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 @@ -181,6 +181,7 @@ import org.bukkit.plugin.Plugin;
@@ -374,20 +374,20 @@ index 0000000000000000000000000000000000000000..f8458c14ad7f585e9c4b648461291ba4
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 251bf9b3ed398e25fb24fa5d21371dae96d37333..752ae9378860dcef1556364662c8b0c682258407 100644
+index cbef73f5c4f5ca1652019ee35d0beaf5dc1e2f5b..8a2dc453696529a607a1e505f71598f9bef08f72 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
 @@ -34,8 +34,8 @@ public class ExternalPlayer extends ServerPlayer {
      private boolean sendPackets = true;
      public boolean updatingData = false;
  
--    public static void create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, GameType gamemode) {
--        new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, gamemode);
-+    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, GameType gamemode) {
-+        return new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, gamemode);
+-    public static void create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode) {
+-        new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, yaw, pitch, gamemode);
++    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode) {
++        return new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, yaw, pitch, gamemode);
      }
  
-     public ExternalPlayer(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, GameType gamemode) {
+     public ExternalPlayer(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 index 4caca7cb82a61eb55b5601abc4fe0d08d7c1fd02..08307f240d8eb721fc833cfae3c473f2adecf599 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
@@ -402,7 +402,7 @@ index 4caca7cb82a61eb55b5601abc4fe0d08d7c1fd02..08307f240d8eb721fc833cfae3c473f2
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index f87c7dff5450a8d84b3cbf4fd1c4c86fbfb7a71e..a1ce17a3c7c7775d3a37141c5ec4e4f4632a6ba6 100644
+index 568e4ff3a5f6c6fdb9c6aa4c38df0d4e5096188a..77c72dbcf465252b53c68bb2e464d9ce37b17f79 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 @@ -11,6 +11,8 @@ import puregero.multipaper.MultiPaper;
@@ -414,27 +414,27 @@ index f87c7dff5450a8d84b3cbf4fd1c4c86fbfb7a71e..a1ce17a3c7c7775d3a37141c5ec4e4f4
  import java.util.UUID;
  
  public class PlayerCreatePacket extends ExternalServerPacket {
-@@ -24,6 +26,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-     private final double y;
-     private final double z;
+@@ -26,6 +28,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+     private float yaw;
+     private float pitch;
      private final GameType gamemode;
 +    private final HashMap<String, String> data;
 +    private final HashMap<String, String> persistentData;
  
      public PlayerCreatePacket(ServerPlayer player) {
          this.name = player.getScoreboardName();
-@@ -33,6 +37,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         this.y = player.getY();
-         this.z = player.getZ();
+@@ -37,6 +41,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+         this.yaw = player.getYRot();
+         this.pitch = player.getXRot();
          this.gamemode = player.gameMode.getGameModeForPlayer();
 +        this.data = player.getBukkitEntity().data;
 +        this.persistentData = player.getBukkitEntity().persistentData;
      }
  
      public PlayerCreatePacket(DataInputStream in) throws IOException {
-@@ -43,6 +49,18 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         y = in.readDouble();
-         z = in.readDouble();
+@@ -49,6 +55,18 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+         yaw = in.readFloat();
+         pitch = in.readFloat();
          gamemode = GameType.byId(in.read());
 +
 +        data = new HashMap<>();
@@ -451,9 +451,9 @@ index f87c7dff5450a8d84b3cbf4fd1c4c86fbfb7a71e..a1ce17a3c7c7775d3a37141c5ec4e4f4
      }
  
      @Override
-@@ -54,11 +72,27 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         out.writeDouble(y);
-         out.writeDouble(z);
+@@ -62,11 +80,27 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+         out.writeFloat(yaw);
+         out.writeFloat(pitch);
          out.write(gamemode.getId());
 +
 +        out.writeInt(data.size());
@@ -472,9 +472,9 @@ index f87c7dff5450a8d84b3cbf4fd1c4c86fbfb7a71e..a1ce17a3c7c7775d3a37141c5ec4e4f4
      @Override
      public void handle(ExternalServerConnection connection) {
          LOGGER.info("Adding player " + name + " (" + uuid + ")");
--        MultiPaper.runSync(() -> ExternalPlayer.create(connection, name, uuid, world, x, y, z, gamemode));
+-        MultiPaper.runSync(() -> ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode));
 +        MultiPaper.runSync(() -> {
-+            ExternalPlayer player = ExternalPlayer.create(connection, name, uuid, world, x, y, z, gamemode);
++            ExternalPlayer player = ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode);
 +            player.getBukkitEntity().data = data;
 +            player.getBukkitEntity().persistentData = persistentData;
 +        });

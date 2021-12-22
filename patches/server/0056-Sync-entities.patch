@@ -272,7 +272,7 @@ index d21cadf5cdb2eb054bb1f3a525b3748353c69379..814600b60e3a6c4e3056db1a9ac0ea20
          ClientboundPlayerInfoPacket packet = new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.ADD_PLAYER, player);
  
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index e20954acedfd36941f8ffa013cd00ff6de5f2202..0db9fb26d5b4a6435de31def7e8f93bfd8040e51 100644
+index e20954acedfd36941f8ffa013cd00ff6de5f2202..e68125618c028c4bdf81c141a861a3daa8a17339 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -140,6 +140,7 @@ import org.bukkit.event.entity.EntityPoseChangeEvent;
@@ -283,15 +283,7 @@ index e20954acedfd36941f8ffa013cd00ff6de5f2202..0db9fb26d5b4a6435de31def7e8f93bf
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource, io.papermc.paper.util.KeyedObject { // Paper
-@@ -623,6 +624,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
-     }
- 
-     public void remove(Entity.RemovalReason reason) {
-+        MultiPaperEntitiesHandler.onEntityRemove(this); // MultiPaper
-         this.setRemoved(reason);
-         if (reason == Entity.RemovalReason.KILLED) {
-             this.gameEvent(GameEvent.ENTITY_KILLED);
-@@ -4137,6 +4139,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4137,6 +4138,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
              int j = Mth.floor(y);
              int k = Mth.floor(z);
  
@@ -302,6 +294,15 @@ index e20954acedfd36941f8ffa013cd00ff6de5f2202..0db9fb26d5b4a6435de31def7e8f93bf
              if (i != this.blockPosition.getX() || j != this.blockPosition.getY() || k != this.blockPosition.getZ()) {
                  this.blockPosition = new BlockPos(i, j, k);
                  this.feetBlockState = null;
+@@ -4229,6 +4234,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+ 
+     @Override
+     public void setRemoved(Entity.RemovalReason reason) {
++        MultiPaperEntitiesHandler.onEntityRemove(this, reason); // MultiPaper
++
+         if (this.removalReason == null) {
+             this.removalReason = reason;
+         }
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 index 6b386abec31da6071f09e70fd632df8a22ad90fe..459d8090de028bb90d495245a5f1799bf48b336e 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
@@ -824,10 +825,10 @@ index fcdd064e23faf8ded36484f92be59357503ed843..0977035ea3aa6a3571b25709271b240d
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f5db0216eea3c91c927cae7fc80ea73cb40438a5
+index 0000000000000000000000000000000000000000..4ccacbcf147302a9f2c0c30a5a9b329482b0b027
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,263 @@
+@@ -0,0 +1,266 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -861,6 +862,7 @@ index 0000000000000000000000000000000000000000..f5db0216eea3c91c927cae7fc80ea73c
 +public class MultiPaperEntitiesHandler {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(MultiPaperEntitiesHandler.class.getSimpleName());
++    public static boolean removingEntity = false;
 +
 +    public static void onEntitiesUnload(ServerLevel level, ChunkPos pos) {
 +        try {
@@ -1038,8 +1040,10 @@ index 0000000000000000000000000000000000000000..f5db0216eea3c91c927cae7fc80ea73c
 +        });
 +    }
 +
-+    public static void onEntityRemove(Entity entity) {
++    public static void onEntityRemove(Entity entity, Entity.RemovalReason reason) {
 +        if (entity instanceof ServerPlayer) return;
++        if (removingEntity) return;
++        if (reason == Entity.RemovalReason.UNLOADED_TO_CHUNK || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER) return;
 +
 +        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
 +        if (chunk != null) {
@@ -1120,10 +1124,10 @@ index 0000000000000000000000000000000000000000..a69c0ab8a07a32020946489acf97b9bd
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..35bd24588241421580ed1888485c85830031e0f2
+index 0000000000000000000000000000000000000000..49177e89fe99fd18794bac3e431491f8166a17c7
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,62 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.level.ServerLevel;
@@ -1133,6 +1137,7 @@ index 0000000000000000000000000000000000000000..35bd24588241421580ed1888485c8583
 +import org.bukkit.craftbukkit.scheduler.CraftScheduler;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperEntitiesHandler;
 +
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
@@ -1167,7 +1172,9 @@ index 0000000000000000000000000000000000000000..35bd24588241421580ed1888485c8583
 +            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
 +            Entity entity = level.getEntity(uuid);
 +            if (entity != null) {
++                MultiPaperEntitiesHandler.removingEntity = true;
 +                entity.setRemoved(Entity.RemovalReason.DISCARDED);
++                MultiPaperEntitiesHandler.removingEntity = false;
 +            } else {
 +                setEntityRemoved(uuid);
 +            }

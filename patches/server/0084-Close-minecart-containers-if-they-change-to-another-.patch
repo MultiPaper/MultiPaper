@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 23 Dec 2021 00:05:35 +1000
+Subject: [PATCH] Close minecart containers if they change to another server
+
+
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 53d1d271a66658de8500db94feee85c4526a2e15..449439e4283bc9d50a613110891974bf20c28e0c 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -382,6 +382,7 @@ public class MultiPaper {
+     public static void unlockChunk(LevelChunk chunk) {
+         try {
+             if (MultiPaper.isChunkLocal(chunk)) {
++                chunk.level.entityManager.getEntities(chunk.getPos()).forEach(MultiPaperEntitiesHandler::onEntityUnlock);
+                 broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new SendEntitiesPacket(chunk));
+                 broadcastPacketToExternalServers(chunk.externalSubscribers, () -> new SendTickListPacket(chunk));
+             }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+index 95f8ebde7217c3238edebabcb50eb491ba806769..b12a40e39e536fd45768981ae3e76c36e7380797 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+@@ -8,6 +8,7 @@ import net.minecraft.network.syncher.SynchedEntityData;
+ import net.minecraft.server.level.ChunkMap;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.Container;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EquipmentSlot;
+ import net.minecraft.world.entity.LivingEntity;
+@@ -22,6 +23,7 @@ import net.minecraft.world.phys.Vec3;
+ import org.apache.commons.lang.ArrayUtils;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import org.bukkit.entity.HumanEntity;
+ import puregero.multipaper.externalserverprotocol.*;
+ 
+ import java.io.IOException;
+@@ -62,6 +64,7 @@ public class MultiPaperEntitiesHandler {
+         if (MultiPaper.isChunkLocal(chunkFrom)) {
+             if (!MultiPaper.isChunkLocal(chunkTo)) {
+                 // Leaving our jurisdiction, do a full entity update to ensure the new external server has all the required info
++                onEntityUnlock(entity);
+                 MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity)));
+                 if (entity instanceof Mob mob) {
+                     MultiPaper.runSync(() -> {
+@@ -92,6 +95,12 @@ public class MultiPaperEntitiesHandler {
+         }
+     }
+ 
++    public static void onEntityUnlock(Entity entity) {
++        if (entity instanceof Container container) {
++            new ArrayList<>(container.getViewers()).forEach(HumanEntity::closeInventory);
++        }
++    }
++
+     private static void setRemovedRecursive(Entity entity) {
+         for (Entity passenger : entity.getPassengers()) {
+             if (!(passenger instanceof ServerPlayer)) {

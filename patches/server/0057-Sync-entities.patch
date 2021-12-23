@@ -148,10 +148,18 @@ index 887556052a8dd36453aef8b92cf2e1c81932876b..6032128a4eb2ea88000e5288261599e5
          this.entity.startSeenByPlayer(player);
      }
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index f1584587473a1be231a893233bc122c4c70bfd8e..2fd973aac3aa420523795c8fcb6b5fe6b2942c00 100644
+index f1584587473a1be231a893233bc122c4c70bfd8e..4e40a55c0e0f662df0cca0df1f4ccbff01535be5 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -163,6 +163,7 @@ import org.bukkit.event.world.TimeSkipEvent;
+@@ -92,6 +92,7 @@ import net.minecraft.world.entity.boss.EnderDragonPart;
+ import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
+ import net.minecraft.world.entity.npc.Npc;
+ import net.minecraft.world.entity.player.Player;
++import net.minecraft.world.entity.projectile.FishingHook;
+ import net.minecraft.world.entity.raid.Raid;
+ import net.minecraft.world.entity.raid.Raids;
+ import net.minecraft.world.item.crafting.RecipeManager;
+@@ -163,6 +164,7 @@ import org.bukkit.event.world.TimeSkipEvent;
  import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
  import puregero.multipaper.MultiPaper;
  import puregero.multipaper.MultiPaperChunkHandler;
@@ -159,13 +167,13 @@ index f1584587473a1be231a893233bc122c4c70bfd8e..2fd973aac3aa420523795c8fcb6b5fe6
  import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
  
  public class ServerLevel extends Level implements WorldGenLevel {
-@@ -652,6 +653,13 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -652,6 +654,13 @@ public class ServerLevel extends Level implements WorldGenLevel {
              org.spigotmc.ActivationRange.activateEntities(this); // Spigot
              timings.entityTick.startTiming(); // Spigot
              this.entityTickList.forEach((entity) -> {
 +                // MultiPaper start - Are we ticking this entity?
 +                LevelChunk chunk = getChunkIfLoaded(entity.blockPosition());
-+                if (!MultiPaper.isRealPlayer(entity) && !MultiPaper.isChunkLocal(chunk)) {
++                if (!MultiPaper.isRealPlayer(entity) && !MultiPaper.isChunkLocal(chunk) && !(entity instanceof FishingHook)) {
 +                    return;
 +                }
 +                // MultiPaper end
@@ -173,7 +181,7 @@ index f1584587473a1be231a893233bc122c4c70bfd8e..2fd973aac3aa420523795c8fcb6b5fe6
                  if (!entity.isRemoved()) {
                      if (false && this.shouldDiscardEntity(entity)) { // CraftBukkit - We prevent spawning in general, so this butchering is not needed
                          entity.discard();
-@@ -1432,6 +1440,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1432,6 +1441,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
              }
              // CraftBukkit end
  
@@ -272,7 +280,7 @@ index 72e490578d6c2c75684d1e7320e39b5012d11540..530bc07a42a2b57f0cc141ef5302d15f
          ClientboundPlayerInfoPacket packet = new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.ADD_PLAYER, player);
  
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index e025c01f54381ba0b77b056b7cd6bdae4aa909de..cefb360dc9bdebae7d31a63fb32c460819c2608d 100644
+index e025c01f54381ba0b77b056b7cd6bdae4aa909de..22184848bfe9205725000eb654ed88986dd3e6b1 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -140,6 +140,7 @@ import org.bukkit.event.entity.EntityPoseChangeEvent;
@@ -303,6 +311,15 @@ index e025c01f54381ba0b77b056b7cd6bdae4aa909de..cefb360dc9bdebae7d31a63fb32c4608
          if (this.removalReason == null) {
              this.removalReason = reason;
          }
+@@ -4259,7 +4266,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+ 
+     @Override
+     public boolean shouldBeSaved() {
+-        return this.removalReason != null && !this.removalReason.shouldSave() ? false : (this.isPassenger() ? false : !this.isVehicle() || !this.hasExactlyOnePlayerPassenger());
++        return !getType().canSerialize() || (this.removalReason != null && !this.removalReason.shouldSave()) ? false : (this.isPassenger() ? false : !this.isVehicle() || !this.hasExactlyOnePlayerPassenger()); // MultiPaper - if they can't be serialized, they also can't be saved
+     }
+ 
+     @Override
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 index 6b386abec31da6071f09e70fd632df8a22ad90fe..459d8090de028bb90d495245a5f1799bf48b336e 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
@@ -336,6 +353,26 @@ index 2c00a766130a7f682fc6c4c74321e10637ca7932..823d249db72e2430e78da9db0d3fed6c
      protected static final EntityDataAccessor<CompoundTag> DATA_SHOULDER_LEFT = SynchedEntityData.defineId(Player.class, EntityDataSerializers.COMPOUND_TAG);
      protected static final EntityDataAccessor<CompoundTag> DATA_SHOULDER_RIGHT = SynchedEntityData.defineId(Player.class, EntityDataSerializers.COMPOUND_TAG);
      private long timeEntitySatOnShoulder;
+diff --git a/src/main/java/net/minecraft/world/entity/projectile/FishingHook.java b/src/main/java/net/minecraft/world/entity/projectile/FishingHook.java
+index 1037d0a0cdd4fd7aa99a958ee969759c5883fdc0..6905487aca4fb2c0fe0b47c45e37c4317e4ab872 100644
+--- a/src/main/java/net/minecraft/world/entity/projectile/FishingHook.java
++++ b/src/main/java/net/minecraft/world/entity/projectile/FishingHook.java
+@@ -46,6 +46,7 @@ import net.minecraft.world.phys.Vec3;
+ import org.bukkit.entity.Player;
+ import org.bukkit.entity.FishHook;
+ import org.bukkit.event.player.PlayerFishEvent;
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public class FishingHook extends Projectile {
+@@ -306,6 +307,7 @@ public class FishingHook extends Projectile {
+     }
+ 
+     private void catchingFish(BlockPos pos) {
++        if (!MultiPaper.isChunkLocal(level.getChunkIfLoaded(blockPosition()))) return; // MultiPaper - Only catch fish on our own chunks
+         ServerLevel worldserver = (ServerLevel) this.level;
+         int i = 1;
+         BlockPos blockposition1 = pos.above();
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 index a1cb320b82d63c22380b725096078fb104dfebbb..5aa054d0770d58b91dfcafe6d05f092e81bd5905 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
@@ -726,10 +763,10 @@ index fcdd064e23faf8ded36484f92be59357503ed843..0977035ea3aa6a3571b25709271b240d
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4ccacbcf147302a9f2c0c30a5a9b329482b0b027
+index 0000000000000000000000000000000000000000..bb587402abe945d9182427af74771b1b449e59d0
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,266 @@
+@@ -0,0 +1,268 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -942,7 +979,7 @@ index 0000000000000000000000000000000000000000..4ccacbcf147302a9f2c0c30a5a9b3294
 +    }
 +
 +    public static void onEntityRemove(Entity entity, Entity.RemovalReason reason) {
-+        if (entity instanceof ServerPlayer) return;
++        if (!entity.shouldBeSaved()) return;
 +        if (removingEntity) return;
 +        if (reason == Entity.RemovalReason.UNLOADED_TO_CHUNK || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER) return;
 +
@@ -955,6 +992,8 @@ index 0000000000000000000000000000000000000000..4ccacbcf147302a9f2c0c30a5a9b3294
 +    }
 +
 +    public static void onEntityUpdate(Entity entity, Packet<?> packet) {
++        if (!entity.shouldBeSaved() && !(entity instanceof ServerPlayer)) return;
++
 +        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
 +
 +        if (packet instanceof ClientboundSetEquipmentPacket && entity instanceof ServerPlayer) {

@@ -5,18 +5,20 @@ Subject: [PATCH] Dont update external blocks
 
 
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index c53190203f18e9ae40466454e1a3b76e7b8511d3..7bc773cd8a3e597e381a91943b8c9923e37f5a90 100644
+index c53190203f18e9ae40466454e1a3b76e7b8511d3..5d1cb439389a4e586f9067c851e5585f51aecc7d 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
-@@ -99,6 +99,7 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
+@@ -99,7 +99,9 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
  import org.bukkit.craftbukkit.util.CraftNamespacedKey;
  import org.bukkit.event.block.BlockPhysicsEvent;
  import org.bukkit.event.world.GenericGameEvent;
 +import puregero.multipaper.MultiPaper;
  import puregero.multipaper.MultiPaperChunkHandler;
++import puregero.multipaper.MultiPaperExternalBlocksHandler;
  // CraftBukkit end
  
-@@ -814,6 +815,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -814,6 +816,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
              return false;
          } else {
              FluidState fluid = this.getFluidState(pos);
@@ -31,16 +33,16 @@ index c53190203f18e9ae40466454e1a3b76e7b8511d3..7bc773cd8a3e597e381a91943b8c9923
              // Paper start - while the above setAir method is named same and looks very similar
              // they are NOT used with same intent and the above should not fire this event. The above method is more of a BlockSetToAirEvent,
              // it doesn't imply destruction of a block that plays a sound effect / drops an item.
-@@ -898,6 +907,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -898,6 +908,8 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
          if (!this.isClientSide) {
              BlockState iblockdata = this.getBlockState(pos);
  
-+            if (!iblockdata.is(Blocks.REDSTONE_WIRE) && MultiPaper.isChunkExternal(getChunkIfLoaded(pos))) return; // MultiPaper - don't update blocks not owned by us (except for redstone)
++            if (!MultiPaperExternalBlocksHandler.shouldUpdate(iblockdata, this, pos)) return; // MultiPaper - don't update blocks not owned by us
 +
              try {
                  // CraftBukkit start
                  CraftWorld world = ((ServerLevel) this).getWorld();
-@@ -1057,7 +1068,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1057,7 +1069,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
                  toRemove.add(tickingblockentity); // Paper - use removeAll
                  // Spigot end
              } else if (this.shouldTickBlocksAt(ChunkPos.asLong(tickingblockentity.getPos()))) {
@@ -70,7 +72,7 @@ index ab5b9f00123e2ede2931ffc520684e482aac49b4..e1b0b93a640609fcce326e3cad500c81
              if (newState.isAir()) {
                  if (!world.isClientSide()) {
 diff --git a/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java b/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
-index 28256f1f0aeb7718a5866add4ec40ce0198c36b9..0e3f1340006c1df7db01533e0f6fcb84015eb21c 100644
+index c9c18cf84e4ee5c253bbc64a4b41e91f9f4c4bc7..5f2374c0ca0bb2bf984255448e08bbcf388a6083 100644
 --- a/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
 +++ b/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
 @@ -228,6 +228,7 @@ public class PistonBaseBlock extends DirectionalBlock {
@@ -81,15 +83,95 @@ index 28256f1f0aeb7718a5866add4ec40ce0198c36b9..0e3f1340006c1df7db01533e0f6fcb84
              BlockEntity tileentity = world.getBlockEntity(pos.relative(enumdirection));
  
              if (tileentity instanceof PistonMovingBlockEntity) {
+diff --git a/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java b/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
+index 05c46f3b3bce5225b819d86e6e06729a5093e092..fd2943e3c056427d46c26820eae69eb173d421a2 100644
+--- a/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
++++ b/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
+@@ -47,6 +47,7 @@ import net.minecraft.world.level.block.SupportType;
+ import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.world.level.block.entity.BlockEntityTicker;
+ import net.minecraft.world.level.block.entity.BlockEntityType;
++import net.minecraft.world.level.block.piston.PistonHeadBlock;
+ import net.minecraft.world.level.block.state.properties.Property;
+ import net.minecraft.world.level.material.Fluid;
+ import net.minecraft.world.level.material.FluidState;
+@@ -65,6 +66,7 @@ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++import puregero.multipaper.MultiPaperExternalBlocksHandler;
+ 
+ public abstract class BlockBehaviour {
+ 
+@@ -913,6 +915,7 @@ public abstract class BlockBehaviour {
+         }
+ 
+         public void neighborChanged(Level world, BlockPos pos, Block block, BlockPos posFrom, boolean notify) {
++            if (!MultiPaperExternalBlocksHandler.shouldUpdate(world.getBlockState(pos), world, pos)) return; // MultiPaper - don't update blocks not owned by us
+             this.getBlock().neighborChanged(this.asState(), world, pos, block, posFrom, notify);
+         }
+ 
+@@ -991,6 +994,7 @@ public abstract class BlockBehaviour {
+         }
+ 
+         public BlockState updateShape(Direction direction, BlockState neighborState, LevelAccessor world, BlockPos pos, BlockPos neighborPos) {
++            if (getBlock() instanceof PistonHeadBlock) return this.asState(); // MultiPaper - skip piston head shape updates
+             return this.getBlock().updateShape(this.asState(), direction, neighborState, world, pos, neighborPos);
+         }
+ 
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index 5aa054d0770d58b91dfcafe6d05f092e81bd5905..94529301d9ebf3cfab166ab5b72c4365c96afd52 100644
+index 5aa054d0770d58b91dfcafe6d05f092e81bd5905..827ff2c10a5df898d1c9d39e37f9accda15d3918 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -564,6 +564,7 @@ public class LevelChunk extends ChunkAccess {
                  boolean flag3 = iblockdata1.hasBlockEntity();
  
                  if (!this.level.isClientSide) {
-+                    if (!MultiPaper.isChunkExternal(this)) // MultiPaper - only call the onremove for our blocks
++                    if (MultiPaperChunkHandler.blockUpdateChunk == null) // MultiPaper - only call onremove when we're not updating a chunk
                      iblockdata1.onRemove(this.level, blockposition, iblockdata, flag);
                  } else if (!iblockdata1.is(block) && flag3) {
                      this.removeBlockEntity(blockposition);
+diff --git a/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java b/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..9e30b66cf5c5673b2f573a9ee09340db2787d623
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java
+@@ -0,0 +1,38 @@
++package puregero.multipaper;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.SectionPos;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
++import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
++import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
++import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
++import net.minecraft.server.level.ChunkHolder;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.Level;
++import net.minecraft.world.level.LightLayer;
++import net.minecraft.world.level.block.Blocks;
++import net.minecraft.world.level.block.entity.BlockEntity;
++import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.chunk.ChunkAccess;
++import net.minecraft.world.level.chunk.DataLayer;
++import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.level.lighting.LevelLightEngine;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.externalserverprotocol.SendUpdatePacket;
++
++import java.io.IOException;
++import java.util.BitSet;
++import java.util.HashSet;
++import java.util.Iterator;
++
++public class MultiPaperExternalBlocksHandler {
++
++    public static boolean shouldUpdate(BlockState iblockdata, Level level, BlockPos pos) {
++        return iblockdata.is(Blocks.REDSTONE_WIRE) || iblockdata.is(Blocks.PISTON_HEAD) || !MultiPaper.isChunkExternal(level.getChunkIfLoaded(pos));
++    }
++
++}

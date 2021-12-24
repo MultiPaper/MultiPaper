@@ -53,6 +53,13 @@ Toggle a debug visualisation showing chunks that your server is ticking (aqua)
 and chunks being ticked by another server (red). The server ticking the chunk
 you are standing in is displayed above the action bar.
 
+`/mpmap`  
+Show a map of nearby chunks and which server owns them. Up represents north. If
+your server owns the chunk, the chunk is shown as aqua. If another servers owns
+the chunk, it's shown as red. If the chunk is in memory but not within
+simulation range on your server, it's shown as white. Chunks not loaded on your
+server as shown as grey.
+
 Setting up MultiPaper
 ------
   * Place your worlds inside the directory being used for MultiPaper-Master

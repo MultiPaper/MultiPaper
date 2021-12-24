@@ -639,21 +639,24 @@ index e8149e3955307669d819967c8297af21ddf088f1..c6a2e97a0bb4f52aafc7a6d004b1d770
              }
              getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index bcf9c78f42f339ec67844823d0b37986fa0f6d4e..65296beee44e99e92668a3ab7bc87747d9219764 100644
+index 77c57fbacf1e4c4a1a1e2501b511c26abe03d318..668d7f1c490c4eaf7002d9b9ed164d035a77056c 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -2,8 +2,10 @@ package puregero.multipaper;
+@@ -2,10 +2,13 @@ package puregero.multipaper;
  
  import net.minecraft.core.Registry;
  import net.minecraft.resources.ResourceLocation;
 +import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
+ import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ChunkHolder;
+ import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.ChunkPos;
  import net.minecraft.world.level.chunk.ChunkAccess;
  import net.minecraft.world.level.chunk.ChunkStatus;
  import net.minecraft.world.level.chunk.LevelChunk;
-@@ -12,6 +14,8 @@ import org.apache.logging.log4j.Logger;
+@@ -14,6 +17,8 @@ import org.apache.logging.log4j.Logger;
  import org.bukkit.Bukkit;
  import org.bukkit.World;
  import org.bukkit.craftbukkit.CraftWorld;
@@ -662,7 +665,17 @@ index bcf9c78f42f339ec67844823d0b37986fa0f6d4e..65296beee44e99e92668a3ab7bc87747
  import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
  
  import javax.annotation.Nullable;
-@@ -250,6 +254,43 @@ public class MultiPaperConnection extends Thread {
+@@ -118,6 +123,9 @@ public class MultiPaperConnection extends Thread {
+                         level.chunkSource.chunkMap.updatingChunks.getUpdatingValuesCopy().forEach(chunkHolder -> {
+                             subscribeChunk(level.convertable.getLevelId(), chunkHolder.pos.x, chunkHolder.pos.z);
+                         });
++                        level.entityManager.chunkLoadStatuses.forEach((key, status) -> {
++                            subscribeEntities(level.convertable.getLevelId(), ChunkPos.getX(key), ChunkPos.getZ(key));
++                        });
+                     }
+                 }
+ 
+@@ -263,6 +271,43 @@ public class MultiPaperConnection extends Thread {
          }
      }
  
@@ -706,7 +719,7 @@ index bcf9c78f42f339ec67844823d0b37986fa0f6d4e..65296beee44e99e92668a3ab7bc87747
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -353,6 +394,11 @@ public class MultiPaperConnection extends Thread {
+@@ -366,6 +411,11 @@ public class MultiPaperConnection extends Thread {
                          RequestChunkPacket.blocker = null;
                          future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
                      });
@@ -718,7 +731,7 @@ index bcf9c78f42f339ec67844823d0b37986fa0f6d4e..65296beee44e99e92668a3ab7bc87747
                  } else {
                      future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
                  }
-@@ -373,10 +419,13 @@ public class MultiPaperConnection extends Thread {
+@@ -386,10 +436,13 @@ public class MultiPaperConnection extends Thread {
      }
  
      public void writeChunk(String world, String path, int cx, int cz, byte[] data) throws IOException {
@@ -736,7 +749,7 @@ index bcf9c78f42f339ec67844823d0b37986fa0f6d4e..65296beee44e99e92668a3ab7bc87747
  
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeChunk");
-@@ -384,8 +433,8 @@ public class MultiPaperConnection extends Thread {
+@@ -397,8 +450,8 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(path);
          out.writeInt(cx);
          out.writeInt(cz);
@@ -747,10 +760,23 @@ index bcf9c78f42f339ec67844823d0b37986fa0f6d4e..65296beee44e99e92668a3ab7bc87747
          out.send(in -> { /* Do nothing */ });
      }
      
-@@ -631,4 +680,13 @@ public class MultiPaperConnection extends Thread {
+@@ -657,4 +710,26 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(resource);
          out.send(null);
      }
++
++    public void subscribeEntities(String world, int cx, int cz) {
++        try {
++            DataOutputSender out = new DataOutputSender(this);
++            out.writeUTF("subscribeEntities");
++            out.writeUTF(world);
++            out.writeInt(cx);
++            out.writeInt(cz);
++            out.send(null);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
 +
 +    public void unsubscribeEntities(String world, int cx, int cz) throws IOException {
 +        DataOutputSender out = new DataOutputSender(this);

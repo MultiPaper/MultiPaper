@@ -12,6 +12,8 @@ public class Handlers {
         handlers.put("writeChunk", new WriteChunkHandler());
         handlers.put("lockChunk", new LockChunkHandler());
         handlers.put("unlockChunk", new UnlockChunkHandler());
+        handlers.put("subscribeChunk", new SubscribeChunkHandler());
+        handlers.put("subscribeEntities", new SubscribeEntitiesHandler());
         handlers.put("unsubscribeChunk", new UnsubscribeChunkHandler());
         handlers.put("unsubscribeEntities", new UnsubscribeEntitiesHandler());
         handlers.put("readLevel", new ReadLevelHandler());

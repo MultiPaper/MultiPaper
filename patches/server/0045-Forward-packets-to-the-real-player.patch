@@ -37,7 +37,7 @@ index ec509a18e6cc9937f1216b38f0f4c3f3df66c3d8..2c0df286dce1262a3db05407a9a4cb9b
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 4ad75d2b6a773cae13fd5cd66b52dc092af17043..573a0fc42bbf510f9cb77e107f840ad8b6da6394 100644
+index c3802a96f93186ad43b1bd7ada97dd262394062d..22558abb4e710cb29891e5c9aa52c72fb8cbdbda 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -1,15 +1,17 @@
@@ -56,11 +56,11 @@ index 4ad75d2b6a773cae13fd5cd66b52dc092af17043..573a0fc42bbf510f9cb77e107f840ad8
  import java.net.Socket;
 -import java.util.HashSet;
 +import java.util.*;
- 
- public class ExternalServerConnection extends Thread implements Closeable {
- 
-@@ -17,6 +19,9 @@ public class ExternalServerConnection extends Thread implements Closeable {
-     public ExternalServer externalServer = null;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.ExecutorService;
+ import java.util.concurrent.Executors;
+@@ -21,6 +23,9 @@ public class ExternalServerConnection extends Thread implements Closeable {
+     private ExecutorService sendThread = Executors.newSingleThreadExecutor();
      public HashSet<String> subscribedWorlds = new HashSet<>();
  
 +    private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
@@ -69,9 +69,9 @@ index 4ad75d2b6a773cae13fd5cd66b52dc092af17043..573a0fc42bbf510f9cb77e107f840ad8
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
          start();
-@@ -82,4 +87,32 @@ public class ExternalServerConnection extends Thread implements Closeable {
-             e.printStackTrace();
-         }
+@@ -88,4 +93,32 @@ public class ExternalServerConnection extends Thread implements Closeable {
+             }
+         }, sendThread);
      }
 +
 +    public void tick() {

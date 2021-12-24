@@ -495,10 +495,10 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 573a0fc42bbf510f9cb77e107f840ad8b6da6394..5f9247717fb439add513056cfefe0eecfb066055 100644
+index 22558abb4e710cb29891e5c9aa52c72fb8cbdbda..59d46e57859da9078409b04efb661f9226ebf543 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -4,23 +4,27 @@ import net.minecraft.network.protocol.Packet;
+@@ -4,20 +4,23 @@ import net.minecraft.network.protocol.Packet;
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ServerPlayer;
@@ -513,7 +513,10 @@ index 573a0fc42bbf510f9cb77e107f840ad8b6da6394..5f9247717fb439add513056cfefe0eec
  import java.io.*;
  import java.net.Socket;
  import java.util.*;
+ import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.ConcurrentHashMap;
+ import java.util.concurrent.ExecutorService;
+ import java.util.concurrent.Executors;
 +import java.util.function.Consumer;
  
  public class ExternalServerConnection extends Thread implements Closeable {
@@ -522,7 +525,8 @@ index 573a0fc42bbf510f9cb77e107f840ad8b6da6394..5f9247717fb439add513056cfefe0eec
 +
      private Socket socket;
      public ExternalServer externalServer = null;
-     public HashSet<String> subscribedWorlds = new HashSet<>();
+     private ExecutorService sendThread = Executors.newSingleThreadExecutor();
+@@ -25,6 +28,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
  
      private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
@@ -530,7 +534,7 @@ index 573a0fc42bbf510f9cb77e107f840ad8b6da6394..5f9247717fb439add513056cfefe0eec
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
-@@ -115,4 +119,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -121,4 +125,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
              players.add(player);
          }
      }

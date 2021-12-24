@@ -73,25 +73,28 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2245b1ad53a171a8f2c6bd7be9bb74b42fe0dc31
+index 0000000000000000000000000000000000000000..c62d729561957735557ec463caa40087e051cce6
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,81 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.server.MinecraftServer;
-+import net.minecraft.server.level.ServerPlayer;
 +import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
 +import puregero.multipaper.externalserverprotocol.ExternalServerPacketSerializer;
 +import puregero.multipaper.externalserverprotocol.HelloPacket;
 +
 +import java.io.*;
 +import java.net.Socket;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
 +
 +public class ExternalServerConnection extends Thread implements Closeable {
 +
 +    private Socket socket;
 +    public ExternalServer externalServer = null;
++    private ExecutorService sendThread = Executors.newSingleThreadExecutor();
 +
 +    public ExternalServerConnection(Socket socket) {
 +        this.socket = socket;
@@ -136,21 +139,23 @@ index 0000000000000000000000000000000000000000..2245b1ad53a171a8f2c6bd7be9bb74b4
 +            // Ignore
 +        }
 +
++        sendThread.shutdown();
++
 +        if (externalServer != null && externalServer.getConnection() == this) {
 +            externalServer.setConnection(null);
 +        }
 +    }
 +
 +    public void send(ExternalServerPacket packet) {
-+        try {
-+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-+            ExternalServerPacketSerializer.serialize(packet, new DataOutputStream(buffer));
-+            synchronized (socket) {
++        CompletableFuture.runAsync(() -> {
++            try {
++                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
++                ExternalServerPacketSerializer.serialize(packet, new DataOutputStream(buffer));
 +                socket.getOutputStream().write(buffer.toByteArray());
++            } catch (IOException e) {
++                e.printStackTrace();
 +            }
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
++        }, sendThread);
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalServerSocket.java b/src/main/java/puregero/multipaper/ExternalServerSocket.java

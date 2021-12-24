@@ -495,7 +495,7 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 22558abb4e710cb29891e5c9aa52c72fb8cbdbda..59d46e57859da9078409b04efb661f9226ebf543 100644
+index 2137a8a8ae7bdca236794f65ab8626859eb85291..9bae9a01adc4f6224d85421a4acf96d31f1c77e3 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -4,20 +4,23 @@ import net.minecraft.network.protocol.Packet;
@@ -534,7 +534,7 @@ index 22558abb4e710cb29891e5c9aa52c72fb8cbdbda..59d46e57859da9078409b04efb661f92
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
-@@ -121,4 +125,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -125,4 +129,15 @@ public class ExternalServerConnection extends Thread implements Closeable {
              players.add(player);
          }
      }
@@ -546,7 +546,8 @@ index 22558abb4e710cb29891e5c9aa52c72fb8cbdbda..59d46e57859da9078409b04efb661f92
 +            }
 +        }
 +
-+        send(new RequestChunkPacket(world, cx, cz, externalServer));
++        RequestChunkPacket.blocker = externalServer;
++        send(new RequestChunkPacket(world, cx, cz));
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
@@ -993,7 +994,7 @@ index 0000000000000000000000000000000000000000..f25b2a2a57aa9a76f7655287a57bedb0
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index f6f7d74d354373fc21dd988757792ab575e3ad64..83bd88592586df13e07bcf3ec0b6d5eaf4d52c4a 100644
+index f6f7d74d354373fc21dd988757792ab575e3ad64..0abc6dfa4b991bd3c7f14c531a568bda1f04e9c2 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -1,17 +1,29 @@
@@ -1109,7 +1110,7 @@ index f6f7d74d354373fc21dd988757792ab575e3ad64..83bd88592586df13e07bcf3ec0b6d5ea
      public void writeTickTime(long time, double tps) throws IOException {
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeTickTime");
-@@ -161,4 +242,132 @@ public class MultiPaperConnection extends Thread {
+@@ -161,4 +242,133 @@ public class MultiPaperConnection extends Thread {
          out.writeInt(port);
          out.send(null);
      }
@@ -1167,6 +1168,7 @@ index f6f7d74d354373fc21dd988757792ab575e3ad64..83bd88592586df13e07bcf3ec0b6d5ea
 +                if (!owner.isEmpty() && path.equals("region")) {
 +                    ExternalServer server = serversMap.get(owner);
 +                    server.getConnection().requestChunk(world, cx, cz, data2 -> {
++                        RequestChunkPacket.blocker = null;
 +                        future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
 +                    });
 +                } else {
@@ -1259,12 +1261,13 @@ index c1bac1bf5148126a0fcad517bf499833d31cf050..934b75c68cc94cf39d09f086d97b88d0
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f291a7d70e5119d04b9b13850c3769f99f98be84
+index 0000000000000000000000000000000000000000..0bf479e9476128af2ae61d07d1fb51a6c20d392c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,122 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import com.mojang.datafixers.util.Either;
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
@@ -1284,22 +1287,18 @@ index 0000000000000000000000000000000000000000..f291a7d70e5119d04b9b13850c3769f9
 +import java.io.DataOutputStream;
 +import java.io.IOException;
 +import java.util.ConcurrentModificationException;
++import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.TimeUnit;
 +import java.util.concurrent.TimeoutException;
 +
 +public class RequestChunkPacket extends ExternalServerPacket {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(RequestChunkPacket.class.getSimpleName());
-+    private static ExternalServer blocker = null;
++    public static ExternalServer blocker = null;
 +
 +    private final String world;
 +    private final int cx;
 +    private final int cz;
-+
-+    public RequestChunkPacket(String world, int cx, int cz, ExternalServer blocker) {
-+        this(world, cx, cz);
-+        RequestChunkPacket.blocker = blocker;
-+    }
 +
 +    public RequestChunkPacket(String world, int cx, int cz) {
 +        this.world = world;
@@ -1331,7 +1330,19 @@ index 0000000000000000000000000000000000000000..f291a7d70e5119d04b9b13850c3769f9
 +            return;
 +        }
 +
-+        holder.getLastAvailableChunkFuture().thenAccept(either -> {
++        CompletableFuture<Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>> future = holder.getLastAvailableChunkFuture();
++
++        if (blocker == connection.externalServer) {
++            ChunkAccess access = holder.getAvailableChunkNow();
++            if (access != null) {
++                future = CompletableFuture.completedFuture(Either.left(holder.getAvailableChunkNow()));
++            } else {
++                connection.send(new SendChunkPacket(world, cx, cz, null));
++                return;
++            }
++        }
++
++        future.thenAccept(either -> {
 +            if (either.left().isEmpty()) {
 +                LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we don't have it loaded.");
 +                connection.send(new SendChunkPacket(world, cx, cz, null));
@@ -1364,7 +1375,7 @@ index 0000000000000000000000000000000000000000..f291a7d70e5119d04b9b13850c3769f9
 +            }
 +        })
 +        // Timeout instantly if this server is blocking our chunk loading, as this is probably also blocking their chunk loading
-+        .orTimeout(blocker == connection.externalServer ? 0 : 15, TimeUnit.SECONDS).exceptionally(throwable -> {
++        .orTimeout(15, TimeUnit.SECONDS).exceptionally(throwable -> {
 +            if (throwable instanceof TimeoutException) {
 +                LOGGER.warn("Timed out while sending chunk " + world + "," + cx + "," + cz);
 +            } else {

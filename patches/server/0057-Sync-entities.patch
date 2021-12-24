@@ -587,7 +587,7 @@ index 853c02d4f690d71d36d2a88ca08fbdff49a4f08e..5aef3ecda15fb58924e0ffd810e3f6cd
      public void checkInsideBlocks() {
          super.checkInsideBlocks();
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 59d46e57859da9078409b04efb661f9226ebf543..03ab385bf1a670d3c781dee4f7054223e17580cf 100644
+index 9bae9a01adc4f6224d85421a4acf96d31f1c77e3..77ac0e31c6b46f9775fdcaa95b4e7d312119981e 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -29,6 +29,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
@@ -598,9 +598,9 @@ index 59d46e57859da9078409b04efb661f9226ebf543..03ab385bf1a670d3c781dee4f7054223
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
-@@ -135,4 +136,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
- 
-         send(new RequestChunkPacket(world, cx, cz, externalServer));
+@@ -140,4 +141,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
+         RequestChunkPacket.blocker = externalServer;
+         send(new RequestChunkPacket(world, cx, cz));
      }
 +
 +    public void requestEntities(String world, int cx, int cz, Consumer<byte[]> callback) {
@@ -639,7 +639,7 @@ index e8149e3955307669d819967c8297af21ddf088f1..c6a2e97a0bb4f52aafc7a6d004b1d770
              }
              getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index fcdd064e23faf8ded36484f92be59357503ed843..0977035ea3aa6a3571b25709271b240d47551d2b 100644
+index bcf9c78f42f339ec67844823d0b37986fa0f6d4e..65296beee44e99e92668a3ab7bc87747d9219764 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -2,8 +2,10 @@ package puregero.multipaper;
@@ -706,8 +706,8 @@ index fcdd064e23faf8ded36484f92be59357503ed843..0977035ea3aa6a3571b25709271b240d
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -352,6 +393,11 @@ public class MultiPaperConnection extends Thread {
-                     server.getConnection().requestChunk(world, cx, cz, data2 -> {
+@@ -353,6 +394,11 @@ public class MultiPaperConnection extends Thread {
+                         RequestChunkPacket.blocker = null;
                          future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
                      });
 +                } else if (!owner.isEmpty() && path.equals("entities")) {
@@ -718,7 +718,7 @@ index fcdd064e23faf8ded36484f92be59357503ed843..0977035ea3aa6a3571b25709271b240d
                  } else {
                      future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
                  }
-@@ -372,10 +418,13 @@ public class MultiPaperConnection extends Thread {
+@@ -373,10 +419,13 @@ public class MultiPaperConnection extends Thread {
      }
  
      public void writeChunk(String world, String path, int cx, int cz, byte[] data) throws IOException {
@@ -736,7 +736,7 @@ index fcdd064e23faf8ded36484f92be59357503ed843..0977035ea3aa6a3571b25709271b240d
  
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeChunk");
-@@ -383,8 +432,8 @@ public class MultiPaperConnection extends Thread {
+@@ -384,8 +433,8 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(path);
          out.writeInt(cx);
          out.writeInt(cz);
@@ -747,7 +747,7 @@ index fcdd064e23faf8ded36484f92be59357503ed843..0977035ea3aa6a3571b25709271b240d
          out.send(in -> { /* Do nothing */ });
      }
      
-@@ -630,4 +679,13 @@ public class MultiPaperConnection extends Thread {
+@@ -631,4 +680,13 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(resource);
          out.send(null);
      }

@@ -73,10 +73,10 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c62d729561957735557ec463caa40087e051cce6
+index 0000000000000000000000000000000000000000..f93a51058848620727f783dd23f83b23c2707238
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,85 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.server.MinecraftServer;
@@ -147,15 +147,19 @@ index 0000000000000000000000000000000000000000..c62d729561957735557ec463caa40087
 +    }
 +
 +    public void send(ExternalServerPacket packet) {
-+        CompletableFuture.runAsync(() -> {
-+            try {
-+                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-+                ExternalServerPacketSerializer.serialize(packet, new DataOutputStream(buffer));
-+                socket.getOutputStream().write(buffer.toByteArray());
-+            } catch (IOException e) {
-+                e.printStackTrace();
-+            }
-+        }, sendThread);
++        if (socket.isClosed()) {
++            new IOException("Socket is closed for " + externalServer.getName()).printStackTrace();
++        } else {
++            CompletableFuture.runAsync(() -> {
++                try {
++                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
++                    ExternalServerPacketSerializer.serialize(packet, new DataOutputStream(buffer));
++                    socket.getOutputStream().write(buffer.toByteArray());
++                } catch (IOException e) {
++                    e.printStackTrace();
++                }
++            }, sendThread);
++        }
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalServerSocket.java b/src/main/java/puregero/multipaper/ExternalServerSocket.java

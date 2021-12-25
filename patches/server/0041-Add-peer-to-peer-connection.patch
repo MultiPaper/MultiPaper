@@ -73,10 +73,10 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f93a51058848620727f783dd23f83b23c2707238
+index 0000000000000000000000000000000000000000..986ac1459ff7fb8f5e8f96fb00b0a85e944081d8
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,87 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.server.MinecraftServer;
@@ -92,9 +92,9 @@ index 0000000000000000000000000000000000000000..f93a51058848620727f783dd23f83b23
 +
 +public class ExternalServerConnection extends Thread implements Closeable {
 +
-+    private Socket socket;
++    private final Socket socket;
 +    public ExternalServer externalServer = null;
-+    private ExecutorService sendThread = Executors.newSingleThreadExecutor();
++    private final ExecutorService sendThread = Executors.newSingleThreadExecutor();
 +
 +    public ExternalServerConnection(Socket socket) {
 +        this.socket = socket;
@@ -154,7 +154,9 @@ index 0000000000000000000000000000000000000000..f93a51058848620727f783dd23f83b23
 +                try {
 +                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 +                    ExternalServerPacketSerializer.serialize(packet, new DataOutputStream(buffer));
-+                    socket.getOutputStream().write(buffer.toByteArray());
++                    synchronized (socket) {
++                        socket.getOutputStream().write(buffer.toByteArray());
++                    }
 +                } catch (IOException e) {
 +                    e.printStackTrace();
 +                }

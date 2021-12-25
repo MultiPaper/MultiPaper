@@ -164,7 +164,7 @@ index 0000000000000000000000000000000000000000..f93a51058848620727f783dd23f83b23
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalServerSocket.java b/src/main/java/puregero/multipaper/ExternalServerSocket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..87a0ea1ce48d9543007558df2e5326aba123e745
+index 0000000000000000000000000000000000000000..52ff011d8ce356a407f38502eb828e24bbb4dc5c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerSocket.java
 @@ -0,0 +1,41 @@
@@ -180,7 +180,7 @@ index 0000000000000000000000000000000000000000..87a0ea1ce48d9543007558df2e5326ab
 +
 +    public ExternalServerSocket() {
 +        try {
-+            socket = new ServerSocket(0);
++            socket = new ServerSocket(MultiPaper.getExternalServerPort());
 +        } catch (IOException e) {
 +            throw new RuntimeException(e);
 +        }
@@ -210,18 +210,19 @@ index 0000000000000000000000000000000000000000..87a0ea1ce48d9543007558df2e5326ab
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 5ddb4c40c42f94b6a4b76dc0479c51dbcfe65f6e..c246f0ae17147515d2d61c6f555af17e63c4f29b 100644
+index 7c34a6624baa715409538d57a02672e70bd42d48..1a78a66bba0d8e34d2ea692df7e298a634c339c7 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,11 +1,18 @@
- package puregero.multipaper;
+@@ -2,13 +2,19 @@ package puregero.multipaper;
  
+ import org.bukkit.configuration.InvalidConfigurationException;
+ import org.bukkit.configuration.file.YamlConfiguration;
 +import net.minecraft.server.MinecraftServer;
 +import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
-+
+ 
  import java.io.File;
+ import java.io.FileNotFoundException;
  import java.io.IOException;
- import java.nio.file.Files;
 +import java.util.Collection;
 +import java.util.function.Consumer;
 +import java.util.function.Supplier;
@@ -232,7 +233,36 @@ index 5ddb4c40c42f94b6a4b76dc0479c51dbcfe65f6e..c246f0ae17147515d2d61c6f555af17e
  
      public static MultiPaperConnection getConnection() {
          if (multiPaperConnection == null) {
-@@ -38,4 +45,40 @@ public class MultiPaper {
+@@ -34,6 +40,14 @@ public class MultiPaper {
+         return multipaperMasterAddress;
+     }
+ 
++    private static Integer externalServerPort = null;
++    public static int getExternalServerPort() {
++        if (externalServerPort == null) {
++            loadConfig();
++        }
++        return externalServerPort;
++    }
++
+     private static void loadConfig() {
+         YamlConfiguration config = new YamlConfiguration();
+         File file = new File("multipaper.yml");
+@@ -61,6 +75,13 @@ public class MultiPaper {
+ 
+         multipaperMasterAddress = config.getString("multipaperMasterAddress");
+ 
++        if (!config.contains("externalServerPort")) {
++            save = true;
++            config.set("externalServerPort", 0);
++        }
++
++        externalServerPort = config.getInt("externalServerPort");
++
+         try {
+             if (save) {
+                 config.save(file);
+@@ -77,4 +98,40 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -274,19 +304,19 @@ index 5ddb4c40c42f94b6a4b76dc0479c51dbcfe65f6e..c246f0ae17147515d2d61c6f555af17e
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 4aaa90a7023245791003dfe274af04bcf42ca1d9..f6f7d74d354373fc21dd988757792ab575e3ad64 100644
+index 6d82a54d759d2be4a7cdfc392371ac94a563b59c..a07fee59d0907e2263426ec0ba47fb7bec6b9aee 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -9,6 +9,7 @@ import java.net.Socket;
+@@ -8,6 +8,7 @@ import java.io.*;
+ import java.net.Socket;
  import java.net.SocketException;
- import java.nio.file.Files;
  import java.util.Map;
 +import java.util.concurrent.CompletableFuture;
  import java.util.concurrent.ConcurrentHashMap;
  import java.util.function.Consumer;
  
-@@ -66,6 +67,10 @@ public class MultiPaperConnection extends Thread {
-         }
+@@ -52,6 +53,10 @@ public class MultiPaperConnection extends Thread {
+         return new DataOutputSender(this, id);
      }
  
 +    public ExternalServer getOrCreateServer(String name) {
@@ -296,7 +326,7 @@ index 4aaa90a7023245791003dfe274af04bcf42ca1d9..f6f7d74d354373fc21dd988757792ab5
      @Override
      public void run() {
          while (true) {
-@@ -122,12 +127,26 @@ public class MultiPaperConnection extends Thread {
+@@ -108,12 +113,26 @@ public class MultiPaperConnection extends Thread {
      }
  
      public void serverInfo(DataInputStream in, DataOutputSender out) throws IOException {
@@ -324,7 +354,7 @@ index 4aaa90a7023245791003dfe274af04bcf42ca1d9..f6f7d74d354373fc21dd988757792ab5
      public void writeTickTime(long time, double tps) throws IOException {
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeTickTime");
-@@ -135,4 +154,11 @@ public class MultiPaperConnection extends Thread {
+@@ -121,4 +140,11 @@ public class MultiPaperConnection extends Thread {
          out.writeFloat((float) tps);
          out.send(null);
      }

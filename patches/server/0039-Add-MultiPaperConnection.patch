@@ -5,7 +5,7 @@ Subject: [PATCH] Add MultiPaperConnection
 
 
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 09e511b4a2f12e417d4804739e8a9701d8cf59b0..60633552c440039bdc1bfd50789645b8a78154b4 100644
+index 76f565260bbc5041585146968c03cab8f1f0f589..09e8a6d47d427e7c0f01e1c56409ce0906f5acde 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -185,6 +185,7 @@ import org.bukkit.event.server.ServerLoadEvent;
@@ -110,15 +110,18 @@ index 0000000000000000000000000000000000000000..35b8352a2c798c70cfebeddd2a95dc8e
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7a6b980502593afd47de458ed2b443160dfb5754
+index 0000000000000000000000000000000000000000..5624ae7ac06396f649dc0df285665c89bdc1bb85
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,72 @@
 +package puregero.multipaper;
 +
++import org.bukkit.configuration.InvalidConfigurationException;
++import org.bukkit.configuration.file.YamlConfiguration;
++
 +import java.io.File;
++import java.io.FileNotFoundException;
 +import java.io.IOException;
-+import java.nio.file.Files;
 +
 +public class MultiPaper {
 +    private static MultiPaperConnection multiPaperConnection = null;
@@ -134,25 +137,61 @@ index 0000000000000000000000000000000000000000..7a6b980502593afd47de458ed2b44316
 +    private static String bungeeCordName = null;
 +    public static String getBungeeCordName() {
 +        if (bungeeCordName == null) {
-+            try {
-+                File file = new File("bungeecordname.txt");
-+                if (!file.isFile()) {
-+                    Files.write(file.toPath(), ("server" + Double.toString(Math.random()).substring(2, 7)).getBytes());
-+                }
-+                bungeeCordName = new String(Files.readAllBytes(file.toPath())).trim();
-+            } catch (IOException e) {
-+                throw new RuntimeException(e);
-+            }
++            loadConfig();
 +        }
 +        return bungeeCordName;
++    }
++
++    private static String multipaperMasterAddress = null;
++    public static String getMultipaperMasterAddress() {
++        if (multipaperMasterAddress == null) {
++            loadConfig();
++        }
++        return multipaperMasterAddress;
++    }
++
++    private static void loadConfig() {
++        YamlConfiguration config = new YamlConfiguration();
++        File file = new File("multipaper.yml");
++        boolean save = false;
++
++        try {
++            config.load(file);
++        } catch (FileNotFoundException e) {
++            // ignore
++        } catch (IOException | InvalidConfigurationException e) {
++            e.printStackTrace();
++        }
++
++        if (!config.contains("bungeecordName")) {
++            save = true;
++            config.set("bungeecordName", "server" + Double.toString(Math.random()).substring(2, 7));
++        }
++
++        bungeeCordName = config.getString("bungeecordName");
++
++        if (!config.contains("multipaperMasterAddress")) {
++            save = true;
++            config.set("multipaperMasterAddress", "localhost:35353");
++        }
++
++        multipaperMasterAddress = config.getString("multipaperMasterAddress");
++
++        try {
++            if (save) {
++                config.save(file);
++            }
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4c3b5986e4c29663e193987d24cc2f88d309b30d
+index 0000000000000000000000000000000000000000..8920b0fce82cd663b588a5ba954258445cb7f345
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,107 @@
 +package puregero.multipaper;
 +
 +import org.apache.logging.log4j.LogManager;
@@ -162,7 +201,6 @@ index 0000000000000000000000000000000000000000..4c3b5986e4c29663e193987d24cc2f88
 +import java.io.*;
 +import java.net.Socket;
 +import java.net.SocketException;
-+import java.nio.file.Files;
 +import java.util.Map;
 +import java.util.concurrent.ConcurrentHashMap;
 +import java.util.function.Consumer;
@@ -200,23 +238,10 @@ index 0000000000000000000000000000000000000000..4c3b5986e4c29663e193987d24cc2f88
 +        return new DataOutputSender(this, id);
 +    }
 +
-+    private static String getServer() {
-+        try {
-+            File file = new File("multipaperserver.txt");
-+            if (!file.isFile()) {
-+                Files.write(file.toPath(), ("localhost:35353").getBytes());
-+            }
-+            return new String(Files.readAllBytes(file.toPath())).trim();
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+            return "localhost:35353";
-+        }
-+    }
-+
 +    @Override
 +    public void run() {
 +        while (true) {
-+            String server = getServer();
++            String server = MultiPaper.getMultipaperMasterAddress();
 +            LOGGER.info("Connecting to " + server + "...");
 +            String[] serverParts = server.split(":");
 +            try (Socket socket = new Socket(serverParts[0], Integer.parseInt(serverParts[1]))) {

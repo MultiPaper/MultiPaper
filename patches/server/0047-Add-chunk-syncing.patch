@@ -551,12 +551,13 @@ index 2137a8a8ae7bdca236794f65ab8626859eb85291..9bae9a01adc4f6224d85421a4acf96d3
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 3c70c8fec9bfe3042801298af4d1c8efdc59b7bb..eeb5dc975b477ebbf2ae41bec7a0ad0d6cb00082 100644
+index 5fb10c2a35342685306d5c64fbd86342072af38b..bd81d0c02bca1faa5903f80a2116136e4944fc48 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,22 +1,41 @@
- package puregero.multipaper;
+@@ -2,23 +2,41 @@ package puregero.multipaper;
  
+ import org.bukkit.configuration.InvalidConfigurationException;
+ import org.bukkit.configuration.file.YamlConfiguration;
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.core.Registry;
  import net.minecraft.server.MinecraftServer;
@@ -582,9 +583,9 @@ index 3c70c8fec9bfe3042801298af4d1c8efdc59b7bb..eeb5dc975b477ebbf2ae41bec7a0ad0d
 +import puregero.multipaper.externalserverprotocol.*;
  
 -import java.io.File;
+-import java.io.FileNotFoundException;
 -import java.io.IOException;
 +import java.io.*;
- import java.nio.file.Files;
  import java.util.Collection;
 +import java.util.HashSet;
 +import java.util.concurrent.ConcurrentHashMap;
@@ -601,7 +602,7 @@ index 3c70c8fec9bfe3042801298af4d1c8efdc59b7bb..eeb5dc975b477ebbf2ae41bec7a0ad0d
      private static MultiPaperConnection multiPaperConnection = null;
      private static ExternalServerSocket externalServerSocket = null;
  
-@@ -51,6 +70,11 @@ public class MultiPaper {
+@@ -104,6 +122,11 @@ public class MultiPaper {
                  server.getConnection().tick();
              }
          }
@@ -613,7 +614,7 @@ index 3c70c8fec9bfe3042801298af4d1c8efdc59b7bb..eeb5dc975b477ebbf2ae41bec7a0ad0d
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -136,4 +160,161 @@ public class MultiPaper {
+@@ -189,4 +212,161 @@ public class MultiPaper {
      public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
          return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
      }
@@ -993,10 +994,10 @@ index 0000000000000000000000000000000000000000..2b7bac9afa8596cb8f288f571662281c
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index f6f7d74d354373fc21dd988757792ab575e3ad64..30aff3b559a684225f9814025e703ea475555fdf 100644
+index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..b0297c5b6bea33d3b1d3cb944e854dcfdbba7520 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -1,17 +1,31 @@
+@@ -1,16 +1,30 @@
  package puregero.multipaper;
  
 +import net.minecraft.core.Registry;
@@ -1017,7 +1018,6 @@ index f6f7d74d354373fc21dd988757792ab575e3ad64..30aff3b559a684225f9814025e703ea4
  import java.io.*;
  import java.net.Socket;
  import java.net.SocketException;
- import java.nio.file.Files;
 +import java.util.HashSet;
  import java.util.Map;
  import java.util.concurrent.CompletableFuture;
@@ -1028,7 +1028,7 @@ index f6f7d74d354373fc21dd988757792ab575e3ad64..30aff3b559a684225f9814025e703ea4
  
  public class MultiPaperConnection extends Thread {
  
-@@ -93,6 +107,17 @@ public class MultiPaperConnection extends Thread {
+@@ -79,6 +93,17 @@ public class MultiPaperConnection extends Thread {
                      }
                  }
  
@@ -1046,7 +1046,7 @@ index f6f7d74d354373fc21dd988757792ab575e3ad64..30aff3b559a684225f9814025e703ea4
                  DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
                  while (!socket.isClosed()) {
                      int id = in.readInt();
-@@ -133,6 +158,57 @@ public class MultiPaperConnection extends Thread {
+@@ -119,6 +144,57 @@ public class MultiPaperConnection extends Thread {
          server.setLastAlive(System.currentTimeMillis());
      }
  
@@ -1104,7 +1104,7 @@ index f6f7d74d354373fc21dd988757792ab575e3ad64..30aff3b559a684225f9814025e703ea4
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -147,6 +223,24 @@ public class MultiPaperConnection extends Thread {
+@@ -133,6 +209,24 @@ public class MultiPaperConnection extends Thread {
          });
      }
  
@@ -1129,7 +1129,7 @@ index f6f7d74d354373fc21dd988757792ab575e3ad64..30aff3b559a684225f9814025e703ea4
      public void writeTickTime(long time, double tps) throws IOException {
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeTickTime");
-@@ -161,4 +255,146 @@ public class MultiPaperConnection extends Thread {
+@@ -147,4 +241,146 @@ public class MultiPaperConnection extends Thread {
          out.writeInt(port);
          out.send(null);
      }

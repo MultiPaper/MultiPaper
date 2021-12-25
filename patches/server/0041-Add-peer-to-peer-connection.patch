@@ -73,10 +73,10 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..986ac1459ff7fb8f5e8f96fb00b0a85e944081d8
+index 0000000000000000000000000000000000000000..9e522fb26957683db29035a6c5074daffd2e82cb
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,97 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.server.MinecraftServer;
@@ -86,6 +86,7 @@ index 0000000000000000000000000000000000000000..986ac1459ff7fb8f5e8f96fb00b0a85e
 +
 +import java.io.*;
 +import java.net.Socket;
++import java.nio.ByteBuffer;
 +import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.ExecutorService;
 +import java.util.concurrent.Executors;
@@ -122,8 +123,16 @@ index 0000000000000000000000000000000000000000..986ac1459ff7fb8f5e8f96fb00b0a85e
 +            send(new HelloPacket(MultiPaper.getBungeeCordName()));
 +
 +            while (!socket.isClosed()) {
-+                ExternalServerPacket packet = ExternalServerPacketSerializer.deserialize(in);
-+                packet.handle(this);
++                int length = in.readInt();
++                byte[] packetBytes = new byte[length];
++                in.readFully(packetBytes);
++                try {
++                    DataInputStream packetInput = new DataInputStream(new ByteArrayInputStream(packetBytes));
++                    ExternalServerPacket packet = ExternalServerPacketSerializer.deserialize(packetInput);
++                    packet.handle(this);
++                } catch (Exception e) {
++                    e.printStackTrace();
++                }
 +            }
 +        } catch (EOFException e) {
 +            // Ignore
@@ -154,9 +163,10 @@ index 0000000000000000000000000000000000000000..986ac1459ff7fb8f5e8f96fb00b0a85e
 +                try {
 +                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 +                    ExternalServerPacketSerializer.serialize(packet, new DataOutputStream(buffer));
-+                    synchronized (socket) {
-+                        socket.getOutputStream().write(buffer.toByteArray());
-+                    }
++                    ByteBuffer byteBuffer = ByteBuffer.allocate(buffer.size() + 4);
++                    byteBuffer.putInt(buffer.size());
++                    byteBuffer.put(buffer.toByteArray());
++                    socket.getOutputStream().write(byteBuffer.array());
 +                } catch (IOException e) {
 +                    e.printStackTrace();
 +                }

@@ -778,7 +778,7 @@ index 5fb10c2a35342685306d5c64fbd86342072af38b..bd81d0c02bca1faa5903f80a2116136e
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ae2e8a8bb8c1e1e854c9c0853901a66306b387a8
+index 0000000000000000000000000000000000000000..b7dccd7a0272b3f6765c9e7ddd282b274f711853
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 @@ -0,0 +1,217 @@
@@ -798,6 +798,7 @@ index 0000000000000000000000000000000000000000..ae2e8a8bb8c1e1e854c9c0853901a663
 +import net.minecraft.world.level.block.entity.BlockEntity;
 +import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.DataLayer;
++import net.minecraft.world.level.chunk.ImposterProtoChunk;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.level.lighting.LevelLightEngine;
 +import org.apache.logging.log4j.LogManager;
@@ -900,18 +901,17 @@ index 0000000000000000000000000000000000000000..ae2e8a8bb8c1e1e854c9c0853901a663
 +            holder = MultiPaper.getChunkHolder(world, update.getX(), update.getZ());
 +        }
 +
-+        if (holder != null && holder.getAvailableChunkNow() instanceof LevelChunk) {
-+            // Send block changes already made to the chunk before we lock the broadcasts
-+            holder.broadcastChanges((LevelChunk) holder.getAvailableChunkNow());
-+        }
-+
 +        if (holder != null) {
 +            blockUpdateChunk = holder.getAvailableChunkNow();
++
++            if (blockUpdateChunk instanceof ImposterProtoChunk imposterProtoChunk) {
++                blockUpdateChunk = imposterProtoChunk.getWrapped();
++            }
 +        }
 +
-+        if (holder != null && blockUpdateChunk instanceof LevelChunk) {
++        if (holder != null && blockUpdateChunk instanceof LevelChunk levelChunk) {
 +            // Clear pre-existing block changes
-+            holder.broadcastChanges((LevelChunk) blockUpdateChunk);
++            holder.broadcastChanges(levelChunk);
 +        }
 +
 +        boolean unsaved = false;
@@ -959,9 +959,9 @@ index 0000000000000000000000000000000000000000..ae2e8a8bb8c1e1e854c9c0853901a663
 +            }
 +        }
 +
-+        if (holder != null && blockUpdateChunk instanceof LevelChunk) {
++        if (holder != null && blockUpdateChunk instanceof LevelChunk levelChunk) {
 +            // Send block changes
-+            holder.broadcastChanges((LevelChunk) blockUpdateChunk);
++            holder.broadcastChanges(levelChunk);
 +        }
 +
 +        if (blockUpdateChunk != null) {

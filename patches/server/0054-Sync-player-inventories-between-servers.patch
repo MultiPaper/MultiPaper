@@ -218,18 +218,19 @@ index 8d329bca0818033df41fbd781028919c73e052a6..d43cdea5999da9f878bb6a84da1893f4
      }
  
 diff --git a/src/main/java/net/minecraft/world/item/ItemStack.java b/src/main/java/net/minecraft/world/item/ItemStack.java
-index 66f808cabcf6a9a6584849b285f1c60133adc7b4..4baf093f31e2d9ad7481d2ff151f7c920a55fefb 100644
+index 66f808cabcf6a9a6584849b285f1c60133adc7b4..ee33647ae4658e3318db556556e682b84e479fd5 100644
 --- a/src/main/java/net/minecraft/world/item/ItemStack.java
 +++ b/src/main/java/net/minecraft/world/item/ItemStack.java
-@@ -148,6 +148,7 @@ public final class ItemStack {
+@@ -148,6 +148,8 @@ public final class ItemStack {
      private AdventureModeCheck adventureBreakCheck;
      @Nullable
      private AdventureModeCheck adventurePlaceCheck;
 +    public boolean dirty = true; // MultiPaper
++    static { EMPTY.dirty = false; } // MultiPaper
  
      public Optional<TooltipComponent> getTooltipImage() {
          return this.getItem().getTooltipImage(this);
-@@ -260,6 +261,7 @@ public final class ItemStack {
+@@ -260,6 +262,7 @@ public final class ItemStack {
              this.setDamageValue(this.getDamageValue());
          }
  
@@ -237,7 +238,7 @@ index 66f808cabcf6a9a6584849b285f1c60133adc7b4..4baf093f31e2d9ad7481d2ff151f7c92
      }
  
      private ItemStack(CompoundTag nbt) {
-@@ -519,6 +521,8 @@ public final class ItemStack {
+@@ -519,6 +522,8 @@ public final class ItemStack {
  
      public void setDamageValue(int damage) {
          this.getOrCreateTag().putInt("Damage", Math.max(0, damage));
@@ -246,7 +247,7 @@ index 66f808cabcf6a9a6584849b285f1c60133adc7b4..4baf093f31e2d9ad7481d2ff151f7c92
      }
  
      public int getMaxDamage() {
-@@ -788,6 +792,8 @@ public final class ItemStack {
+@@ -788,6 +793,8 @@ public final class ItemStack {
              if (this.tag.isEmpty()) {
                  this.tag = null;
              }
@@ -255,7 +256,7 @@ index 66f808cabcf6a9a6584849b285f1c60133adc7b4..4baf093f31e2d9ad7481d2ff151f7c92
          }
  
      }
-@@ -826,6 +832,7 @@ public final class ItemStack {
+@@ -826,6 +833,7 @@ public final class ItemStack {
              this.getItem().verifyTagAfterLoad(nbt);
          }
  
@@ -263,7 +264,7 @@ index 66f808cabcf6a9a6584849b285f1c60133adc7b4..4baf093f31e2d9ad7481d2ff151f7c92
      }
  
      public Component getHoverName() {
-@@ -857,6 +864,8 @@ public final class ItemStack {
+@@ -857,6 +865,8 @@ public final class ItemStack {
              nbttagcompound.remove("Name");
          }
  
@@ -272,7 +273,7 @@ index 66f808cabcf6a9a6584849b285f1c60133adc7b4..4baf093f31e2d9ad7481d2ff151f7c92
          return this;
      }
  
-@@ -874,6 +883,8 @@ public final class ItemStack {
+@@ -874,6 +884,8 @@ public final class ItemStack {
              this.tag = null;
          }
  
@@ -281,7 +282,7 @@ index 66f808cabcf6a9a6584849b285f1c60133adc7b4..4baf093f31e2d9ad7481d2ff151f7c92
      }
  
      public boolean hasCustomHoverName() {
-@@ -1059,6 +1070,8 @@ public final class ItemStack {
+@@ -1059,6 +1071,8 @@ public final class ItemStack {
          CompoundTag nbttagcompound = this.getOrCreateTag();
  
          nbttagcompound.putInt("HideFlags", nbttagcompound.getInt("HideFlags") | tooltipSection.getMask());
@@ -290,7 +291,7 @@ index 66f808cabcf6a9a6584849b285f1c60133adc7b4..4baf093f31e2d9ad7481d2ff151f7c92
      }
  
      public static void appendEnchantmentNames(List<Component> tooltip, ListTag enchantments) {
-@@ -1126,6 +1139,8 @@ public final class ItemStack {
+@@ -1126,6 +1140,8 @@ public final class ItemStack {
  
          nbttaglist.add(EnchantmentHelper.storeEnchantment(EnchantmentHelper.getEnchantmentId(enchantment), (byte) level));
          processEnchantOrder(this.tag); // Paper
@@ -299,7 +300,7 @@ index 66f808cabcf6a9a6584849b285f1c60133adc7b4..4baf093f31e2d9ad7481d2ff151f7c92
      }
  
      public boolean isEnchanted() {
-@@ -1134,6 +1149,8 @@ public final class ItemStack {
+@@ -1134,6 +1150,8 @@ public final class ItemStack {
  
      public void addTagElement(String key, net.minecraft.nbt.Tag element) {
          this.getOrCreateTag().put(key, element);
@@ -308,7 +309,7 @@ index 66f808cabcf6a9a6584849b285f1c60133adc7b4..4baf093f31e2d9ad7481d2ff151f7c92
      }
  
      public boolean isFramed() {
-@@ -1166,6 +1183,8 @@ public final class ItemStack {
+@@ -1166,6 +1184,8 @@ public final class ItemStack {
          }
          // CraftBukkit end
          this.getOrCreateTag().putInt("RepairCost", repairCost);
@@ -317,7 +318,7 @@ index 66f808cabcf6a9a6584849b285f1c60133adc7b4..4baf093f31e2d9ad7481d2ff151f7c92
      }
  
      public Multimap<Attribute, AttributeModifier> getAttributeModifiers(EquipmentSlot slot) {
-@@ -1219,6 +1238,8 @@ public final class ItemStack {
+@@ -1219,6 +1239,8 @@ public final class ItemStack {
      public void setItem(Item item) {
          this.bukkitStack = null; // Paper
          this.item = item;
@@ -326,7 +327,7 @@ index 66f808cabcf6a9a6584849b285f1c60133adc7b4..4baf093f31e2d9ad7481d2ff151f7c92
      }
      // CraftBukkit end
  
-@@ -1271,6 +1292,8 @@ public final class ItemStack {
+@@ -1271,6 +1293,8 @@ public final class ItemStack {
      public void setCount(int count) {
          this.count = count;
          this.updateEmptyCacheFlag();

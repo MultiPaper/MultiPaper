@@ -104,7 +104,7 @@ index d271871563fa883efb77b35ec3b1dfbba87f0b62..40e74c91d79eab808b5bed3954a67624
      public interface LevelChangeListener {
  
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 40a43bcb4bde488dbe742fc9e688014dee801942..e2f9e1510ebb80e39107a928fdd30caf8661af93 100644
+index 40a43bcb4bde488dbe742fc9e688014dee801942..2b98e858da679fe20db5e087bd7befcb2e5bd65a 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -110,6 +110,7 @@ import org.bukkit.entity.Player;
@@ -115,16 +115,15 @@ index 40a43bcb4bde488dbe742fc9e688014dee801942..e2f9e1510ebb80e39107a928fdd30caf
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -1013,6 +1014,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
-                         ((LevelChunk) ichunkaccess).setLoaded(false);
-                     }
- 
-+                    MultiPaperChunkHandler.onChunkUnload(level, ichunkaccess); // MultiPaper
-+
-                     // Paper start - async chunk saving
-                     try {
-                         this.asyncSave(ichunkaccess);
-@@ -1213,6 +1216,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1002,6 +1003,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+                 try {
+                     // Paper end - do not allow ticket level changes while unloading chunks
+                 // Paper start
++                MultiPaperChunkHandler.onChunkUnload(level, holder.pos, ichunkaccess); // MultiPaper
+                 boolean removed;
+                 if ((removed = this.pendingUnloads.remove(pos, holder)) && ichunkaccess != null) {
+                     for (int index = 0, len = this.regionManagers.size(); index < len; ++index) {
+@@ -1213,6 +1215,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                          return this.protoChunkToFullChunk(holder);
                      }, list, false);
  
@@ -133,7 +132,7 @@ index 40a43bcb4bde488dbe742fc9e688014dee801942..e2f9e1510ebb80e39107a928fdd30caf
                      this.progressListener.onStatusChange(chunkcoordintpair, requiredStatus);
                      return completablefuture1;
                  } catch (Exception exception) {
-@@ -1653,6 +1658,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1653,6 +1657,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              }
              return ret;
          }
@@ -141,7 +140,7 @@ index 40a43bcb4bde488dbe742fc9e688014dee801942..e2f9e1510ebb80e39107a928fdd30caf
          return super.read(chunkcoordintpair);
      }
  
-@@ -1664,6 +1670,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1664,6 +1669,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                  com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread());
              return;
          }
@@ -154,7 +153,7 @@ index 40a43bcb4bde488dbe742fc9e688014dee801942..e2f9e1510ebb80e39107a928fdd30caf
          super.write(chunkcoordintpair, nbttagcompound);
      }
      // Paper end
-@@ -1707,6 +1719,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1707,6 +1718,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              return status;
          }
  
@@ -551,7 +550,7 @@ index ee45bf94ec98d1f26aeb6c7fb0a5056d13ec78e3..620fbf3c4e006395a2354e6b555e5d2d
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 5fb10c2a35342685306d5c64fbd86342072af38b..8cd207acef49e28b0ce879e88710d20fe1eddb5d 100644
+index 5fb10c2a35342685306d5c64fbd86342072af38b..60e2c2252b84932436487cff84e4eb9f606755e3 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -2,25 +2,46 @@ package puregero.multipaper;
@@ -625,7 +624,7 @@ index 5fb10c2a35342685306d5c64fbd86342072af38b..8cd207acef49e28b0ce879e88710d20f
 +
 +        while (!visibleChunksToCheck.isEmpty()) {
 +            ChunkHolder holder = visibleChunksToCheck.remove(visibleChunksToCheck.size() - 1);
-+            if (holder.getAvailableChunkNow() != null) {
++            if (holder.getWorld().chunkSource.chunkMap.getVisibleChunkIfPresent(holder.pos.longKey) == holder) {
 +                getConnection().syncChunkSubscribers(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z);
 +                break;
 +            }
@@ -797,10 +796,10 @@ index 5fb10c2a35342685306d5c64fbd86342072af38b..8cd207acef49e28b0ce879e88710d20f
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b7dccd7a0272b3f6765c9e7ddd282b274f711853
+index 0000000000000000000000000000000000000000..9989877d7e79c9b7e92f43007b538a6516d87d6f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,217 @@
+@@ -0,0 +1,219 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -812,6 +811,7 @@ index 0000000000000000000000000000000000000000..b7dccd7a0272b3f6765c9e7ddd282b27
 +import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
 +import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.Level;
 +import net.minecraft.world.level.LightLayer;
 +import net.minecraft.world.level.block.entity.BlockEntity;
@@ -826,6 +826,7 @@ index 0000000000000000000000000000000000000000..b7dccd7a0272b3f6765c9e7ddd282b27
 +import org.bukkit.craftbukkit.CraftWorld;
 +import puregero.multipaper.externalserverprotocol.SendUpdatePacket;
 +
++import javax.annotation.Nullable;
 +import java.io.IOException;
 +import java.util.BitSet;
 +import java.util.HashSet;
@@ -852,12 +853,12 @@ index 0000000000000000000000000000000000000000..b7dccd7a0272b3f6765c9e7ddd282b27
 +        }
 +    }
 +
-+    public static void onChunkUnload(ServerLevel level, ChunkAccess chunk) {
-+        if (chunk instanceof LevelChunk && ((LevelChunk) chunk).hasExternalLockRequest) {
-+            MultiPaper.unlockChunk((LevelChunk) chunk);
++    public static void onChunkUnload(ServerLevel level, ChunkPos pos, @Nullable ChunkAccess chunk) {
++        if (chunk instanceof LevelChunk levelChunk && levelChunk.hasExternalLockRequest) {
++            MultiPaper.unlockChunk(levelChunk);
 +        }
 +        try {
-+            MultiPaper.getConnection().unsubscribeChunk(level.convertable.getLevelId(), chunk.getPos().x, chunk.getPos().z);
++            MultiPaper.getConnection().unsubscribeChunk(level.convertable.getLevelId(), pos.x, pos.z);
 +        } catch (IOException e) {
 +            e.printStackTrace();
 +        }

@@ -551,10 +551,10 @@ index ee45bf94ec98d1f26aeb6c7fb0a5056d13ec78e3..620fbf3c4e006395a2354e6b555e5d2d
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 5fb10c2a35342685306d5c64fbd86342072af38b..bd81d0c02bca1faa5903f80a2116136e4944fc48 100644
+index 5fb10c2a35342685306d5c64fbd86342072af38b..3e8bd6cfa158043cfb56859c393f1f835a001892 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -2,23 +2,41 @@ package puregero.multipaper;
+@@ -2,25 +2,46 @@ package puregero.multipaper;
  
  import org.bukkit.configuration.InvalidConfigurationException;
  import org.bukkit.configuration.file.YamlConfiguration;
@@ -586,8 +586,10 @@ index 5fb10c2a35342685306d5c64fbd86342072af38b..bd81d0c02bca1faa5903f80a2116136e
 -import java.io.FileNotFoundException;
 -import java.io.IOException;
 +import java.io.*;
++import java.util.ArrayList;
  import java.util.Collection;
 +import java.util.HashSet;
++import java.util.List;
 +import java.util.concurrent.ConcurrentHashMap;
  import java.util.function.Consumer;
  import java.util.function.Supplier;
@@ -601,8 +603,11 @@ index 5fb10c2a35342685306d5c64fbd86342072af38b..bd81d0c02bca1faa5903f80a2116136e
 +    public final static ConcurrentHashMap<ChunkKey, Runnable> reloadChunks = new ConcurrentHashMap<>();
      private static MultiPaperConnection multiPaperConnection = null;
      private static ExternalServerSocket externalServerSocket = null;
++    private final static List<ChunkHolder> visibleChunksToCheck = new ArrayList<>();
  
-@@ -104,6 +122,11 @@ public class MultiPaper {
+     public static MultiPaperConnection getConnection() {
+         if (multiPaperConnection == null) {
+@@ -104,6 +125,25 @@ public class MultiPaper {
                  server.getConnection().tick();
              }
          }
@@ -611,10 +616,24 @@ index 5fb10c2a35342685306d5c64fbd86342072af38b..bd81d0c02bca1faa5903f80a2116136e
 +            entry.getValue().run();
 +            return true;
 +        });
++
++        if (visibleChunksToCheck.isEmpty()) {
++            for (ServerLevel level : MinecraftServer.getServer().getAllLevels()) {
++                visibleChunksToCheck.addAll(level.chunkSource.chunkMap.updatingChunks.getVisibleValues());
++            }
++        }
++
++        while (!visibleChunksToCheck.isEmpty()) {
++            ChunkHolder holder = visibleChunksToCheck.remove(visibleChunksToCheck.size() - 1);
++            if (holder.getAvailableChunkNow() != null) {
++                getConnection().subscribeChunk(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z);
++                break;
++            }
++        }
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -189,4 +212,161 @@ public class MultiPaper {
+@@ -189,4 +229,161 @@ public class MultiPaper {
      public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
          return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
      }

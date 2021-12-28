@@ -145,14 +145,16 @@ public class ChunkSubscriptionManager {
                 return new ArrayList<>();
             });
 
-            if (!serverConnections.contains(serverConnection)) {
-                if (!serverConnections.isEmpty()) {
-                    List<ServerConnection> singletonList = Collections.singletonList(serverConnection);
-                    for (ServerConnection subscriber : serverConnections) {
+            if (!serverConnections.isEmpty()) {
+                List<ServerConnection> singletonList = Collections.singletonList(serverConnection);
+                for (ServerConnection subscriber : serverConnections) {
+                    if (subscriber != serverConnection) {
                         updateSubscriberAdd(singletonList, subscriber, world, cx, cz);
                     }
                 }
+            }
 
+            if (!serverConnections.contains(serverConnection)) {
                 serverConnections.add(serverConnection);
                 updateSubscriberAdd(serverConnections, serverConnection, world, cx, cz);
                 subscribedChunks.computeIfAbsent(serverConnection, k -> new HashSet<>()).add(key);

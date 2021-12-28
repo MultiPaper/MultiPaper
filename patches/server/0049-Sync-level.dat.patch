@@ -76,7 +76,7 @@ index 9a9e9e13c08d1cbcad98729065185c2c449d70a4..0bad3318667da163502173da0a1700ad
  
                  NbtIo.writeCompressed(nbttagcompound2, file1);
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index bd81d0c02bca1faa5903f80a2116136e4944fc48..f8531e59212cc75f8bc6da76c9481be9a495a240 100644
+index 3e8bd6cfa158043cfb56859c393f1f835a001892..18cdb3bb8992c5162a63f03075244388f75e8dbc 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -16,6 +16,8 @@ import net.minecraft.world.level.chunk.ChunkAccess;
@@ -88,7 +88,7 @@ index bd81d0c02bca1faa5903f80a2116136e4944fc48..f8531e59212cc75f8bc6da76c9481be9
  import org.bukkit.Bukkit;
  import org.bukkit.Chunk;
  import org.bukkit.craftbukkit.CraftChunk;
-@@ -34,11 +36,14 @@ import java.util.zip.InflaterInputStream;
+@@ -36,12 +38,15 @@ import java.util.zip.InflaterInputStream;
  
  public class MultiPaper {
  
@@ -99,14 +99,15 @@ index bd81d0c02bca1faa5903f80a2116136e4944fc48..f8531e59212cc75f8bc6da76c9481be9
      public final static ConcurrentHashMap<ChunkKey, Runnable> reloadChunks = new ConcurrentHashMap<>();
      private static MultiPaperConnection multiPaperConnection = null;
      private static ExternalServerSocket externalServerSocket = null;
+     private final static List<ChunkHolder> visibleChunksToCheck = new ArrayList<>();
 +    public static boolean levelDatNeedsSaving = false;
  
      public static MultiPaperConnection getConnection() {
          if (multiPaperConnection == null) {
-@@ -127,6 +132,14 @@ public class MultiPaper {
-             entry.getValue().run();
-             return true;
-         });
+@@ -144,6 +149,14 @@ public class MultiPaper {
+                 break;
+             }
+         }
 +
 +        if (levelDatNeedsSaving) {
 +            levelDatNeedsSaving = false;
@@ -118,7 +119,7 @@ index bd81d0c02bca1faa5903f80a2116136e4944fc48..f8531e59212cc75f8bc6da76c9481be9
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -271,6 +284,18 @@ public class MultiPaper {
+@@ -288,6 +301,18 @@ public class MultiPaper {
          writeRegionFile(world, path, cx, cz, nbtToBytes(compoundTag));
      }
  
@@ -138,7 +139,7 @@ index bd81d0c02bca1faa5903f80a2116136e4944fc48..f8531e59212cc75f8bc6da76c9481be9
          do {
              path = path.getParentFile();
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index b0297c5b6bea33d3b1d3cb944e854dcfdbba7520..e9d20e2c370f351af5bb56742c32333d34ab8dd5 100644
+index a239159d27d17fc53bd367c9a34c3bd59705be3e..e5d95f820f4e529026384571154a799f0246d23d 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -333,6 +333,35 @@ public class MultiPaperConnection extends Thread {

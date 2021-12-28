@@ -551,7 +551,7 @@ index ee45bf94ec98d1f26aeb6c7fb0a5056d13ec78e3..620fbf3c4e006395a2354e6b555e5d2d
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 5fb10c2a35342685306d5c64fbd86342072af38b..3e8bd6cfa158043cfb56859c393f1f835a001892 100644
+index 5fb10c2a35342685306d5c64fbd86342072af38b..8cd207acef49e28b0ce879e88710d20fe1eddb5d 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -2,25 +2,46 @@ package puregero.multipaper;
@@ -626,7 +626,7 @@ index 5fb10c2a35342685306d5c64fbd86342072af38b..3e8bd6cfa158043cfb56859c393f1f83
 +        while (!visibleChunksToCheck.isEmpty()) {
 +            ChunkHolder holder = visibleChunksToCheck.remove(visibleChunksToCheck.size() - 1);
 +            if (holder.getAvailableChunkNow() != null) {
-+                getConnection().subscribeChunk(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z);
++                getConnection().syncChunkSubscribers(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z);
 +                break;
 +            }
 +        }
@@ -1019,10 +1019,10 @@ index 0000000000000000000000000000000000000000..b7dccd7a0272b3f6765c9e7ddd282b27
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..a239159d27d17fc53bd367c9a34c3bd59705be3e 100644
+index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..3287ce488700ce67038dcb25e7ae7ff2ada1b505 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -1,16 +1,30 @@
+@@ -1,16 +1,28 @@
  package puregero.multipaper;
  
 +import net.minecraft.core.Registry;
@@ -1035,8 +1035,6 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..a239159d27d17fc53bd367c9a34c3bd5
 +import net.minecraft.world.level.chunk.LevelChunk;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
-+import org.bukkit.Bukkit;
-+import org.bukkit.craftbukkit.CraftWorld;
 +import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
  
  import javax.annotation.Nullable;
@@ -1053,7 +1051,7 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..a239159d27d17fc53bd367c9a34c3bd5
  
  public class MultiPaperConnection extends Thread {
  
-@@ -79,6 +93,17 @@ public class MultiPaperConnection extends Thread {
+@@ -79,6 +91,17 @@ public class MultiPaperConnection extends Thread {
                      }
                  }
  
@@ -1071,7 +1069,7 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..a239159d27d17fc53bd367c9a34c3bd5
                  DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
                  while (!socket.isClosed()) {
                      int id = in.readInt();
-@@ -119,6 +144,57 @@ public class MultiPaperConnection extends Thread {
+@@ -119,6 +142,95 @@ public class MultiPaperConnection extends Thread {
          server.setLastAlive(System.currentTimeMillis());
      }
  
@@ -1101,12 +1099,14 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..a239159d27d17fc53bd367c9a34c3bd5
 +        int cz = in.readInt();
 +        ExternalServer server = getOrCreateServer(in.readUTF());
 +
-+        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
-+        if (chunk instanceof LevelChunk levelChunk) {
-+            levelChunk.externalSubscribers.add(server);
-+        } else {
-+            MultiPaper.chunkSubscribersToSet.computeIfAbsent(new ChunkKey(world, cx, cz), key -> new HashSet<>()).add(server);
-+        }
++        MultiPaper.runSync(() -> {
++            ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
++            if (chunk instanceof LevelChunk levelChunk) {
++                levelChunk.externalSubscribers.add(server);
++            } else {
++                MultiPaper.chunkSubscribersToSet.computeIfAbsent(new ChunkKey(world, cx, cz), key -> new HashSet<>()).add(server);
++            }
++        });
 +    }
 +
 +    public void chunkUnsubscribe(DataInputStream in, DataOutputSender out) throws IOException {
@@ -1115,21 +1115,57 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..a239159d27d17fc53bd367c9a34c3bd5
 +        int cz = in.readInt();
 +        ExternalServer server = getOrCreateServer(in.readUTF());
 +
-+        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
-+        if (chunk instanceof LevelChunk levelChunk) {
-+            levelChunk.externalSubscribers.remove(server);
++        MultiPaper.runSync(() -> {
++            ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
++            if (chunk instanceof LevelChunk levelChunk) {
++                levelChunk.externalSubscribers.remove(server);
++            }
++
++            HashSet<ExternalServer> subscribers = MultiPaper.chunkSubscribersToSet.get(new ChunkKey(world, cx, cz));
++            if (subscribers != null) {
++                subscribers.remove(server);
++            }
++        });
++    }
++
++    public void chunkSubscribeSync(DataInputStream in, DataOutputSender out) throws IOException {
++        String world = in.readUTF();
++        int cx = in.readInt();
++        int cz = in.readInt();
++        String owner = in.readUTF();
++        ExternalServer ownerServer = owner.isEmpty() ? null : getOrCreateServer(owner);
++        int length = in.readInt();
++        HashSet<ExternalServer> servers = new HashSet<>();
++        for (int i = 0; i < length; i++) {
++            servers.add(getOrCreateServer(in.readUTF()));
 +        }
 +
-+        HashSet<ExternalServer> subscribers = MultiPaper.chunkSubscribersToSet.get(new ChunkKey(world, cx, cz));
-+        if (subscribers != null) {
-+            subscribers.remove(server);
-+        }
++        MultiPaper.runSync(() -> {
++            ChunkKey key = new ChunkKey(world, cx, cz);
++
++            MultiPaper.chunkSubscribersToSet.remove(key);
++
++            ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
++            if (chunk instanceof LevelChunk levelChunk) {
++                levelChunk.externalOwner = ownerServer;
++                levelChunk.externalSubscribers.clear();
++                levelChunk.externalSubscribers.addAll(servers);
++            } else {
++                MultiPaper.chunkSubscribersToSet.put(key, servers);
++
++                if (ownerServer == null) {
++                    MultiPaper.chunkOwnerToSet.remove(key);
++                } else {
++                    MultiPaper.chunkOwnerToSet.put(key, ownerServer);
++                }
++            }
++        });
 +    }
 +
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -133,6 +209,24 @@ public class MultiPaperConnection extends Thread {
+@@ -133,6 +245,24 @@ public class MultiPaperConnection extends Thread {
          });
      }
  
@@ -1154,7 +1190,7 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..a239159d27d17fc53bd367c9a34c3bd5
      public void writeTickTime(long time, double tps) throws IOException {
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeTickTime");
-@@ -147,4 +241,146 @@ public class MultiPaperConnection extends Thread {
+@@ -147,4 +277,159 @@ public class MultiPaperConnection extends Thread {
          out.writeInt(port);
          out.send(null);
      }
@@ -1289,6 +1325,19 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..a239159d27d17fc53bd367c9a34c3bd5
 +        out.writeInt(cx);
 +        out.writeInt(cz);
 +        out.send(null);
++    }
++
++    public void syncChunkSubscribers(String world, int cx, int cz) {
++        try {
++            DataOutputSender out = new DataOutputSender(this);
++            out.writeUTF("syncChunkSubscribers");
++            out.writeUTF(world);
++            out.writeInt(cx);
++            out.writeInt(cz);
++            out.send(null);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
 +    }
 +
 +    public void sendChunkChangedStatus(String world, int cx, int cz, String resource) throws IOException {

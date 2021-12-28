@@ -155,8 +155,8 @@ public class ChunkSubscriptionManager {
             }
 
             if (!serverConnections.contains(serverConnection)) {
-                serverConnections.add(serverConnection);
                 updateSubscriberAdd(serverConnections, serverConnection, world, cx, cz);
+                serverConnections.add(serverConnection);
                 subscribedChunks.computeIfAbsent(serverConnection, k -> new HashSet<>()).add(key);
             }
 
@@ -224,6 +224,35 @@ public class ChunkSubscriptionManager {
                     out.writeInt(cx);
                     out.writeInt(cz);
                     out.writeUTF(unsubscriber);
+                    out.send();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+        }
+    }
+
+    public static void syncSubscribers(ServerConnection serverConnection, String world, int cx, int cz) {
+        ChunkKey key = new ChunkKey(world, cx, cz);
+        synchronized (chunkSubscribers) {
+            if (!chunkSubscribers.containsKey(key) || !chunkSubscribers.get(key).contains(serverConnection)) {
+                subscribe(serverConnection, world, cx, cz);
+            }
+
+            ServerConnection[] subscribers = chunkSubscribers.get(key).stream().filter(subscriber -> subscriber != serverConnection).toArray(ServerConnection[]::new);
+
+            CompletableFuture.runAsync(() -> {
+                try {
+                    DataOutputSender out = serverConnection.buffer();
+                    out.writeUTF("chunkSubscribeSync");
+                    out.writeUTF(world);
+                    out.writeInt(cx);
+                    out.writeInt(cz);
+                    out.writeUTF(chunkLocks.get(key) != null && !chunkLocks.get(key).isEmpty() ? chunkLocks.get(key).get(0).getBungeeCordName() : "");
+                    out.writeInt(subscribers.length);
+                    for (ServerConnection subscriber : subscribers) {
+                        out.writeUTF(subscriber.getBungeeCordName());
+                    }
                     out.send();
                 } catch (IOException e) {
                     e.printStackTrace();

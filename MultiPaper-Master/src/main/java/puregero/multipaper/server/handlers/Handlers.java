@@ -16,6 +16,8 @@ public class Handlers {
         handlers.put("subscribeEntities", new SubscribeEntitiesHandler());
         handlers.put("unsubscribeChunk", new UnsubscribeChunkHandler());
         handlers.put("unsubscribeEntities", new UnsubscribeEntitiesHandler());
+        handlers.put("syncChunkSubscribers", new SyncChunkSubscribersHandler());
+        handlers.put("syncEntitiesSubscribers", new SyncEntitiesSubscribersHandler());
         handlers.put("readLevel", new ReadLevelHandler());
         handlers.put("writeLevel", new WriteLevelHandler());
         handlers.put("readJson", new ReadJsonHandler());

@@ -612,15 +612,15 @@ index 620fbf3c4e006395a2354e6b555e5d2dda15f958..a430c81782e6cb9190d4333b2d6a1da7
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index c8774a6518b321b0f79ab3dad3ca135043a364ec..9fe4178c3992318c778fda01db5975406db304d7 100644
+index 15e67db250d05e74e7e5615480f86de736203043..5174362ba8cbed92bf37e2574b0ff9b266719555 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -152,6 +152,9 @@ public class MultiPaper {
              ChunkHolder holder = visibleChunksToCheck.remove(visibleChunksToCheck.size() - 1);
              if (holder.getAvailableChunkNow() != null) {
-                 getConnection().subscribeChunk(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z);
+                 getConnection().syncChunkSubscribers(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z);
 +                if (holder.getWorld().entityManager.areEntitiesLoaded(holder.pos.longKey)) {
-+                    getConnection().subscribeEntities(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z);
++                    getConnection().syncEntitiesSubscribers(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z);
 +                }
                  break;
              }
@@ -647,7 +647,7 @@ index c8774a6518b321b0f79ab3dad3ca135043a364ec..9fe4178c3992318c778fda01db597540
              }
              getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index d6888bc043940e6c8f391bec6b37b9307429139b..52cf9cd99a4625c4b6c4b26934de0db75a75bf52 100644
+index 294f0bf2d7437a74985a3b22380b20c8f5dbecb5..be282a42391efc55692e8707e28cca16f125f877 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -2,10 +2,13 @@ package puregero.multipaper;
@@ -683,8 +683,8 @@ index d6888bc043940e6c8f391bec6b37b9307429139b..52cf9cd99a4625c4b6c4b26934de0db7
                      }
                  }
  
-@@ -249,6 +257,43 @@ public class MultiPaperConnection extends Thread {
-         }
+@@ -287,6 +295,66 @@ public class MultiPaperConnection extends Thread {
+         });
      }
  
 +    public void entitiesSubscribe(DataInputStream in, DataOutputSender out) throws IOException {
@@ -693,21 +693,21 @@ index d6888bc043940e6c8f391bec6b37b9307429139b..52cf9cd99a4625c4b6c4b26934de0db7
 +        int cz = in.readInt();
 +        ExternalServer server = getOrCreateServer(in.readUTF());
 +
-+        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
-+        if (chunk instanceof LevelChunk levelChunk) {
-+            levelChunk.externalEntitiesSubscribers.add(server);
++        MultiPaper.runSync(() -> {
++            ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
++            if (chunk instanceof LevelChunk levelChunk) {
++                levelChunk.externalEntitiesSubscribers.add(server);
 +
-+            MultiPaper.runSync(() -> {
 +                for (Entity entity : levelChunk.level.entityManager.getEntities(chunk.getPos())) {
 +                    if (MultiPaper.isRealPlayer(entity) && entity.getVehicle() != null) {
 +                        server.getConnection().send(new EntityUpdateNBTPacket(entity.getVehicle()));
 +                        server.getConnection().send(new EntityUpdateWithDependenciesPacket(entity.getVehicle(), entity.getVehicle().getPassengers(), new ClientboundSetPassengersPacket(entity.getVehicle())));
 +                    }
 +                }
-+            });
-+        } else {
-+            LOGGER.warn("Received an entities subscribe notification for an unloaded chunk " + world + ";" + cx + ";" + cz);
-+        }
++            } else {
++                LOGGER.warn("Received an entities subscribe notification for an unloaded chunk " + world + ";" + cx + ";" + cz);
++            }
++        });
 +    }
 +
 +    public void entitiesUnsubscribe(DataInputStream in, DataOutputSender out) throws IOException {
@@ -716,18 +716,41 @@ index d6888bc043940e6c8f391bec6b37b9307429139b..52cf9cd99a4625c4b6c4b26934de0db7
 +        int cz = in.readInt();
 +        ExternalServer server = getOrCreateServer(in.readUTF());
 +
-+        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
-+        if (chunk instanceof LevelChunk levelChunk) {
-+            levelChunk.externalEntitiesSubscribers.remove(server);
-+        } else {
-+            LOGGER.warn("Received an entities unsubscribe notification for an unloaded chunk " + world + ";" + cx + ";" + cz);
++        MultiPaper.runSync(() -> {
++            ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
++            if (chunk instanceof LevelChunk levelChunk) {
++                levelChunk.externalEntitiesSubscribers.remove(server);
++            } else {
++                LOGGER.warn("Received an entities unsubscribe notification for an unloaded chunk " + world + ";" + cx + ";" + cz);
++            }
++        });
++    }
++
++    public void entitiesSubscribeSync(DataInputStream in, DataOutputSender out) throws IOException {
++        String world = in.readUTF();
++        int cx = in.readInt();
++        int cz = in.readInt();
++        int length = in.readInt();
++        HashSet<ExternalServer> servers = new HashSet<>();
++        for (int i = 0; i < length; i++) {
++            servers.add(getOrCreateServer(in.readUTF()));
 +        }
++
++        MultiPaper.runSync(() -> {
++            ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
++            if (chunk instanceof LevelChunk levelChunk) {
++                levelChunk.externalEntitiesSubscribers.clear();
++                levelChunk.externalEntitiesSubscribers.addAll(servers);
++            } else {
++                LOGGER.warn("Received an entities subscribe sync notification for an unloaded chunk " + world + ";" + cx + ";" + cz);
++            }
++        });
 +    }
 +
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -352,6 +397,11 @@ public class MultiPaperConnection extends Thread {
+@@ -390,6 +458,11 @@ public class MultiPaperConnection extends Thread {
                          RequestChunkPacket.blocker = null;
                          future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
                      });
@@ -739,7 +762,7 @@ index d6888bc043940e6c8f391bec6b37b9307429139b..52cf9cd99a4625c4b6c4b26934de0db7
                  } else {
                      future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
                  }
-@@ -372,10 +422,13 @@ public class MultiPaperConnection extends Thread {
+@@ -410,10 +483,13 @@ public class MultiPaperConnection extends Thread {
      }
  
      public void writeChunk(String world, String path, int cx, int cz, byte[] data) throws IOException {
@@ -757,7 +780,7 @@ index d6888bc043940e6c8f391bec6b37b9307429139b..52cf9cd99a4625c4b6c4b26934de0db7
  
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeChunk");
-@@ -383,8 +436,8 @@ public class MultiPaperConnection extends Thread {
+@@ -421,8 +497,8 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(path);
          out.writeInt(cx);
          out.writeInt(cz);
@@ -768,7 +791,7 @@ index d6888bc043940e6c8f391bec6b37b9307429139b..52cf9cd99a4625c4b6c4b26934de0db7
          out.send(in -> { /* Do nothing */ });
      }
      
-@@ -643,4 +696,26 @@ public class MultiPaperConnection extends Thread {
+@@ -694,4 +770,39 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(resource);
          out.send(null);
      }
@@ -793,6 +816,19 @@ index d6888bc043940e6c8f391bec6b37b9307429139b..52cf9cd99a4625c4b6c4b26934de0db7
 +        out.writeInt(cx);
 +        out.writeInt(cz);
 +        out.send(null);
++    }
++
++    public void syncEntitiesSubscribers(String world, int cx, int cz) {
++        try {
++            DataOutputSender out = new DataOutputSender(this);
++            out.writeUTF("syncEntitiesSubscribers");
++            out.writeUTF(world);
++            out.writeInt(cx);
++            out.writeInt(cz);
++            out.send(null);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java

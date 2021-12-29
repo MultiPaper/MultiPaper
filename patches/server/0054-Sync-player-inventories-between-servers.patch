@@ -25,7 +25,7 @@ index ec71daaddd359276db1d16abcbeb93da6fc3cfdb..9ef56fc6f3322144bf171206b42ebb76
      public boolean wonGame;
      private int containerUpdateDelay; // Paper
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 2194ac8066f8093b905e88c1782b5e99aa16282e..46060a0036bca2d31aabbb2331f6c594a3dfd669 100644
+index 2194ac8066f8093b905e88c1782b5e99aa16282e..eee573797e16c7a0284a5c59e992f17327029b18 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -214,6 +214,7 @@ import org.bukkit.inventory.SmithingInventory;
@@ -110,7 +110,15 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..46060a0036bca2d31aabbb2331f6c594
          if (this.player.isImmobile()) return; // CraftBukkit
          this.player.resetLastActionTime();
          if (this.player.containerMenu.containerId == packet.getContainerId() && this.player.containerMenu.stillValid(this.player)) { // CraftBukkit
-@@ -2929,6 +2941,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2904,6 +2916,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+ 
+     @Override
+     public void handlePlaceRecipe(ServerboundPlaceRecipePacket packet) {
++        if (MultiPaperInventoryHandler.handleContainerEvent(this.player, packet)) return; // MultiPaper
+         // Paper start
+         if (!org.bukkit.Bukkit.isPrimaryThread()) {
+             if (recipeSpamPackets.addAndGet(com.destroystokyo.paper.PaperConfig.autoRecipeIncrement) > com.destroystokyo.paper.PaperConfig.autoRecipeLimit) {
+@@ -2929,6 +2942,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleContainerButtonClick(ServerboundContainerButtonClickPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -118,6 +126,18 @@ index 2194ac8066f8093b905e88c1782b5e99aa16282e..46060a0036bca2d31aabbb2331f6c594
          if (this.player.isImmobile()) return; // CraftBukkit
          this.player.resetLastActionTime();
          if (this.player.containerMenu.containerId == packet.getContainerId() && !this.player.isSpectator()) {
+diff --git a/src/main/java/net/minecraft/stats/RecipeBook.java b/src/main/java/net/minecraft/stats/RecipeBook.java
+index 87167f16fa9dedf19abefe38864498edb0c40a1d..8fb5f47a1ffeb248266e6bfa12a26a1bc8a8ad0f 100644
+--- a/src/main/java/net/minecraft/stats/RecipeBook.java
++++ b/src/main/java/net/minecraft/stats/RecipeBook.java
+@@ -33,6 +33,7 @@ public class RecipeBook {
+     }
+ 
+     public boolean contains(@Nullable Recipe<?> recipe) {
++        if (recipe != null) return true; // MultiPaper - who cares if they use a recipe that they don't have, no point trying to sync this between servers
+         return recipe == null ? false : this.known.contains(recipe.getId());
+     }
+ 
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
 index 7a1bec43df6711cb797960b69e20a744c44c36e2..e025c01f54381ba0b77b056b7cd6bdae4aa909de 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
@@ -351,7 +371,7 @@ index 75609c1074a45f20137ef1bb3d6bae9c96a61618..0e7172bb8d8024541662644ee5a0d0ea
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 741a41c9984889de0b0dd895a00f8d5bb1d1d0e6..fc66d37b8865391df0384c4093553425e9b20d23 100644
+index c53d89f9adea1c20ca34aa594b6e522764a774c6..9c3773b8881992ef401601680df45da3e56f45f5 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -4,6 +4,7 @@ import org.bukkit.configuration.InvalidConfigurationException;

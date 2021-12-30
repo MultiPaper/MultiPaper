@@ -5,7 +5,7 @@ Subject: [PATCH] Sync player inventories between servers
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index ec71daaddd359276db1d16abcbeb93da6fc3cfdb..9ef56fc6f3322144bf171206b42ebb76e0d08d0d 100644
+index baa2053f7a5570df1587792f7d5875fa11fff67c..ab4e4cafae6a52baff33bfa0790a1d7b446ca100 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -164,6 +164,7 @@ import org.bukkit.event.player.PlayerPortalEvent;
@@ -371,7 +371,7 @@ index 75609c1074a45f20137ef1bb3d6bae9c96a61618..0e7172bb8d8024541662644ee5a0d0ea
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 3a34befb232e09e95932b39d42aacfb7724c002f..71b27af1ac9cbf5d2ea117fb6f4217cafae2f0c9 100644
+index 406f443f5e0b985ec4af555dfec19d7ea997c8d1..12bb3e83f0306e3d00322aa08f0d0ba9143ebf3c 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -4,6 +4,7 @@ import org.bukkit.configuration.InvalidConfigurationException;
@@ -414,25 +414,21 @@ index 3a34befb232e09e95932b39d42aacfb7724c002f..71b27af1ac9cbf5d2ea117fb6f4217ca
      public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
          if (compoundTag == null) {
              return new byte[0];
-@@ -501,4 +511,12 @@ public class MultiPaper {
+@@ -501,4 +511,8 @@ public class MultiPaper {
              e.printStackTrace();
          };
      }
 +
 +    public static void broadcastPlayerAction(ServerPlayer player, ServerboundSetCarriedItemPacket packet) {
-+        getConnection().getServersMap().values().forEach(externalServer -> {
-+            if (externalServer.getConnection() != null) {
-+                externalServer.getConnection().send(new PlayerActionPacket(player, packet));
-+            }
-+        });
++        broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4d9efd6b6dd6f17a0334304f7f39714cdf11fc45
+index 0000000000000000000000000000000000000000..9a816f371e3cd95d8e9df2f3c694c882c117f045
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-@@ -0,0 +1,211 @@
+@@ -0,0 +1,207 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -585,11 +581,7 @@ index 0000000000000000000000000000000000000000..4d9efd6b6dd6f17a0334304f7f39714c
 +                if (!items.isEmpty()) {
 +                    CompoundTag itemsRoot = new CompoundTag();
 +                    itemsRoot.put("items", items);
-+                    for (ExternalServer externalServer : MultiPaper.getConnection().getServersMap().values()) {
-+                        if (externalServer.getConnection() != null) {
-+                            externalServer.getConnection().send(new PlayerInventoryUpdatePacket((ServerPlayer) inventoryComponent.player, inventoryComponent.name, itemsRoot));
-+                        }
-+                    }
++                    MultiPaper.broadcastPacketToExternalServers(inventoryComponent.player.level.getWorld().getName(), new PlayerInventoryUpdatePacket((ServerPlayer) inventoryComponent.player, inventoryComponent.name, itemsRoot));
 +                }
 +            }
 +        }

@@ -18,7 +18,7 @@ index 17ebc0ac3d4c91d6818c79e8821681b668bd95c6..e0dc397e12c8e1a07e50102f08bb248b
                  metrics.addCustomChart(new Metrics.SimplePie("multipaper_version", () -> (Metrics.class.getPackage().getImplementationVersion() != null) ? Metrics.class.getPackage().getImplementationVersion() : "unknown")); // Tuinity - we have our own bstats page // Airplane // MultiPaper
                  metrics.addCustomChart(new Metrics.SimplePie("total_servers", () -> String.valueOf(MultiPaper.getConnection().getServersMap().values().stream().filter(ExternalServer::isAlive).count()))); // MultiPaper
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 7b23535a680d2a8534dcb8dd87770f66fb982c13..ec71daaddd359276db1d16abcbeb93da6fc3cfdb 100644
+index 7b23535a680d2a8534dcb8dd87770f66fb982c13..baa2053f7a5570df1587792f7d5875fa11fff67c 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -164,6 +164,11 @@ import org.bukkit.event.player.PlayerPortalEvent;
@@ -40,7 +40,7 @@ index 7b23535a680d2a8534dcb8dd87770f66fb982c13..ec71daaddd359276db1d16abcbeb93da
 +            // MultiPaper start
 +            ServerLevel destination = worldserver;
 +            MultiPaper.forEachExternalServer(externalServer -> {
-+                if (externalServer.getConnection() != null) {
++                if (externalServer.getConnection() != null && externalServer.getConnection().isOpen()) {
 +                    boolean subscribedToSoruce = externalServer.getConnection().subscribedWorlds.contains(worldserver1.getWorld().getName());
 +                    boolean subscribedToDestination = externalServer.getConnection().subscribedWorlds.contains(destination.getWorld().getName());
 +
@@ -89,7 +89,7 @@ index 057fcbc389e54e0c9f7a90a3e8b965cd46db9d58..2194ac8066f8093b905e88c1782b5e99
              // Paper end
          }
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 042be2cf60a9d01698808d84f2e537a5eb952079..1265f20eb615b6c2cdd541faf4a0ea3f2d43fe23 100644
+index 042be2cf60a9d01698808d84f2e537a5eb952079..8a7acc5f3441dcbee659439f1aba506ff13f7ed0 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -13,14 +13,7 @@ import java.io.File;
@@ -167,7 +167,7 @@ index 042be2cf60a9d01698808d84f2e537a5eb952079..1265f20eb615b6c2cdd541faf4a0ea3f
 +
 +        // MultiPaper start
 +        MultiPaper.forEachExternalServer(externalServer -> {
-+            if (externalServer.getConnection() != null) {
++            if (externalServer.getConnection() != null && externalServer.getConnection().isOpen()) {
 +                boolean subscribedToSoruce = externalServer.getConnection().subscribedWorlds.contains(fromWorld.getName());
 +                boolean subscribedToDestination = externalServer.getConnection().subscribedWorlds.contains(worldserver1.getWorld().getName());
 +
@@ -289,7 +289,7 @@ index 0000000000000000000000000000000000000000..ec509a18e6cc9937f1216b38f0f4c3f3
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index d0680711427b1eb9653e44ec045f865f160fe27e..4f7f4f8788907f1b4b749609f53d66bf646756e6 100644
+index 806079a0a930f0f6ab4fb3523912cbb4ed2e5c65..e7793a1b97be384917d9117e77b4a7996118cb41 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -1,6 +1,8 @@
@@ -301,7 +301,7 @@ index d0680711427b1eb9653e44ec045f865f160fe27e..4f7f4f8788907f1b4b749609f53d66bf
  import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
  import puregero.multipaper.externalserverprotocol.ExternalServerPacketSerializer;
  import puregero.multipaper.externalserverprotocol.HelloPacket;
-@@ -72,6 +74,12 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -76,6 +78,12 @@ public class ExternalServerConnection extends Thread implements Closeable {
          }
  
          sendThread.shutdown();
@@ -315,7 +315,7 @@ index d0680711427b1eb9653e44ec045f865f160fe27e..4f7f4f8788907f1b4b749609f53d66bf
  
      public void send(ExternalServerPacket packet) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 805ca6860b866fe910bcf6589f6e489a74535057..2ca7ed1bc3b2cb28144b92be423b18d6bc1ace49 100644
+index e6052eeb92d5af22938dc239ef7be0a267ea7cda..d75aad7a40462e5eee8ebf6a09dfdc23b9e63cde 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -3,7 +3,12 @@ package puregero.multipaper;
@@ -361,7 +361,7 @@ index 805ca6860b866fe910bcf6589f6e489a74535057..2ca7ed1bc3b2cb28144b92be423b18d6
 +
 +    public static void onPlayerJoin(ServerPlayer player) {
 +        forEachExternalServer(externalServer -> {
-+            if (externalServer.getConnection() != null && externalServer.getConnection().subscribedWorlds.contains(player.getLevel().getWorld().getName())) {
++            if (externalServer.getConnection() != null && externalServer.getConnection().isOpen() && externalServer.getConnection().subscribedWorlds.contains(player.getLevel().getWorld().getName())) {
 +                PlayerCreatePacket.sendPlayer(externalServer.getConnection(), player);
 +            }
 +        });

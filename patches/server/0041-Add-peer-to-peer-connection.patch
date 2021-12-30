@@ -73,10 +73,10 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..aed33f883dff71c0aa8ae5c538d8f6dd3c0ff516
+index 0000000000000000000000000000000000000000..f579860e8f1a4222cd45dc90cfc846f234d89e7d
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,97 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.server.MinecraftServer;
@@ -109,6 +109,10 @@ index 0000000000000000000000000000000000000000..aed33f883dff71c0aa8ae5c538d8f6dd
 +    @Override
 +    public void close() throws IOException {
 +        socket.close();
++    }
++
++    public boolean isOpen() {
++        return !socket.isClosed();
 +    }
 +
 +    @Override
@@ -218,7 +222,7 @@ index 0000000000000000000000000000000000000000..52ff011d8ce356a407f38502eb828e24
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 7c34a6624baa715409538d57a02672e70bd42d48..1a78a66bba0d8e34d2ea692df7e298a634c339c7 100644
+index 7c34a6624baa715409538d57a02672e70bd42d48..8da5b18aef1c16fa3293d32b8263d7500b5a0304 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -2,13 +2,19 @@ package puregero.multipaper;
@@ -304,7 +308,7 @@ index 7c34a6624baa715409538d57a02672e70bd42d48..1a78a66bba0d8e34d2ea692df7e298a6
 +        if (!externalServers.isEmpty()) {
 +            ExternalServerPacket packet = generatePacketIfNeeded.get();
 +            externalServers.forEach(externalServer -> {
-+                if (externalServer.getConnection() != null) {
++                if (externalServer.getConnection() != null && externalServer.getConnection().isOpen()) {
 +                    externalServer.getConnection().send(packet);
 +                }
 +            });

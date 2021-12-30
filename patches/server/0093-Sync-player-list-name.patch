@@ -1,0 +1,95 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 30 Dec 2021 22:43:43 +1000
+Subject: [PATCH] Sync player list name
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index 36faf2d1ac58b61f482a1f93d40d097469ed2acf..891e8995e0d73515a391b8060909a1ce051a782f 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -141,6 +141,7 @@ import org.jetbrains.annotations.NotNull;
+ import net.md_5.bungee.api.chat.BaseComponent; // Spigot
+ import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.externalserverprotocol.PlayerDataUpdatePacket;
++import puregero.multipaper.externalserverprotocol.PlayerListNameUpdatePacket;
+ 
+ @DelegateDeserialization(CraftOfflinePlayer.class)
+ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -413,6 +414,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+                 player.connection.send(new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.UPDATE_DISPLAY_NAME, getHandle()));
+             }
+         }
++        MultiPaper.broadcastPacketToExternalServers(getWorld().getName(), new PlayerListNameUpdatePacket(getHandle())); // MultiPaper
+     }
+     @Override
+     public net.kyori.adventure.text.Component playerListName() {
+@@ -443,6 +445,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+                 player.connection.send(new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.UPDATE_DISPLAY_NAME, this.getHandle()));
+             }
+         }
++        MultiPaper.broadcastPacketToExternalServers(getWorld().getName(), new PlayerListNameUpdatePacket(getHandle())); // MultiPaper
+     }
+ 
+     private net.kyori.adventure.text.Component playerListHeader; // Paper - Adventure
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+index 20e5c37e9b5a500281e8c23f4fce302ea117b378..193bc5592e22a68ebbecb5db9cb2a9c21ab529dc 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+@@ -113,6 +113,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+         connection.send(new SendPacketPacket(player, new ClientboundSetCarriedItemPacket(player.getInventory().selected)));
+         connection.send(new EntityUpdatePacket(player, new ClientboundSetEntityDataPacket(player.getId(), player.getEntityData(), true)));
+         connection.send(new PlayerFoodUpdatePacket(player));
++        connection.send(new PlayerListNameUpdatePacket(player));
+ 
+         MultiPaperInventoryHandler.sendFullInventoryUpdate(connection, player);
+         MultiPaperEnderChestHandler.sendFullEnderChestUpdate(connection, player);
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..937028bed949bdb3b238ea139abaebb0d6d2d2ea
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java
+@@ -0,0 +1,43 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.chat.Component;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.UUID;
++
++public class PlayerListNameUpdatePacket extends ExternalServerPacket {
++
++    private final UUID uuid;
++    private final Component listName;
++
++    public PlayerListNameUpdatePacket(ServerPlayer player) {
++        this.uuid = player.getUUID();
++        this.listName = player.listName;
++    }
++
++    public PlayerListNameUpdatePacket(DataInputStream in) throws IOException {
++        uuid = readUUID(in);
++        listName = Component.Serializer.fromJson(in.readUTF());
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        writeUUID(out, uuid);
++        out.writeUTF(Component.Serializer.toJson(listName));
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            player.listName = listName;
++        });
++    }
++}

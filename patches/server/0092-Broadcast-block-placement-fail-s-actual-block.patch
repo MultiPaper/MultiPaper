@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 30 Dec 2021 15:09:05 +1000
+Subject: [PATCH] Broadcast block placement fail's actual block
+
+
+diff --git a/src/main/java/net/minecraft/world/item/BlockItem.java b/src/main/java/net/minecraft/world/item/BlockItem.java
+index 8175bb6331727440da2232998bdad068a1c47ae8..2f386151510995b91e1c757dfaae2fb74bca3857 100644
+--- a/src/main/java/net/minecraft/world/item/BlockItem.java
++++ b/src/main/java/net/minecraft/world/item/BlockItem.java
+@@ -13,6 +13,7 @@ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.nbt.ListTag;
+ import net.minecraft.network.chat.Component;
+ import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ChunkHolder;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.sounds.SoundEvent;
+@@ -21,6 +22,7 @@ import net.minecraft.world.entity.item.ItemEntity;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.context.BlockPlaceContext;
+ import net.minecraft.world.item.context.UseOnContext;
++import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.ShulkerBoxBlock;
+@@ -65,6 +67,12 @@ public class BlockItem extends Item {
+ 
+     public InteractionResult place(BlockPlaceContext context) {
+         if (!context.canPlace()) {
++            // MultiPaper - broadcast block change to other servers as they may be out of sync
++            ChunkHolder holder = ((ServerLevel) context.getLevel()).chunkSource.chunkMap.getVisibleChunkIfPresent(new ChunkPos(context.getClickedPos()).longKey);
++            if (holder != null) {
++                holder.blockChanged(context.getClickedPos());
++            }
++            // MultiPaper - broadcast block change to other servers as they may be out of sync
+             return InteractionResult.FAIL;
+         } else {
+             BlockPlaceContext blockactioncontext1 = this.updatePlacementContext(context);

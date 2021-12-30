@@ -5,7 +5,7 @@ Subject: [PATCH] Sync hunger
 
 
 diff --git a/src/main/java/net/minecraft/world/food/FoodData.java b/src/main/java/net/minecraft/world/food/FoodData.java
-index 2934b6de1f1fb914a532ee20184df99d1acd8e65..d12e8b20e3b305569c2fd57b2dbe3951c0522697 100644
+index 2934b6de1f1fb914a532ee20184df99d1acd8e65..386e34ab182f2966cd1570160707c1eed17df1f4 100644
 --- a/src/main/java/net/minecraft/world/food/FoodData.java
 +++ b/src/main/java/net/minecraft/world/food/FoodData.java
 @@ -9,6 +9,8 @@ import net.minecraft.world.entity.player.Player;
@@ -21,7 +21,7 @@ index 2934b6de1f1fb914a532ee20184df99d1acd8e65..d12e8b20e3b305569c2fd57b2dbe3951
      public void eat(int food, float saturationModifier) {
          this.foodLevel = Math.min(food + this.foodLevel, 20);
          this.saturationLevel = Math.min(this.saturationLevel + (float) food * saturationModifier * 2.0F, (float) this.foodLevel);
-+        MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
++        MultiPaper.broadcastPacketToExternalServers((ServerPlayer) entityhuman, new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
      }
  
      public void eat(Item item, ItemStack stack) {
@@ -29,14 +29,14 @@ index 2934b6de1f1fb914a532ee20184df99d1acd8e65..d12e8b20e3b305569c2fd57b2dbe3951
              this.exhaustionLevel -= 4.0F;
              if (this.saturationLevel > 0.0F) {
                  this.saturationLevel = Math.max(this.saturationLevel - 1.0F, 0.0F);
-+                MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
++                MultiPaper.broadcastPacketToExternalServers((ServerPlayer) entityhuman, new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
              } else if (enumdifficulty != Difficulty.PEACEFUL) {
                  // CraftBukkit start
                  org.bukkit.event.entity.FoodLevelChangeEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callFoodLevelChangeEvent(player, Math.max(this.foodLevel - 1, 0));
  
                  if (!event.isCancelled()) {
                      this.foodLevel = event.getFoodLevel();
-+                    MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
++                    MultiPaper.broadcastPacketToExternalServers((ServerPlayer) entityhuman, new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
                  }
  
                  ((ServerPlayer) player).connection.send(new ClientboundSetHealthPacket(((ServerPlayer) player).getBukkitEntity().getScaledHealth(), this.foodLevel, this.saturationLevel));
@@ -44,17 +44,17 @@ index 2934b6de1f1fb914a532ee20184df99d1acd8e65..d12e8b20e3b305569c2fd57b2dbe3951
  
      public void setFoodLevel(int foodLevel) {
          this.foodLevel = foodLevel;
-+        MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
++        MultiPaper.broadcastPacketToExternalServers((ServerPlayer) entityhuman, new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
      }
  
      public void setSaturation(float saturationLevel) {
          this.saturationLevel = saturationLevel;
-+        MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
++        MultiPaper.broadcastPacketToExternalServers((ServerPlayer) entityhuman, new PlayerFoodUpdatePacket(entityhuman)); // MultiPaper
      }
  
      public void setExhaustion(float exhaustion) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
-index b39117c4505926da0be9c8248964a233393e8e2d..c452146b05dc4ebd17654a8c49c8fb396db5246c 100644
+index b39117c4505926da0be9c8248964a233393e8e2d..8e972c5fa65c4a09c88a284b66cfe2ffcd34bb39 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
 @@ -62,6 +62,8 @@ import org.bukkit.permissions.Permission;
@@ -70,7 +70,7 @@ index b39117c4505926da0be9c8248964a233393e8e2d..c452146b05dc4ebd17654a8c49c8fb39
      @Override
      public void setSaturation(float value) {
          this.getHandle().getFoodData().saturationLevel = value;
-+        MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(getHandle())); // MultiPaper
++        MultiPaper.broadcastPacketToExternalServers((ServerPlayer) getHandle(), new PlayerFoodUpdatePacket(getHandle())); // MultiPaper
      }
  
      @Override
@@ -78,7 +78,7 @@ index b39117c4505926da0be9c8248964a233393e8e2d..c452146b05dc4ebd17654a8c49c8fb39
      @Override
      public void setFoodLevel(int value) {
          this.getHandle().getFoodData().foodLevel = value;
-+        MultiPaper.broadcastPacketToExternalServers(new PlayerFoodUpdatePacket(getHandle())); // MultiPaper
++        MultiPaper.broadcastPacketToExternalServers((ServerPlayer) getHandle(), new PlayerFoodUpdatePacket(getHandle())); // MultiPaper
      }
  
      @Override

@@ -550,10 +550,10 @@ index ee45bf94ec98d1f26aeb6c7fb0a5056d13ec78e3..620fbf3c4e006395a2354e6b555e5d2d
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 5fb10c2a35342685306d5c64fbd86342072af38b..e40f134bae7dcd6291c294cc2091c6b3a90d5a9b 100644
+index 5fb10c2a35342685306d5c64fbd86342072af38b..964702bf5a35b60405b2c6f42b170b1f3e0b7a5c 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -2,25 +2,46 @@ package puregero.multipaper;
+@@ -2,25 +2,48 @@ package puregero.multipaper;
  
  import org.bukkit.configuration.InvalidConfigurationException;
  import org.bukkit.configuration.file.YamlConfiguration;
@@ -590,6 +590,8 @@ index 5fb10c2a35342685306d5c64fbd86342072af38b..e40f134bae7dcd6291c294cc2091c6b3
 +import java.util.HashSet;
 +import java.util.List;
 +import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.TimeoutException;
  import java.util.function.Consumer;
  import java.util.function.Supplier;
 +import java.util.zip.DeflaterOutputStream;
@@ -606,7 +608,7 @@ index 5fb10c2a35342685306d5c64fbd86342072af38b..e40f134bae7dcd6291c294cc2091c6b3
  
      public static MultiPaperConnection getConnection() {
          if (multiPaperConnection == null) {
-@@ -104,6 +125,25 @@ public class MultiPaper {
+@@ -104,6 +127,25 @@ public class MultiPaper {
                  server.getConnection().tick();
              }
          }
@@ -632,7 +634,7 @@ index 5fb10c2a35342685306d5c64fbd86342072af38b..e40f134bae7dcd6291c294cc2091c6b3
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -189,4 +229,161 @@ public class MultiPaper {
+@@ -189,4 +231,168 @@ public class MultiPaper {
      public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
          return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
      }
@@ -662,7 +664,14 @@ index 5fb10c2a35342685306d5c64fbd86342072af38b..e40f134bae7dcd6291c294cc2091c6b3
 +    }
 +
 +    public static DataInput readRegionFile(String world, String path, int cx, int cz) throws IOException {
-+        return getConnection().readChunk(world, path, cx, cz).join();
++        try {
++            return getConnection().readChunk(world, path, cx, cz).get(15, TimeUnit.SECONDS);
++        } catch (TimeoutException timeoutException) {
++            LOGGER.warn("Timed out reading " + world + "," + path + "," + cx + "," + cz + ", retrying...");
++            return readRegionFile(world, path, cx, cz);
++        } catch (Exception e) {
++            throw new RuntimeException(e);
++        }
 +    }
 +
 +    public static void writeRegionFile(String world, String path, int cx, int cz, byte[] bytes) throws IOException {

@@ -280,18 +280,19 @@ index 72e490578d6c2c75684d1e7320e39b5012d11540..530bc07a42a2b57f0cc141ef5302d15f
          ClientboundPlayerInfoPacket packet = new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.ADD_PLAYER, player);
  
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index e025c01f54381ba0b77b056b7cd6bdae4aa909de..22184848bfe9205725000eb654ed88986dd3e6b1 100644
+index e025c01f54381ba0b77b056b7cd6bdae4aa909de..8023d26b4b6c08a97b34a0d46f06ebcc5e4481a6 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -140,6 +140,7 @@ import org.bukkit.event.entity.EntityPoseChangeEvent;
+@@ -140,6 +140,8 @@ import org.bukkit.event.entity.EntityPoseChangeEvent;
  import org.bukkit.event.player.PlayerTeleportEvent;
  import org.bukkit.plugin.PluginManager;
  import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
++import puregero.multipaper.externalserverprotocol.EntityRemovePacket;
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource, io.papermc.paper.util.KeyedObject { // Paper
-@@ -4144,6 +4145,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4144,6 +4146,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
              int j = Mth.floor(y);
              int k = Mth.floor(z);
  
@@ -302,16 +303,17 @@ index e025c01f54381ba0b77b056b7cd6bdae4aa909de..22184848bfe9205725000eb654ed8898
              if (i != this.blockPosition.getX() || j != this.blockPosition.getY() || k != this.blockPosition.getZ()) {
                  this.blockPosition = new BlockPos(i, j, k);
                  this.feetBlockState = null;
-@@ -4236,6 +4241,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4236,6 +4242,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
  
      @Override
      public void setRemoved(Entity.RemovalReason reason) {
 +        MultiPaperEntitiesHandler.onEntityRemove(this, reason); // MultiPaper
++        EntityRemovePacket.setEntityRemoved(this.getUUID()); // MultiPaper
 +
          if (this.removalReason == null) {
              this.removalReason = reason;
          }
-@@ -4259,7 +4266,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4259,7 +4268,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
  
      @Override
      public boolean shouldBeSaved() {
@@ -414,10 +416,10 @@ index c7216cf3317cbd49b032c44feb370c50928dd21e..29cccfa81f57adeb3d1de10019c896ac
          try { // Paper
          int attempts = 0; Exception laste = null; while (attempts++ < 5) { try { // Paper
 diff --git a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-index bd7967680d7a75caff98a827895c795f2d101f99..f8b30b4e9c200c1e22d66bb2237beb9e35a2e99e 100644
+index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee9717488c640 100644
 --- a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 +++ b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-@@ -25,15 +25,21 @@ import java.util.stream.Stream;
+@@ -25,15 +25,20 @@ import java.util.stream.Stream;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.SectionPos;
  import net.minecraft.server.level.ChunkHolder;
@@ -434,12 +436,11 @@ index bd7967680d7a75caff98a827895c795f2d101f99..f8b30b4e9c200c1e22d66bb2237beb9e
  import org.bukkit.craftbukkit.event.CraftEventFactory;
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
-+import puregero.multipaper.externalserverprotocol.EntityRemovePacket;
 +import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
  // CraftBukkit end
  
  public class PersistentEntitySectionManager<T extends EntityAccess> implements AutoCloseable {
-@@ -46,9 +52,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -46,9 +51,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
      final EntitySectionStorage<T> sectionStorage;
      private final LevelEntityGetter<T> entityGetter;
      private final Long2ObjectMap<Visibility> chunkVisibility = new Long2ObjectOpenHashMap();
@@ -451,7 +452,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..f8b30b4e9c200c1e22d66bb2237beb9e
      public final io.papermc.paper.world.EntitySliceManager entitySliceManager; // Paper
  
      public PersistentEntitySectionManager(Class<T> entityClass, LevelCallback<T> handler, EntityPersistentStorage<T> dataAccess, io.papermc.paper.world.EntitySliceManager entitySliceManager) { // Paper
-@@ -347,6 +353,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -347,6 +352,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
  
      private boolean processChunkUnload(long chunkPos) {
          org.spigotmc.AsyncCatcher.catchOp("Entity chunk unload process"); // Paper
@@ -466,15 +467,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..f8b30b4e9c200c1e22d66bb2237beb9e
          boolean flag = this.storeChunkSections(chunkPos, (entityaccess) -> {
              entityaccess.getPassengersAndSelf().forEach(this::unloadEntity);
          }, true); // CraftBukkit - add boolean for event call
-@@ -362,6 +376,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
-     private void unloadEntity(EntityAccess entity) {
-         entity.setRemoved(Entity.RemovalReason.UNLOADED_TO_CHUNK);
-         entity.setLevelCallback(EntityInLevelCallback.NULL);
-+        EntityRemovePacket.setEntityRemoved(entity.getUUID()); // MultiPaper
-     }
- 
-     private void processUnloads() {
-@@ -375,6 +390,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -375,6 +388,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          ChunkEntities<T> chunkentities; // CraftBukkit - decompile error
  
          while ((chunkentities = (ChunkEntities) this.loadingInbox.poll()) != null) {
@@ -484,7 +477,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..f8b30b4e9c200c1e22d66bb2237beb9e
              chunkentities.getEntities().forEach((entityaccess) -> {
                  this.addEntity(entityaccess, true);
              });
-@@ -383,6 +401,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -383,6 +399,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
              List<Entity> entities = this.getEntities(chunkentities.getPos());
              CraftEventFactory.callEntitiesLoadEvent(((EntityStorage) this.permanentStorage).level, chunkentities.getPos(), entities);
              // CraftBukkit end
@@ -499,7 +492,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..f8b30b4e9c200c1e22d66bb2237beb9e
          }
  
      }
-@@ -507,7 +533,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -507,7 +531,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          return i + "," + this.visibleEntityStorage.count() + "," + this.sectionStorage.count() + "," + this.chunkLoadStatuses.size() + "," + this.chunkVisibility.size() + "," + this.loadingInbox.size() + "," + this.chunksToUnload.size();
      }
  

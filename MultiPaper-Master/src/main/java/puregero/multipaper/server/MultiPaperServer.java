@@ -22,9 +22,13 @@ public class MultiPaperServer extends Thread {
     }
 
     private ServerSocket serverSocket;
+    private HeartbeatThread heartbeatThread;
 
     public MultiPaperServer(int port) throws IOException {
         serverSocket = new ServerSocket(port);
+
+        heartbeatThread = new HeartbeatThread();
+        heartbeatThread.start();
 
         System.out.println("[MultiPaperServer] Listening on " + serverSocket.getLocalSocketAddress());
     }
@@ -40,6 +44,8 @@ public class MultiPaperServer extends Thread {
     }
 
     public void close() {
+        heartbeatThread.stopped = true;
+
         try {
             serverSocket.close();
         } catch (Exception e) {

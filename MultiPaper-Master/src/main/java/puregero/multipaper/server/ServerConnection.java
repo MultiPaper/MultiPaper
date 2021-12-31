@@ -1,5 +1,6 @@
 package puregero.multipaper.server;
 
+import org.jetbrains.annotations.Nullable;
 import puregero.multipaper.server.handlers.Handler;
 import puregero.multipaper.server.handlers.Handlers;
 
@@ -7,6 +8,7 @@ import java.io.*;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -15,20 +17,19 @@ public class ServerConnection extends Thread {
 
     private String name;
     private long lastPing = System.currentTimeMillis();
-    private CircularTimer timer = new CircularTimer();
-    private Map<Integer, Consumer<DataInputStream>> callbacks = new ConcurrentHashMap<>();
-    private List<Player> players = new ArrayList<>();
+    private final CircularTimer timer = new CircularTimer();
+    private final Map<Integer, Consumer<DataInputStream>> callbacks = new ConcurrentHashMap<>();
+    private final List<Player> players = new ArrayList<>();
     private double tps;
-
-    public HashSet<String> loadedChunks = new HashSet<>();
+    @Nullable private CompletableFuture<Long> onTickFinish;
 
     /**
      * This connection map may include dead servers! Check if a server is alive
      * with `connections` before trying to send any data!
      */
-    private static Map<String, ServerConnection> connectionMap = new ConcurrentHashMap<>();
+    private static final Map<String, ServerConnection> connectionMap = new ConcurrentHashMap<>();
 
-    private static List<ServerConnection> connections = new ArrayList<>();
+    private static final List<ServerConnection> connections = new ArrayList<>();
 
     public ServerConnection(Socket socket) {
         this.socket = socket;
@@ -76,7 +77,7 @@ public class ServerConnection extends Thread {
         return new DataOutputSender(this, id);
     }
 
-    public DataOutputStream broadcastAll() {
+    public static DataOutputStream broadcastAll() {
         return new DataOutputStream(new ByteArrayOutputStream() {
             @Override
             public void close() {
@@ -119,8 +120,10 @@ public class ServerConnection extends Thread {
 
             name = in.readUTF();
 
-            connections.add(this);
-            connectionMap.put(name, this);
+            synchronized (connections) {
+                connections.add(this);
+                connectionMap.put(name, this);
+            }
 
             System.out.println("Connection from " + socket.getRemoteSocketAddress() + " (" + name + ")");
 
@@ -158,7 +161,12 @@ public class ServerConnection extends Thread {
         EntitiesSubscriptionManager.unsubscribeAll(this);
         ChunkSubscriptionManager.unsubscribeAndUnlockAll(this);
 
-        connections.remove(this);
+        synchronized (connections) {
+            connections.remove(this);
+        }
+
+        finishTick(-1);
+
         System.out.println(socket.getRemoteSocketAddress() + " (" + name + ") closed");
     }
 
@@ -188,5 +196,17 @@ public class ServerConnection extends Thread {
 
     public SocketAddress getAddress() {
         return socket.getRemoteSocketAddress();
+    }
+
+    public void setOnTickFinish(@Nullable CompletableFuture<Long> onTickFinish) {
+        this.onTickFinish = onTickFinish;
+    }
+
+    public void finishTick(long tickTime) {
+        CompletableFuture<Long> onTickFinish = this.onTickFinish;
+
+        if (onTickFinish != null) {
+            onTickFinish.complete(tickTime);
+        }
     }
 }

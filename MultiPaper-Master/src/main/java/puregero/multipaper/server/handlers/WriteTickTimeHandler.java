@@ -17,6 +17,8 @@ public class WriteTickTimeHandler implements Handler {
         long tickTime = in.readLong();
         float tps = in.readFloat();
 
+        connection.finishTick(tickTime);
+
         connection.getTimer().append(tickTime);
         connection.setTps(tps);
         

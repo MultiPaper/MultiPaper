@@ -1,6 +1,8 @@
 package puregero.multipaper.server.bungee;
 
 import net.md_5.bungee.api.config.ServerInfo;
+import net.md_5.bungee.api.connection.ProxiedPlayer;
+import net.md_5.bungee.api.event.ChatEvent;
 import net.md_5.bungee.api.event.ServerConnectEvent;
 import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.api.plugin.Plugin;
@@ -15,9 +17,12 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 
 public class MultiPaperProxy extends Plugin implements Listener {
+
+    private final HashSet<ProxiedPlayer> usingServerCommand = new HashSet<>();
 
     @Override
     public void onEnable() {
@@ -54,29 +59,40 @@ public class MultiPaperProxy extends Plugin implements Listener {
     }
 
     @EventHandler
+    public void onChat(ChatEvent event) {
+        if (event.getMessage().startsWith("/server ") && event.getSender() instanceof ProxiedPlayer) {
+            usingServerCommand.add((ProxiedPlayer) event.getSender());
+        }
+    }
+
+    @EventHandler
     public void onServerConnect(ServerConnectEvent event) {
-        if (event.getPlayer().getServer() == null || !isMultiPaperServer(event.getPlayer().getServer().getInfo().getName())) {
-            if (isMultiPaperServer(event.getTarget().getName())) {
-                // They are connecting to a multipaper server from a non-multipaper server
+        if (usingServerCommand.remove(event.getPlayer())) {
+            // Allow players to do /server <server> to join the server that they want
+            // (Mostly for debug purposes)
+            return;
+        }
 
-                List<ServerInfo> servers = new ArrayList<>(getProxy().getServers().values());
-                Collections.shuffle(servers);
+        if (isMultiPaperServer(event.getTarget().getName())) {
+            // They are connecting to a multipaper server
 
-                // Send them to the multipaper server with the lowest tick time
-                ServerInfo bestServer = null;
-                long lowestTickTime = Long.MAX_VALUE;
+            List<ServerInfo> servers = new ArrayList<>(getProxy().getServers().values());
+            Collections.shuffle(servers);
 
-                for (ServerInfo info : servers) {
-                    ServerConnection connection = ServerConnection.getConnection(info.getName());
-                    if (connection != null && ServerConnection.isAlive(info.getName()) && connection.getTimer().averageInMillis() < lowestTickTime) {
-                        lowestTickTime = connection.getTimer().averageInMillis();
-                        bestServer = info;
-                    }
+            // Send them to the multipaper server with the lowest tick time
+            ServerInfo bestServer = null;
+            long lowestTickTime = Long.MAX_VALUE;
+
+            for (ServerInfo info : servers) {
+                ServerConnection connection = ServerConnection.getConnection(info.getName());
+                if (connection != null && ServerConnection.isAlive(info.getName()) && connection.getTimer().averageInMillis() < lowestTickTime) {
+                    lowestTickTime = connection.getTimer().averageInMillis();
+                    bestServer = info;
                 }
+            }
 
-                if (bestServer != null) {
-                    event.setTarget(bestServer);
-                }
+            if (bestServer != null) {
+                event.setTarget(bestServer);
             }
         }
     }

@@ -805,10 +805,10 @@ index 0cecbaf69f193011860c03e3fe0787d269819a60..1e76a47314e31f37283dfca0f61c16da
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0e019f5dd753353426d4b8ac7b8a4e38dbdade12
+index 0000000000000000000000000000000000000000..9a4349b14245aaf1c8145609a55235e535831c7c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,219 @@
+@@ -0,0 +1,229 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -824,6 +824,7 @@ index 0000000000000000000000000000000000000000..0e019f5dd753353426d4b8ac7b8a4e38
 +import net.minecraft.world.level.Level;
 +import net.minecraft.world.level.LightLayer;
 +import net.minecraft.world.level.block.entity.BlockEntity;
++import net.minecraft.world.level.block.state.BlockState;
 +import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.DataLayer;
 +import net.minecraft.world.level.chunk.ImposterProtoChunk;
@@ -951,12 +952,10 @@ index 0000000000000000000000000000000000000000..0e019f5dd753353426d4b8ac7b8a4e38
 +        if (holder != null && level.getChunkIfLoaded(holder.pos.x, holder.pos.z) != null) {
 +            // Chunk is loaded
 +            if (packet instanceof ClientboundBlockUpdatePacket update) {
-+                ((LevelChunk) blockUpdateChunk).setBlockState(update.getPos(), update.getBlockState(), false, false);
-+                holder.blockChanged(update.getPos());
++                setBlock(((LevelChunk) blockUpdateChunk), update.getPos(), update.getBlockState());
 +            } else if (packet instanceof ClientboundSectionBlocksUpdatePacket update) {
 +                update.runUpdates((pos, state) -> {
-+                    ((LevelChunk) blockUpdateChunk).setBlockState(pos, state, false, false);
-+                    holder.blockChanged(pos);
++                    setBlock(((LevelChunk) blockUpdateChunk), pos, state);
 +                });
 +            } else if (packet instanceof ClientboundBlockEntityDataPacket update) {
 +                if (!update.getTag().getString("id").equals("minecraft:piston")) {
@@ -999,6 +998,17 @@ index 0000000000000000000000000000000000000000..0e019f5dd753353426d4b8ac7b8a4e38
 +        }
 +
 +        blockUpdateChunk = null;
++    }
++
++    private static void setBlock(LevelChunk chunk, BlockPos pos, BlockState blockState) {
++        BlockState oldState = chunk.setBlockState(pos, blockState, false, false);
++        holder.blockChanged(pos);
++
++        if (oldState != null && blockState != oldState && (blockState.getLightBlock(chunk, pos) != oldState.getLightBlock(chunk, pos) || blockState.getLightEmission() != oldState.getLightEmission() || blockState.useShapeForLightOcclusion() || oldState.useShapeForLightOcclusion())) {
++            chunk.level.getProfiler().push("queueCheckLightExternalUpdate");
++            chunk.level.getChunkSource().getLightEngine().checkBlock(pos);
++            chunk.level.getProfiler().pop();
++        }
 +    }
 +
 +    // From the client

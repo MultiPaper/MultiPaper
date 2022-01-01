@@ -640,7 +640,7 @@ index bf0b96d2bd23aa4be8511d67d8d5a234638ae8ed..70ec73338bc3fa7482ac021ff7669675
              }
              getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 294f0bf2d7437a74985a3b22380b20c8f5dbecb5..be282a42391efc55692e8707e28cca16f125f877 100644
+index 4119f9e8ef745c45fd193787dfff7ce92bbfd7e2..90dcb8eb17321923d831ec95a413a7290722fe7d 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -2,10 +2,13 @@ package puregero.multipaper;
@@ -657,16 +657,17 @@ index 294f0bf2d7437a74985a3b22380b20c8f5dbecb5..be282a42391efc55692e8707e28cca16
  import net.minecraft.world.level.chunk.ChunkAccess;
  import net.minecraft.world.level.chunk.ChunkStatus;
  import net.minecraft.world.level.chunk.LevelChunk;
-@@ -14,6 +17,8 @@ import org.apache.logging.log4j.Logger;
+@@ -14,8 +17,7 @@ import org.apache.logging.log4j.Logger;
  import org.bukkit.Bukkit;
  import org.bukkit.World;
  import org.bukkit.craftbukkit.CraftWorld;
-+import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
-+import puregero.multipaper.externalserverprotocol.EntityUpdateWithDependenciesPacket;
- import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
+-import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
+-import puregero.multipaper.externalserverprotocol.SendTickListPacket;
++import puregero.multipaper.externalserverprotocol.*;
  
  import javax.annotation.Nullable;
-@@ -104,6 +109,9 @@ public class MultiPaperConnection extends Thread {
+ import java.io.*;
+@@ -105,6 +107,9 @@ public class MultiPaperConnection extends Thread {
                          level.chunkSource.chunkMap.updatingChunks.getUpdatingValuesCopy().forEach(chunkHolder -> {
                              subscribeChunk(level.convertable.getLevelId(), chunkHolder.pos.x, chunkHolder.pos.z);
                          });
@@ -676,7 +677,15 @@ index 294f0bf2d7437a74985a3b22380b20c8f5dbecb5..be282a42391efc55692e8707e28cca16
                      }
                  }
  
-@@ -287,6 +295,66 @@ public class MultiPaperConnection extends Thread {
+@@ -210,6 +215,7 @@ public class MultiPaperConnection extends Thread {
+         if (chunk != null) {
+             if (chunk instanceof LevelChunk levelChunk) {
+                 if (levelChunk.externalOwner != null && levelChunk.externalOwner.isMe() && server != null && !server.isMe()) {
++                    server.getConnection().send(new SendEntitiesPacket(levelChunk));
+                     server.getConnection().send(new SendTickListPacket(levelChunk));
+                 }
+                 levelChunk.externalOwner = server;
+@@ -291,6 +297,66 @@ public class MultiPaperConnection extends Thread {
          });
      }
  
@@ -743,7 +752,7 @@ index 294f0bf2d7437a74985a3b22380b20c8f5dbecb5..be282a42391efc55692e8707e28cca16
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -390,6 +458,11 @@ public class MultiPaperConnection extends Thread {
+@@ -394,6 +460,11 @@ public class MultiPaperConnection extends Thread {
                          RequestChunkPacket.blocker = null;
                          future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
                      });
@@ -755,7 +764,7 @@ index 294f0bf2d7437a74985a3b22380b20c8f5dbecb5..be282a42391efc55692e8707e28cca16
                  } else {
                      future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
                  }
-@@ -410,10 +483,13 @@ public class MultiPaperConnection extends Thread {
+@@ -414,10 +485,13 @@ public class MultiPaperConnection extends Thread {
      }
  
      public void writeChunk(String world, String path, int cx, int cz, byte[] data) throws IOException {
@@ -773,7 +782,7 @@ index 294f0bf2d7437a74985a3b22380b20c8f5dbecb5..be282a42391efc55692e8707e28cca16
  
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeChunk");
-@@ -421,8 +497,8 @@ public class MultiPaperConnection extends Thread {
+@@ -425,8 +499,8 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(path);
          out.writeInt(cx);
          out.writeInt(cz);
@@ -784,7 +793,7 @@ index 294f0bf2d7437a74985a3b22380b20c8f5dbecb5..be282a42391efc55692e8707e28cca16
          out.send(in -> { /* Do nothing */ });
      }
      
-@@ -694,4 +770,39 @@ public class MultiPaperConnection extends Thread {
+@@ -698,4 +772,39 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(resource);
          out.send(null);
      }
@@ -1566,10 +1575,10 @@ index 0000000000000000000000000000000000000000..7d5115ce44ac2182366b8765f8147252
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index adac73da63f08ce39d6be0bbe9a150833c31ac05..4bbe42c000064947e613e3ba3820d4147093b6c5 100644
+index a474e9752ecadfede52ee7d98cc1e3bd5feb07e3..0ff1f12c156ba0145e12ad75b06b0ad6f293211e 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -28,6 +28,13 @@ public class ExternalServerPacketSerializer {
+@@ -27,6 +27,13 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerActionPacket.class, PlayerActionPacket::new);
          addPacket(PlayerInventoryUpdatePacket.class, PlayerInventoryUpdatePacket::new);
          addPacket(TimeUpdatePacket.class, TimeUpdatePacket::new);

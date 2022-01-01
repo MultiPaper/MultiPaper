@@ -30,4 +30,9 @@ public class ChunkKey {
 
         return name.hashCode() ^ i ^ j;
     }
+
+    @Override
+    public String toString() {
+        return name + "," + x + "," + z;
+    }
 }

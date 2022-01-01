@@ -1,0 +1,370 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 3 Dec 2021 22:28:35 +1000
+Subject: [PATCH] Take control of external chunks to ensure a redstone
+ contraption runs on a single server
+
+
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index c53190203f18e9ae40466454e1a3b76e7b8511d3..db7eec07c1df00054ff21f395d0df0e09291e946 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -99,6 +99,7 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
+ import org.bukkit.craftbukkit.util.CraftNamespacedKey;
+ import org.bukkit.event.block.BlockPhysicsEvent;
+ import org.bukkit.event.world.GenericGameEvent;
++import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperChunkHandler;
+ // CraftBukkit end
+ 
+@@ -814,6 +815,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+             return false;
+         } else {
+             FluidState fluid = this.getFluidState(pos);
++
++            // MultiPaper start - only animate destroyed blocks on our chunks
++            ChunkAccess chunk = getChunkIfLoaded(pos);
++            if (MultiPaper.isChunkExternal(chunk)) {
++                return this.setBlock(pos, fluid.createLegacyBlock(), 3, maxUpdateDepth);
++            }
++            // MultiPaper end
++
+             // Paper start - while the above setAir method is named same and looks very similar
+             // they are NOT used with same intent and the above should not fire this event. The above method is more of a BlockSetToAirEvent,
+             // it doesn't imply destruction of a block that plays a sound effect / drops an item.
+@@ -1057,7 +1066,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+                 toRemove.add(tickingblockentity); // Paper - use removeAll
+                 // Spigot end
+             } else if (this.shouldTickBlocksAt(ChunkPos.asLong(tickingblockentity.getPos()))) {
+-                if (!MultiPaperChunkHandler.shouldTick(this, tickingblockentity.getPos())) continue; // MultiPaper - should tick
++                if (!MultiPaperChunkHandler.shouldTick(this, tickingblockentity.getPos()) && !tickingblockentity.getType().equals("minecraft:piston")) continue; // MultiPaper - should tick
+                 tickingblockentity.tick();
+             }
+         }
+diff --git a/src/main/java/net/minecraft/world/level/LevelAccessor.java b/src/main/java/net/minecraft/world/level/LevelAccessor.java
+index 86517c755f3762cf5f86d57894d6930a3cd3f872..7e8ba7c388644a3892fd518a8742e429840b7d4a 100644
+--- a/src/main/java/net/minecraft/world/level/LevelAccessor.java
++++ b/src/main/java/net/minecraft/world/level/LevelAccessor.java
+@@ -19,6 +19,7 @@ import net.minecraft.world.level.storage.LevelData;
+ import net.minecraft.world.ticks.LevelTickAccess;
+ import net.minecraft.world.ticks.ScheduledTick;
+ import net.minecraft.world.ticks.TickPriority;
++import puregero.multipaper.MultiPaperExternalBlocksHandler;
+ 
+ public interface LevelAccessor extends CommonLevelAccessor, LevelTimeAccess {
+ 
+@@ -40,20 +41,24 @@ public interface LevelAccessor extends CommonLevelAccessor, LevelTimeAccess {
+     }
+ 
+     default void scheduleTick(BlockPos pos, Block block, int delay, TickPriority priority) {
++        MultiPaperExternalBlocksHandler.onBlockScheduled(getMinecraftWorld(), pos);
+         this.getBlockTicks().schedule(this.createTick(pos, block, delay, priority));
+     }
+ 
+     default void scheduleTick(BlockPos pos, Block block, int delay) {
++        MultiPaperExternalBlocksHandler.onBlockScheduled(getMinecraftWorld(), pos);
+         this.getBlockTicks().schedule(this.createTick(pos, block, delay));
+     }
+ 
+     LevelTickAccess<Fluid> getFluidTicks();
+ 
+     default void scheduleTick(BlockPos pos, Fluid fluid, int delay, TickPriority priority) {
++        MultiPaperExternalBlocksHandler.onBlockScheduled(getMinecraftWorld(), pos);
+         this.getFluidTicks().schedule(this.createTick(pos, fluid, delay, priority));
+     }
+ 
+     default void scheduleTick(BlockPos pos, Fluid fluid, int delay) {
++        MultiPaperExternalBlocksHandler.onBlockScheduled(getMinecraftWorld(), pos);
+         this.getFluidTicks().schedule(this.createTick(pos, fluid, delay));
+     }
+ 
+diff --git a/src/main/java/net/minecraft/world/level/block/Block.java b/src/main/java/net/minecraft/world/level/block/Block.java
+index ab5b9f00123e2ede2931ffc520684e482aac49b4..e1b0b93a640609fcce326e3cad500c8156c73350 100644
+--- a/src/main/java/net/minecraft/world/level/block/Block.java
++++ b/src/main/java/net/minecraft/world/level/block/Block.java
+@@ -62,6 +62,7 @@ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class Block extends BlockBehaviour implements ItemLike {
+ 
+@@ -189,6 +190,7 @@ public class Block extends BlockBehaviour implements ItemLike {
+     }
+ 
+     public static void updateOrDestroy(BlockState state, BlockState newState, LevelAccessor world, BlockPos pos, int flags, int maxUpdateDepth) {
++        if (MultiPaper.isChunkExternal(world.getChunkIfLoadedImmediately(pos.getX(), pos.getZ()))) return; // MultiPaper - don't update blocks on external servers
+         if (newState != state) {
+             if (newState.isAir()) {
+                 if (!world.isClientSide()) {
+diff --git a/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java b/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
+index c9c18cf84e4ee5c253bbc64a4b41e91f9f4c4bc7..5f2374c0ca0bb2bf984255448e08bbcf388a6083 100644
+--- a/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
++++ b/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
+@@ -228,6 +228,7 @@ public class PistonBaseBlock extends DirectionalBlock {
+             world.playSound((Player) null, pos, SoundEvents.PISTON_EXTEND, SoundSource.BLOCKS, 0.5F, world.random.nextFloat() * 0.25F + 0.6F);
+             world.gameEvent(GameEvent.PISTON_EXTEND, pos);
+         } else if (type == 1 || type == 2) {
++
+             BlockEntity tileentity = world.getBlockEntity(pos.relative(enumdirection));
+ 
+             if (tileentity instanceof PistonMovingBlockEntity) {
+diff --git a/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java b/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
+index 05c46f3b3bce5225b819d86e6e06729a5093e092..2456bc6f0f268b96f3ad4b87359937851399283b 100644
+--- a/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
++++ b/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
+@@ -47,6 +47,7 @@ import net.minecraft.world.level.block.SupportType;
+ import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.world.level.block.entity.BlockEntityTicker;
+ import net.minecraft.world.level.block.entity.BlockEntityType;
++import net.minecraft.world.level.block.piston.PistonHeadBlock;
+ import net.minecraft.world.level.block.state.properties.Property;
+ import net.minecraft.world.level.material.Fluid;
+ import net.minecraft.world.level.material.FluidState;
+@@ -991,6 +992,7 @@ public abstract class BlockBehaviour {
+         }
+ 
+         public BlockState updateShape(Direction direction, BlockState neighborState, LevelAccessor world, BlockPos pos, BlockPos neighborPos) {
++            if (getBlock() instanceof PistonHeadBlock) return this.asState(); // MultiPaper - skip piston head shape updates
+             return this.getBlock().updateShape(this.asState(), direction, neighborState, world, pos, neighborPos);
+         }
+ 
+diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+index 5aa054d0770d58b91dfcafe6d05f092e81bd5905..216f0bc01f482ac59e01d77e858f87e2dfd6bd6c 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
++++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
+@@ -564,7 +564,13 @@ public class LevelChunk extends ChunkAccess {
+                 boolean flag3 = iblockdata1.hasBlockEntity();
+ 
+                 if (!this.level.isClientSide) {
++                    if (MultiPaperChunkHandler.blockUpdateChunk == null) // MultiPaper - only call onremove when we're not updating a chunk
+                     iblockdata1.onRemove(this.level, blockposition, iblockdata, flag);
++                    // MultiPaper start - call removeBlockEntity even if we don't remove the block
++                    else if (!iblockdata1.is(block) && flag3) {
++                        this.removeBlockEntity(blockposition);
++                    }
++                    // MultiPaper end - call removeBlockEntity even if we don't remove the block
+                 } else if (!iblockdata1.is(block) && flag3) {
+                     this.removeBlockEntity(blockposition);
+                 }
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index e7b372e393d08698ccb44a0799186d56952c4f26..8faa0ee34afba4f8638b6f4f7de26d1e45ebdcf4 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -203,13 +203,15 @@ public class MultiPaper {
+                 player.tickAttackStrength();
+             }
+         }
++
++        MultiPaperExternalBlocksHandler.tick();
+     }
+ 
+     public static void sendTickTime(long time, double tps) {
+         try {
+-            getConnection().writeTickTime(time, tps);
+-
+             tick();
++
++            getConnection().writeTickTime(time, tps);
+         } catch (IOException e) {
+             e.printStackTrace();
+         }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java b/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..a2d422e410cba751b0dbbe33101189d9bd91f5a4
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java
+@@ -0,0 +1,151 @@
++package puregero.multipaper;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.block.Block;
++import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.level.material.Fluid;
++import net.minecraft.world.ticks.LevelChunkTicks;
++import puregero.multipaper.externalserverprotocol.SendTickListPacket;
++
++import java.io.IOException;
++import java.util.ArrayList;
++import java.util.HashSet;
++import java.util.Iterator;
++import java.util.List;
++import java.util.concurrent.CompletableFuture;
++
++public class MultiPaperExternalBlocksHandler {
++
++    private static final HashSet<LevelChunk> scheduledChunks = new HashSet<>();
++    private static final List<CompletableFutureWithKey<HashSet<LevelChunk>, Boolean>> takingControlOf = new ArrayList<>();
++
++    public static void onBlockScheduled(ServerLevel level, BlockPos pos) {
++        LevelChunk chunk = level.getChunkIfLoaded(pos);
++
++        if (MultiPaper.isChunkExternal(chunk)) {
++            scheduledChunks.add(chunk);
++        }
++    }
++
++    public static void tick() {
++        takingControlOf.clear();
++
++        while (!scheduledChunks.isEmpty()) {
++            Iterator<LevelChunk> iterator = scheduledChunks.iterator();
++            LevelChunk chunk = iterator.next();
++            iterator.remove();
++
++            if (!chunk.hasExternalLockRequest) {
++                // We aren't ticking this chunk
++                sendTickListTo(chunk);
++                continue;
++            }
++
++            HashSet<LevelChunk> neighbours = new HashSet<>();
++
++            fillTickingNeighbours(chunk, neighbours);
++
++            boolean hasALocalChunk = false;
++
++            for (LevelChunk neighbour : neighbours) {
++                if (MultiPaper.isChunkLocal(neighbour)) {
++                    hasALocalChunk = true;
++                    break;
++                }
++            }
++
++            if (hasALocalChunk) {
++                takingControlOf.add(requestChunkOwnership(neighbours));
++            } else {
++                for (LevelChunk neighbour : neighbours) {
++                    sendTickListTo(neighbour);
++                }
++            }
++        }
++
++        CompletableFuture<Void> allFuture = CompletableFuture.allOf(takingControlOf.toArray(CompletableFuture[]::new));
++
++        // Wait for the control process to complete before continuing the tick so that this doesn't mess up the next tick
++        MinecraftServer.getServer().managedBlock(allFuture::isDone);
++
++        for (CompletableFutureWithKey<HashSet<LevelChunk>, Boolean> completableFuture : takingControlOf) {
++            if (!completableFuture.join()) {
++                // Failed to take control of the chunks, send the tick lists to their owners
++                for (LevelChunk chunk : completableFuture.getKey()) {
++                    sendTickListTo(chunk);
++                }
++            }
++        }
++    }
++
++    private static void sendTickListTo(LevelChunk chunk) {
++        if (MultiPaper.isChunkExternal(chunk)) {
++            chunk.externalOwner.getConnection().send(new SendTickListPacket(chunk));
++            ((LevelChunkTicks<Block>) chunk.getBlockTicks()).removeIf(schedule -> true);
++            ((LevelChunkTicks<Fluid>) chunk.getFluidTicks()).removeIf(schedule -> true);
++        }
++    }
++
++    private static void fillTickingNeighbours(LevelChunk chunk, HashSet<LevelChunk> neighbours) {
++        for (int x = -1; x <= 1; x ++) {
++            for (int z = -1; z <= 1; z ++) {
++                LevelChunk neighbour = chunk.level.getChunkIfLoaded(chunk.locX + x, chunk.locZ + z);
++
++                if (neighbour != null && !neighbours.contains(neighbour) && neighbour.hasExternalLockRequest &&
++                        (neighbour.getBlockTicks().count() > 0 || neighbour.getFluidTicks().count() > 0)) {
++                    scheduledChunks.remove(neighbour);
++                    neighbours.add(neighbour);
++                    fillTickingNeighbours(neighbour, neighbours);
++                }
++            }
++        }
++    }
++
++    private static CompletableFutureWithKey<HashSet<LevelChunk>, Boolean> requestChunkOwnership(HashSet<LevelChunk> neighbours) {
++        CompletableFutureWithKey<HashSet<LevelChunk>, Boolean> future = new CompletableFutureWithKey<>(neighbours);
++        boolean writtenWorld = false;
++
++        try {
++            DataOutputSender out = new DataOutputSender(MultiPaper.getConnection());
++            out.writeUTF("requestChunkOwnership");
++            out.writeInt(neighbours.size());
++
++            for (LevelChunk chunk : neighbours) {
++                if (!writtenWorld) {
++                    out.writeUTF(chunk.level.getWorld().getName());
++                    writtenWorld = true;
++                }
++
++                out.writeInt(chunk.locX);
++                out.writeInt(chunk.locZ);
++            }
++
++            out.send(in -> {
++                try {
++                    future.complete(in.readBoolean());
++                } catch (IOException e) {
++                    e.printStackTrace();
++                }
++            });
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++
++        return future;
++    }
++
++    private static class CompletableFutureWithKey<K, V> extends CompletableFuture<V> {
++        private final K key;
++
++        private CompletableFutureWithKey(K key) {
++            this.key = key;
++        }
++
++        public K getKey() {
++            return key;
++        }
++    }
++
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
+index cdca8cca8581c4d6146f98fca4d47eff103e898a..816f757c601f6e836c25b39f00903e007bc6dec3 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
+@@ -5,9 +5,11 @@ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.nbt.Tag;
+ import net.minecraft.resources.ResourceLocation;
+ import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.chunk.ChunkAccess;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.level.chunk.ProtoChunk;
++import net.minecraft.world.level.material.Fluid;
+ import net.minecraft.world.ticks.LevelChunkTicks;
+ import net.minecraft.world.ticks.ProtoChunkTicks;
+ import org.apache.logging.log4j.LogManager;
+@@ -67,7 +69,23 @@ public class SendTickListPacket extends ExternalServerPacket {
+     public void handle(ExternalServerConnection connection) {
+         ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
+         ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
+-        if (chunk instanceof LevelChunk levelChunk) {
++        if (level.getChunkIfLoaded(cx, cz) != null) {
++            long now = level.getLevelData().getGameTime();
++
++            LevelChunkTicks<Block> blockTicks = LevelChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
++            blockTicks.unpack(now);
++            blockTicks.removeIf(scheduled -> {
++                level.getBlockTicks().schedule(scheduled);
++                return true;
++            });
++
++            LevelChunkTicks<Fluid> fluidTicks = LevelChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> Registry.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
++            fluidTicks.unpack(now);
++            fluidTicks.removeIf(scheduled -> {
++                level.getFluidTicks().schedule(scheduled);
++                return true;
++            });
++        } else if (chunk instanceof LevelChunk levelChunk) {
+             levelChunk.unregisterTickContainerFromLevel(level);
+             levelChunk.blockTicks = LevelChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
+             levelChunk.fluidTicks = LevelChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> Registry.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());

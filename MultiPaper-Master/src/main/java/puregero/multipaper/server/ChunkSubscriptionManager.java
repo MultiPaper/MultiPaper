@@ -43,6 +43,10 @@ public class ChunkSubscriptionManager {
     }
 
     public static ServerConnection lock(ServerConnection serverConnection, String world, int cx, int cz) {
+        return lock(serverConnection, world, cx, cz, false);
+    }
+
+    public static ServerConnection lock(ServerConnection serverConnection, String world, int cx, int cz, boolean force) {
         ChunkKey key = new ChunkKey(world, cx, cz);
         synchronized (chunkLocks) {
             List<ServerConnection> serverConnections = chunkLocks.computeIfAbsent(key, key2 -> {
@@ -55,11 +59,20 @@ public class ChunkSubscriptionManager {
                 return new ArrayList<>();
             });
 
+            if (force && serverConnections.indexOf(serverConnection) != 0) {
+                serverConnections.remove(serverConnection);
+            }
+
             if (!serverConnections.contains(serverConnection)) {
-                serverConnections.add(serverConnection);
+                if (force) {
+                    serverConnections.add(0, serverConnection);
+                } else {
+                    serverConnections.add(serverConnection);
+                }
+
                 lockedChunks.computeIfAbsent(serverConnection, k -> new HashSet<>()).add(key);
 
-                if (serverConnections.size() == 1) {
+                if (serverConnections.size() == 1 || force) {
                     synchronized (chunkSubscribers) {
                         if (chunkSubscribers.get(key) != null) {
                             updateOwner(serverConnections.get(0), chunkSubscribers.get(key), key.name, key.x, key.z);

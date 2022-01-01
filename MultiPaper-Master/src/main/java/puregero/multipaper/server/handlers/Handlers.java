@@ -35,6 +35,7 @@ public class Handlers {
         handlers.put("writeData", new WriteDataHandler());
         handlers.put("start", new StartHandler());
         handlers.put("chunkChangedStatus", new ChunkChangedStatusHandler());
+        handlers.put("requestChunkOwnership", new RequestChunkOwnershipHandler());
     }
 
     public static Handler get(String handler) {

@@ -274,6 +274,43 @@ index ab38b0e0394f53979dc3a32270814bf3cb41a330..c53190203f18e9ae40466454e1a3b76e
                  tickingblockentity.tick();
              }
          }
+diff --git a/src/main/java/net/minecraft/world/level/LevelAccessor.java b/src/main/java/net/minecraft/world/level/LevelAccessor.java
+index 86517c755f3762cf5f86d57894d6930a3cd3f872..f179a7c68ff43e1da2d4ad7a46c082f3c0540316 100644
+--- a/src/main/java/net/minecraft/world/level/LevelAccessor.java
++++ b/src/main/java/net/minecraft/world/level/LevelAccessor.java
+@@ -19,6 +19,7 @@ import net.minecraft.world.level.storage.LevelData;
+ import net.minecraft.world.ticks.LevelTickAccess;
+ import net.minecraft.world.ticks.ScheduledTick;
+ import net.minecraft.world.ticks.TickPriority;
++import puregero.multipaper.MultiPaperChunkHandler;
+ 
+ public interface LevelAccessor extends CommonLevelAccessor, LevelTimeAccess {
+ 
+@@ -40,20 +41,24 @@ public interface LevelAccessor extends CommonLevelAccessor, LevelTimeAccess {
+     }
+ 
+     default void scheduleTick(BlockPos pos, Block block, int delay, TickPriority priority) {
++        MultiPaperChunkHandler.scheduleTickOnExternalServer(this, pos, block, delay, priority); // MultiPaper
+         this.getBlockTicks().schedule(this.createTick(pos, block, delay, priority));
+     }
+ 
+     default void scheduleTick(BlockPos pos, Block block, int delay) {
++        MultiPaperChunkHandler.scheduleTickOnExternalServer(this, pos, block, delay, TickPriority.NORMAL); // MultiPaper
+         this.getBlockTicks().schedule(this.createTick(pos, block, delay));
+     }
+ 
+     LevelTickAccess<Fluid> getFluidTicks();
+ 
+     default void scheduleTick(BlockPos pos, Fluid fluid, int delay, TickPriority priority) {
++        MultiPaperChunkHandler.scheduleTickOnExternalServer(this, pos, fluid, delay, priority); // MultiPaper
+         this.getFluidTicks().schedule(this.createTick(pos, fluid, delay, priority));
+     }
+ 
+     default void scheduleTick(BlockPos pos, Fluid fluid, int delay) {
++        MultiPaperChunkHandler.scheduleTickOnExternalServer(this, pos, fluid, delay, TickPriority.NORMAL); // MultiPaper
+         this.getFluidTicks().schedule(this.createTick(pos, fluid, delay));
+     }
+ 
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
 index 5601d0c2fe635a2a4f073c333531e1a8adf1833c..dd35cc82ce15dd7a76081109a8d29b3df168e0dd 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
@@ -805,13 +842,14 @@ index 0cecbaf69f193011860c03e3fe0787d269819a60..1e76a47314e31f37283dfca0f61c16da
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9989877d7e79c9b7e92f43007b538a6516d87d6f
+index 0000000000000000000000000000000000000000..9dd1c4a9ef005e1efd2778690b401470dc168026
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,219 @@
+@@ -0,0 +1,246 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
++import net.minecraft.core.Registry;
 +import net.minecraft.core.SectionPos;
 +import net.minecraft.network.protocol.Packet;
 +import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
@@ -822,17 +860,22 @@ index 0000000000000000000000000000000000000000..9989877d7e79c9b7e92f43007b538a65
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.Level;
++import net.minecraft.world.level.LevelAccessor;
 +import net.minecraft.world.level.LightLayer;
++import net.minecraft.world.level.block.Block;
 +import net.minecraft.world.level.block.entity.BlockEntity;
 +import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.DataLayer;
 +import net.minecraft.world.level.chunk.ImposterProtoChunk;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.level.lighting.LevelLightEngine;
++import net.minecraft.world.level.material.Fluid;
++import net.minecraft.world.ticks.TickPriority;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.externalserverprotocol.ScheduleBlockTickPacket;
 +import puregero.multipaper.externalserverprotocol.SendUpdatePacket;
 +
 +import javax.annotation.Nullable;
@@ -951,10 +994,12 @@ index 0000000000000000000000000000000000000000..9989877d7e79c9b7e92f43007b538a65
 +        if (holder != null && level.getChunkIfLoaded(holder.pos.x, holder.pos.z) != null) {
 +            // Chunk is loaded
 +            if (packet instanceof ClientboundBlockUpdatePacket update) {
-+                level.setBlockAndUpdate(update.getPos(), update.getBlockState());
++                ((LevelChunk) blockUpdateChunk).setBlockState(update.getPos(), update.getBlockState(), false, false);
++                holder.blockChanged(update.getPos());
 +            } else if (packet instanceof ClientboundSectionBlocksUpdatePacket update) {
 +                update.runUpdates((pos, state) -> {
-+                    level.setBlockAndUpdate(pos, state);
++                    ((LevelChunk) blockUpdateChunk).setBlockState(pos, state, false, false);
++                    holder.blockChanged(pos);
 +                });
 +            } else if (packet instanceof ClientboundBlockEntityDataPacket update) {
 +                if (!update.getTag().getString("id").equals("minecraft:piston")) {
@@ -962,9 +1007,7 @@ index 0000000000000000000000000000000000000000..9989877d7e79c9b7e92f43007b538a65
 +                    blockUpdateChunk.setBlockEntityNbt(update.getTag());
 +                    blockUpdateChunk.getBlockEntity(update.getPos());
 +
-+                    if (((LevelChunk) blockUpdateChunk).playerChunk != null) {
-+                        ((LevelChunk) blockUpdateChunk).playerChunk.blockChanged(update.getPos());
-+                    }
++                    holder.blockChanged(update.getPos());
 +                }
 +            }
 +        } else if (blockUpdateChunk != null) {
@@ -1025,6 +1068,27 @@ index 0000000000000000000000000000000000000000..9989877d7e79c9b7e92f43007b538a65
 +            if (flag || flag1) {
 +                levelLightEngine.queueSectionData(lightLayer, SectionPos.of(i, l, j), flag ? new DataLayer((byte[])iterator1.next().clone()) : new DataLayer(), trustEdges);
 +            }
++        }
++    }
++
++    public static <T> void scheduleTickOnExternalServer(LevelAccessor level, BlockPos pos, T object, int delay, TickPriority priority) {
++        ChunkAccess chunk = MultiPaper.getChunkAccess(level.getMinecraftWorld().getWorld().getName(), pos);
++
++        if (chunk instanceof LevelChunk levelChunk && MultiPaper.isChunkExternal(levelChunk)) {
++            String identifier;
++            int type;
++
++            if (object instanceof Block block) {
++                type = 0;
++                identifier = Registry.BLOCK.getKey(block).toString();
++            } else if (object instanceof Fluid fluid) {
++                type = 1;
++                identifier = Registry.FLUID.getKey(fluid).toString();
++            } else {
++                throw new IllegalArgumentException("Invalid object type");
++            }
++
++            levelChunk.externalOwner.getConnection().send(new ScheduleBlockTickPacket(level.getMinecraftWorld().getWorld().getName(), type, identifier, pos, delay, priority.getValue()));
 +        }
 +    }
 +}
@@ -1361,16 +1425,17 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..3287ce488700ce67038dcb25e7ae7ff2
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index c1bac1bf5148126a0fcad517bf499833d31cf050..934b75c68cc94cf39d09f086d97b88d0fe50c23c 100644
+index c1bac1bf5148126a0fcad517bf499833d31cf050..56ef3830012604bcd6eb4e5f14ecca66fd5ac98f 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -20,6 +20,10 @@ public class ExternalServerPacketSerializer {
+@@ -20,6 +20,11 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerRespawnPacket.class, PlayerRespawnPacket::new);
          addPacket(PlayerChangeDimensionPacket.class, PlayerChangeDimensionPacket::new);
          addPacket(SendPacketPacket.class, SendPacketPacket::new);
 +        addPacket(SendUpdatePacket.class, SendUpdatePacket::new);
 +        addPacket(RequestChunkPacket.class, RequestChunkPacket::new);
 +        addPacket(SendChunkPacket.class, SendChunkPacket::new);
++        addPacket(ScheduleBlockTickPacket.class, ScheduleBlockTickPacket::new);
 +        addPacket(SendTickListPacket.class, SendTickListPacket::new);
      }
  
@@ -1500,6 +1565,87 @@ index 0000000000000000000000000000000000000000..0bf479e9476128af2ae61d07d1fb51a6
 +
 +            connection.send(new SendChunkPacket(world, cx, cz, null));
 +            return null;
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ScheduleBlockTickPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ScheduleBlockTickPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..6cece7061a11339c68de919646e3f82816f9d22b
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ScheduleBlockTickPacket.java
+@@ -0,0 +1,75 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Registry;
++import net.minecraft.resources.ResourceLocation;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.block.Block;
++import net.minecraft.world.level.material.Fluid;
++import net.minecraft.world.ticks.TickPriority;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.util.Objects;
++
++public class ScheduleBlockTickPacket extends ExternalServerPacket {
++
++    private final String world;
++    private final int type;
++    private final String identifier;
++    private final BlockPos pos;
++    private final int delay;
++    private final int priority;
++
++    public ScheduleBlockTickPacket(String world, int type, String identifier, BlockPos pos, int delay, int priority) {
++        this.world = world;
++        this.type = type;
++        this.identifier = identifier;
++        this.pos = pos;
++        this.delay = delay;
++        this.priority = priority;
++    }
++
++    public ScheduleBlockTickPacket(DataInputStream in) throws IOException {
++        world = in.readUTF();
++        type = in.readByte();
++        identifier = in.readUTF();
++        pos = BlockPos.of(in.readLong());
++        delay = in.readByte();
++        priority = in.readByte();
++    }
++
++    @Override
++    public void write(DataOutputStream out) throws IOException {
++        out.writeUTF(world);
++        out.writeByte(type);
++        out.writeUTF(identifier);
++        out.writeLong(pos.asLong());
++        out.writeByte(delay);
++        out.writeByte(priority);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerLevel level = ((CraftWorld) Objects.requireNonNull(Bukkit.getWorld(world))).getHandle();
++            TickPriority tickPriority = TickPriority.byValue(priority);
++            ResourceLocation resourceLocation = ResourceLocation.tryParse(identifier);
++
++            if (type == 0) {
++                Block block = Registry.BLOCK.get(resourceLocation);
++                level.scheduleTick(pos, block, delay, tickPriority);
++            } else if (type == 1) {
++                Fluid fluid = Registry.FLUID.get(resourceLocation);
++                level.scheduleTick(pos, fluid, delay, tickPriority);
++            } else {
++                throw new IllegalArgumentException("Unknown type " + type);
++            }
 +        });
 +    }
 +}

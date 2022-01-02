@@ -5,7 +5,7 @@ Subject: [PATCH] Hurt external entities
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index fae321f7501fe0b3e6c16f4764b8ea5c57b98485..6e2fc2726652f2679fbbda3db5680b89c0c5d51f 100644
+index fae321f7501fe0b3e6c16f4764b8ea5c57b98485..2065dec6064b701d5be938e3b195eb7b0abb4ff4 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 @@ -138,6 +138,7 @@ import org.bukkit.event.entity.EntityResurrectEvent;
@@ -16,13 +16,15 @@ index fae321f7501fe0b3e6c16f4764b8ea5c57b98485..6e2fc2726652f2679fbbda3db5680b89
  // CraftBukkit end
  
  
-@@ -1290,6 +1291,12 @@ public abstract class LivingEntity extends Entity {
+@@ -1290,6 +1291,14 @@ public abstract class LivingEntity extends Entity {
  
      @Override
      public boolean hurt(DamageSource source, float amount) {
 +        // MultiPaper start
 +        if (!(this instanceof ServerPlayer) && MultiPaper.isChunkExternal(level.getChunkIfLoaded(blockPosition()))) {
-+            level.getChunkIfLoaded(blockPosition()).externalOwner.getConnection().send(new HurtEntityPacket(this, source, amount));
++            level.getChunkIfLoaded(blockPosition()).externalOwner.getConnection().send(new HurtEntityPacket(this, source, amount, CraftEventFactory.entityDamage, CraftEventFactory.blockDamage));
++            CraftEventFactory.entityDamage = null;
++            CraftEventFactory.blockDamage = null;
 +            return false;
 +        }
 +        // MultiPaper end
@@ -30,10 +32,10 @@ index fae321f7501fe0b3e6c16f4764b8ea5c57b98485..6e2fc2726652f2679fbbda3db5680b89
              return false;
          } else if (this.level.isClientSide) {
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index a3b79258e7377a5b82e924834256cbdf220fda70..b80dfe2d2da22390c88b25831b4c292a10b67b2e 100644
+index a3b79258e7377a5b82e924834256cbdf220fda70..8558f3c0c342bd516be8606a28ed424d361a2286 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -11,6 +11,7 @@ import net.minecraft.network.syncher.EntityDataAccessor;
+@@ -11,13 +11,16 @@ import net.minecraft.network.syncher.EntityDataAccessor;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
  import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -41,22 +43,25 @@ index a3b79258e7377a5b82e924834256cbdf220fda70..b80dfe2d2da22390c88b25831b4c292a
  import net.minecraft.world.level.GameType;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
-@@ -18,6 +19,7 @@ import org.bukkit.Bukkit;
+ import org.bukkit.Bukkit;
  import org.bukkit.craftbukkit.CraftServer;
  import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
  import puregero.multipaper.externalserverprotocol.EntityUpdatePacket;
 +import puregero.multipaper.externalserverprotocol.HurtEntityPacket;
  
  import javax.annotation.Nullable;
  import java.util.Collections;
-@@ -107,4 +109,10 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -107,4 +110,12 @@ public class ExternalPlayer extends ServerPlayer {
      public void checkInsideBlocks() {
          super.checkInsideBlocks();
      }
 +
 +    @Override
 +    public boolean hurt(DamageSource source, float amount) {
-+        externalServerConnection.send(new HurtEntityPacket(this, source, amount));
++        externalServerConnection.send(new HurtEntityPacket(this, source, amount, CraftEventFactory.entityDamage, CraftEventFactory.blockDamage));
++        CraftEventFactory.entityDamage = null;
++        CraftEventFactory.blockDamage = null;
 +        return true;
 +    }
  }
@@ -74,19 +79,23 @@ index 6b83ec9eb7748f2ae96e5faa56bc6d123f5cebe7..074a4ab965f7af9786d25cb01c655863
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..769088b750ee23408dd491d8999968cb3c25a37a
+index 0000000000000000000000000000000000000000..790b220927b3b9c965298048834205294783a586
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,116 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.core.BlockPos;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.damagesource.DamageSource;
 +import net.minecraft.world.entity.Entity;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
++import org.bukkit.block.Block;
 +import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.util.DamageSourceSerializer;
@@ -102,11 +111,15 @@ index 0000000000000000000000000000000000000000..769088b750ee23408dd491d8999968cb
 +    private final UUID uuid;
 +    private final byte[] sourceBytes;
 +    private final float amount;
++    private final UUID entityDamageUuid;
++    private final BlockPos blockDamagePos;
 +
-+    public HurtEntityPacket(Entity entity, DamageSource source, float amount) {
++    public HurtEntityPacket(Entity entity, DamageSource source, float amount, Entity entityDamage, Block blockDamage) {
 +        this.world = ((ServerLevel) entity.level).convertable.getLevelId();
 +        this.uuid = entity.getUUID();
 +        this.amount = amount;
++        this.entityDamageUuid = entityDamage == null ? null : entityDamage.getUUID();
++        this.blockDamagePos = blockDamage == null ? null : ((CraftBlock) blockDamage).getPosition();
 +
 +        try {
 +            ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -124,6 +137,18 @@ index 0000000000000000000000000000000000000000..769088b750ee23408dd491d8999968cb
 +        amount = in.readFloat();
 +        sourceBytes = new byte[in.readInt()];
 +        in.readFully(sourceBytes);
++
++        if (in.readBoolean()) {
++            entityDamageUuid = readUUID(in);
++        } else {
++            entityDamageUuid = null;
++        }
++
++        if (in.readBoolean()) {
++            blockDamagePos = BlockPos.of(in.readLong());
++        } else {
++            blockDamagePos = null;
++        }
 +    }
 +
 +    @Override
@@ -133,6 +158,16 @@ index 0000000000000000000000000000000000000000..769088b750ee23408dd491d8999968cb
 +        out.writeFloat(amount);
 +        out.writeInt(sourceBytes.length);
 +        out.write(sourceBytes);
++
++        out.writeBoolean(entityDamageUuid != null);
++        if (entityDamageUuid != null) {
++            writeUUID(out, entityDamageUuid);
++        }
++
++        out.writeBoolean(blockDamagePos != null);
++        if (blockDamagePos != null) {
++            out.writeLong(blockDamagePos.asLong());
++        }
 +    }
 +
 +    @Override
@@ -148,7 +183,16 @@ index 0000000000000000000000000000000000000000..769088b750ee23408dd491d8999968cb
 +                    return;
 +                }
 +
++                Entity entityDamage = entityDamageUuid == null ? null : level.getEntity(entityDamageUuid);
++                Block blockDamage = blockDamagePos == null ? null : CraftBlock.at(level, blockDamagePos);
++
++                CraftEventFactory.entityDamage = entityDamage;
++                CraftEventFactory.blockDamage = blockDamage;
++
 +                entity.hurt(source, amount);
++
++                CraftEventFactory.entityDamage = null;
++                CraftEventFactory.blockDamage = null;
 +            } catch (IOException e) {
 +                throw new RuntimeException(e);
 +            }

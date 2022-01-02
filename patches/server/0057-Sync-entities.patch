@@ -191,18 +191,30 @@ index 0ba73edbd8ebd458bbf4acb3903d0950774bb444..74aa9af9685f1742e573016242292486
          }
      }
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 4debf47f563b38e4890fae477f638c1fbd683a1b..014b89c43b3ca4fcbf35dc91705f04572a41baa5 100644
+index 4debf47f563b38e4890fae477f638c1fbd683a1b..be2e9046037f37e23b2a434471f2cf2490107db7 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-@@ -164,6 +164,7 @@ import org.bukkit.event.player.PlayerPortalEvent;
+@@ -164,9 +164,7 @@ import org.bukkit.event.player.PlayerPortalEvent;
  import org.bukkit.event.player.PlayerTeleportEvent;
  import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
  import org.bukkit.inventory.MainHand;
-+import puregero.multipaper.ExternalPlayer;
- import puregero.multipaper.ExternalServer;
- import puregero.multipaper.MultiPaper;
- import puregero.multipaper.MultiPaperEnderChestHandler;
-@@ -1428,7 +1429,7 @@ public class ServerPlayer extends Player {
+-import puregero.multipaper.ExternalServer;
+-import puregero.multipaper.MultiPaper;
+-import puregero.multipaper.MultiPaperEnderChestHandler;
++import puregero.multipaper.*;
+ import puregero.multipaper.externalserverprotocol.PlayerChangeDimensionPacket;
+ import puregero.multipaper.externalserverprotocol.PlayerChangeGamemodePacket;
+ import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
+@@ -1290,7 +1288,7 @@ public class ServerPlayer extends Player {
+     @Override
+     public void take(Entity item, int count) {
+         super.take(item, count);
+-        this.containerMenu.broadcastChanges();
++        if (!MultiPaperEntitiesHandler.takingItem) this.containerMenu.broadcastChanges(); // MultiPaper
+     }
+ 
+     // CraftBukkit start - moved bed result checks from below into separate method
+@@ -1428,7 +1426,7 @@ public class ServerPlayer extends Player {
          } else {
              Entity entity2 = this.getVehicle();
  
@@ -211,7 +223,7 @@ index 4debf47f563b38e4890fae477f638c1fbd683a1b..014b89c43b3ca4fcbf35dc91705f0457
                  this.connection.teleport(this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
              }
  
-@@ -1445,7 +1446,7 @@ public class ServerPlayer extends Player {
+@@ -1445,7 +1443,7 @@ public class ServerPlayer extends Player {
          super.stopRiding(suppressCancellation); // Paper
          Entity entity1 = this.getVehicle();
  
@@ -220,7 +232,7 @@ index 4debf47f563b38e4890fae477f638c1fbd683a1b..014b89c43b3ca4fcbf35dc91705f0457
              this.connection.dismount(this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
          }
  
-@@ -1925,7 +1926,9 @@ public class ServerPlayer extends Player {
+@@ -1925,7 +1923,9 @@ public class ServerPlayer extends Player {
          this.locale = packet.language;
          // Paper start
          this.adventure$locale = net.kyori.adventure.translation.Translator.parseLocale(this.locale);
@@ -868,10 +880,10 @@ index 4119f9e8ef745c45fd193787dfff7ce92bbfd7e2..90dcb8eb17321923d831ec95a413a729
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..929923d53398490f5e7f7c71df97af05c358298f
+index 0000000000000000000000000000000000000000..7badb82180c88340c6f3301eeaf2d48d25bede33
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,273 @@
+@@ -0,0 +1,276 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -904,6 +916,7 @@ index 0000000000000000000000000000000000000000..929923d53398490f5e7f7c71df97af05
 +
 +    private static final Logger LOGGER = LogManager.getLogger(MultiPaperEntitiesHandler.class.getSimpleName());
 +    public static boolean removingEntity = false;
++    public static boolean takingItem = false;
 +
 +    public static void onEntitiesUnload(ServerLevel level, ChunkPos pos) {
 +        try {
@@ -1060,7 +1073,9 @@ index 0000000000000000000000000000000000000000..929923d53398490f5e7f7c71df97af05
 +                ((Mob) entity).setLeashedTo(entities[0], true);
 +            }
 +        } else if (packet instanceof ClientboundTakeItemEntityPacket takeItemEntityPacket) {
++            takingItem = true;
 +            ((LivingEntity) entities[0]).take(entity, takeItemEntityPacket.getAmount());
++            takingItem = false;
 +        } else {
 +            LOGGER.warn("Unhandled dependencies packet " + packet);
 +        }

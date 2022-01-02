@@ -1726,10 +1726,10 @@ index 7556253a69c24d98cf5a3539d24bcd7af1156f02..d0820b2987dd929e1df8c9cf2151fd14
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8482ed16ef089d1b2b882672ee4d82da973ec718
+index 0000000000000000000000000000000000000000..d2a27c3ef6c09f409cb50a73083ecc274496a4cd
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,70 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.level.ServerLevel;
@@ -1740,10 +1740,12 @@ index 0000000000000000000000000000000000000000..8482ed16ef089d1b2b882672ee4d82da
 +import org.bukkit.craftbukkit.CraftWorld;
 +import org.bukkit.craftbukkit.scheduler.CraftScheduler;
 +import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
 +
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
 +import java.io.IOException;
++import java.util.ConcurrentModificationException;
 +
 +public class RequestEntitiesPacket extends ExternalServerPacket {
 +
@@ -1789,7 +1791,12 @@ index 0000000000000000000000000000000000000000..8482ed16ef089d1b2b882672ee4d82da
 +                sendChunkLater(connection, world, cx, cz, depth + 1);
 +            }, 1, "ExternalServerConnection-sendEntitiesLater");
 +        } else {
-+            connection.send(new SendEntitiesPacket(level, new ChunkPos(cx, cz)));
++            try {
++                connection.send(new SendEntitiesPacket(level, new ChunkPos(cx, cz)));
++            } catch (ConcurrentModificationException e) {
++                LOGGER.warn("Got ConcurrentModificationException while sending entities, sending it in main thread instead");
++                MultiPaper.runSync(() -> sendChunkLater(connection, world, cx, cz, depth));
++            }
 +        }
 +    }
 +}

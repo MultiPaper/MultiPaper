@@ -259,7 +259,7 @@ index 80f6007a220698f61942b3c20b79517597f59c71..7cdec020e5c9f4f56b157ed3d38d33c3
      }
  
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 0c8925d29ce6937cdad5d9ecb1aab1b9d752630d..f440d07b369c03f2fe268d9dae063f008f05d217 100644
+index 558698cad8e3f94b5041d865187bfd37c95618f3..e995bd07e9e19cbe7105411a860be844c4d208e0 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -323,7 +323,6 @@ public abstract class PlayerList {
@@ -280,7 +280,7 @@ index 0c8925d29ce6937cdad5d9ecb1aab1b9d752630d..f440d07b369c03f2fe268d9dae063f00
          ClientboundPlayerInfoPacket packet = new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.ADD_PLAYER, player);
  
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index e025c01f54381ba0b77b056b7cd6bdae4aa909de..8023d26b4b6c08a97b34a0d46f06ebcc5e4481a6 100644
+index e025c01f54381ba0b77b056b7cd6bdae4aa909de..0963b09c91b14d5fbffc5bd1804fdf79cd462845 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -140,6 +140,8 @@ import org.bukkit.event.entity.EntityPoseChangeEvent;
@@ -292,7 +292,24 @@ index e025c01f54381ba0b77b056b7cd6bdae4aa909de..8023d26b4b6c08a97b34a0d46f06ebcc
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource, io.papermc.paper.util.KeyedObject { // Paper
-@@ -4144,6 +4146,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -264,6 +266,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+     private static final int FLAG_INVISIBLE = 5;
+     protected static final int FLAG_GLOWING = 6;
+     protected static final int FLAG_FALL_FLYING = 7;
++    public boolean isSyncing = false;  // MultiPaper - add isSyncing
+     private static final EntityDataAccessor<Integer> DATA_AIR_SUPPLY_ID = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.INT);
+     private static final EntityDataAccessor<Optional<Component>> DATA_CUSTOM_NAME = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.OPTIONAL_COMPONENT);
+     private static final EntityDataAccessor<Boolean> DATA_CUSTOM_NAME_VISIBLE = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.BOOLEAN);
+@@ -2374,7 +2377,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+         EntityType<?> entitytypes = this.getType();
+         ResourceLocation minecraftkey = EntityType.getKey(entitytypes);
+ 
+-        return entitytypes != null && entitytypes.canSerialize() ? getMinecraftKeyString() : null;
++        return entitytypes != null && (entitytypes.canSerialize() || isSyncing) ? getMinecraftKeyString() : null; // MultiPaper - add isSyncing
+         // Paper end
+     }
+ 
+@@ -4144,6 +4147,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
              int j = Mth.floor(y);
              int k = Mth.floor(z);
  
@@ -303,7 +320,7 @@ index e025c01f54381ba0b77b056b7cd6bdae4aa909de..8023d26b4b6c08a97b34a0d46f06ebcc
              if (i != this.blockPosition.getX() || j != this.blockPosition.getY() || k != this.blockPosition.getZ()) {
                  this.blockPosition = new BlockPos(i, j, k);
                  this.feetBlockState = null;
-@@ -4236,6 +4242,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4236,6 +4243,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
  
      @Override
      public void setRemoved(Entity.RemovalReason reason) {
@@ -313,7 +330,7 @@ index e025c01f54381ba0b77b056b7cd6bdae4aa909de..8023d26b4b6c08a97b34a0d46f06ebcc
          if (this.removalReason == null) {
              this.removalReason = reason;
          }
-@@ -4259,7 +4268,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4259,7 +4269,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
  
      @Override
      public boolean shouldBeSaved() {
@@ -323,7 +340,7 @@ index e025c01f54381ba0b77b056b7cd6bdae4aa909de..8023d26b4b6c08a97b34a0d46f06ebcc
  
      @Override
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index 6b386abec31da6071f09e70fd632df8a22ad90fe..459d8090de028bb90d495245a5f1799bf48b336e 100644
+index c3a85237f0a35d51e96bcc7ff238cdda8177e2bb..fae321f7501fe0b3e6c16f4764b8ea5c57b98485 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 @@ -137,6 +137,7 @@ import org.bukkit.event.entity.EntityRegainHealthEvent;
@@ -835,10 +852,10 @@ index 4119f9e8ef745c45fd193787dfff7ce92bbfd7e2..90dcb8eb17321923d831ec95a413a729
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..27779c88f0e925e4b5926ed4159bc6d81e1ac555
+index 0000000000000000000000000000000000000000..37240a4841a151b66b89ee0f6a9134a14617818d
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,271 @@
+@@ -0,0 +1,273 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -849,12 +866,10 @@ index 0000000000000000000000000000000000000000..27779c88f0e925e4b5926ed4159bc6d8
 +import net.minecraft.server.level.ChunkMap;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
-+import net.minecraft.world.entity.Entity;
-+import net.minecraft.world.entity.EquipmentSlot;
-+import net.minecraft.world.entity.LivingEntity;
-+import net.minecraft.world.entity.Mob;
++import net.minecraft.world.entity.*;
 +import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 +import net.minecraft.world.entity.ai.attributes.AttributeModifier;
++import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
 +import net.minecraft.world.item.ItemStack;
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.ChunkAccess;
@@ -1036,7 +1051,7 @@ index 0000000000000000000000000000000000000000..27779c88f0e925e4b5926ed4159bc6d8
 +    }
 +
 +    public static void onEntitySpawn(Entity entity) {
-+        if (!entity.shouldBeSaved()) return;
++        if (!shouldSyncEntity(entity)) return;
 +
 +        MultiPaper.runSync(() -> { // Run this after the entity has finished spawning
 +            if (entity.isRemoved()) {
@@ -1053,8 +1068,12 @@ index 0000000000000000000000000000000000000000..27779c88f0e925e4b5926ed4159bc6d8
 +        });
 +    }
 +
++    private static boolean shouldSyncEntity(Entity entity) {
++        return entity.shouldBeSaved() || entity instanceof LightningBolt || entity instanceof LeashFenceKnotEntity;
++    }
++
 +    public static void onEntityRemove(Entity entity, Entity.RemovalReason reason) {
-+        if (!entity.shouldBeSaved()) return;
++        if (!shouldSyncEntity(entity)) return;
 +        if (removingEntity) return;
 +        if (reason == Entity.RemovalReason.UNLOADED_TO_CHUNK || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER) return;
 +
@@ -1207,10 +1226,10 @@ index 0000000000000000000000000000000000000000..49177e89fe99fd18794bac3e431491f8
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e93a6f3a4123c6af9b98d997d9a2b77d949626ca
+index 0000000000000000000000000000000000000000..18d76d36623e232abfc1ea03f081c1dbcbc2f558
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,118 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1245,7 +1264,10 @@ index 0000000000000000000000000000000000000000..e93a6f3a4123c6af9b98d997d9a2b77d
 +        this.uuid = entity.getUUID();
 +
 +        CompoundTag tag = new CompoundTag();
++
++        entity.isSyncing = true;
 +        entity.save(tag);
++        entity.isSyncing = false;
 +
 +        if (tag.getAllKeys().isEmpty()) {
 +            new Exception("Sending an empty entity " + entity).printStackTrace();

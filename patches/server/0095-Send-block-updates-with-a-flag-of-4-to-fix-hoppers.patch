@@ -1,0 +1,19 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 2 Jan 2022 19:01:29 +1000
+Subject: [PATCH] Send block updates with a flag of 4 to fix hoppers
+
+
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index db7eec07c1df00054ff21f395d0df0e09291e946..d59157b46415f74b6f0fcb3746b212a98fb9dbd5 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -759,7 +759,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+                 this.setBlocksDirty(blockposition, iblockdata1, iblockdata2);
+             }
+ 
+-            if ((i & 2) != 0 && (!this.isClientSide || (i & 4) == 0) && (this.isClientSide || chunk == null || (chunk.getFullStatus() != null && chunk.getFullStatus().isOrAfter(ChunkHolder.FullChunkStatus.TICKING)))) { // allow chunk to be null here as chunk.isReady() is false when we send our notification during block placement
++            if (((i & 2) != 0 || i == 4) && (!this.isClientSide || (i & 4) == 0) && (this.isClientSide || chunk == null || (chunk.getFullStatus() != null && chunk.getFullStatus().isOrAfter(ChunkHolder.FullChunkStatus.TICKING)))) { // allow chunk to be null here as chunk.isReady() is false when we send our notification during block placement // MultiPaper - also send blocks with a flag of 4
+                 this.sendBlockUpdated(blockposition, iblockdata1, iblockdata, i);
+             }
+ 

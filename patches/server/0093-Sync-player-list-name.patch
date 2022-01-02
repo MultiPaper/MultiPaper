@@ -58,13 +58,14 @@ index 20e5c37e9b5a500281e8c23f4fce302ea117b378..193bc5592e22a68ebbecb5db9cb2a9c2
          MultiPaperEnderChestHandler.sendFullEnderChestUpdate(connection, player);
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..008add1c34cda02307dd37c0aafa5b22ae6870fd
+index 0000000000000000000000000000000000000000..5b3f40eb5679f88a395294b80fe01739272a18de
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,52 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.chat.Component;
++import net.minecraft.network.protocol.game.ClientboundPlayerInfoPacket;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import puregero.multipaper.ExternalServerConnection;
@@ -103,6 +104,12 @@ index 0000000000000000000000000000000000000000..008add1c34cda02307dd37c0aafa5b22
 +
 +            if (player != null) {
 +                player.listName = listName;
++
++                for (ServerPlayer receiver : player.server.getPlayerList().players) {
++                    if (MultiPaper.isRealPlayer(receiver) && receiver.getBukkitEntity().canSee(player.getBukkitEntity())) {
++                        receiver.connection.send(new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.UPDATE_DISPLAY_NAME, player));
++                    }
++                }
 +            }
 +        });
 +    }

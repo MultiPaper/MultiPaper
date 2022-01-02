@@ -359,6 +359,19 @@ index c3a85237f0a35d51e96bcc7ff238cdda8177e2bb..fae321f7501fe0b3e6c16f4764b8ea5c
          this.dismountTo(vec3d.x, vec3d.y, vec3d.z);
      }
  
+diff --git a/src/main/java/net/minecraft/world/entity/Mob.java b/src/main/java/net/minecraft/world/entity/Mob.java
+index d405bbb4163d9c8e197f7e0318b8c7bde873d4b1..0e04d9f57659adc284e85c86d3d160a0ff3110a3 100644
+--- a/src/main/java/net/minecraft/world/entity/Mob.java
++++ b/src/main/java/net/minecraft/world/entity/Mob.java
+@@ -1480,7 +1480,7 @@ public abstract class Mob extends LivingEntity {
+         return flag1;
+     }
+ 
+-    private void restoreLeashFromSave() {
++    public void restoreLeashFromSave() { // MultiPaper - make public
+         if (this.leashInfoTag != null && this.level instanceof ServerLevel) {
+             if (this.leashInfoTag.hasUUID("UUID")) {
+                 UUID uuid = this.leashInfoTag.getUUID("UUID");
 diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
 index 570d2325997e2465a8e17803ea882bc07ca64c38..9757b3215c9495515f8efbcaf49d1fbf889ba0cb 100644
 --- a/src/main/java/net/minecraft/world/entity/player/Player.java
@@ -433,10 +446,10 @@ index c7216cf3317cbd49b032c44feb370c50928dd21e..29cccfa81f57adeb3d1de10019c896ac
          try { // Paper
          int attempts = 0; Exception laste = null; while (attempts++ < 5) { try { // Paper
 diff --git a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee9717488c640 100644
+index bd7967680d7a75caff98a827895c795f2d101f99..43c4111e8e69fee0712330721b4c2eee6dfc7ef7 100644
 --- a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 +++ b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-@@ -25,15 +25,20 @@ import java.util.stream.Stream;
+@@ -25,15 +25,21 @@ import java.util.stream.Stream;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.SectionPos;
  import net.minecraft.server.level.ChunkHolder;
@@ -444,6 +457,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee971
  import net.minecraft.util.CsvOutput;
  import net.minecraft.util.VisibleForDebug;
  import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.Mob;
 +import net.minecraft.world.level.chunk.LevelChunk;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
@@ -457,7 +471,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee971
  // CraftBukkit end
  
  public class PersistentEntitySectionManager<T extends EntityAccess> implements AutoCloseable {
-@@ -46,9 +51,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -46,9 +52,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
      final EntitySectionStorage<T> sectionStorage;
      private final LevelEntityGetter<T> entityGetter;
      private final Long2ObjectMap<Visibility> chunkVisibility = new Long2ObjectOpenHashMap();
@@ -469,7 +483,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee971
      public final io.papermc.paper.world.EntitySliceManager entitySliceManager; // Paper
  
      public PersistentEntitySectionManager(Class<T> entityClass, LevelCallback<T> handler, EntityPersistentStorage<T> dataAccess, io.papermc.paper.world.EntitySliceManager entitySliceManager) { // Paper
-@@ -347,6 +352,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -347,6 +353,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
  
      private boolean processChunkUnload(long chunkPos) {
          org.spigotmc.AsyncCatcher.catchOp("Entity chunk unload process"); // Paper
@@ -484,7 +498,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee971
          boolean flag = this.storeChunkSections(chunkPos, (entityaccess) -> {
              entityaccess.getPassengersAndSelf().forEach(this::unloadEntity);
          }, true); // CraftBukkit - add boolean for event call
-@@ -375,6 +388,9 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -375,14 +389,26 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          ChunkEntities<T> chunkentities; // CraftBukkit - decompile error
  
          while ((chunkentities = (ChunkEntities) this.loadingInbox.poll()) != null) {
@@ -493,8 +507,10 @@ index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee971
 +            // MultiPaper end
              chunkentities.getEntities().forEach((entityaccess) -> {
                  this.addEntity(entityaccess, true);
++                if (entityaccess instanceof Mob mob) mob.restoreLeashFromSave(); // MultiPaper
              });
-@@ -383,6 +399,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+             this.chunkLoadStatuses.put(chunkentities.getPos().toLong(), PersistentEntitySectionManager.ChunkLoadStatus.LOADED);
+             // CraftBukkit start - call entity load event
              List<Entity> entities = this.getEntities(chunkentities.getPos());
              CraftEventFactory.callEntitiesLoadEvent(((EntityStorage) this.permanentStorage).level, chunkentities.getPos(), entities);
              // CraftBukkit end
@@ -509,7 +525,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..d69201d9bec3f21e51b9e09672fee971
          }
  
      }
-@@ -507,7 +531,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -507,7 +533,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          return i + "," + this.visibleEntityStorage.count() + "," + this.sectionStorage.count() + "," + this.chunkLoadStatuses.size() + "," + this.chunkVisibility.size() + "," + this.loadingInbox.size() + "," + this.chunksToUnload.size();
      }
  
@@ -852,7 +868,7 @@ index 4119f9e8ef745c45fd193787dfff7ce92bbfd7e2..90dcb8eb17321923d831ec95a413a729
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..37240a4841a151b66b89ee0f6a9134a14617818d
+index 0000000000000000000000000000000000000000..929923d53398490f5e7f7c71df97af05c358298f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 @@ -0,0 +1,273 @@
@@ -1068,7 +1084,7 @@ index 0000000000000000000000000000000000000000..37240a4841a151b66b89ee0f6a9134a1
 +        });
 +    }
 +
-+    private static boolean shouldSyncEntity(Entity entity) {
++    public static boolean shouldSyncEntity(Entity entity) {
 +        return entity.shouldBeSaved() || entity instanceof LightningBolt || entity instanceof LeashFenceKnotEntity;
 +    }
 +
@@ -1226,10 +1242,10 @@ index 0000000000000000000000000000000000000000..49177e89fe99fd18794bac3e431491f8
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..18d76d36623e232abfc1ea03f081c1dbcbc2f558
+index 0000000000000000000000000000000000000000..6f1ed87f4c615550ab3c9d7d3f04ebe37a7c7644
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,122 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1238,6 +1254,7 @@ index 0000000000000000000000000000000000000000..18d76d36623e232abfc1ea03f081c1db
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.Mob;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
@@ -1320,6 +1337,7 @@ index 0000000000000000000000000000000000000000..18d76d36623e232abfc1ea03f081c1db
 +            entity = EntityType.loadEntityRecursive(tag, level, entity2 -> {
 +                if (level.entityManager.isPending(entity2.chunkPosition().longKey) || level.entityManager.areEntitiesLoaded(entity2.chunkPosition().longKey)) {
 +                    level.entityManager.addNewEntity(entity2);
++                    if (entity2 instanceof Mob mob) mob.restoreLeashFromSave();
 +                    return entity2;
 +                } else {
 +                    LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk aren't loaded: " + entity2);
@@ -1344,6 +1362,8 @@ index 0000000000000000000000000000000000000000..18d76d36623e232abfc1ea03f081c1db
 +                }
 +            }
 +        }
++
++        if (entity instanceof Mob mob) mob.restoreLeashFromSave();
 +
 +        return entity;
 +    }
@@ -1823,10 +1843,10 @@ index 0000000000000000000000000000000000000000..df56adcd898e83362371ca27640fd719
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0696868c141ab606cccd195100d941ecfbfd8525
+index 0000000000000000000000000000000000000000..857a6c89d5e7b50381563c621344892f7da4e45e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
-@@ -0,0 +1,144 @@
+@@ -0,0 +1,147 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.SharedConstants;
@@ -1846,6 +1866,7 @@ index 0000000000000000000000000000000000000000..0696868c141ab606cccd195100d941ec
 +import puregero.multipaper.ChunkKey;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperEntitiesHandler;
 +
 +import java.io.ByteArrayInputStream;
 +import java.io.DataInputStream;
@@ -1881,9 +1902,11 @@ index 0000000000000000000000000000000000000000..0696868c141ab606cccd195100d941ec
 +        CompoundTag entitiesRoot = new CompoundTag();
 +        ListTag entities = new ListTag();
 +        for (Entity entity : level.entityManager.getEntities(pos)) {
-+            if (entity.shouldBeSaved()) {
++            if (MultiPaperEntitiesHandler.shouldSyncEntity(entity)) {
 +                CompoundTag tag = new CompoundTag();
++                entity.isSyncing = true;
 +                entity.save(tag);
++                entity.isSyncing = false;
 +                entities.add(tag);
 +            }
 +        }

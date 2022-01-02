@@ -1,14 +1,14 @@
 package puregero.multipaper.server;
 
-import org.jetbrains.annotations.Nullable;
 import puregero.multipaper.server.handlers.Handler;
 import puregero.multipaper.server.handlers.Handlers;
 
 import java.io.*;
 import java.net.Socket;
 import java.net.SocketAddress;
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -21,7 +21,6 @@ public class ServerConnection extends Thread {
     private final Map<Integer, Consumer<DataInputStream>> callbacks = new ConcurrentHashMap<>();
     private final List<Player> players = new ArrayList<>();
     private double tps;
-    @Nullable private CompletableFuture<Long> onTickFinish;
 
     /**
      * This connection map may include dead servers! Check if a server is alive
@@ -165,8 +164,6 @@ public class ServerConnection extends Thread {
             connections.remove(this);
         }
 
-        finishTick(-1);
-
         System.out.println(socket.getRemoteSocketAddress() + " (" + name + ") closed");
     }
 
@@ -196,17 +193,5 @@ public class ServerConnection extends Thread {
 
     public SocketAddress getAddress() {
         return socket.getRemoteSocketAddress();
-    }
-
-    public void setOnTickFinish(@Nullable CompletableFuture<Long> onTickFinish) {
-        this.onTickFinish = onTickFinish;
-    }
-
-    public void finishTick(long tickTime) {
-        CompletableFuture<Long> onTickFinish = this.onTickFinish;
-
-        if (onTickFinish != null) {
-            onTickFinish.complete(tickTime);
-        }
     }
 }

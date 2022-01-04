@@ -5,7 +5,7 @@ Subject: [PATCH] Add chunk syncing
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
-index d271871563fa883efb77b35ec3b1dfbba87f0b62..40e74c91d79eab808b5bed3954a67624188cc003 100644
+index d271871563fa883efb77b35ec3b1dfbba87f0b62..9f8c73d3ad985160f82fb58bd28b37d4613ef07a 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
 @@ -16,6 +16,7 @@ import net.minecraft.Util;
@@ -46,15 +46,7 @@ index d271871563fa883efb77b35ec3b1dfbba87f0b62..40e74c91d79eab808b5bed3954a67624
          this.playerProvider.getPlayers(this.pos, onlyOnWatchDistanceEdge).forEach((entityplayer) -> {
              entityplayer.connection.send(packet);
          });
-@@ -615,6 +627,7 @@ public class ChunkHolder {
-                 either.ifLeft(chunk -> {
-                     ChunkHolder.this.isEntityTickingReady = true;
-                     // Paper start - entity ticking chunk set
-+                    if (!chunk.hasExternalLockRequest) MultiPaper.lockChunk(chunk); // MultiPaper
-                     ChunkHolder.this.chunkMap.level.getChunkSource().entityTickingChunks.add(chunk);
-                     // Paper end - entity ticking chunk set
-                 });
-@@ -629,6 +642,7 @@ public class ChunkHolder {
+@@ -629,6 +641,7 @@ public class ChunkHolder {
              // Paper start - entity ticking chunk set
              LevelChunk chunkIfCached = this.getFullChunkUnchecked();
              if (chunkIfCached != null) {
@@ -62,7 +54,7 @@ index d271871563fa883efb77b35ec3b1dfbba87f0b62..40e74c91d79eab808b5bed3954a67624
                  this.chunkMap.level.getChunkSource().entityTickingChunks.remove(chunkIfCached);
              }
              // Paper end - entity ticking chunk set
-@@ -747,6 +761,40 @@ public class ChunkHolder {
+@@ -747,6 +760,40 @@ public class ChunkHolder {
          this.updateChunkToSave(CompletableFuture.completedFuture(Either.left(chunk.getWrapped())), "replaceProto");
      }
  
@@ -163,7 +155,7 @@ index da0649efaefd9221ecb50fe243b1ee1a5ee1385a..90ea886d16e6ad52015abf883c675843
  
          return regionFile.getStatusIfCached(chunkPos.x, chunkPos.z);
 diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
-index b2b714f212423006c8b2d7dba6820523c1063e24..7b072b40b30b1a27f5939dcbfa852870f1a3b640 100644
+index b2b714f212423006c8b2d7dba6820523c1063e24..8513fa2c2b4f1a9d26d2645ffb770ebef8fa26f8 100644
 --- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 +++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 @@ -50,6 +50,7 @@ import org.apache.logging.log4j.LogManager;
@@ -174,11 +166,16 @@ index b2b714f212423006c8b2d7dba6820523c1063e24..7b072b40b30b1a27f5939dcbfa852870
  
  public class ServerChunkCache extends ChunkSource {
  
-@@ -1036,6 +1037,8 @@ public class ServerChunkCache extends ChunkSource {
+@@ -1036,6 +1037,13 @@ public class ServerChunkCache extends ChunkSource {
                  // Paper end - optimise chunk tick iteration
                  ChunkPos chunkcoordintpair = chunk1.getPos();
  
-+                if (!MultiPaper.isChunkLocal(chunk1)) continue; // MultiPaper - Don't tick this chunk if we don't own it
++                // MultiPaper start - Don't tick this chunk if we don't own it
++                boolean isTicking = chunkMap.getDistanceManager().inEntityTickingRange(chunkcoordintpair.longKey);
++                if (isTicking && !chunk1.hasExternalLockRequest) MultiPaper.lockChunk(chunk1);
++                if (!isTicking && chunk1.hasExternalLockRequest) MultiPaper.unlockChunk(chunk1);
++                if (!MultiPaper.isChunkLocal(chunk1)) continue;
++                // MultiPaper end - Don't tick this chunk if we don't own it
 +
                  if ((true || this.level.isPositionEntityTicking(chunkcoordintpair)) && this.chunkMap.anyPlayerCloseEnoughForSpawning(holder, chunkcoordintpair, false)) { // Paper - optimise anyPlayerCloseEnoughForSpawning & optimise chunk tick iteration
                      chunk1.incrementInhabitedTime(j);

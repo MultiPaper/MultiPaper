@@ -31,59 +31,62 @@ public class ProxiedConnection {
     }
 
     public void write(SelectionKey key) {
-        synchronized (writeBuffer) {
-            if (writeBuffer.hasRemaining()) {
-                try {
-                    socketChannel.write(writeBuffer);
-                } catch (ClosedChannelException e) {
-                    close();
-                    return;
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    close();
-                    return;
-                }
+        if (writeBuffer.hasRemaining()) {
+            try {
+                socketChannel.write(writeBuffer);
+            } catch (ClosedChannelException e) {
+                close();
+                return;
+            } catch (IOException e) {
+                e.printStackTrace();
+                close();
+                return;
+            }
 
+            SelectionKey destinationKey = destinationChannel.keyFor(key.selector());
+            if (!writeBuffer.hasRemaining()) {
+                // We wrote all the data, stop listening to the write op and start listening to the read op
+                key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
+                destinationKey.interestOps(destinationKey.interestOps() | SelectionKey.OP_READ);
                 // Notify the other connection that the buffer has been emptied
-                if (!writeBuffer.hasRemaining()) {
-                    SelectionKey destinationKey = destinationChannel.keyFor(key.selector());
-                    ((ProxiedConnection) destinationKey.attachment()).read(destinationKey);
-                }
+                ((ProxiedConnection) destinationKey.attachment()).read(destinationKey);
+            } else {
+                // We didn't manage to write all of the data, tell us when we can write again and ignore when we can read
+                key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+                destinationKey.interestOps(destinationKey.interestOps() & ~SelectionKey.OP_READ);
             }
         }
     }
 
     public void read(SelectionKey key) {
-        synchronized (readBuffer) {
-            if (!readBuffer.hasRemaining()) {
-                readBuffer.position(0);
-                readBuffer.limit(readBuffer.capacity());
+        if (!readBuffer.hasRemaining()) {
+            readBuffer.position(0);
+            readBuffer.limit(readBuffer.capacity());
 
-                try {
-                    if (socketChannel.read(readBuffer) == -1) {
-                        close();
-                    }
-                } catch (ClosedChannelException e) {
+            try {
+                if (socketChannel.read(readBuffer) == -1) {
                     close();
-                    return;
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    close();
-                    return;
+                }
+            } catch (ClosedChannelException e) {
+                close();
+                return;
+            } catch (IOException e) {
+                e.printStackTrace();
+                close();
+                return;
+            }
+
+            readBuffer.limit(readBuffer.position());
+            readBuffer.position(0);
+
+            // Notify the other connection that the buffer has been filled
+            if (readBuffer.hasRemaining()) {
+                if (helloPacket) {
+                    rewriteHelloPacket(readBuffer);
                 }
 
-                readBuffer.limit(readBuffer.position());
-                readBuffer.position(0);
-
-                // Notify the other connection that the buffer has been filled
-                if (readBuffer.hasRemaining()) {
-                    if (helloPacket) {
-                        rewriteHelloPacket(readBuffer);
-                    }
-
-                    SelectionKey destinationKey = destinationChannel.keyFor(key.selector());
-                    ((ProxiedConnection) destinationKey.attachment()).write(destinationKey);
-                }
+                SelectionKey destinationKey = destinationChannel.keyFor(key.selector());
+                ((ProxiedConnection) destinationKey.attachment()).write(destinationKey);
             }
         }
     }

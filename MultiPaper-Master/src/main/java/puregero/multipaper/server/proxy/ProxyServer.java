@@ -10,17 +10,16 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Iterator;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class ProxyServer extends Thread {
 
     public static final int BUFFER_SIZE = Integer.parseInt(System.getProperty("proxyserver.buffersize", "32768"));
     public static final int WORKER_THREADS = Integer.parseInt(System.getProperty("proxyserver.workerthreads", Integer.toString(Runtime.getRuntime().availableProcessors())));
 
-    private final ExecutorService workers = Executors.newFixedThreadPool(WORKER_THREADS);
     private final ServerSocketChannel serverChannel;
     private final Selector selector;
+    private Selector[] workerSelectors;
+    private int workerSelectorsIndex = 0;
 
     public static void openServer(int port) {
         try {
@@ -33,16 +32,24 @@ public class ProxyServer extends Thread {
             Selector selector = Selector.open();
             serverChannel.register(selector, SelectionKey.OP_ACCEPT);
 
-            new ProxyServer(serverChannel, selector).start();
+            ProxyServer acceptThread = new ProxyServer(serverChannel, selector, "ProxyServer-Accept");
+
+            acceptThread.workerSelectors = new Selector[Math.max(1, WORKER_THREADS)];
+            for (int i = 0; i < acceptThread.workerSelectors.length; i ++) {
+                acceptThread.workerSelectors[i] = Selector.open();
+                new ProxyServer(serverChannel, acceptThread.workerSelectors[i], "ProxyServer-Worker #" + (i + 1)).start();
+            }
+
+            acceptThread.start();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public ProxyServer(ServerSocketChannel serverChannel, Selector selector) {
+    public ProxyServer(ServerSocketChannel serverChannel, Selector selector, String name) {
         this.serverChannel = serverChannel;
         this.selector = selector;
-        setName("ProxyServer");
+        setName(name);
     }
 
     @Override
@@ -66,15 +73,15 @@ public class ProxyServer extends Thread {
                     }
 
                     if (key.isAcceptable()) {
-                        workers.execute(() -> accept(key));
+                        accept(key);
                     }
 
                     if (key.isWritable()) {
-                        workers.execute(() -> ((ProxiedConnection) key.attachment()).write(key));
+                        ((ProxiedConnection) key.attachment()).write(key);
                     }
 
                     if (key.isReadable()) {
-                        workers.execute(() -> ((ProxiedConnection) key.attachment()).read(key));
+                        ((ProxiedConnection) key.attachment()).read(key);
                     }
                 }
             }
@@ -116,9 +123,10 @@ public class ProxyServer extends Thread {
             sourceConnection.setWriteBuffer(destinationConnection.getReadBuffer());
             destinationConnection.setWriteBuffer(sourceConnection.getReadBuffer());
 
-            destinationChannel.register(selector, SelectionKey.OP_READ, SelectionKey.OP_WRITE).attach(destinationConnection);
-            socketChannel.register(selector, SelectionKey.OP_READ, SelectionKey.OP_WRITE).attach(sourceConnection);
-            selector.wakeup();
+            Selector workerSelector = workerSelectors[workerSelectorsIndex = (workerSelectorsIndex + 1) % workerSelectors.length];
+            destinationChannel.register(workerSelector, SelectionKey.OP_READ, destinationConnection);
+            socketChannel.register(workerSelector, SelectionKey.OP_READ, sourceConnection);
+            workerSelector.wakeup();
 
             System.out.println(socketChannel.getRemoteAddress() + " has connected to " + destinationChannel.getRemoteAddress());
         } catch (IOException e) {

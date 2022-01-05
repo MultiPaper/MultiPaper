@@ -34,11 +34,7 @@ public class ProxiedConnection {
         if (writeBuffer.hasRemaining()) {
             try {
                 socketChannel.write(writeBuffer);
-            } catch (ClosedChannelException e) {
-                close();
-                return;
             } catch (IOException e) {
-                e.printStackTrace();
                 close();
                 return;
             }
@@ -67,11 +63,7 @@ public class ProxiedConnection {
                 if (socketChannel.read(readBuffer) == -1) {
                     close();
                 }
-            } catch (ClosedChannelException e) {
-                close();
-                return;
             } catch (IOException e) {
-                e.printStackTrace();
                 close();
                 return;
             }

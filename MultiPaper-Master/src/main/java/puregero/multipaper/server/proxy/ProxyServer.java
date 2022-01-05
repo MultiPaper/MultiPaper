@@ -76,11 +76,11 @@ public class ProxyServer extends Thread {
                         accept(key);
                     }
 
-                    if (key.isWritable()) {
+                    if (key.isValid() && key.isWritable()) {
                         ((ProxiedConnection) key.attachment()).write(key);
                     }
 
-                    if (key.isReadable()) {
+                    if (key.isValid() && key.isReadable()) {
                         ((ProxiedConnection) key.attachment()).read(key);
                     }
                 }

@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 5 Jan 2022 16:43:52 +1000
+Subject: [PATCH] Send server port to the master server
+
+
+diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+index 8c392224518b61edad3dbe7ee5d23611fff247af..bb77f89e2e00cd29c1f331d630eed77160ca0d5d 100644
+--- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -268,6 +268,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+             this.setPort(dedicatedserverproperties.serverPort);
+         }
+         bindAddress = new java.net.InetSocketAddress(inetaddress, this.getPort());
++        MultiPaper.setPort(this.getPort()); // MultiPaper
+         }
+         // Paper end
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 7f4dfc32418df136a1d10cc0cbf6d27454aacd56..98f072346627e277f369b10a13a7ab8fc9f06ff1 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -557,4 +557,8 @@ public class MultiPaper {
+     public static void broadcastPlayerAction(ServerPlayer player, ServerboundSetCarriedItemPacket packet) {
+         broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
+     }
++
++    public static void setPort(int port) {
++        getConnection().sendPort(port);
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 90dcb8eb17321923d831ec95a413a7290722fe7d..25e3ab36e490cecd40e0c89937c910a34f5e2e33 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -40,6 +40,7 @@ public class MultiPaperConnection extends Thread {
+     private final Map<Integer, Request> callbacks = new ConcurrentHashMap<>();
+     private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
+     private String myName = null;
++    private int port = -1;
+ 
+     public MultiPaperConnection() {
+         super("MultiPaperConnection Thread");
+@@ -113,6 +114,10 @@ public class MultiPaperConnection extends Thread {
+                     }
+                 }
+ 
++                if (port >= 0) {
++                    sendPort(port);
++                }
++
+                 DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+                 while (!socket.isClosed()) {
+                     int id = in.readInt();
+@@ -807,4 +812,16 @@ public class MultiPaperConnection extends Thread {
+             e.printStackTrace();
+         }
+     }
++
++    public void sendPort(int port) {
++        this.port = port;
++        try {
++            DataOutputSender out = new DataOutputSender(this);
++            out.writeUTF("setPort");
++            out.writeInt(port);
++            out.send(null);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
+ }

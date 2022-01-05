@@ -36,6 +36,7 @@ public class Handlers {
         handlers.put("start", new StartHandler());
         handlers.put("chunkChangedStatus", new ChunkChangedStatusHandler());
         handlers.put("requestChunkOwnership", new RequestChunkOwnershipHandler());
+        handlers.put("setPort", new SetPortHandler());
     }
 
     public static Handler get(String handler) {

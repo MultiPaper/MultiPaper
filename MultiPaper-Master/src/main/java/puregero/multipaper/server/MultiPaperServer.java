@@ -1,5 +1,7 @@
 package puregero.multipaper.server;
 
+import puregero.multipaper.server.proxy.ProxyServer;
+
 import java.io.IOException;
 import java.net.ServerSocket;
 
@@ -13,7 +15,16 @@ public class MultiPaperServer extends Thread {
             try {
                 port = Integer.parseInt(args[0]);
             } catch (NumberFormatException e) {
-                System.err.println("Usage: java -jar MultiPaperServer.jar <port>");
+                System.err.println("Usage: java -jar MultiPaperServer.jar <port> [proxy port]");
+                System.exit(1);
+            }
+        }
+
+        if (args.length > 1) {
+            try {
+                ProxyServer.openServer(Integer.parseInt(args[1]));
+            } catch (NumberFormatException e) {
+                System.err.println("Usage: java -jar MultiPaperServer.jar <port> [proxy port]");
                 System.exit(1);
             }
         }

@@ -64,7 +64,7 @@ Setting up MultiPaper
 ------
   * Place your worlds inside the directory being used for MultiPaper-Master
   * Start the MultiPaper-Master by either:
-    * Standalone: `java -jar multipaper-master.jar <port>`
+    * Standalone: `java -jar multipaper-master.jar <port> [optionalProxyPort]`
     * BungeeCord plugin: Set the port in `plugins/MultiPaperProxy/config.yml`
   * In each MultiPaper server:
     * Run the server once the generate the config file `multipaper.yml`
@@ -77,6 +77,25 @@ Setting up MultiPaper
       * Leave this as `0` for it to automatically choose a port for you
       * This value can be different for each server
       * Other servers are let known of your port via MultiPaper-Master
+
+The built-in proxy
+------
+MultiPaper provides a proxy (like Bungeecord or Velocity) that can be used to
+hide the multipaper servers behind a single address. The proxy automatically
+selects the multipaper server with the lowest load and forwards the player
+to it. The proxy provides no extra features and is designed to be as fast and
+light-weight as possible. To use the proxy, set `bungeecord` to `true` in
+the multipapers' spigot.yml.
+
+This proxy is only available when running a standalone MultiPaper-Master
+installation and can be started by specifying a port for it to listen on:
+
+`java -jar multipaper-master.jar <port> [proxy port]`
+
+For example, to run the MultiPaper-Master on port 35353 and the proxy on port
+25565, you'd run:
+
+`java -jar multipaper-master.jar 35353 25565`
   
 Using MultiPaper with plugins
 ------

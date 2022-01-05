@@ -21,6 +21,7 @@ public class ServerConnection extends Thread {
     private final Map<Integer, Consumer<DataInputStream>> callbacks = new ConcurrentHashMap<>();
     private final List<Player> players = new ArrayList<>();
     private double tps;
+    private int port = -1;
 
     /**
      * This connection map may include dead servers! Check if a server is alive
@@ -193,5 +194,13 @@ public class ServerConnection extends Thread {
 
     public SocketAddress getAddress() {
         return socket.getRemoteSocketAddress();
+    }
+
+    public int getPort() {
+        return port;
+    }
+
+    public void setPort(int port) {
+        this.port = port;
     }
 }

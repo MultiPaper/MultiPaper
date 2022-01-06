@@ -402,10 +402,10 @@ index 5e94d902df21af760767dbd18d13edd593a65445..0fcd70430f7e1baedc17004506fd4852
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index d0820b2987dd929e1df8c9cf2151fd14520439ef..b8f684eb64428654e0f5dd2d291e829b7ec3f58b 100644
+index c4dc70a8c90d419ad4e48ce47eb2e9a0ba75815c..108a09f1f371991305cf8124a7c93a9336a624ff 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -15,6 +15,8 @@ import puregero.multipaper.*;
+@@ -16,6 +16,8 @@ import puregero.multipaper.*;
  import java.io.DataInputStream;
  import java.io.DataOutputStream;
  import java.io.IOException;
@@ -414,16 +414,16 @@ index d0820b2987dd929e1df8c9cf2151fd14520439ef..b8f684eb64428654e0f5dd2d291e829b
  import java.util.UUID;
  
  public class PlayerCreatePacket extends ExternalServerPacket {
-@@ -30,6 +32,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -31,6 +33,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
      private float yaw;
      private float pitch;
      private final GameType gamemode;
 +    private final HashMap<String, String> data;
 +    private final HashMap<String, String> persistentData;
  
-     public PlayerCreatePacket(ServerPlayer player) {
+     private PlayerCreatePacket(ServerPlayer player) {
          this.name = player.getScoreboardName();
-@@ -41,6 +45,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -42,6 +46,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          this.yaw = player.getYRot();
          this.pitch = player.getXRot();
          this.gamemode = player.gameMode.getGameModeForPlayer();
@@ -432,7 +432,7 @@ index d0820b2987dd929e1df8c9cf2151fd14520439ef..b8f684eb64428654e0f5dd2d291e829b
      }
  
      public PlayerCreatePacket(DataInputStream in) throws IOException {
-@@ -53,6 +59,18 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -54,6 +60,18 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          yaw = in.readFloat();
          pitch = in.readFloat();
          gamemode = GameType.byId(in.read());
@@ -451,7 +451,7 @@ index d0820b2987dd929e1df8c9cf2151fd14520439ef..b8f684eb64428654e0f5dd2d291e829b
      }
  
      @Override
-@@ -66,12 +84,28 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -67,6 +85,18 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          out.writeFloat(yaw);
          out.writeFloat(pitch);
          out.write(gamemode.getId());
@@ -470,17 +470,17 @@ index d0820b2987dd929e1df8c9cf2151fd14520439ef..b8f684eb64428654e0f5dd2d291e829b
      }
  
      @Override
-     public void handle(ExternalServerConnection connection) {
-         LOGGER.info("Adding player " + name + " (" + uuid + ")");
--        MultiPaper.runSync(() -> ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode));
-+        MultiPaper.runSync(() -> {
+@@ -79,7 +109,9 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+                 existingPlayer.connection.disconnect("Logged in from another location");
+             }
+ 
+-            ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode);
 +            ExternalPlayer player = ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode);
 +            player.getBukkitEntity().data = data;
 +            player.getBukkitEntity().persistentData = persistentData;
-+        });
+         });
      }
  
-     public static void sendPlayer(ExternalServerConnection connection, ServerPlayer player) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerDataUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerDataUpdatePacket.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..ecefd031e3e8ea2ceaed5de8e025e3263a0aebec

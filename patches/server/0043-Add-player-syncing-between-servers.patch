@@ -562,12 +562,13 @@ index 0000000000000000000000000000000000000000..23acee115e2c7f3d7bfc9605b6f067c3
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e5fa6a719e7c4c9f1ee5085c687469c5ad8ce522
+index 0000000000000000000000000000000000000000..78c06f43dfcb8cccb69355fecc84678a144cf6d5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,85 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.level.GameType;
 +import org.apache.logging.log4j.LogManager;
@@ -595,7 +596,7 @@ index 0000000000000000000000000000000000000000..e5fa6a719e7c4c9f1ee5085c687469c5
 +    private float pitch;
 +    private final GameType gamemode;
 +
-+    public PlayerCreatePacket(ServerPlayer player) {
++    private PlayerCreatePacket(ServerPlayer player) {
 +        this.name = player.getScoreboardName();
 +        this.uuid = player.getUUID();
 +        this.world = player.getLevel().convertable.getLevelId();
@@ -635,7 +636,15 @@ index 0000000000000000000000000000000000000000..e5fa6a719e7c4c9f1ee5085c687469c5
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
 +        LOGGER.info("Adding player " + name + " (" + uuid + ")");
-+        MultiPaper.runSync(() -> ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode));
++        MultiPaper.runSync(() -> {
++            ServerPlayer existingPlayer = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++            if (existingPlayer != null) {
++                LOGGER.warn("Trying to add external player " + name + " (" + uuid + "), but they're already online as a " + existingPlayer.getClass().getSimpleName() + ", kicking them");
++                existingPlayer.connection.disconnect("Logged in from another location");
++            }
++
++            ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode);
++        });
 +    }
 +
 +    public static void sendPlayer(ExternalServerConnection connection, ServerPlayer player) {

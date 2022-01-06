@@ -6,33 +6,18 @@ Subject: [PATCH] Take control of external chunks to ensure a redstone
 
 
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index c53190203f18e9ae40466454e1a3b76e7b8511d3..db7eec07c1df00054ff21f395d0df0e09291e946 100644
+index c53190203f18e9ae40466454e1a3b76e7b8511d3..f62109eb390e660a9f9afe8641dcf11af264fc44 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
-@@ -99,6 +99,7 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
- import org.bukkit.craftbukkit.util.CraftNamespacedKey;
- import org.bukkit.event.block.BlockPhysicsEvent;
- import org.bukkit.event.world.GenericGameEvent;
-+import puregero.multipaper.MultiPaper;
- import puregero.multipaper.MultiPaperChunkHandler;
- // CraftBukkit end
- 
-@@ -814,6 +815,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -814,6 +814,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
              return false;
          } else {
              FluidState fluid = this.getFluidState(pos);
 +
-+            // MultiPaper start - only animate destroyed blocks on our chunks
-+            ChunkAccess chunk = getChunkIfLoaded(pos);
-+            if (MultiPaper.isChunkExternal(chunk)) {
-+                return this.setBlock(pos, fluid.createLegacyBlock(), 3, maxUpdateDepth);
-+            }
-+            // MultiPaper end
-+
              // Paper start - while the above setAir method is named same and looks very similar
              // they are NOT used with same intent and the above should not fire this event. The above method is more of a BlockSetToAirEvent,
              // it doesn't imply destruction of a block that plays a sound effect / drops an item.
-@@ -1057,7 +1066,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -1057,7 +1058,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
                  toRemove.add(tickingblockentity); // Paper - use removeAll
                  // Spigot end
              } else if (this.shouldTickBlocksAt(ChunkPos.asLong(tickingblockentity.getPos()))) {
@@ -78,26 +63,6 @@ index 86517c755f3762cf5f86d57894d6930a3cd3f872..7e8ba7c388644a3892fd518a8742e429
          this.getFluidTicks().schedule(this.createTick(pos, fluid, delay));
      }
  
-diff --git a/src/main/java/net/minecraft/world/level/block/Block.java b/src/main/java/net/minecraft/world/level/block/Block.java
-index ab5b9f00123e2ede2931ffc520684e482aac49b4..e1b0b93a640609fcce326e3cad500c8156c73350 100644
---- a/src/main/java/net/minecraft/world/level/block/Block.java
-+++ b/src/main/java/net/minecraft/world/level/block/Block.java
-@@ -62,6 +62,7 @@ import net.minecraft.world.phys.shapes.Shapes;
- import net.minecraft.world.phys.shapes.VoxelShape;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
-+import puregero.multipaper.MultiPaper;
- 
- public class Block extends BlockBehaviour implements ItemLike {
- 
-@@ -189,6 +190,7 @@ public class Block extends BlockBehaviour implements ItemLike {
-     }
- 
-     public static void updateOrDestroy(BlockState state, BlockState newState, LevelAccessor world, BlockPos pos, int flags, int maxUpdateDepth) {
-+        if (MultiPaper.isChunkExternal(world.getChunkIfLoadedImmediately(pos.getX(), pos.getZ()))) return; // MultiPaper - don't update blocks on external servers
-         if (newState != state) {
-             if (newState.isAir()) {
-                 if (!world.isClientSide()) {
 diff --git a/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java b/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
 index c9c18cf84e4ee5c253bbc64a4b41e91f9f4c4bc7..5f2374c0ca0bb2bf984255448e08bbcf388a6083 100644
 --- a/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java

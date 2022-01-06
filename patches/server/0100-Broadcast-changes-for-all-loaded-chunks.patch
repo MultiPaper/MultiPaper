@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 6 Jan 2022 19:07:52 +1000
+Subject: [PATCH] Broadcast changes for all loaded chunks
+
+Even chunks that aren't visible. This fixes issues with block updates along the edge of the view distance such as pistons pushing into a non-visible chunk.
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+index 8513fa2c2b4f1a9d26d2645ffb770ebef8fa26f8..2b6b91b9e5baa50bc91304d7a276d32b37e17ee9 100644
+--- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
++++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+@@ -1029,11 +1029,13 @@ public class ServerChunkCache extends ChunkSource {
+                 LevelChunk chunk1 = iterator1.next();
+                 ChunkHolder holder = chunk1.playerChunk;
+                 if (holder != null) {
+-                    gameprofilerfiller.popPush("broadcast");
+-                    this.level.timings.broadcastChunkUpdates.startTiming(); // Paper - timing
+-                    holder.broadcastChanges(chunk1);
+-                    this.level.timings.broadcastChunkUpdates.stopTiming(); // Paper - timing
+-                    gameprofilerfiller.pop();
++                    // MultiPaper start - move down
++//                    gameprofilerfiller.popPush("broadcast");
++//                    this.level.timings.broadcastChunkUpdates.startTiming(); // Paper - timing
++//                    holder.broadcastChanges(chunk1);
++//                    this.level.timings.broadcastChunkUpdates.stopTiming(); // Paper - timing
++//                    gameprofilerfiller.pop();
++                    // MultiPaper end - move down
+                 // Paper end - optimise chunk tick iteration
+                 ChunkPos chunkcoordintpair = chunk1.getPos();
+ 
+@@ -1065,6 +1067,20 @@ public class ServerChunkCache extends ChunkSource {
+                 }
+             }
+             // Paper end - optimise chunk tick iteration
++
++            // MultiPaper start - broadcast changes for all chunks
++            gameprofilerfiller.popPush("broadcast");
++            this.level.timings.broadcastChunkUpdates.startTiming(); // Paper - timing
++            for (ChunkHolder holder : chunkMap.getChunks()) {
++                ChunkAccess chunk = holder.getAvailableChunkNow();
++                if (chunk instanceof LevelChunk levelChunk) {
++                    holder.broadcastChanges(levelChunk);
++                }
++            }
++            this.level.timings.broadcastChunkUpdates.stopTiming(); // Paper - timing
++            gameprofilerfiller.pop();
++            // MultiPaper end - broadcast changes for all chunks
++
+             this.level.timings.chunkTicks.stopTiming(); // Paper
+             gameprofilerfiller.popPush("customSpawners");
+             if (flag2) {

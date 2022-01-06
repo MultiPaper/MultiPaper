@@ -41,10 +41,10 @@ index ec509a18e6cc9937f1216b38f0f4c3f3df66c3d8..75609c1074a45f20137ef1bb3d6bae9c
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index e7793a1b97be384917d9117e77b4a7996118cb41..9adb38f09481683789d193d7fc4adcf89569afba 100644
+index 733b08f931bc168025fe56dfe44442b929cfe9a4..14c9e177645bc2b784a6e1da4dcbf39416898d55 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -1,16 +1,18 @@
+@@ -1,17 +1,19 @@
  package puregero.multipaper;
  
 +import net.minecraft.network.protocol.Packet;
@@ -59,13 +59,14 @@ index e7793a1b97be384917d9117e77b4a7996118cb41..9adb38f09481683789d193d7fc4adcf8
  import java.io.*;
  import java.net.Socket;
  import java.nio.ByteBuffer;
+ import java.util.concurrent.*;
 -import java.util.HashSet;
 +import java.util.*;
- import java.util.concurrent.CompletableFuture;
- import java.util.concurrent.ExecutorService;
- import java.util.concurrent.Executors;
-@@ -22,6 +24,9 @@ public class ExternalServerConnection extends Thread implements Closeable {
-     private final ExecutorService sendThread = Executors.newSingleThreadExecutor();
+ 
+ public class ExternalServerConnection extends Thread implements Closeable {
+ 
+@@ -20,6 +22,9 @@ public class ExternalServerConnection extends Thread implements Closeable {
+     private final MultiPaperExecutor sendThread = new MultiPaperExecutor(new ConcurrentLinkedQueue<>());
      public HashSet<String> subscribedWorlds = new HashSet<>();
  
 +    private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
@@ -74,8 +75,8 @@ index e7793a1b97be384917d9117e77b4a7996118cb41..9adb38f09481683789d193d7fc4adcf8
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
          start();
-@@ -104,4 +109,32 @@ public class ExternalServerConnection extends Thread implements Closeable {
-             }, sendThread);
+@@ -102,4 +107,32 @@ public class ExternalServerConnection extends Thread implements Closeable {
+             });
          }
      }
 +

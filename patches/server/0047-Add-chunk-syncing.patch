@@ -491,10 +491,10 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 9adb38f09481683789d193d7fc4adcf89569afba..67eab8c9e6c41fb0ca104e0ec21d1411343f6822 100644
+index 14c9e177645bc2b784a6e1da4dcbf39416898d55..0eeb5a4c699a0b2dd22d71fc9d7797414fc0aa75 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -4,21 +4,23 @@ import net.minecraft.network.protocol.Packet;
+@@ -4,19 +4,21 @@ import net.minecraft.network.protocol.Packet;
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ServerPlayer;
@@ -509,11 +509,9 @@ index 9adb38f09481683789d193d7fc4adcf89569afba..67eab8c9e6c41fb0ca104e0ec21d1411
  import java.io.*;
  import java.net.Socket;
  import java.nio.ByteBuffer;
+ import java.util.concurrent.*;
  import java.util.*;
- import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.ConcurrentHashMap;
- import java.util.concurrent.ExecutorService;
- import java.util.concurrent.Executors;
 +import java.util.function.Consumer;
  
  public class ExternalServerConnection extends Thread implements Closeable {
@@ -521,8 +519,8 @@ index 9adb38f09481683789d193d7fc4adcf89569afba..67eab8c9e6c41fb0ca104e0ec21d1411
 +    private static final Logger LOGGER = LogManager.getLogger(ExternalServerPacket.class.getSimpleName());
      private final Socket socket;
      public ExternalServer externalServer = null;
-     private final ExecutorService sendThread = Executors.newSingleThreadExecutor();
-@@ -26,6 +28,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
+     private final MultiPaperExecutor sendThread = new MultiPaperExecutor(new ConcurrentLinkedQueue<>());
+@@ -24,6 +26,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
  
      private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
@@ -530,7 +528,7 @@ index 9adb38f09481683789d193d7fc4adcf89569afba..67eab8c9e6c41fb0ca104e0ec21d1411
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
-@@ -137,4 +140,15 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -135,4 +138,15 @@ public class ExternalServerConnection extends Thread implements Closeable {
              players.add(player);
          }
      }

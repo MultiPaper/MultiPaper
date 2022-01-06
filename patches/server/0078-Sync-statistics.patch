@@ -104,10 +104,10 @@ index df614d897a6612f438da6caa7d94f8f34b54db36..39b2b3ada17b28ce6fd1b9c42f2497eb
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerStatsIncreasePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerStatsIncreasePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7e7b2f642715fc7f8682621b5c8a95222c1fc9f0
+index 0000000000000000000000000000000000000000..1af1fa71dfcdf2ab19700c62e42e97b4383bce8c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerStatsIncreasePacket.java
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,108 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.core.Registry;
@@ -121,6 +121,7 @@ index 0000000000000000000000000000000000000000..7e7b2f642715fc7f8682621b5c8a9522
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperStatHandler;
 +
++import java.io.ByteArrayOutputStream;
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
 +import java.io.IOException;
@@ -132,10 +133,24 @@ index 0000000000000000000000000000000000000000..7e7b2f642715fc7f8682621b5c8a9522
 +public class PlayerStatsIncreasePacket extends ExternalServerPacket {
 +    private final UUID uuid;
 +    private final HashMap<Stat<?>, Integer> stats;
++    private byte[] cache;
 +
 +    public PlayerStatsIncreasePacket(Player player, HashMap<Stat<?>, Integer> stats) {
 +        this.uuid = player.getUUID();
 +        this.stats = stats;
++
++        try {
++            // Write the packet now so that we can pool the stats hashmap
++
++            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
++            DataOutputStream out = new DataOutputStream(byteArrayOutputStream);
++
++            write(out);
++
++            cache = byteArrayOutputStream.toByteArray();
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
 +    }
 +
 +    public PlayerStatsIncreasePacket(DataInputStream in) throws IOException {
@@ -167,6 +182,11 @@ index 0000000000000000000000000000000000000000..7e7b2f642715fc7f8682621b5c8a9522
 +
 +    @Override
 +    public void write(DataOutputStream out) throws IOException {
++        if (cache != null) {
++            out.write(cache);
++            return;
++        }
++
 +        Set<Map.Entry<Stat<?>, Integer>> entries = stats.entrySet();
 +
 +        writeUUID(out, uuid);

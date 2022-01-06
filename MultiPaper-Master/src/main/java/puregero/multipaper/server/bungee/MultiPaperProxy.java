@@ -23,6 +23,7 @@ import java.util.List;
 public class MultiPaperProxy extends Plugin implements Listener {
 
     private final HashSet<ProxiedPlayer> usingServerCommand = new HashSet<>();
+    private boolean balanceNodes = true;
 
     @Override
     public void onEnable() {
@@ -46,7 +47,13 @@ public class MultiPaperProxy extends Plugin implements Listener {
                 configuration.set("port", MultiPaperServer.DEFAULT_PORT);
             }
 
+            if (!configuration.contains("balanceNodes")) {
+                configuration.set("balanceNodes", true);
+            }
+
             ConfigurationProvider.getProvider(YamlConfiguration.class).save(configuration, new File(getDataFolder(), "config.yml"));
+
+            balanceNodes = configuration.getBoolean("balanceNodes", true);
 
             try {
                 new MultiPaperServer(configuration.getInt("port")).start();
@@ -73,7 +80,7 @@ public class MultiPaperProxy extends Plugin implements Listener {
             return;
         }
 
-        if (isMultiPaperServer(event.getTarget().getName())) {
+        if (balanceNodes && isMultiPaperServer(event.getTarget().getName())) {
             // They are connecting to a multipaper server
 
             List<ServerInfo> servers = new ArrayList<>(getProxy().getServers().values());

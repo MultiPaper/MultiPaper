@@ -17,6 +17,19 @@ index 17ebc0ac3d4c91d6818c79e8821681b668bd95c6..e0dc397e12c8e1a07e50102f08bb248b
                  metrics.addCustomChart(new Metrics.SimplePie("online_mode", () -> Bukkit.getOnlineMode() ? "online" : "offline"));
                  metrics.addCustomChart(new Metrics.SimplePie("multipaper_version", () -> (Metrics.class.getPackage().getImplementationVersion() != null) ? Metrics.class.getPackage().getImplementationVersion() : "unknown")); // Tuinity - we have our own bstats page // Airplane // MultiPaper
                  metrics.addCustomChart(new Metrics.SimplePie("total_servers", () -> String.valueOf(MultiPaper.getConnection().getServersMap().values().stream().filter(ExternalServer::isAlive).count()))); // MultiPaper
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index 79b8236e1063409ca199e532215ea024e1b7671b..91af7186d804e1bda8824f3c8f6b0e9d90f71a98 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -1491,6 +1491,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+             }
+         }
+ 
++        MultiPaper.tick(); // MultiPaper
++
+         // Paper start - incremental chunk and player saving
+         int playerSaveInterval = com.destroystokyo.paper.PaperConfig.playerAutoSaveRate;
+         if (playerSaveInterval < 0) {
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 index 7b23535a680d2a8534dcb8dd87770f66fb982c13..1e311b86901b22b0ec09d0fc5188e886110a2c4f 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
@@ -315,7 +328,7 @@ index 8dbe0fdbf4ca3cf7e739f7b91cd4a3a055b47a32..733b08f931bc168025fe56dfe44442b9
  
      public void send(ExternalServerPacket packet) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..ca46e1a515db6458b31dc7e19c9d2fd9d66a53c9 100644
+index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..824bfa73af81847f4f903e062cf8d46595613f92 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -4,7 +4,12 @@ import net.minecraft.server.level.ServerPlayer;
@@ -339,7 +352,7 @@ index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..ca46e1a515db6458b31dc7e19c9d2fd9
      private static MultiPaperConnection multiPaperConnection = null;
      private static ExternalServerSocket externalServerSocket = null;
  
-@@ -92,9 +98,14 @@ public class MultiPaper {
+@@ -92,6 +98,9 @@ public class MultiPaper {
          }
      }
  
@@ -349,12 +362,7 @@ index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..ca46e1a515db6458b31dc7e19c9d2fd9
      public static void sendTickTime(long time, double tps) {
          try {
              getConnection().writeTickTime(time, tps);
-+
-+            tick();
-         } catch (IOException e) {
-             e.printStackTrace();
-         }
-@@ -147,4 +158,34 @@ public class MultiPaper {
+@@ -147,4 +156,34 @@ public class MultiPaper {
      public static void broadcastPacketToExternalServers(ServerPlayer player, ExternalServerPacket packet) {
          broadcastPacketToExternalServers(player.getLevel().getWorld().getName(), packet);
      }

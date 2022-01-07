@@ -31,7 +31,7 @@ index 79b8236e1063409ca199e532215ea024e1b7671b..91af7186d804e1bda8824f3c8f6b0e9d
          int playerSaveInterval = com.destroystokyo.paper.PaperConfig.playerAutoSaveRate;
          if (playerSaveInterval < 0) {
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 7b23535a680d2a8534dcb8dd87770f66fb982c13..1e311b86901b22b0ec09d0fc5188e886110a2c4f 100644
+index 7b23535a680d2a8534dcb8dd87770f66fb982c13..f9706047b06b303f769ca1ce633e4fcd7c6bd3a0 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -164,6 +164,11 @@ import org.bukkit.event.player.PlayerPortalEvent;
@@ -46,7 +46,15 @@ index 7b23535a680d2a8534dcb8dd87770f66fb982c13..1e311b86901b22b0ec09d0fc5188e886
  // CraftBukkit end
  
  public class ServerPlayer extends Player {
-@@ -1175,6 +1180,24 @@ public class ServerPlayer extends Player {
+@@ -219,6 +224,7 @@ public class ServerPlayer extends Player {
+     private final TextFilter textFilter;
+     private boolean textFilteringEnabled;
+     private boolean allowsListing;
++    public boolean didMultiPaperJoin = false; // Multipaper
+     private final ContainerSynchronizer containerSynchronizer;
+     private final ContainerListener containerListener;
+     private int containerCounter;
+@@ -1175,6 +1181,24 @@ public class ServerPlayer extends Player {
              }
              // Paper end
  
@@ -71,7 +79,7 @@ index 7b23535a680d2a8534dcb8dd87770f66fb982c13..1e311b86901b22b0ec09d0fc5188e886
              return this;
          }
      }
-@@ -1835,6 +1858,8 @@ public class ServerPlayer extends Player {
+@@ -1835,6 +1859,8 @@ public class ServerPlayer extends Player {
                  this.setCamera(this);
              }
  
@@ -328,7 +336,7 @@ index 8dbe0fdbf4ca3cf7e739f7b91cd4a3a055b47a32..733b08f931bc168025fe56dfe44442b9
  
      public void send(ExternalServerPacket packet) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..824bfa73af81847f4f903e062cf8d46595613f92 100644
+index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..5889308c15bd5e6dcf7b9dfcb15865f1bdc36c61 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -4,7 +4,12 @@ import net.minecraft.server.level.ServerPlayer;
@@ -362,12 +370,13 @@ index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..824bfa73af81847f4f903e062cf8d465
      public static void sendTickTime(long time, double tps) {
          try {
              getConnection().writeTickTime(time, tps);
-@@ -147,4 +156,34 @@ public class MultiPaper {
+@@ -147,4 +156,35 @@ public class MultiPaper {
      public static void broadcastPacketToExternalServers(ServerPlayer player, ExternalServerPacket packet) {
          broadcastPacketToExternalServers(player.getLevel().getWorld().getName(), packet);
      }
 +
 +    public static void onPlayerJoin(ServerPlayer player) {
++        player.didMultiPaperJoin = true;
 +        forEachExternalServer(externalServer -> {
 +            if (externalServer.getConnection() != null && externalServer.getConnection().isOpen() && externalServer.getConnection().subscribedWorlds.contains(player.getLevel().getWorld().getName())) {
 +                PlayerCreatePacket.sendPlayer(externalServer.getConnection(), player);
@@ -376,7 +385,7 @@ index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..824bfa73af81847f4f903e062cf8d465
 +    }
 +
 +    public static void onPlayerDisconnect(ServerPlayer player) {
-+        if (!(player instanceof ExternalPlayer)) {
++        if (!(player instanceof ExternalPlayer) && player.didMultiPaperJoin) {
 +            broadcastPacketToExternalServers(player, new PlayerRemovePacket(player));
 +        }
 +    }
@@ -653,10 +662,10 @@ index 0000000000000000000000000000000000000000..78c06f43dfcb8cccb69355fecc84678a
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b2012d93a098ddacf707159b7fccd0a1820776ae
+index 0000000000000000000000000000000000000000..1338f1881622c0c31b3d25fee8618a3fd0c30869
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,47 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.MinecraftServer;
@@ -692,14 +701,16 @@ index 0000000000000000000000000000000000000000..b2012d93a098ddacf707159b7fccd0a1
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
 +
-+        if (player == null) {
-+            LOGGER.warn("Tried to remove a non-existent player with uuid " + uuid);
-+            return;
-+        }
++            if (player == null) {
++                LOGGER.warn("Tried to remove a non-existent player with uuid " + uuid);
++                return;
++            }
 +
-+        MultiPaper.runSync(() -> player.connection.disconnect("Disconnected from external server"));
++            player.connection.disconnect("Disconnected from external server");
++        });
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRespawnPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRespawnPacket.java

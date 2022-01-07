@@ -1,0 +1,86 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 7 Jan 2022 23:49:15 +1000
+Subject: [PATCH] Add /slist
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+index dc9d2b7ff44b0ca31ab1b6e6258795c7df114f40..75c47d4c51e41cce641d79b5cd3d0bb4eccd5cff 100644
+--- a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
++++ b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+@@ -6,6 +6,7 @@ import org.bukkit.command.Command;
+ import org.bukkit.command.SimpleCommandMap;
+ import puregero.multipaper.commands.MPDebugCommand;
+ import puregero.multipaper.commands.MPMapCommand;
++import puregero.multipaper.commands.SListCommand;
+ import puregero.multipaper.commands.ServersCommand;
+ 
+ public class CraftCommandMap extends SimpleCommandMap {
+@@ -27,6 +28,7 @@ public class CraftCommandMap extends SimpleCommandMap {
+         register("multipaper", new MPDebugCommand("mpdebug"));
+         register("multipaper", new ServersCommand("servers"));
+         register("multipaper", new MPMapCommand("mpmap"));
++        register("multipaper", new SListCommand("slist"));
+     }
+     // MultiPaper end
+ 
+diff --git a/src/main/java/puregero/multipaper/commands/SListCommand.java b/src/main/java/puregero/multipaper/commands/SListCommand.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..f9b85cb2de1fab25e0e48ceecf706dca41ce022f
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/commands/SListCommand.java
+@@ -0,0 +1,54 @@
++package puregero.multipaper.commands;
++
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import org.bukkit.Bukkit;
++import org.bukkit.ChatColor;
++import org.bukkit.command.Command;
++import org.bukkit.command.CommandSender;
++import puregero.multipaper.ExternalPlayer;
++import puregero.multipaper.ExternalServer;
++import puregero.multipaper.MultiPaper;
++
++public class SListCommand extends Command {
++    public SListCommand(String command) {
++        super(command);
++        setPermission("minecraft.command.list");
++    }
++
++    @Override
++    public boolean execute(CommandSender sender, String commandLabel, String[] args) {
++        sender.sendMessage(ChatColor.WHITE + "There are " + Bukkit.getOnlinePlayers().size() + " out of " + Bukkit.getMaxPlayers() + " players online");
++
++        for (ExternalServer server : MultiPaper.getConnection().getServersMap().values()) {
++            String name = ChatColor.GREEN + "[" + server.getName() + "] ";
++            String playerList = ChatColor.WHITE + "";
++            String playerSep = "";
++
++            int playerCount = 0;
++
++            for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
++                if ((server.isMe() && MultiPaper.isRealPlayer(player))
++                        || (player instanceof ExternalPlayer && ((ExternalPlayer) player).externalServerConnection == server.getConnection())) {
++                    playerCount ++;
++                    playerList += playerSep + player.getScoreboardName();
++                    playerSep = ", ";
++                }
++            }
++
++            String players = ChatColor.YELLOW + "(" + playerCount + "): ";
++
++            if (!server.isAlive()) {
++                if (playerCount == 0) {
++                    continue;
++                } else {
++                    name = ChatColor.GRAY + "[" + server.getName() + "] ";
++                }
++            }
++
++            sender.sendMessage(name + players + playerList);
++        }
++
++        return true;
++    }
++}

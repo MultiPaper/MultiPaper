@@ -103,7 +103,7 @@ index 5aa054d0770d58b91dfcafe6d05f092e81bd5905..216f0bc01f482ac59e01d77e858f87e2
                      this.removeBlockEntity(blockposition);
                  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 52738125242ab093d60ccb9420a88c43c062bb1e..b3e8529189329bcc38697af5aa61fd5a62082070 100644
+index 2f5e0713fbd2b5bbe72468bbd399a694c66b8913..244e0f494999afa48d7f2725191293e01dd841c5 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -203,6 +203,8 @@ public class MultiPaper {
@@ -117,10 +117,10 @@ index 52738125242ab093d60ccb9420a88c43c062bb1e..b3e8529189329bcc38697af5aa61fd5a
      public static void sendTickTime(long time, double tps) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java b/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a2d422e410cba751b0dbbe33101189d9bd91f5a4
+index 0000000000000000000000000000000000000000..4db560ccf326a74014d76a62b12dcfb13fb07060
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,153 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -188,16 +188,18 @@ index 0000000000000000000000000000000000000000..a2d422e410cba751b0dbbe33101189d9
 +            }
 +        }
 +
-+        CompletableFuture<Void> allFuture = CompletableFuture.allOf(takingControlOf.toArray(CompletableFuture[]::new));
++        if (!takingControlOf.isEmpty()) {
++            CompletableFuture<Void> allFuture = CompletableFuture.allOf(takingControlOf.toArray(CompletableFuture[]::new));
 +
-+        // Wait for the control process to complete before continuing the tick so that this doesn't mess up the next tick
-+        MinecraftServer.getServer().managedBlock(allFuture::isDone);
++            // Wait for the control process to complete before continuing the tick so that this doesn't mess up the next tick
++            MinecraftServer.getServer().managedBlock(allFuture::isDone);
 +
-+        for (CompletableFutureWithKey<HashSet<LevelChunk>, Boolean> completableFuture : takingControlOf) {
-+            if (!completableFuture.join()) {
-+                // Failed to take control of the chunks, send the tick lists to their owners
-+                for (LevelChunk chunk : completableFuture.getKey()) {
-+                    sendTickListTo(chunk);
++            for (CompletableFutureWithKey<HashSet<LevelChunk>, Boolean> completableFuture : takingControlOf) {
++                if (!completableFuture.join()) {
++                    // Failed to take control of the chunks, send the tick lists to their owners
++                    for (LevelChunk chunk : completableFuture.getKey()) {
++                        sendTickListTo(chunk);
++                    }
 +                }
 +            }
 +        }

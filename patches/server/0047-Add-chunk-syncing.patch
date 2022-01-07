@@ -800,10 +800,10 @@ index 215850f28d980ea5803d6c28319d2a51cfd72848..469589ccbf175fe148399f263792bb85
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9a4349b14245aaf1c8145609a55235e535831c7c
+index 0000000000000000000000000000000000000000..92c1dd813ac1c0bc0be6dbb14d6232302b2720de
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,229 @@
+@@ -0,0 +1,233 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -953,7 +953,11 @@ index 0000000000000000000000000000000000000000..9a4349b14245aaf1c8145609a55235e5
 +                    setBlock(((LevelChunk) blockUpdateChunk), pos, state);
 +                });
 +            } else if (packet instanceof ClientboundBlockEntityDataPacket update) {
-+                if (!update.getTag().getString("id").equals("minecraft:piston")) {
++                BlockEntity existingBlockEntity = blockUpdateChunk.getBlockEntity(update.getPos());
++                if (existingBlockEntity != null && existingBlockEntity.getMinecraftKey().toString().equals(update.getTag().getString("id"))) {
++                    existingBlockEntity.load(update.getTag());
++                    holder.blockChanged(update.getPos());
++                } else if (!update.getTag().getString("id").equals("minecraft:piston")) {
 +                    blockUpdateChunk.removeBlockEntity(update.getPos());
 +                    blockUpdateChunk.setBlockEntityNbt(update.getTag());
 +                    blockUpdateChunk.getBlockEntity(update.getPos());

@@ -1630,10 +1630,10 @@ index 0000000000000000000000000000000000000000..dd3826160ebd266a829c91bb9ca2c535
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..cdca8cca8581c4d6146f98fca4d47eff103e898a
+index 0000000000000000000000000000000000000000..8dcd270787ac942a69a9dd2e3749fffed1de9a9c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
-@@ -0,0 +1,83 @@
+@@ -0,0 +1,85 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.core.Registry;
@@ -1701,20 +1701,22 @@ index 0000000000000000000000000000000000000000..cdca8cca8581c4d6146f98fca4d47eff
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
-+        ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
-+        if (chunk instanceof LevelChunk levelChunk) {
-+            levelChunk.unregisterTickContainerFromLevel(level);
-+            levelChunk.blockTicks = LevelChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
-+            levelChunk.fluidTicks = LevelChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> Registry.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
-+            levelChunk.unpackTicks(level.getLevelData().getGameTime());
-+            if (levelChunk.loaded) levelChunk.registerTickContainerInLevel(level);
-+        } else if (chunk instanceof ProtoChunk protoChunk) {
-+            protoChunk.blockTicks = ProtoChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
-+            protoChunk.fluidTicks = ProtoChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> Registry.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
-+        } else {
-+            LOGGER.warn("Received tick lists for an unloaded chunk " + world + "," + cx + "," + cz);
-+        }
++        MultiPaper.runSync(() -> {
++            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++            ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
++            if (chunk instanceof LevelChunk levelChunk) {
++                levelChunk.unregisterTickContainerFromLevel(level);
++                levelChunk.blockTicks = LevelChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
++                levelChunk.fluidTicks = LevelChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> Registry.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
++                levelChunk.unpackTicks(level.getLevelData().getGameTime());
++                if (levelChunk.loaded) levelChunk.registerTickContainerInLevel(level);
++            } else if (chunk instanceof ProtoChunk protoChunk) {
++                protoChunk.blockTicks = ProtoChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
++                protoChunk.fluidTicks = ProtoChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> Registry.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
++            } else {
++                LOGGER.warn("Received tick lists for an unloaded chunk " + world + "," + cx + "," + cz);
++            }
++        });
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java

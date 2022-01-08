@@ -6,7 +6,7 @@ Subject: [PATCH] Take control of external chunks to ensure a redstone
 
 
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 8abc50b6eb41b4494f1aa0c048958fe59ebdbab7..9c3c677ab9f483c8ed3ad85bb78225649c392e32 100644
+index 732cca1df8364ae7f40ac497bfc78f0e5382dc16..7b9ea233c1ab6bb5ef58a6bcf514011cb356aeb4 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -186,6 +186,7 @@ import org.bukkit.event.server.ServerLoadEvent;
@@ -275,7 +275,7 @@ index 0000000000000000000000000000000000000000..4db560ccf326a74014d76a62b12dcfb1
 +
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
-index cdca8cca8581c4d6146f98fca4d47eff103e898a..816f757c601f6e836c25b39f00903e007bc6dec3 100644
+index 8dcd270787ac942a69a9dd2e3749fffed1de9a9c..d36c401cafd5769d9cf1111c9c3ec020d6e86a6a 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
 @@ -5,9 +5,11 @@ import net.minecraft.nbt.CompoundTag;
@@ -290,28 +290,28 @@ index cdca8cca8581c4d6146f98fca4d47eff103e898a..816f757c601f6e836c25b39f00903e00
  import net.minecraft.world.ticks.LevelChunkTicks;
  import net.minecraft.world.ticks.ProtoChunkTicks;
  import org.apache.logging.log4j.LogManager;
-@@ -67,7 +69,23 @@ public class SendTickListPacket extends ExternalServerPacket {
-     public void handle(ExternalServerConnection connection) {
-         ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
-         ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
--        if (chunk instanceof LevelChunk levelChunk) {
-+        if (level.getChunkIfLoaded(cx, cz) != null) {
-+            long now = level.getLevelData().getGameTime();
+@@ -68,7 +70,23 @@ public class SendTickListPacket extends ExternalServerPacket {
+         MultiPaper.runSync(() -> {
+             ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
+             ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
+-            if (chunk instanceof LevelChunk levelChunk) {
++            if (level.getChunkIfLoaded(cx, cz) != null) {
++                long now = level.getLevelData().getGameTime();
 +
-+            LevelChunkTicks<Block> blockTicks = LevelChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
-+            blockTicks.unpack(now);
-+            blockTicks.removeIf(scheduled -> {
-+                level.getBlockTicks().schedule(scheduled);
-+                return true;
-+            });
++                LevelChunkTicks<Block> blockTicks = LevelChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
++                blockTicks.unpack(now);
++                blockTicks.removeIf(scheduled -> {
++                    level.getBlockTicks().schedule(scheduled);
++                    return true;
++                });
 +
-+            LevelChunkTicks<Fluid> fluidTicks = LevelChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> Registry.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
-+            fluidTicks.unpack(now);
-+            fluidTicks.removeIf(scheduled -> {
-+                level.getFluidTicks().schedule(scheduled);
-+                return true;
-+            });
-+        } else if (chunk instanceof LevelChunk levelChunk) {
-             levelChunk.unregisterTickContainerFromLevel(level);
-             levelChunk.blockTicks = LevelChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
-             levelChunk.fluidTicks = LevelChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> Registry.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
++                LevelChunkTicks<Fluid> fluidTicks = LevelChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> Registry.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
++                fluidTicks.unpack(now);
++                fluidTicks.removeIf(scheduled -> {
++                    level.getFluidTicks().schedule(scheduled);
++                    return true;
++                });
++            } else if (chunk instanceof LevelChunk levelChunk) {
+                 levelChunk.unregisterTickContainerFromLevel(level);
+                 levelChunk.blockTicks = LevelChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
+                 levelChunk.fluidTicks = LevelChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> Registry.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());

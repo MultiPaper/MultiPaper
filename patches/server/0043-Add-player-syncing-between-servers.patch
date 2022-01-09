@@ -31,7 +31,7 @@ index 10d38958b17294648128a38efb7f84379738fac0..0a2a5709ad06263cf849a61f6a43279d
          int playerSaveInterval = com.destroystokyo.paper.PaperConfig.playerAutoSaveRate;
          if (playerSaveInterval < 0) {
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 7b23535a680d2a8534dcb8dd87770f66fb982c13..f9706047b06b303f769ca1ce633e4fcd7c6bd3a0 100644
+index 7b23535a680d2a8534dcb8dd87770f66fb982c13..7aaa378e4c3239173c7fc032ded8252aac5d2c0b 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -164,6 +164,11 @@ import org.bukkit.event.player.PlayerPortalEvent;
@@ -66,7 +66,7 @@ index 7b23535a680d2a8534dcb8dd87770f66fb982c13..f9706047b06b303f769ca1ce633e4fcd
 +                    boolean subscribedToDestination = externalServer.getConnection().subscribedWorlds.contains(destination.getWorld().getName());
 +
 +                    if (subscribedToSoruce && subscribedToDestination) {
-+                        externalServer.getConnection().send(new PlayerChangeDimensionPacket(this));
++                        externalServer.getConnection().send(new PlayerChangeDimensionPacket(this, false));
 +                    } else if (subscribedToDestination) {
 +                        PlayerCreatePacket.sendPlayer(externalServer.getConnection(), this);
 +                    } else if (subscribedToSoruce) {
@@ -110,7 +110,7 @@ index 926d0a80cbb55184955ac6720948d2e86683cc57..b1a82769dfbec6eeb9cbeb768e218637
              // Paper end
          }
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index f55f8c0b2c748a5442199c0a7f772b02ed533753..01d967f4feddccb983a7de73c7cd1326a7e43795 100644
+index f55f8c0b2c748a5442199c0a7f772b02ed533753..be3423cb11815f855c9a615f8f9fbfa2dddb48c9 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -13,14 +13,7 @@ import java.io.File;
@@ -197,7 +197,7 @@ index f55f8c0b2c748a5442199c0a7f772b02ed533753..01d967f4feddccb983a7de73c7cd1326
 +                boolean subscribedToDestination = externalServer.getConnection().subscribedWorlds.contains(worldserver1.getWorld().getName());
 +
 +                if (subscribedToSoruce && subscribedToDestination) {
-+                    externalServer.getConnection().send(new PlayerChangeDimensionPacket(entityplayer1));
++                    externalServer.getConnection().send(new PlayerChangeDimensionPacket(entityplayer1, true));
 +                } else if (subscribedToDestination) {
 +                    PlayerCreatePacket.sendPlayer(externalServer.getConnection(), entityplayer1);
 +                } else if (subscribedToSoruce) {
@@ -314,7 +314,7 @@ index 0000000000000000000000000000000000000000..ec509a18e6cc9937f1216b38f0f4c3f3
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 9f40f5587c376d8e3fa881824a988ec060e6b8d2..893e8f5a4fd42867fe106f43f380c81e974a39f3 100644
+index 0003197ea8802131ce3d8d8dfa5d19aa02565946..addc98997c8a599967c82725789e50af4f5a6be6 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -1,6 +1,8 @@
@@ -457,10 +457,10 @@ index aa9e79748ef682de68ecea928c80e021a955a791..4d3f43ce98e5ad09ed0bf23dce09d609
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7a50cedd8979b933963d2458b66945d99e1de84f
+index 0000000000000000000000000000000000000000..35497d398a2bbf35cc4d910f36ab5d050d7b1ffe
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,75 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.MinecraftServer;
@@ -484,13 +484,15 @@ index 0000000000000000000000000000000000000000..7a50cedd8979b933963d2458b66945d9
 +    private final double x;
 +    private final double y;
 +    private final double z;
++    private final boolean reset;
 +
-+    public PlayerChangeDimensionPacket(ServerPlayer player) {
++    public PlayerChangeDimensionPacket(ServerPlayer player, boolean reset) {
 +        this.uuid = player.getUUID();
 +        this.world = player.getLevel().convertable.getLevelId();
 +        this.x = player.getX();
 +        this.y = player.getY();
 +        this.z = player.getZ();
++        this.reset = reset;
 +    }
 +
 +    public PlayerChangeDimensionPacket(FriendlyDataInputStream in) throws IOException {
@@ -499,6 +501,7 @@ index 0000000000000000000000000000000000000000..7a50cedd8979b933963d2458b66945d9
 +        x = in.readDouble();
 +        y = in.readDouble();
 +        z = in.readDouble();
++        reset = in.readBoolean();
 +    }
 +
 +    @Override
@@ -508,6 +511,7 @@ index 0000000000000000000000000000000000000000..7a50cedd8979b933963d2458b66945d9
 +        out.writeDouble(x);
 +        out.writeDouble(y);
 +        out.writeDouble(z);
++        out.writeBoolean(reset);
 +    }
 +
 +    @Override
@@ -521,6 +525,10 @@ index 0000000000000000000000000000000000000000..7a50cedd8979b933963d2458b66945d9
 +
 +            player.setPosRaw(x, y, z);
 +
++            if (reset) {
++                player.reset();
++            }
++
 +            // Add to new world
 +            player.setLevel(level);
 +            player.unsetRemoved();
@@ -530,7 +538,7 @@ index 0000000000000000000000000000000000000000..7a50cedd8979b933963d2458b66945d9
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..23acee115e2c7f3d7bfc9605b6f067c30f526ac2
+index 0000000000000000000000000000000000000000..2f8858724fae9c15290a3a3b6b3d5b52821b3931
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java
 @@ -0,0 +1,39 @@
@@ -575,7 +583,7 @@ index 0000000000000000000000000000000000000000..23acee115e2c7f3d7bfc9605b6f067c3
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..78c06f43dfcb8cccb69355fecc84678a144cf6d5
+index 0000000000000000000000000000000000000000..f75ddc7f2122856dc803e7d0d6a4f871bd82e40e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 @@ -0,0 +1,85 @@
@@ -666,7 +674,7 @@ index 0000000000000000000000000000000000000000..78c06f43dfcb8cccb69355fecc84678a
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..1338f1881622c0c31b3d25fee8618a3fd0c30869
+index 0000000000000000000000000000000000000000..511c62f60426376fdb77dd3436d571c6fb398087
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
 @@ -0,0 +1,47 @@
@@ -719,7 +727,7 @@ index 0000000000000000000000000000000000000000..1338f1881622c0c31b3d25fee8618a3f
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRespawnPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRespawnPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0ca776a577b4084c8379eb9db540eb851787a506
+index 0000000000000000000000000000000000000000..dbac30515b1889a830a1e0589a0e5ef94489856b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRespawnPacket.java
 @@ -0,0 +1,88 @@

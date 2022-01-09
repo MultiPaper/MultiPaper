@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 9 Jan 2022 15:23:24 +1000
+Subject: [PATCH] Sync player cameras
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 36f9ecebd1e9cecbfc5784777719e599b251bd91..8ead331c4889e1e92ae764b81fdbd38ad6b6a00b 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -2043,6 +2043,8 @@ public class ServerPlayer extends Player {
+ 
+         this.camera = entity; // only set after validating state
+ 
++        if (!PlayerSetCameraPacket.handlingSetCamera) { // MultiPaper
++
+         if (entity != this) {
+             // Make sure we're in the right place
+             this.ejectPassengers(); // teleport can fail if we have passengers...
+@@ -2058,6 +2060,9 @@ public class ServerPlayer extends Player {
+         }
+         this.connection.send(new ClientboundSetCameraPacket(entity));
+         // Paper end
++
++            MultiPaper.broadcastPacketToExternalServers(this, new PlayerSetCameraPacket(this, entity)); // Multipaper
++        } // MultiPaper
+     }
+ 
+     @Override
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 62656ea5006b0c63bb5b97cd042f421a168276f6..e8f8699a6fb129118310f77367213971568bd190 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -48,6 +48,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerStatsIncreasePacket.class, PlayerStatsIncreasePacket::new);
+         addPacket(PlayerExperienceUpdatePacket.class, PlayerExperienceUpdatePacket::new);
+         addPacket(PlayerListNameUpdatePacket.class, PlayerListNameUpdatePacket::new);
++        addPacket(PlayerSetCameraPacket.class, PlayerSetCameraPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSetCameraPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSetCameraPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..337c5c03293a09a866befae1fb2f83a5275d2101
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSetCameraPacket.java
+@@ -0,0 +1,50 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.Entity;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.IOException;
++import java.util.UUID;
++
++public class PlayerSetCameraPacket extends ExternalServerPacket {
++
++    public static boolean handlingSetCamera = false;
++
++    private final UUID uuid;
++    private final UUID uuidCamera;
++
++    public PlayerSetCameraPacket(ServerPlayer player, Entity camera) {
++        this.uuid = player.getUUID();
++        this.uuidCamera = camera == null ? null : camera.getUUID();
++    }
++
++    public PlayerSetCameraPacket(FriendlyDataInputStream in) throws IOException {
++        uuid = in.readUUID();
++        uuidCamera = in.readBoolean() ? in.readUUID() : null;
++    }
++
++    @Override
++    public void write(FriendlyDataOutputStream out) throws IOException {
++        out.writeUUID(uuid);
++        out.writeBoolean(uuidCamera != null);
++        if (uuidCamera != null) {
++            out.writeUUID(uuidCamera);
++        }
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            handlingSetCamera = true;
++
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++            Entity entity = player.getLevel().getEntity(uuidCamera);
++            player.setCamera(entity);
++
++            handlingSetCamera = false;
++        });
++    }
++}

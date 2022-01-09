@@ -73,7 +73,7 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..95165501e33fa87656b5cf71cbcb68d893cfd694
+index 0000000000000000000000000000000000000000..b0da4d0c9eee334f2e40ec0091dfb6350cbabb0f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -0,0 +1,93 @@
@@ -91,7 +91,7 @@ index 0000000000000000000000000000000000000000..95165501e33fa87656b5cf71cbcb68d8
 +
 +    private final Socket socket;
 +    public ExternalServer externalServer = null;
-+    private final MultiPaperExecutor sendThread = new MultiPaperExecutor(new ConcurrentLinkedQueue<>());
++    private final ExecutorService sendThread = Executors.newSingleThreadExecutor();
 +
 +    public ExternalServerConnection(Socket socket) {
 +        this.socket = socket;
@@ -374,67 +374,6 @@ index 6d82a54d759d2be4a7cdfc392371ac94a563b59c..a07fee59d0907e2263426ec0ba47fb7b
 +        out.send(null);
 +    }
  }
-diff --git a/src/main/java/puregero/multipaper/MultiPaperExecutor.java b/src/main/java/puregero/multipaper/MultiPaperExecutor.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..76cb92e4dcc9b913e91e5fd6a53289ee2c061b34
---- /dev/null
-+++ b/src/main/java/puregero/multipaper/MultiPaperExecutor.java
-@@ -0,0 +1,55 @@
-+package puregero.multipaper;
-+
-+import org.jetbrains.annotations.NotNull;
-+
-+import java.util.Queue;
-+import java.util.concurrent.Executor;
-+import java.util.concurrent.locks.LockSupport;
-+
-+public class MultiPaperExecutor extends Thread implements Executor {
-+    private final Queue<Runnable> queue;
-+    private volatile boolean isShutdown = false;
-+    private volatile boolean isRunningTasks = false;
-+
-+    /**
-+     * @param queue Must be a thread-safe queue implementation
-+     */
-+    public MultiPaperExecutor(Queue<Runnable> queue) {
-+        this.queue = queue;
-+        start();
-+    }
-+
-+    @Override
-+    public void execute(@NotNull Runnable command) {
-+        queue.add(command);
-+
-+        if (!isRunningTasks) {
-+            LockSupport.unpark(this);
-+        }
-+    }
-+
-+    public void shutdown() {
-+        isShutdown = true;
-+    }
-+
-+    @Override
-+    public void run() {
-+        while (!isShutdown) {
-+            isRunningTasks = true;
-+            while (!queue.isEmpty()) {
-+                while (!queue.isEmpty()) {
-+                    Runnable task = queue.remove();
-+
-+                    task.run();
-+                }
-+
-+                // Wait 1 ms then check for tasks again, this saves us having to call unpark too many times
-+                LockSupport.parkNanos("short waiting for tasks", 1000000L);
-+            }
-+            isRunningTasks = false;
-+
-+            // 1 second park, on an active server this should always be unparked before it even reaches 1 second
-+            LockSupport.parkNanos("long waiting for tasks", 1000000000L);
-+        }
-+    }
-+}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..b4bb3e44ca3ea626c9170e636ee2d67c441b4800

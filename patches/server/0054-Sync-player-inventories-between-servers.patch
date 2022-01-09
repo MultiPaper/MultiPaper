@@ -902,10 +902,17 @@ index 0000000000000000000000000000000000000000..c7a0b11623e5a79d4ea842ffc088b20f
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
-index d819ab99327584516d9076c8f23497cf4b5fddf8..54ec32c02517f253c3789438014e93d7b3c4f537 100644
+index af285389a119f3661e607f1bdef0934cda970408..19913fcd26548d00eb4747b539d72e4c0b945f54 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
-@@ -12,6 +12,7 @@ import org.apache.logging.log4j.LogManager;
+@@ -6,12 +6,14 @@ import net.minecraft.network.ConnectionProtocol;
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.ServerPlayer;
+ import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
  import puregero.multipaper.ExternalServerConnection;
  import puregero.multipaper.MultiPaper;
@@ -913,14 +920,27 @@ index d819ab99327584516d9076c8f23497cf4b5fddf8..54ec32c02517f253c3789438014e93d7
  
  import java.io.DataInputStream;
  import java.io.DataOutputStream;
-@@ -84,6 +85,10 @@ public class SendPacketPacket extends ExternalServerPacket {
-                     return;
-                 }
+@@ -75,7 +77,11 @@ public class SendPacketPacket extends ExternalServerPacket {
  
-+                if (MultiPaperInventoryHandler.handlePacketFromExternalServer(connection.externalServer, player, packet)) {
-+                    return;
-+                }
-+
-                 player.connection.send(packet);
+     @Override
+     public void handle(ExternalServerConnection connection) {
+-        doHandle(connection);
++        if (packet instanceof ClientboundPlayerPositionPacket) {
++            MultiPaper.runSync(() -> doHandle(connection));
++        } else {
++            doHandle(connection);
++        }
+     }
+ 
+     public void doHandle(ExternalServerConnection connection) {
+@@ -87,6 +93,10 @@ public class SendPacketPacket extends ExternalServerPacket {
+                 return;
              }
-         });
+ 
++            if (MultiPaperInventoryHandler.handlePacketFromExternalServer(connection.externalServer, player, packet)) {
++                return;
++            }
++
+             player.connection.send(packet);
+         }
+     }

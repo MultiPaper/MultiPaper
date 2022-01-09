@@ -643,7 +643,7 @@ index 0e7172bb8d8024541662644ee5a0d0ea7dd902d6..a3b79258e7377a5b82e924834256cbdf
      public void checkInsideBlocks() {
          super.checkInsideBlocks();
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 20d0263ac71d393a765a7a78cc604f3946829803..09122d2a3609ebfba8b199b8f51567938757f29f 100644
+index c28985a13158ab05bcc9ebdc9ffac9d28c7a301b..6b5f65ce2c32ae1aa863b5d0dbc7118d2fecb072 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -27,6 +27,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
@@ -900,10 +900,10 @@ index 4119f9e8ef745c45fd193787dfff7ce92bbfd7e2..90dcb8eb17321923d831ec95a413a729
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7badb82180c88340c6f3301eeaf2d48d25bede33
+index 0000000000000000000000000000000000000000..14478d14c6585a6e887fed6e86a4084b80a84e3f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,276 @@
+@@ -0,0 +1,277 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -918,6 +918,7 @@ index 0000000000000000000000000000000000000000..7badb82180c88340c6f3301eeaf2d48d
 +import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 +import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 +import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
++import net.minecraft.world.entity.player.Player;
 +import net.minecraft.world.item.ItemStack;
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.ChunkAccess;
@@ -1124,7 +1125,7 @@ index 0000000000000000000000000000000000000000..7badb82180c88340c6f3301eeaf2d48d
 +    }
 +
 +    public static void onEntityRemove(Entity entity, Entity.RemovalReason reason) {
-+        if (!shouldSyncEntity(entity)) return;
++        if (!shouldSyncEntity(entity) && !(entity instanceof Player && reason == Entity.RemovalReason.KILLED)) return;
 +        if (removingEntity) return;
 +        if (reason == Entity.RemovalReason.UNLOADED_TO_CHUNK || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER) return;
 +
@@ -1209,14 +1210,15 @@ index 0000000000000000000000000000000000000000..a69c0ab8a07a32020946489acf97b9bd
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..49177e89fe99fd18794bac3e431491f8166a17c7
+index 0000000000000000000000000000000000000000..4ec11d32bb2c9e286cc5db8408eb8f794b26e12a
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,63 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.player.Player;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
 +import org.bukkit.craftbukkit.scheduler.CraftScheduler;
@@ -1258,7 +1260,7 @@ index 0000000000000000000000000000000000000000..49177e89fe99fd18794bac3e431491f8
 +            Entity entity = level.getEntity(uuid);
 +            if (entity != null) {
 +                MultiPaperEntitiesHandler.removingEntity = true;
-+                entity.setRemoved(Entity.RemovalReason.DISCARDED);
++                entity.setRemoved(entity instanceof Player ? Entity.RemovalReason.KILLED : Entity.RemovalReason.DISCARDED);
 +                MultiPaperEntitiesHandler.removingEntity = false;
 +            } else {
 +                setEntityRemoved(uuid);
@@ -1277,7 +1279,7 @@ index 0000000000000000000000000000000000000000..49177e89fe99fd18794bac3e431491f8
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..6f1ed87f4c615550ab3c9d7d3f04ebe37a7c7644
+index 0000000000000000000000000000000000000000..9442cc254704537aa0983ab1c810f028f64f6de4
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 @@ -0,0 +1,122 @@
@@ -1405,7 +1407,7 @@ index 0000000000000000000000000000000000000000..6f1ed87f4c615550ab3c9d7d3f04ebe3
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..81d269a4208ab9328b99e7d2eef39e788e1663ba
+index 0000000000000000000000000000000000000000..9120392720898fd7f97b333c9f2f7578de070107
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 @@ -0,0 +1,103 @@
@@ -1514,7 +1516,7 @@ index 0000000000000000000000000000000000000000..81d269a4208ab9328b99e7d2eef39e78
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7d5115ce44ac2182366b8765f8147252593932f3
+index 0000000000000000000000000000000000000000..39c6bb2394068da0cf366bcd66fe78b03bf93797
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 @@ -0,0 +1,133 @@
@@ -1670,7 +1672,7 @@ index a086c845e915de7d65457bb8111f7083b23541f2..92d4021d5377ec7abe7869479885a2f3
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
-index b242b1f00b4f4380db4d2c3d5a9c7ec66f478fcd..38d4b1f8ad24cd3003ddc891afb7c0c9bcce83ff 100644
+index 286f2f964822059d7bb58c6b7d8f6b6e1853b956..1172e49de361cb41dd5e1f7ddbc9de99f02cfbcb 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
 @@ -60,13 +60,15 @@ public class PlayerActionPacket extends ExternalServerPacket {
@@ -1696,7 +1698,7 @@ index b242b1f00b4f4380db4d2c3d5a9c7ec66f478fcd..38d4b1f8ad24cd3003ddc891afb7c0c9
      }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index ce3118df139ec2061fb050b0842493a0717bd7b3..c4dc70a8c90d419ad4e48ce47eb2e9a0ba75815c 100644
+index 734d8b21795a5027103a3e5d5dda6cbdf1b762bf..3b4bacb89e418f1aa37eb35fbd46711f27154316 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 @@ -1,9 +1,14 @@
@@ -1747,7 +1749,7 @@ index ce3118df139ec2061fb050b0842493a0717bd7b3..c4dc70a8c90d419ad4e48ce47eb2e9a0
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d2a27c3ef6c09f409cb50a73083ecc274496a4cd
+index 0000000000000000000000000000000000000000..08f181056896a176a475e7d6093cf1702a5cc3e9
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java
 @@ -0,0 +1,70 @@
@@ -1823,7 +1825,7 @@ index 0000000000000000000000000000000000000000..d2a27c3ef6c09f409cb50a73083ecc27
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..df56adcd898e83362371ca27640fd719c37feb3b
+index 0000000000000000000000000000000000000000..1b7ce7d96e0ac939198b1fccf7e7a8a9f3bdf962
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
 @@ -0,0 +1,57 @@
@@ -1886,7 +1888,7 @@ index 0000000000000000000000000000000000000000..df56adcd898e83362371ca27640fd719
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..857a6c89d5e7b50381563c621344892f7da4e45e
+index 0000000000000000000000000000000000000000..b50c1fe2a2ace2b9ce5f0b4942651a0c757c1e09
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
 @@ -0,0 +1,147 @@
@@ -2038,7 +2040,7 @@ index 0000000000000000000000000000000000000000..857a6c89d5e7b50381563c621344892f
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
-index b2bcaa3fbb1f9640faf3d7c61ba1a7087d46db12..389878c9f2a66e336b983f7b760a9584ae76f5f9 100644
+index d2a3a04e77ef7898b1eaddb37783d15413f3f34e..700161f76bac0a60391d38f9244c11906bc830d0 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
 @@ -10,6 +10,7 @@ import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
@@ -2062,7 +2064,7 @@ index b2bcaa3fbb1f9640faf3d7c61ba1a7087d46db12..389878c9f2a66e336b983f7b760a9584
          this.world = world;
          this.packet = packet;
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
-index eb733582d7b401fc657b48d5bf5474fa00630b6c..efcacae3e0b7e2dbba773cfab696f04f79f4bdd3 100644
+index ab69e1f3a6c9b4801763d802ff3c784be0710d95..530ceb36036034b5e421875e3e77bde946e0614c 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
 @@ -1,5 +1,6 @@

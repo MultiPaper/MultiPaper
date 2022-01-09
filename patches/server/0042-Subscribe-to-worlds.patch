@@ -5,7 +5,7 @@ Subject: [PATCH] Subscribe to worlds
 
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 552188278f86318017273b09192234f278b84cdd..d6d93ef9615c143e1e37fb520a35a21de94ae7e6 100644
+index d1684dfd788567e0fa0afbcdfed69074d37373a8..f576eb3dafd132a9b1cb106f750269f3226eb621 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 @@ -249,6 +249,8 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -26,10 +26,10 @@ index 552188278f86318017273b09192234f278b84cdd..d6d93ef9615c143e1e37fb520a35a21d
  
      @Override
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index e9a7feef3d266a43d9df9c1d7859181e169ed8c0..8dbe0fdbf4ca3cf7e739f7b91cd4a3a055b47a32 100644
+index 95165501e33fa87656b5cf71cbcb68d893cfd694..9f40f5587c376d8e3fa881824a988ec060e6b8d2 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -9,12 +9,14 @@ import java.io.*;
+@@ -7,12 +7,14 @@ import java.io.*;
  import java.net.Socket;
  import java.nio.ByteBuffer;
  import java.util.concurrent.*;
@@ -73,19 +73,19 @@ index 8da5b18aef1c16fa3293d32b8263d7500b5a0304..de38fd3dd41815791a07ad013c37cfe7
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index c21f3dc975820b3d979a4fc5c0fa981296375f0b..5f34f3e588debed182f77f90a315569d8b149fbd 100644
+index c1d7076b6cc2ff5ec575d1fc1f51ee350afe3199..aa9e79748ef682de68ecea928c80e021a955a791 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -13,6 +13,7 @@ public class ExternalServerPacketSerializer {
-     private static final List<IOExceptionFunction<DataInputStream, ExternalServerPacket>> PACKET_DESERIALIZERS = new ArrayList<>();
+@@ -11,6 +11,7 @@ public class ExternalServerPacketSerializer {
+     private static final List<IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket>> PACKET_DESERIALIZERS = new ArrayList<>();
      static {
          addPacket(HelloPacket.class, HelloPacket::new);
 +        addPacket(SubscribeToWorldPacket.class, SubscribeToWorldPacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
-index 21a57d5fcb66211e6a42d6d1b21940b25e9d1382..f3f3a73c847b692172640dfd12ff389f1f2404e7 100644
+index 8684b38175af859eb4b1c489866df41dddaed2cc..f447caf8e99c19f65e1af34ebb28df7489e003ab 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 @@ -2,6 +2,8 @@ package puregero.multipaper.externalserverprotocol;
@@ -97,7 +97,7 @@ index 21a57d5fcb66211e6a42d6d1b21940b25e9d1382..f3f3a73c847b692172640dfd12ff389f
  import puregero.multipaper.ExternalServerConnection;
  import puregero.multipaper.MultiPaper;
  
-@@ -33,5 +35,9 @@ public class HelloPacket extends ExternalServerPacket {
+@@ -31,5 +33,9 @@ public class HelloPacket extends ExternalServerPacket {
          LOGGER.info("Connected to external server " + bungeecordName);
          connection.externalServer = MultiPaper.getConnection().getOrCreateServer(bungeecordName);
          connection.externalServer.setConnection(connection);
@@ -133,12 +133,12 @@ index 0000000000000000000000000000000000000000..eb733582d7b401fc657b48d5bf5474fa
 +        this.world = world;
 +    }
 +
-+    public SubscribeToWorldPacket(DataInputStream in) throws IOException {
++    public SubscribeToWorldPacket(FriendlyDataInputStream in) throws IOException {
 +        world = in.readUTF();
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        out.writeUTF(world);
 +    }
 +

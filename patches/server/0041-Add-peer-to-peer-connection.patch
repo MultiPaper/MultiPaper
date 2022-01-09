@@ -73,16 +73,14 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e9a7feef3d266a43d9df9c1d7859181e169ed8c0
+index 0000000000000000000000000000000000000000..95165501e33fa87656b5cf71cbcb68d893cfd694
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,93 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.server.MinecraftServer;
-+import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
-+import puregero.multipaper.externalserverprotocol.ExternalServerPacketSerializer;
-+import puregero.multipaper.externalserverprotocol.HelloPacket;
++import puregero.multipaper.externalserverprotocol.*;
 +
 +import java.io.*;
 +import java.net.Socket;
@@ -129,7 +127,7 @@ index 0000000000000000000000000000000000000000..e9a7feef3d266a43d9df9c1d7859181e
 +                byte[] packetBytes = new byte[length];
 +                in.readFully(packetBytes);
 +                try {
-+                    DataInputStream packetInput = new DataInputStream(new ByteArrayInputStream(packetBytes));
++                    FriendlyDataInputStream packetInput = new FriendlyDataInputStream(new ByteArrayInputStream(packetBytes));
 +                    ExternalServerPacket packet = ExternalServerPacketSerializer.deserialize(packetInput);
 +                    packet.handle(this);
 +                } catch (Exception e) {
@@ -160,7 +158,7 @@ index 0000000000000000000000000000000000000000..e9a7feef3d266a43d9df9c1d7859181e
 +            sendThread.execute(() -> {
 +                try {
 +                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-+                    ExternalServerPacketSerializer.serialize(packet, new DataOutputStream(buffer));
++                    ExternalServerPacketSerializer.serialize(packet, new FriendlyDataOutputStream(buffer));
 +                    ByteBuffer byteBuffer = ByteBuffer.allocate(buffer.size() + 4);
 +                    byteBuffer.putInt(buffer.size());
 +                    byteBuffer.put(buffer.toByteArray());
@@ -439,7 +437,7 @@ index 0000000000000000000000000000000000000000..76cb92e4dcc9b913e91e5fd6a53289ee
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..81d61a2d671fedd031eb2725ac3ab45622e196b1
+index 0000000000000000000000000000000000000000..b4bb3e44ca3ea626c9170e636ee2d67c441b4800
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
 @@ -0,0 +1,14 @@
@@ -454,19 +452,17 @@ index 0000000000000000000000000000000000000000..81d61a2d671fedd031eb2725ac3ab456
 +
 +    public abstract void handle(ExternalServerConnection connection);
 +
-+    public abstract void write(DataOutputStream out) throws IOException;
++    public abstract void write(FriendlyDataOutputStream out) throws IOException;
 +
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c21f3dc975820b3d979a4fc5c0fa981296375f0b
+index 0000000000000000000000000000000000000000..c1d7076b6cc2ff5ec575d1fc1f51ee350afe3199
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,37 @@
 +package puregero.multipaper.externalserverprotocol;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
 +import java.io.EOFException;
 +import java.io.IOException;
 +import java.util.ArrayList;
@@ -475,12 +471,12 @@ index 0000000000000000000000000000000000000000..c21f3dc975820b3d979a4fc5c0fa9812
 +public class ExternalServerPacketSerializer {
 +
 +    private static final List<Class<? extends ExternalServerPacket>> PACKETS = new ArrayList<>();
-+    private static final List<IOExceptionFunction<DataInputStream, ExternalServerPacket>> PACKET_DESERIALIZERS = new ArrayList<>();
++    private static final List<IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket>> PACKET_DESERIALIZERS = new ArrayList<>();
 +    static {
 +        addPacket(HelloPacket.class, HelloPacket::new);
 +    }
 +
-+    private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
++    private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
 +        PACKETS.add(clazz);
 +        PACKET_DESERIALIZERS.add(deserializer);
 +    }
@@ -489,12 +485,12 @@ index 0000000000000000000000000000000000000000..c21f3dc975820b3d979a4fc5c0fa9812
 +        return PACKETS.indexOf(packet.getClass());
 +    }
 +
-+    public static void serialize(ExternalServerPacket packet, DataOutputStream out) throws IOException {
++    public static void serialize(ExternalServerPacket packet, FriendlyDataOutputStream out) throws IOException {
 +        out.write(getPacketId(packet));
 +        packet.write(out);
 +    }
 +
-+    public static ExternalServerPacket deserialize(DataInputStream in) throws IOException {
++    public static ExternalServerPacket deserialize(FriendlyDataInputStream in) throws IOException {
 +        int packetId = in.read();
 +        if (packetId == -1) {
 +            throw new EOFException("End of stream reached while reading packet id");
@@ -502,12 +498,144 @@ index 0000000000000000000000000000000000000000..c21f3dc975820b3d979a4fc5c0fa9812
 +        return PACKET_DESERIALIZERS.get(packetId).apply(in);
 +    }
 +}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/FriendlyDataInputStream.java b/src/main/java/puregero/multipaper/externalserverprotocol/FriendlyDataInputStream.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..d99a634bbd737298c750bf777907745c7ad64cf2
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/FriendlyDataInputStream.java
+@@ -0,0 +1,64 @@
++package puregero.multipaper.externalserverprotocol;
++
++import java.io.*;
++import java.nio.charset.StandardCharsets;
++import java.util.UUID;
++
++public class FriendlyDataInputStream extends DataInputStream {
++
++    public FriendlyDataInputStream(InputStream in) {
++        super(in);
++    }
++
++    public int readVarInt() throws IOException {
++        int i = 0;
++        int j = 0;
++
++        byte b0;
++
++        do {
++            b0 = this.readByte();
++            i |= (b0 & 127) << j++ * 7;
++            if (j > 5) {
++                throw new RuntimeException("VarInt too big");
++            }
++        } while ((b0 & 128) == 128);
++
++        return i;
++    }
++
++    public long readVarLong() throws IOException {
++        long i = 0L;
++        int j = 0;
++
++        byte b0;
++
++        do {
++            b0 = this.readByte();
++            i |= (long) (b0 & 127) << j++ * 7;
++            if (j > 10) {
++                throw new RuntimeException("VarLong too big");
++            }
++        } while ((b0 & 128) == 128);
++
++        return i;
++    }
++
++    public UUID readUUID() throws IOException {
++        return new UUID(this.readLong(), this.readLong());
++    }
++
++    public String readString() throws IOException {
++        byte[] stringBytes = new byte[readVarInt()];
++        readFully(stringBytes);
++        return new String(stringBytes, StandardCharsets.UTF_8);
++    }
++
++    public int remaining() {
++        if (in instanceof ByteArrayInputStream byteArrayInputStream) {
++            return byteArrayInputStream.available();
++        }
++
++        throw new UnsupportedOperationException("Not a ByteArrayInputStream");
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/FriendlyDataOutputStream.java b/src/main/java/puregero/multipaper/externalserverprotocol/FriendlyDataOutputStream.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..1237341168b9571155be62e053e781ab3d1c6de4
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/FriendlyDataOutputStream.java
+@@ -0,0 +1,56 @@
++package puregero.multipaper.externalserverprotocol;
++
++import java.io.ByteArrayOutputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.io.OutputStream;
++import java.nio.charset.StandardCharsets;
++import java.util.UUID;
++
++public class FriendlyDataOutputStream extends DataOutputStream {
++
++    public FriendlyDataOutputStream(OutputStream out) {
++        super(out);
++    }
++
++    public FriendlyDataOutputStream() {
++        super(new ByteArrayOutputStream());
++    }
++
++    public void writeUUID(UUID uuid) throws IOException {
++        this.writeLong(uuid.getMostSignificantBits());
++        this.writeLong(uuid.getLeastSignificantBits());
++    }
++
++    public void writeVarInt(int value) throws IOException {
++        while ((value & -128) != 0) {
++            this.writeByte(value & 127 | 128);
++            value >>>= 7;
++        }
++
++        this.writeByte(value);
++    }
++
++    public void writeVarLong(long value) throws IOException {
++        while ((value & -128L) != 0L) {
++            this.writeByte((int) (value & 127L) | 128);
++            value >>>= 7;
++        }
++
++        this.writeByte((int) value);
++    }
++
++    public void writeString(String string) throws IOException {
++        byte[] stringBytes = string.getBytes(StandardCharsets.UTF_8);
++        writeVarInt(stringBytes.length);
++        write(stringBytes);
++    }
++
++    public byte[] toByteArray() {
++        if (out instanceof ByteArrayOutputStream byteArrayOutputStream) {
++            return byteArrayOutputStream.toByteArray();
++        }
++
++        throw new UnsupportedOperationException("Not a ByteArrayOutputStream");
++    }
++}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..21a57d5fcb66211e6a42d6d1b21940b25e9d1382
+index 0000000000000000000000000000000000000000..8684b38175af859eb4b1c489866df41dddaed2cc
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,35 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import org.apache.logging.log4j.LogManager;
@@ -515,8 +643,6 @@ index 0000000000000000000000000000000000000000..21a57d5fcb66211e6a42d6d1b21940b2
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
 +import java.io.IOException;
 +
 +public class HelloPacket extends ExternalServerPacket {
@@ -529,12 +655,12 @@ index 0000000000000000000000000000000000000000..21a57d5fcb66211e6a42d6d1b21940b2
 +        this.bungeecordName = bungeecordName;
 +    }
 +
-+    public HelloPacket(DataInputStream in) throws IOException {
++    public HelloPacket(FriendlyDataInputStream in) throws IOException {
 +        bungeecordName = in.readUTF();
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        out.writeUTF(bungeecordName);
 +    }
 +

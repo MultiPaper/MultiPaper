@@ -18,7 +18,7 @@ index 17ebc0ac3d4c91d6818c79e8821681b668bd95c6..e0dc397e12c8e1a07e50102f08bb248b
                  metrics.addCustomChart(new Metrics.SimplePie("multipaper_version", () -> (Metrics.class.getPackage().getImplementationVersion() != null) ? Metrics.class.getPackage().getImplementationVersion() : "unknown")); // Tuinity - we have our own bstats page // Airplane // MultiPaper
                  metrics.addCustomChart(new Metrics.SimplePie("total_servers", () -> String.valueOf(MultiPaper.getConnection().getServersMap().values().stream().filter(ExternalServer::isAlive).count()))); // MultiPaper
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 79b8236e1063409ca199e532215ea024e1b7671b..91af7186d804e1bda8824f3c8f6b0e9d90f71a98 100644
+index 10d38958b17294648128a38efb7f84379738fac0..0a2a5709ad06263cf849a61f6a43279dccb539cf 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -1491,6 +1491,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -314,7 +314,7 @@ index 0000000000000000000000000000000000000000..ec509a18e6cc9937f1216b38f0f4c3f3
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 8dbe0fdbf4ca3cf7e739f7b91cd4a3a055b47a32..733b08f931bc168025fe56dfe44442b929cfe9a4 100644
+index 9f40f5587c376d8e3fa881824a988ec060e6b8d2..893e8f5a4fd42867fe106f43f380c81e974a39f3 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -1,6 +1,8 @@
@@ -323,10 +323,10 @@ index 8dbe0fdbf4ca3cf7e739f7b91cd4a3a055b47a32..733b08f931bc168025fe56dfe44442b9
  import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.dedicated.DedicatedServer;
 +import net.minecraft.server.level.ServerPlayer;
- import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
- import puregero.multipaper.externalserverprotocol.ExternalServerPacketSerializer;
- import puregero.multipaper.externalserverprotocol.HelloPacket;
-@@ -74,6 +76,12 @@ public class ExternalServerConnection extends Thread implements Closeable {
+ import puregero.multipaper.externalserverprotocol.*;
+ 
+ import java.io.*;
+@@ -72,6 +74,12 @@ public class ExternalServerConnection extends Thread implements Closeable {
          }
  
          sendThread.shutdown();
@@ -411,7 +411,7 @@ index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..5889308c15bd5e6dcf7b9dfcb15865f1
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
-index 81d61a2d671fedd031eb2725ac3ab45622e196b1..ae0855ca9cc5328b2fad1cd505a28ce44f57acaa 100644
+index b4bb3e44ca3ea626c9170e636ee2d67c441b4800..526640e28a04a7fbc380cb9d48fb167f1edaa402 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
 @@ -2,8 +2,10 @@ package puregero.multipaper.externalserverprotocol;
@@ -427,7 +427,7 @@ index 81d61a2d671fedd031eb2725ac3ab45622e196b1..ae0855ca9cc5328b2fad1cd505a28ce4
  
 @@ -11,4 +13,13 @@ public abstract class ExternalServerPacket {
  
-     public abstract void write(DataOutputStream out) throws IOException;
+     public abstract void write(FriendlyDataOutputStream out) throws IOException;
  
 +    protected UUID readUUID(DataInputStream in) throws IOException {
 +        return new UUID(in.readLong(), in.readLong());
@@ -440,10 +440,10 @@ index 81d61a2d671fedd031eb2725ac3ab45622e196b1..ae0855ca9cc5328b2fad1cd505a28ce4
 +
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 5f34f3e588debed182f77f90a315569d8b149fbd..e6088d96e11356c811bd3731461d9a0b1a79254a 100644
+index aa9e79748ef682de68ecea928c80e021a955a791..4d3f43ce98e5ad09ed0bf23dce09d6099df054cb 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -14,6 +14,11 @@ public class ExternalServerPacketSerializer {
+@@ -12,6 +12,11 @@ public class ExternalServerPacketSerializer {
      static {
          addPacket(HelloPacket.class, HelloPacket::new);
          addPacket(SubscribeToWorldPacket.class, SubscribeToWorldPacket::new);
@@ -454,7 +454,7 @@ index 5f34f3e588debed182f77f90a315569d8b149fbd..e6088d96e11356c811bd3731461d9a0b
 +        addPacket(PlayerChangeDimensionPacket.class, PlayerChangeDimensionPacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..7a50cedd8979b933963d2458b66945d99e1de84f
@@ -493,7 +493,7 @@ index 0000000000000000000000000000000000000000..7a50cedd8979b933963d2458b66945d9
 +        this.z = player.getZ();
 +    }
 +
-+    public PlayerChangeDimensionPacket(DataInputStream in) throws IOException {
++    public PlayerChangeDimensionPacket(FriendlyDataInputStream in) throws IOException {
 +        uuid = readUUID(in);
 +        world = in.readUTF();
 +        x = in.readDouble();
@@ -502,7 +502,7 @@ index 0000000000000000000000000000000000000000..7a50cedd8979b933963d2458b66945d9
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        writeUUID(out, uuid);
 +        out.writeUTF(world);
 +        out.writeDouble(x);
@@ -557,13 +557,13 @@ index 0000000000000000000000000000000000000000..23acee115e2c7f3d7bfc9605b6f067c3
 +        this.gamemode = player.gameMode.getGameModeForPlayer();
 +    }
 +
-+    public PlayerChangeGamemodePacket(DataInputStream in) throws IOException {
++    public PlayerChangeGamemodePacket(FriendlyDataInputStream in) throws IOException {
 +        uuid = readUUID(in);
 +        gamemode = GameType.byId(in.read());
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        writeUUID(out, uuid);
 +        out.write(gamemode.getId());
 +    }
@@ -621,7 +621,7 @@ index 0000000000000000000000000000000000000000..78c06f43dfcb8cccb69355fecc84678a
 +        this.gamemode = player.gameMode.getGameModeForPlayer();
 +    }
 +
-+    public PlayerCreatePacket(DataInputStream in) throws IOException {
++    public PlayerCreatePacket(FriendlyDataInputStream in) throws IOException {
 +        name = in.readUTF();
 +        uuid = readUUID(in);
 +        world = in.readUTF();
@@ -634,7 +634,7 @@ index 0000000000000000000000000000000000000000..78c06f43dfcb8cccb69355fecc84678a
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        out.writeUTF(name);
 +        writeUUID(out, uuid);
 +        out.writeUTF(world);
@@ -694,12 +694,12 @@ index 0000000000000000000000000000000000000000..1338f1881622c0c31b3d25fee8618a3f
 +        this.uuid = player.getUUID();
 +    }
 +
-+    public PlayerRemovePacket(DataInputStream in) throws IOException {
++    public PlayerRemovePacket(FriendlyDataInputStream in) throws IOException {
 +        uuid = readUUID(in);
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        writeUUID(out, uuid);
 +    }
 +
@@ -766,7 +766,7 @@ index 0000000000000000000000000000000000000000..0ca776a577b4084c8379eb9db540eb85
 +        this.respawnFlags = respawnFlags;
 +    }
 +
-+    public PlayerRespawnPacket(DataInputStream in) throws IOException {
++    public PlayerRespawnPacket(FriendlyDataInputStream in) throws IOException {
 +        uuid = readUUID(in);
 +        world = in.readUTF();
 +        alive = in.readBoolean();
@@ -784,7 +784,7 @@ index 0000000000000000000000000000000000000000..0ca776a577b4084c8379eb9db540eb85
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        writeUUID(out, uuid);
 +        out.writeUTF(world);
 +        out.writeBoolean(alive);

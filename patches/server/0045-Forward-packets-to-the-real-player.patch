@@ -41,22 +41,17 @@ index ec509a18e6cc9937f1216b38f0f4c3f3df66c3d8..75609c1074a45f20137ef1bb3d6bae9c
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 733b08f931bc168025fe56dfe44442b929cfe9a4..14c9e177645bc2b784a6e1da4dcbf39416898d55 100644
+index 893e8f5a4fd42867fe106f43f380c81e974a39f3..d8d72d70e805f49da9c7703807e867f526c6026b 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -1,17 +1,19 @@
+@@ -1,5 +1,6 @@
  package puregero.multipaper;
  
 +import net.minecraft.network.protocol.Packet;
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ServerPlayer;
- import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
- import puregero.multipaper.externalserverprotocol.ExternalServerPacketSerializer;
- import puregero.multipaper.externalserverprotocol.HelloPacket;
-+import puregero.multipaper.externalserverprotocol.SendPacketPacket;
- 
- import java.io.*;
+@@ -9,7 +10,7 @@ import java.io.*;
  import java.net.Socket;
  import java.nio.ByteBuffer;
  import java.util.concurrent.*;
@@ -65,7 +60,7 @@ index 733b08f931bc168025fe56dfe44442b929cfe9a4..14c9e177645bc2b784a6e1da4dcbf394
  
  public class ExternalServerConnection extends Thread implements Closeable {
  
-@@ -20,6 +22,9 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -18,6 +19,9 @@ public class ExternalServerConnection extends Thread implements Closeable {
      private final MultiPaperExecutor sendThread = new MultiPaperExecutor(new ConcurrentLinkedQueue<>());
      public HashSet<String> subscribedWorlds = new HashSet<>();
  
@@ -75,7 +70,7 @@ index 733b08f931bc168025fe56dfe44442b929cfe9a4..14c9e177645bc2b784a6e1da4dcbf394
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
          start();
-@@ -102,4 +107,32 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -100,4 +104,32 @@ public class ExternalServerConnection extends Thread implements Closeable {
              });
          }
      }
@@ -109,7 +104,7 @@ index 733b08f931bc168025fe56dfe44442b929cfe9a4..14c9e177645bc2b784a6e1da4dcbf394
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index ca46e1a515db6458b31dc7e19c9d2fd9d66a53c9..0cecbaf69f193011860c03e3fe0787d269819a60 100644
+index 5889308c15bd5e6dcf7b9dfcb15865f1bdc36c61..215850f28d980ea5803d6c28319d2a51cfd72848 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -99,6 +99,12 @@ public class MultiPaper {
@@ -126,17 +121,17 @@ index ca46e1a515db6458b31dc7e19c9d2fd9d66a53c9..0cecbaf69f193011860c03e3fe0787d2
  
      public static void sendTickTime(long time, double tps) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index e6088d96e11356c811bd3731461d9a0b1a79254a..c1bac1bf5148126a0fcad517bf499833d31cf050 100644
+index 4d3f43ce98e5ad09ed0bf23dce09d6099df054cb..4020f07f7ba5f8e4f68b8e6f0818a507f3f3b344 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -19,6 +19,7 @@ public class ExternalServerPacketSerializer {
+@@ -17,6 +17,7 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerChangeGamemodePacket.class, PlayerChangeGamemodePacket::new);
          addPacket(PlayerRespawnPacket.class, PlayerRespawnPacket::new);
          addPacket(PlayerChangeDimensionPacket.class, PlayerChangeDimensionPacket::new);
 +        addPacket(SendPacketPacket.class, SendPacketPacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..086f6064400d03de8eb9ffe9fa1a5f349cdf8fe5
@@ -185,7 +180,7 @@ index 0000000000000000000000000000000000000000..086f6064400d03de8eb9ffe9fa1a5f34
 +        this.packet = packet;
 +    }
 +
-+    public SendPacketPacket(DataInputStream in) throws IOException {
++    public SendPacketPacket(FriendlyDataInputStream in) throws IOException {
 +        uuids = new UUID[in.readInt()];
 +        for (int i = 0; i < uuids.length; i++) {
 +            this.uuids[i] = readUUID(in);
@@ -201,7 +196,7 @@ index 0000000000000000000000000000000000000000..086f6064400d03de8eb9ffe9fa1a5f34
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        out.writeInt(uuids.length);
 +        for (UUID uuid : uuids) {
 +            writeUUID(out, uuid);

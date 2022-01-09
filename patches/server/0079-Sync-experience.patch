@@ -5,10 +5,22 @@ Subject: [PATCH] Sync experience
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 87933a19ec2abff599bab3a3aa26ee6238ce0553..226aa61bf8f43147c8c859433c479488e5283ec7 100644
+index 87933a19ec2abff599bab3a3aa26ee6238ce0553..36f9ecebd1e9cecbfc5784777719e599b251bd91 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-@@ -592,6 +592,20 @@ public class ServerPlayer extends Player {
+@@ -165,10 +165,7 @@ import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
+ import org.bukkit.inventory.MainHand;
+ import puregero.multipaper.*;
+-import puregero.multipaper.externalserverprotocol.PlayerChangeDimensionPacket;
+-import puregero.multipaper.externalserverprotocol.PlayerChangeGamemodePacket;
+-import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
+-import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
++import puregero.multipaper.externalserverprotocol.*;
+ // CraftBukkit end
+ 
+ public class ServerPlayer extends Player {
+@@ -592,6 +589,20 @@ public class ServerPlayer extends Player {
          this.lastSentExp = -1;
      }
  
@@ -42,17 +54,30 @@ index 83ee406265020e77a6122c27530a9b8275f54620..df3317351977135627afc27dc110f710
          }
  
          MultiPaperExternalBlocksHandler.tick();
-diff --git a/src/main/java/puregero/multipaper/PlayerExperienceUpdatePacket.java b/src/main/java/puregero/multipaper/PlayerExperienceUpdatePacket.java
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index becab150b5efa9668717bf060471b1da24011635..361ab7bc6a5b8a517ca0077e1961e438e0bc36a9 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -46,6 +46,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(AdvancementGrantProgressPacket.class, AdvancementGrantProgressPacket::new);
+         addPacket(WeatherUpdatePacket.class, WeatherUpdatePacket::new);
+         addPacket(PlayerStatsIncreasePacket.class, PlayerStatsIncreasePacket::new);
++        addPacket(PlayerExperienceUpdatePacket.class, PlayerExperienceUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..fd9348fad3113766b0f5cfb3067d45f83b6c5def
+index 0000000000000000000000000000000000000000..da1ec929bd2ed94ca64091e3a3401a0af757f674
 --- /dev/null
-+++ b/src/main/java/puregero/multipaper/PlayerExperienceUpdatePacket.java
-@@ -0,0 +1,50 @@
-+package puregero.multipaper;
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java
+@@ -0,0 +1,51 @@
++package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
-+import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
 +
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
@@ -72,7 +97,7 @@ index 0000000000000000000000000000000000000000..fd9348fad3113766b0f5cfb3067d45f8
 +        this.level = level;
 +    }
 +
-+    public PlayerExperienceUpdatePacket(DataInputStream in) throws IOException {
++    public PlayerExperienceUpdatePacket(FriendlyDataInputStream in) throws IOException {
 +        uuid = readUUID(in);
 +        progress = in.readFloat();
 +        total = in.readInt();
@@ -80,7 +105,7 @@ index 0000000000000000000000000000000000000000..fd9348fad3113766b0f5cfb3067d45f8
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        writeUUID(out, uuid);
 +        out.writeFloat(progress);
 +        out.writeInt(total);
@@ -98,23 +123,3 @@ index 0000000000000000000000000000000000000000..fd9348fad3113766b0f5cfb3067d45f8
 +        });
 +    }
 +}
-diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 39b2b3ada17b28ce6fd1b9c42f2497ebb8db5c5f..4563f2147be9f78bdd2d26603081ea335ba088c0 100644
---- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-+++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -1,5 +1,7 @@
- package puregero.multipaper.externalserverprotocol;
- 
-+import puregero.multipaper.PlayerExperienceUpdatePacket;
-+
- import java.io.DataInputStream;
- import java.io.DataOutputStream;
- import java.io.EOFException;
-@@ -48,6 +50,7 @@ public class ExternalServerPacketSerializer {
-         addPacket(AdvancementGrantProgressPacket.class, AdvancementGrantProgressPacket::new);
-         addPacket(WeatherUpdatePacket.class, WeatherUpdatePacket::new);
-         addPacket(PlayerStatsIncreasePacket.class, PlayerStatsIncreasePacket::new);
-+        addPacket(PlayerExperienceUpdatePacket.class, PlayerExperienceUpdatePacket::new);
-     }
- 
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {

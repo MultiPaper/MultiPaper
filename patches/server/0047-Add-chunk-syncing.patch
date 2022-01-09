@@ -491,23 +491,19 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 14c9e177645bc2b784a6e1da4dcbf39416898d55..0eeb5a4c699a0b2dd22d71fc9d7797414fc0aa75 100644
+index d8d72d70e805f49da9c7703807e867f526c6026b..20d0263ac71d393a765a7a78cc604f3946829803 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -4,19 +4,21 @@ import net.minecraft.network.protocol.Packet;
+@@ -4,6 +4,8 @@ import net.minecraft.network.protocol.Packet;
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ServerPlayer;
--import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
--import puregero.multipaper.externalserverprotocol.ExternalServerPacketSerializer;
--import puregero.multipaper.externalserverprotocol.HelloPacket;
--import puregero.multipaper.externalserverprotocol.SendPacketPacket;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
-+import puregero.multipaper.externalserverprotocol.*;
+ import puregero.multipaper.externalserverprotocol.*;
  
  import java.io.*;
- import java.net.Socket;
+@@ -11,9 +13,12 @@ import java.net.Socket;
  import java.nio.ByteBuffer;
  import java.util.concurrent.*;
  import java.util.*;
@@ -520,7 +516,7 @@ index 14c9e177645bc2b784a6e1da4dcbf39416898d55..0eeb5a4c699a0b2dd22d71fc9d779741
      private final Socket socket;
      public ExternalServer externalServer = null;
      private final MultiPaperExecutor sendThread = new MultiPaperExecutor(new ConcurrentLinkedQueue<>());
-@@ -24,6 +26,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -21,6 +26,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
  
      private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
@@ -528,7 +524,7 @@ index 14c9e177645bc2b784a6e1da4dcbf39416898d55..0eeb5a4c699a0b2dd22d71fc9d779741
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
-@@ -135,4 +138,15 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -132,4 +138,15 @@ public class ExternalServerConnection extends Thread implements Closeable {
              players.add(player);
          }
      }
@@ -1374,10 +1370,10 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..e02a15c96a2b1f741292ca86b1c899fb
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index c1bac1bf5148126a0fcad517bf499833d31cf050..934b75c68cc94cf39d09f086d97b88d0fe50c23c 100644
+index 4020f07f7ba5f8e4f68b8e6f0818a507f3f3b344..6d53a1c5fb71ba4b8629e4c3b2d06ea999dccea0 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -20,6 +20,10 @@ public class ExternalServerPacketSerializer {
+@@ -18,6 +18,10 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerRespawnPacket.class, PlayerRespawnPacket::new);
          addPacket(PlayerChangeDimensionPacket.class, PlayerChangeDimensionPacket::new);
          addPacket(SendPacketPacket.class, SendPacketPacket::new);
@@ -1387,7 +1383,7 @@ index c1bac1bf5148126a0fcad517bf499833d31cf050..934b75c68cc94cf39d09f086d97b88d0
 +        addPacket(SendTickListPacket.class, SendTickListPacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<DataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..7cdf4f7fdf5dda89d72dd8126249583b36584265
@@ -1435,14 +1431,14 @@ index 0000000000000000000000000000000000000000..7cdf4f7fdf5dda89d72dd8126249583b
 +        this.cz = cz;
 +    }
 +
-+    public RequestChunkPacket(DataInputStream in) throws IOException {
++    public RequestChunkPacket(FriendlyDataInputStream in) throws IOException {
 +        world = in.readUTF();
 +        cx = in.readInt();
 +        cz = in.readInt();
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        out.writeUTF(world);
 +        out.writeInt(cx);
 +        out.writeInt(cz);
@@ -1571,7 +1567,7 @@ index 0000000000000000000000000000000000000000..dd3826160ebd266a829c91bb9ca2c535
 +        }
 +    }
 +
-+    public SendChunkPacket(DataInputStream in) throws IOException {
++    public SendChunkPacket(FriendlyDataInputStream in) throws IOException {
 +        world = in.readUTF();
 +        cx = in.readInt();
 +        cz = in.readInt();
@@ -1581,7 +1577,7 @@ index 0000000000000000000000000000000000000000..dd3826160ebd266a829c91bb9ca2c535
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        out.writeUTF(world);
 +        out.writeInt(cx);
 +        out.writeInt(cz);
@@ -1676,7 +1672,7 @@ index 0000000000000000000000000000000000000000..8dcd270787ac942a69a9dd2e3749fffe
 +        tag.put("fluid_ticks", chunk.fluidTicks.save(chunk.level.getLevelData().getGameTime(), (fluidtype) -> Registry.FLUID.getKey(fluidtype).toString()));
 +    }
 +
-+    public SendTickListPacket(DataInputStream in) throws IOException {
++    public SendTickListPacket(FriendlyDataInputStream in) throws IOException {
 +        this.world = in.readUTF();
 +        this.cx = in.readInt();
 +        this.cz = in.readInt();
@@ -1688,7 +1684,7 @@ index 0000000000000000000000000000000000000000..8dcd270787ac942a69a9dd2e3749fffe
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        out.writeUTF(world);
 +        out.writeInt(cx);
 +        out.writeInt(cz);
@@ -1759,7 +1755,7 @@ index 0000000000000000000000000000000000000000..b2bcaa3fbb1f9640faf3d7c61ba1a708
 +        this.packet = packet;
 +    }
 +
-+    public SendUpdatePacket(DataInputStream in) throws IOException {
++    public SendUpdatePacket(FriendlyDataInputStream in) throws IOException {
 +        world = in.readUTF();
 +
 +        int length = in.readInt();
@@ -1772,7 +1768,7 @@ index 0000000000000000000000000000000000000000..b2bcaa3fbb1f9640faf3d7c61ba1a708
 +    }
 +
 +    @Override
-+    public void write(DataOutputStream out) throws IOException {
++    public void write(FriendlyDataOutputStream out) throws IOException {
 +        out.writeUTF(world);
 +
 +        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);

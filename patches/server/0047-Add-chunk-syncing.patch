@@ -181,7 +181,7 @@ index b2b714f212423006c8b2d7dba6820523c1063e24..8513fa2c2b4f1a9d26d2645ffb770ebe
                      chunk1.incrementInhabitedTime(j);
                      if (flag2 && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair) && this.chunkMap.anyPlayerCloseEnoughForSpawning(holder, chunkcoordintpair, true)) { // Spigot // Paper - optimise anyPlayerCloseEnoughForSpawning & optimise chunk tick iteration
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 93471417e8c6e0c67131005e7e0f63339d96e555..f4ab73db8c2c98462722f68350e7036097b9f784 100644
+index 3e9979de1a49c49e3ac12c54d2c177b4972ff481..00f43c0a59de4f02bf40cd74c1d78742a6faac88 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -161,6 +161,8 @@ import org.bukkit.event.weather.LightningStrikeEvent;
@@ -796,10 +796,10 @@ index 215850f28d980ea5803d6c28319d2a51cfd72848..469589ccbf175fe148399f263792bb85
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..92c1dd813ac1c0bc0be6dbb14d6232302b2720de
+index 0000000000000000000000000000000000000000..52bdd8a2070b6d752f65dbe5be42738522d9ccbf
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,233 @@
+@@ -0,0 +1,242 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -881,6 +881,11 @@ index 0000000000000000000000000000000000000000..92c1dd813ac1c0bc0be6dbb14d623230
 +    }
 +
 +    public static void onBlockUpdate(ChunkHolder chunkHolder, Packet<?> packet) {
++        if (packet instanceof ClientboundLightUpdatePacket) {
++            // This packet doesn't work, no point in sending it
++            return;
++        }
++
 +        if (chunkHolder == null) {
 +            // Chunk is still loading
 +            return;
@@ -909,6 +914,7 @@ index 0000000000000000000000000000000000000000..92c1dd813ac1c0bc0be6dbb14d623230
 +    public static void handleBlockUpdate(String world, Packet<?> packet) {
 +        holder = null;
 +        blockUpdateChunk = null;
++        ChunkAccess tempChunk = null;
 +        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
 +        if (packet instanceof ClientboundBlockUpdatePacket update) {
 +            holder = MultiPaper.getChunkHolder(world, update.getPos());
@@ -923,17 +929,20 @@ index 0000000000000000000000000000000000000000..92c1dd813ac1c0bc0be6dbb14d623230
 +        }
 +
 +        if (holder != null) {
-+            blockUpdateChunk = holder.getAvailableChunkNow();
++            tempChunk = holder.getAvailableChunkNow();
 +
-+            if (blockUpdateChunk instanceof ImposterProtoChunk imposterProtoChunk) {
-+                blockUpdateChunk = imposterProtoChunk.getWrapped();
++            if (tempChunk instanceof ImposterProtoChunk imposterProtoChunk) {
++                tempChunk = imposterProtoChunk.getWrapped();
 +            }
 +        }
 +
-+        if (holder != null && blockUpdateChunk instanceof LevelChunk levelChunk) {
++        if (holder != null && tempChunk instanceof LevelChunk levelChunk) {
 +            // Clear pre-existing block changes
 +            holder.broadcastChanges(levelChunk);
 +        }
++
++        // Set blockUpdateChunk here so that we can broadcast changes beforehand
++        blockUpdateChunk = tempChunk;
 +
 +        boolean unsaved = false;
 +        if (blockUpdateChunk != null) {

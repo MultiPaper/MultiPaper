@@ -1,0 +1,184 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 11 Jan 2022 23:50:54 +1000
+Subject: [PATCH] Pickup items on the player's server
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index e2ed436c427464249bda23db817c83e54c2e2492..3fb740ea7402fbc792800f1cf79135571543218a 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -205,6 +205,7 @@ public class ServerPlayer extends Player {
+     @Nullable
+     private Vec3 levitationStartPos;
+     private int levitationStartTime;
++    public boolean hasAddedAnItemThisTick = false; // MultiPaper
+     private boolean disconnected;
+     @Nullable
+     private Vec3 startingToFallPosition;
+diff --git a/src/main/java/net/minecraft/world/entity/item/ItemEntity.java b/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
+index 39a938dfc3b7478800e5f736ef3a85b70e1c4382..807a62c0f23985cd53937f11d9ba46ca9e614ad1 100644
+--- a/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
++++ b/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
+@@ -37,6 +37,7 @@ import org.bukkit.event.entity.EntityPickupItemEvent;
+ import org.bukkit.event.player.PlayerPickupItemEvent;
+ // CraftBukkit end
+ import org.bukkit.event.player.PlayerAttemptPickupItemEvent; // Paper
++import puregero.multipaper.MultiPaperInventoryHandler;
+ 
+ public class ItemEntity extends Entity {
+ 
+@@ -459,7 +460,7 @@ public class ItemEntity extends Entity {
+             }
+             // CraftBukkit end
+ 
+-            if (this.pickupDelay == 0 && (this.owner == null || this.owner.equals(player.getUUID())) && player.getInventory().add(itemstack)) {
++            if (this.pickupDelay == 0 && (this.owner == null || this.owner.equals(player.getUUID())) && MultiPaperInventoryHandler.givePlayerItem(player, itemstack)) { // MultiPaper
+                 // Paper Start
+                 if (flyAtPlayer) {
+                     player.take(this, i);
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 13e9a8144d9fb124e497818b6c3b7af4a3e03cbf..fcdd00d2c820c587ddafa159b17e27574beb7d43 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -209,6 +209,8 @@ public class MultiPaper {
+             }
+ 
+             player.syncExperience();
++
++            player.hasAddedAnItemThisTick = false;
+         }
+ 
+         MultiPaperExternalBlocksHandler.tick();
+diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
+index 6e5a4c0a27680da5f277eb8df9ff0aa3b48845f6..f5304c99196d9246fa0b5b28aa86f05e3ba31650 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
+@@ -6,11 +6,13 @@ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.game.*;
+ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.BucketItem;
+ import net.minecraft.world.item.EnderEyeItem;
+ import net.minecraft.world.item.FishingRodItem;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.level.chunk.LevelChunk;
++import puregero.multipaper.externalserverprotocol.AddItemPacket;
+ import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
+ import puregero.multipaper.externalserverprotocol.PlayerInventoryUpdatePacket;
+ 
+@@ -196,6 +198,24 @@ public class MultiPaperInventoryHandler {
+         }
+     }
+ 
++    public static boolean givePlayerItem(Player player, ItemStack itemstack) {
++        if (player instanceof ServerPlayer serverPlayer) {
++            if (serverPlayer.hasAddedAnItemThisTick) {
++                return false;
++            }
++
++            serverPlayer.hasAddedAnItemThisTick = true;
++
++            if (MultiPaper.isExternalPlayer(serverPlayer)) {
++                ((ExternalPlayer) serverPlayer).externalServerConnection.send(new AddItemPacket(serverPlayer, itemstack));
++                itemstack.setCount(0);
++                return true;
++            }
++        }
++
++        return player.getInventory().add(itemstack);
++    }
++
+     private static class AwaitingTeleport {
+         private final ExternalServer externalServer;
+         private final int id;
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/AddItemPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..44311656748ef2a808b79d20399d397cdb7ede08
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemPacket.java
+@@ -0,0 +1,71 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.item.ItemEntity;
++import net.minecraft.world.item.ItemStack;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.event.entity.CreatureSpawnEvent;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.IOException;
++import java.util.UUID;
++
++public class AddItemPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(AddItemPacket.class.getSimpleName());
++
++    private final UUID uuid;
++    private final CompoundTag tag;
++
++    public AddItemPacket(ServerPlayer player, ItemStack itemStack) {
++        this.uuid = player.getUUID();
++        this.tag = new CompoundTag();
++        itemStack.save(tag);
++    }
++
++    public AddItemPacket(FriendlyDataInputStream in) throws IOException {
++        uuid = in.readUUID();
++
++        int length = in.readInt();
++        byte[] bytes = new byte[length];
++        in.readFully(bytes);
++        tag = MultiPaper.nbtFromBytes(bytes);
++    }
++
++    @Override
++    public void write(FriendlyDataOutputStream out) throws IOException {
++        out.writeUUID(uuid);
++
++        byte[] bytes = MultiPaper.nbtToBytes(tag);
++        out.writeInt(bytes.length);
++        out.write(bytes);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            if (player == null) {
++                LOGGER.warn("Tried to add an item to a non-existent player uuid " + uuid);
++                return;
++            }
++
++            ItemStack itemStack = ItemStack.of(tag);
++
++            if (!player.isDeadOrDying()) {
++                player.addItem(itemStack);
++            }
++
++            if (!itemStack.isEmpty()) {
++                ItemEntity entity = new ItemEntity(player.level, player.getX(), player.getY(), player.getZ(), itemStack);
++                entity.pickupDelay = 10;
++                player.level.addFreshEntity(entity, CreatureSpawnEvent.SpawnReason.CUSTOM);
++            }
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index e8f8699a6fb129118310f77367213971568bd190..3066e8f2ea5d6fc7bb13affb07c2e990cae793d3 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -49,6 +49,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerExperienceUpdatePacket.class, PlayerExperienceUpdatePacket::new);
+         addPacket(PlayerListNameUpdatePacket.class, PlayerListNameUpdatePacket::new);
+         addPacket(PlayerSetCameraPacket.class, PlayerSetCameraPacket::new);
++        addPacket(AddItemPacket.class, AddItemPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {

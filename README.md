@@ -162,15 +162,13 @@ Or in your pom.xml:
 Requirements:
 - You need `git` installed, with a configured user name and email. 
    On windows you need to run from git bash.
-- You need `maven` installed
 - You need `jdk` 17+ installed to compile (and `jre` 17+ to run)
 
 Build instructions:
 1. Patch paper with: `./gradlew applyPatches`
 2. Build the multipaper jar with: `./gradlew createReobfPaperclipJar`
 3. Get the multipaper jar from `build/libs`
-4. Build the multipaper-master jar with: `cd MultiPaper-Master && mvn package`
-5. Get the multipaper-master jar from `MultiPaper-Master/target`
+5. Get the multipaper-master jar from `MultiPaper-Master/build/libs`
 
 ## Publishing to maven local
 Publish to your local maven repository with: `./gradlew publishToMavenLocal`

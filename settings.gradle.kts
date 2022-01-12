@@ -7,4 +7,4 @@ pluginManagement {
 
 rootProject.name = "MultiPaper"
 
-include("MultiPaper-API", "MultiPaper-Server")
+include("MultiPaper-API", "MultiPaper-Server", "MultiPaper-Master")

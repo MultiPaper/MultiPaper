@@ -31,6 +31,29 @@ public class ServerConnection extends Thread {
 
     private static final List<ServerConnection> connections = new ArrayList<>();
 
+    public static void shutdown() {
+        try {
+            DataOutputStream broadcast = broadcastAll();
+            broadcast.writeInt(-1);
+            broadcast.writeUTF("shutdown");
+            broadcast.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void shutdownAndWait() {
+        while (!connections.isEmpty()) {
+            shutdown();
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
     public ServerConnection(Socket socket) {
         this.socket = socket;
         setName("ServerConnection-" + socket.getRemoteSocketAddress());

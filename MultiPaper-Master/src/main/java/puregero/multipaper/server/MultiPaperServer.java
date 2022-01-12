@@ -29,7 +29,9 @@ public class MultiPaperServer extends Thread {
             }
         }
 
-        new MultiPaperServer(port).run();
+        new MultiPaperServer(port).start();
+
+        new CommandLineInput().run();
     }
 
     private ServerSocket serverSocket;

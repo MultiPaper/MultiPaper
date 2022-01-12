@@ -12,6 +12,7 @@ public class CommandLineInput extends Thread {
             String line = scanner.nextLine();
 
             if (line.equalsIgnoreCase("shutdown")) {
+                System.out.println("Shutting down servers...");
                 ServerConnection.shutdownAndWait();
                 System.exit(0);
             } else {

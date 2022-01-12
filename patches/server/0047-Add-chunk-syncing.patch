@@ -491,7 +491,7 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 971c0df354b86c146d769c2afb828b4c80b428db..c28985a13158ab05bcc9ebdc9ffac9d28c7a301b 100644
+index 971c0df354b86c146d769c2afb828b4c80b428db..8e71b5b207ecbd0aba028bca62d19274bc0484ae 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -4,6 +4,8 @@ import net.minecraft.network.protocol.Packet;
@@ -520,7 +520,7 @@ index 971c0df354b86c146d769c2afb828b4c80b428db..c28985a13158ab05bcc9ebdc9ffac9d2
  
      private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
-+    public final ConcurrentHashMap<ChunkKey, Consumer<byte[]>> chunkCallbacks = new ConcurrentHashMap<>();
++    public final ConcurrentHashMap<ChunkKey, Consumer<DataInputStream>> chunkCallbacks = new ConcurrentHashMap<>();
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
@@ -529,7 +529,7 @@ index 971c0df354b86c146d769c2afb828b4c80b428db..c28985a13158ab05bcc9ebdc9ffac9d2
          }
      }
 +
-+    public void requestChunk(String world, int cx, int cz, Consumer<byte[]> callback) {
++    public void requestChunk(String world, int cx, int cz, Consumer<DataInputStream> callback) {
 +        if (callback != null) {
 +            if (chunkCallbacks.put(new ChunkKey(world, cx, cz), callback) != null) {
 +                LOGGER.warn("A chunk callback already existed for " + world + ", " + cx + ", " + cz);
@@ -1043,7 +1043,7 @@ index 0000000000000000000000000000000000000000..52bdd8a2070b6d752f65dbe5be427385
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..e02a15c96a2b1f741292ca86b1c899fb34b9ad80 100644
+index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..e1b1a0a4c6e0b0d466066dbeb71c40093c81d5cf 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -1,16 +1,29 @@
@@ -1275,9 +1275,9 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..e02a15c96a2b1f741292ca86b1c899fb
 +
 +                if (!owner.isEmpty() && path.equals("region")) {
 +                    ExternalServer server = serversMap.get(owner);
-+                    server.getConnection().requestChunk(world, cx, cz, data2 -> {
++                    server.getConnection().requestChunk(world, cx, cz, inputStream -> {
 +                        RequestChunkPacket.blocker = null;
-+                        future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
++                        future.complete(inputStream);
 +                    });
 +                } else {
 +                    future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
@@ -1522,14 +1522,13 @@ index 0000000000000000000000000000000000000000..80131d5838900a0d7d6538416933cf42
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e85c3fc4e6d14f2cf38c54cc5cfa1b2880f28324
+index 0000000000000000000000000000000000000000..b5353586468f5e58211cf1c5ced8754a71394975
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,105 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
-+import net.minecraft.nbt.NbtIo;
 +import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.level.ChunkPos;
@@ -1546,7 +1545,6 @@ index 0000000000000000000000000000000000000000..e85c3fc4e6d14f2cf38c54cc5cfa1b28
 +
 +import java.io.ByteArrayInputStream;
 +import java.io.DataInputStream;
-+import java.io.DataOutputStream;
 +import java.io.IOException;
 +import java.util.function.Consumer;
 +import java.util.zip.InflaterInputStream;
@@ -1569,7 +1567,7 @@ index 0000000000000000000000000000000000000000..e85c3fc4e6d14f2cf38c54cc5cfa1b28
 +            if (tag == null) {
 +                data = new byte[0];
 +            } else {
-+                data = MultiPaper.nbtCompressToBytes(tag);
++                data = MultiPaper.nbtToBytes(tag);
 +            }
 +        } catch (IOException e) {
 +            throw new RuntimeException(e);
@@ -1597,20 +1595,20 @@ index 0000000000000000000000000000000000000000..e85c3fc4e6d14f2cf38c54cc5cfa1b28
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
 +        try {
-+            Consumer<byte[]> callback = connection.chunkCallbacks.remove(new ChunkKey(world, cx, cz));
++            Consumer<DataInputStream> callback = connection.chunkCallbacks.remove(new ChunkKey(world, cx, cz));
 +            if (callback != null) {
 +                if (data.length == 0) {
 +                    LOGGER.warn(connection.externalServer.getName() + " sent us an empty chunk for " + world + "," + cx + "," + cz + ", force loading it from disk");
-+                    MultiPaper.getConnection().forceReadChunk(world, "region", cx, cz).thenAccept(callback);
++                    MultiPaper.getConnection().forceReadChunk(world, "region", cx, cz).thenAccept(data2 -> callback.accept(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2)))));
 +                } else {
-+                    callback.accept(data);
++                    callback.accept(new DataInputStream(new ByteArrayInputStream(data)));
 +                }
 +            } else {
 +                if (data.length == 0) {
 +                    return;
 +                }
 +
-+                CompoundTag tag = NbtIo.read(new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
++                CompoundTag tag = MultiPaper.nbtFromBytes(data);
 +                ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
 +                ChunkHolder holder = MultiPaper.getChunkHolder(world, cx, cz);
 +                if (holder == null) {
@@ -1635,7 +1633,7 @@ index 0000000000000000000000000000000000000000..e85c3fc4e6d14f2cf38c54cc5cfa1b28
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..99f87bcb98708df547c7f0e7519350e98b5cc47c
+index 0000000000000000000000000000000000000000..0e22b440c1ed4a7fb9295a2057607ad9694a7a39
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
 @@ -0,0 +1,85 @@
@@ -1689,7 +1687,7 @@ index 0000000000000000000000000000000000000000..99f87bcb98708df547c7f0e7519350e9
 +        int byteLength = in.readInt();
 +        byte[] data = new byte[byteLength];
 +        in.readFully(data);
-+        tag = MultiPaper.nbtDecompressFromBytes(data);
++        tag = MultiPaper.nbtFromBytes(data);
 +    }
 +
 +    @Override
@@ -1698,7 +1696,7 @@ index 0000000000000000000000000000000000000000..99f87bcb98708df547c7f0e7519350e9
 +        out.writeInt(cx);
 +        out.writeInt(cz);
 +
-+        byte[] data = MultiPaper.nbtCompressToBytes(tag);
++        byte[] data = MultiPaper.nbtToBytes(tag);
 +
 +        out.writeInt(data.length);
 +        out.write(data);

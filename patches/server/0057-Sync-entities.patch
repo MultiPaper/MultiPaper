@@ -643,14 +643,14 @@ index f7f22526bb862d1b2cff27fe06a61de24c6e5b47..1841af7db493067388b0ede57bdd856e
      public void checkInsideBlocks() {
          super.checkInsideBlocks();
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index c28985a13158ab05bcc9ebdc9ffac9d28c7a301b..6b5f65ce2c32ae1aa863b5d0dbc7118d2fecb072 100644
+index 8e71b5b207ecbd0aba028bca62d19274bc0484ae..b559e6c686feaa347e29bce872487b6d81524232 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -27,6 +27,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
      private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
-     public final ConcurrentHashMap<ChunkKey, Consumer<byte[]>> chunkCallbacks = new ConcurrentHashMap<>();
-+    public final ConcurrentHashMap<ChunkKey, Consumer<byte[]>> entitiesCallbacks = new ConcurrentHashMap<>();
+     public final ConcurrentHashMap<ChunkKey, Consumer<DataInputStream>> chunkCallbacks = new ConcurrentHashMap<>();
++    public final ConcurrentHashMap<ChunkKey, Consumer<DataInputStream>> entitiesCallbacks = new ConcurrentHashMap<>();
  
      public ExternalServerConnection(Socket socket) {
          this.socket = socket;
@@ -659,7 +659,7 @@ index c28985a13158ab05bcc9ebdc9ffac9d28c7a301b..6b5f65ce2c32ae1aa863b5d0dbc7118d
          send(new RequestChunkPacket(world, cx, cz));
      }
 +
-+    public void requestEntities(String world, int cx, int cz, Consumer<byte[]> callback) {
++    public void requestEntities(String world, int cx, int cz, Consumer<DataInputStream> callback) {
 +        if (callback != null) {
 +            if (entitiesCallbacks.put(new ChunkKey(world, cx, cz), callback) != null) {
 +                LOGGER.warn("An entities callback already existed for " + world + ", " + cx + ", " + cz);
@@ -705,7 +705,7 @@ index 9a650f1370788710f0f8051529a6a7e1e8d6f40a..7d51d239608f0205787329e1f382ed93
              }
              getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 4119f9e8ef745c45fd193787dfff7ce92bbfd7e2..90dcb8eb17321923d831ec95a413a7290722fe7d 100644
+index 2e2ab47f88dda7ed6b4ef5b455a5e2a5c6925c18..894e965d7a4bca456f231f6519249cd5b635feb8 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -2,10 +2,13 @@ package puregero.multipaper;
@@ -819,12 +819,12 @@ index 4119f9e8ef745c45fd193787dfff7ce92bbfd7e2..90dcb8eb17321923d831ec95a413a729
          int port = in.readInt();
 @@ -394,6 +460,11 @@ public class MultiPaperConnection extends Thread {
                          RequestChunkPacket.blocker = null;
-                         future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
+                         future.complete(inputStream);
                      });
 +                } else if (!owner.isEmpty() && path.equals("entities")) {
 +                    ExternalServer server = serversMap.get(owner);
-+                    server.getConnection().requestEntities(world, cx, cz, data2 -> {
-+                        future.complete(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2))));
++                    server.getConnection().requestEntities(world, cx, cz, inputStream -> {
++                        future.complete(inputStream);
 +                    });
                  } else {
                      future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
@@ -1279,7 +1279,7 @@ index 0000000000000000000000000000000000000000..4ec11d32bb2c9e286cc5db8408eb8f79
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9442cc254704537aa0983ab1c810f028f64f6de4
+index 0000000000000000000000000000000000000000..3860e91525ae755a40fb4cbaf6b6d3cd3b7bd576
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 @@ -0,0 +1,122 @@
@@ -1328,7 +1328,7 @@ index 0000000000000000000000000000000000000000..9442cc254704537aa0983ab1c810f028
 +        }
 +
 +        try {
-+            this.data = MultiPaper.nbtCompressToBytes(tag);
++            this.data = MultiPaper.nbtToBytes(tag);
 +        } catch (IOException e) {
 +            throw new RuntimeException(e);
 +        }
@@ -1358,7 +1358,7 @@ index 0000000000000000000000000000000000000000..9442cc254704537aa0983ab1c810f028
 +
 +                if (bukkitWorld instanceof CraftWorld craftWorld) {
 +                    ServerLevel level = craftWorld.getHandle();
-+                    CompoundTag tag = MultiPaper.nbtDecompressFromBytes(data);
++                    CompoundTag tag = MultiPaper.nbtFromBytes(data);
 +                    loadEntity(level, tag, uuid);
 +                }
 +            } catch (IOException e) {
@@ -1889,10 +1889,10 @@ index 0000000000000000000000000000000000000000..1b7ce7d96e0ac939198b1fccf7e7a8a9
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b50c1fe2a2ace2b9ce5f0b4942651a0c757c1e09
+index 0000000000000000000000000000000000000000..dff311e7e4648d0f2b381603e79be503ca5bb7fb
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,151 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.SharedConstants;
@@ -1971,7 +1971,7 @@ index 0000000000000000000000000000000000000000..b50c1fe2a2ace2b9ce5f0b4942651a0c
 +            if (tag == null) {
 +                data = new byte[0];
 +            } else {
-+                data = MultiPaper.nbtCompressToBytes(tag);
++                data = MultiPaper.nbtToBytes(tag);
 +            }
 +        } catch (IOException e) {
 +            throw new RuntimeException(e);
@@ -2000,21 +2000,25 @@ index 0000000000000000000000000000000000000000..b50c1fe2a2ace2b9ce5f0b4942651a0c
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
 +        try {
-+            Consumer<byte[]> callback = connection.entitiesCallbacks.remove(new ChunkKey(world, cx, cz));
++            Consumer<DataInputStream> callback = connection.entitiesCallbacks.remove(new ChunkKey(world, cx, cz));
 +            if (callback != null) {
 +                if (data.length == 0) {
 +                    LOGGER.warn(connection.externalServer.getName() + " sent us an empty entities for " + world + "," + cx + "," + cz + ", force loading it from disk");
-+                    MultiPaper.getConnection().forceReadChunk(world, "entities", cx, cz).thenAccept(callback);
++                    MultiPaper.getConnection().forceReadChunk(world, "entities", cx, cz).thenAccept(data2 -> callback.accept(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2)))));
 +                } else {
-+                    callback.accept(data);
++                    callback.accept(new DataInputStream(new ByteArrayInputStream(data)));
 +                }
 +            } else {
++                if (data.length == 0) {
++                    return;
++                }
++
 +                // Replace the existing entities with these new entities
 +                ChunkPos pos = new ChunkPos(cx, cz);
 +                ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
 +                // Check that we have these entities loaded in the first place
 +                if (level.entityManager.chunkLoadStatuses.containsKey(pos.longKey)) {
-+                    CompoundTag tag = data.length == 0 ? null : NbtIo.read(new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
++                    CompoundTag tag = MultiPaper.nbtFromBytes(data);
 +                    ListTag entities = tag == null ? new ListTag() : tag.getList("Entities", Tag.TAG_COMPOUND);
 +                    MultiPaper.runSync(() -> {
 +                        // Remove existing entities in this chunk

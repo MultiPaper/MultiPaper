@@ -58,8 +58,6 @@ package puregero.multipaper.server.util;
 
  */
 
-import org.apache.commons.io.IOUtils;
-
 import java.io.*;
 import java.util.ArrayList;
 import java.util.zip.*;
@@ -187,7 +185,7 @@ public class RegionFile {
                 // Noooo, it's in gzip! We want deflate!
                 byte[] gzipData = new byte[length - 1];
                 file.read(gzipData);
-                return IOUtils.toByteArray(new DeflaterInputStream(new GZIPInputStream(new ByteArrayInputStream(gzipData))));
+                return toByteArray(new DeflaterInputStream(new GZIPInputStream(new ByteArrayInputStream(gzipData))));
             } else if (version == VERSION_DEFLATE) {
                 byte[] data = new byte[length - 1];
                 file.read(data);
@@ -198,6 +196,18 @@ public class RegionFile {
         } catch (IOException e) {
             return null;
         }
+    }
+
+    private byte[] toByteArray(InputStream in) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buffer = new byte[4096];
+
+        int length;
+        while ((length = in.read(buffer)) >= 0) {
+            out.write(buffer, 0, length);
+        }
+
+        return out.toByteArray();
     }
 
     public synchronized void putDeflatedBytes(int x, int z, byte[] b) {

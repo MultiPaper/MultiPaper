@@ -291,6 +291,19 @@ index 5601d0c2fe635a2a4f073c333531e1a8adf1833c..dd35cc82ce15dd7a76081109a8d29b3d
          world.blockEntityChanged(pos);
          if (!state.isAir()) {
              world.updateNeighbourForOutputSignal(pos, state.getBlock());
+diff --git a/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java b/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java
+index 5aeaaae6f15050a2da271fe196d0a234ecafc8a1..e44120e0aaf3513f2b0f72658b8919f88f4f3cec 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java
++++ b/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java
+@@ -56,7 +56,7 @@ public abstract class ChunkAccess implements BlockGetter, BiomeManager.NoiseBiom
+ 
+     private static final Logger LOGGER = LogManager.getLogger();
+     protected final ShortList[] postProcessing;
+-    protected volatile boolean unsaved;
++    public volatile boolean unsaved; // MultiPaper - make public
+     private volatile boolean isLightCorrect;
+     protected final ChunkPos chunkPos; public final long coordinateKey; public final int locX; public final int locZ; // Paper - cache coordinate key
+     private long inhabitedTime;
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..a1cb320b82d63c22380b725096078fb104dfebbb 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
@@ -378,7 +391,7 @@ index e947a47dd8c6906bc36eca757c4b9f9f2ab3cedc..bdaa97438993c21997e7aa570d418926
      public ProtoChunk(ChunkPos pos, UpgradeData upgradeData, LevelHeightAccessor world, Registry<Biome> biomeRegistry, @Nullable BlendingData blendingData) {
          this(pos, upgradeData, (LevelChunkSection[])null, new ProtoChunkTicks<>(), new ProtoChunkTicks<>(), world, biomeRegistry, blendingData);
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
-index 8246204ce5d8f825c7796f87006e658d7a019876..628c0b7aac06b75682ce0cfb8220e6a84daaf235 100644
+index 8246204ce5d8f825c7796f87006e658d7a019876..9cc574749f1e601a1c9ebee1b49a1a22ac0b15b7 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
 @@ -277,6 +277,10 @@ public class ChunkSerializer {
@@ -392,7 +405,16 @@ index 8246204ce5d8f825c7796f87006e658d7a019876..628c0b7aac06b75682ce0cfb8220e6a8
          } else {
              ProtoChunkTicks<Block> protochunkticklist = ProtoChunkTicks.load(nbt.getList("block_ticks", 10), (s) -> {
                  return Registry.BLOCK.getOptional(ResourceLocation.tryParse(s));
-@@ -745,6 +749,10 @@ public class ChunkSerializer {
+@@ -521,6 +525,8 @@ public class ChunkSerializer {
+         DataResult<Tag> dataresult; // CraftBukkit - decompile error
+         Logger logger;
+ 
++        if (chunk.unsaved) nbttagcompound.putBoolean("shouldSave", true); // MultiPaper
++
+         if (blendingdata != null) {
+             dataresult = BlendingData.CODEC.encodeStart(NbtOps.INSTANCE, blendingdata);
+             logger = ChunkSerializer.LOGGER;
+@@ -745,6 +751,10 @@ public class ChunkSerializer {
                  }
              }
  

@@ -1,5 +1,4 @@
-MultiPaper
-==
+# MultiPaper
 
 1.18 [Airplane](https://github.com/TECHNOVE/Airplane) fork
 that enables a server admin to run a single world across multiple
@@ -13,12 +12,13 @@ MultiPaper 2.0:
 
 - Works like a CDN
     - Each server caches chunks that are needed by the players it's serving
+    - The servers keep each others' caches in sync with eachother
     - The servers work together to ensure every chunk gets ticked
-    - Does not need BungeeCord, just some method to evenly distribute players
-      across the servers
+    - Does not require BungeeCord, just some node balancing method to evenly
+      distribute players across the servers
 
 - MultiPaper-Master
-    - Stores the world and data on it
+    - Stores the world files and data
     - Coordinates the servers
         - Decides who gets to tick the chunk (first in first served basis)
     - Runs as a standalone process
@@ -28,25 +28,27 @@ How chunk syncing works:
 
 - When a server reads a chunk, it asks the Master to load the chunk from the
   region file. If another server has ownership of the chunk, the Master will
-  tell the server to load the chunk from the other server.
+  notify the server to load the chunk from that server instead.
 - If the chunk has no owner and is loaded, it won't immediately be taken
   ownership of as it could be an edge chunk that won't get ticked.
 - When the server wants to tick an unowned chunk, it won't, but will instead
   send a request to the Master to take ownership of it. If ownership is
   granted, the chunk will be ticked on next tick. If ownership is denied since
-  another server owns it, the server will redownload the chunk from that
+  another server owns it, the server will keep the chunk in sync with that
   server.
-- When a server has a chunk laoded into memory, it will be subscribed to
+- When a server has a chunk loaded into memory, it will be subscribed to
   any changes made in that chunk. That means if any server changes a block
   within the chunk, it will be updated on all servers subscribed to that chunk.
 
-Commands
-------
+## Commands
 MultiPaper includes a few commands mainly for debug purposes:
 
 `/servers`  
 List all servers running on this MultiPaper cluster. Includes performance
 indicators such as TPS, tick duration, and player count.
+
+`/slist`  
+List all online players and what server they're on.
 
 `/mpdebug`  
 Toggle a debug visualisation showing chunks that your server is ticking (aqua)
@@ -60,8 +62,7 @@ the chunk, it's shown as red. If the chunk is in memory but not within
 simulation range on your server, it's shown as white. Chunks not loaded on your
 server as shown as grey.
 
-Setting up MultiPaper
-------
+## Setting up MultiPaper
   * Place your worlds inside the directory being used for MultiPaper-Master
   * Start the MultiPaper-Master by either:
     * Standalone: `java -jar multipaper-master.jar <port> [optionalProxyPort]`
@@ -78,8 +79,7 @@ Setting up MultiPaper
       * This value can be different for each server
       * Other servers are let known of your port via MultiPaper-Master
 
-The built-in proxy
-------
+## The built-in proxy
 MultiPaper provides a proxy (like Bungeecord or Velocity) that can be used to
 hide the multipaper servers behind a single address. The proxy automatically
 selects the multipaper server with the lowest load and forwards the player
@@ -97,8 +97,7 @@ For example, to run the MultiPaper-Master on port 35353 and the proxy on port
 
 `java -jar multipaper-master.jar 35353 25565`
   
-Using MultiPaper with plugins
-------
+## Using MultiPaper with plugins
 For a plugin to work with MultiPaper, it needs to support multiple servers. A
 good indication of this, but not a guarantee, is if a plugin uses a MySQL
 database.

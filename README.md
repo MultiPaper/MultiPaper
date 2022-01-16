@@ -40,6 +40,40 @@ How chunk syncing works:
   any changes made in that chunk. That means if any server changes a block
   within the chunk, it will be updated on all servers subscribed to that chunk.
 
+## The use case
+
+For servers that wish to maintain all vanilla mechanics while scaling up,
+MultiPaper is for you. Usually when a Minecraft server chooses to scale their
+player count up, they have to sacrifice various mechanics such as render
+distance, mob spawning, and redstone.
+
+With MultiPaper, there is no need to ruin the vanilla experience. All you need
+is a new server when you wish to scale. Instead of having 1 server handling
+100 players, you can have 10 servers handling 10 players each. This allows you
+to keep expensive vanilla mechanics like render distance.
+
+### MultiPaper Pro
+
+For those who wish to minimise their hardware costs, MultiPaper-Pro is for you.
+MultiPaper-Pro introduces various optimisations into both the MultiPaper engine
+and Minecraft itself, allowing your server to run more efficiently and hold
+more players.
+
+Testing of MultiPaper-Pro against other popular server software gave us the
+following results:
+
+| Implementation | Tick time (lower is better) |
+| --- | ----------- |
+| Paper | 90ms |
+| Purpur | 75ms |
+| MultiPaper-Pro | 65ms |
+
+** Note: your results may vary depending on server configuration and player
+activity.
+
+MultiPaper-Pro will be available for 50 cents per player slot per month.
+Contact puregero@gmail.com if you're interested.
+
 ## Commands
 MultiPaper includes a few commands mainly for debug purposes:
 

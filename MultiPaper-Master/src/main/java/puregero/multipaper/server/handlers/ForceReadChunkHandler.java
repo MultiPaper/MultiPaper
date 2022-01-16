@@ -1,5 +1,6 @@
 package puregero.multipaper.server.handlers;
 
+import puregero.multipaper.server.ChunkLockManager;
 import puregero.multipaper.server.DataOutputSender;
 import puregero.multipaper.server.ServerConnection;
 import puregero.multipaper.server.util.RegionFileCache;
@@ -19,15 +20,21 @@ public class ForceReadChunkHandler implements Handler {
         int cx = in.readInt();
         int cz = in.readInt();
 
-        byte[] b = RegionFileCache.getChunkDeflatedData(getWorldDir(world, path), cx, cz);
-        if (b == null) {
-            b = new byte[0];
-        }
-        out.writeUTF("chunkData");
-        out.writeUTF("");
-        out.writeInt(b.length);
-        out.write(b);
-        out.send();
+        ChunkLockManager.waitForLock(world, cx, cz, () -> {
+            try {
+                byte[] b = RegionFileCache.getChunkDeflatedData(getWorldDir(world, path), cx, cz);
+                if (b == null) {
+                    b = new byte[0];
+                }
+                out.writeUTF("chunkData");
+                out.writeUTF("");
+                out.writeInt(b.length);
+                out.write(b);
+                out.send();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     static File getWorldDir(String world, String path) {

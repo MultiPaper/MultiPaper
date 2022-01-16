@@ -1,5 +1,6 @@
 package puregero.multipaper.server.handlers;
 
+import puregero.multipaper.server.ChunkLockManager;
 import puregero.multipaper.server.DataOutputSender;
 import puregero.multipaper.server.ServerConnection;
 import puregero.multipaper.server.util.RegionFileCache;
@@ -16,6 +17,10 @@ public class WriteChunkHandler implements Handler {
         int cz = in.readInt();
         byte[] data = new byte[in.readInt()];
         in.readFully(data);
+
+        if (path.equals("region")) {
+            ChunkLockManager.writtenChunk(world, cx, cz);
+        }
 
         try {
             RegionFileCache.putChunkDeflatedData(ReadChunkHandler.getWorldDir(world, path), cx, cz, data);

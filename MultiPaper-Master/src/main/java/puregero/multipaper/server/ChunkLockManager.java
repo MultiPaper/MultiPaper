@@ -24,7 +24,6 @@ public class ChunkLockManager {
         CompletableFuture<Void> lock = locks.get(new ChunkKey(world, cx, cz));
 
         if (lock != null) {
-            System.out.println("Waiting for lock on " + world + "," + cx + "," + cz + "...");
             lock.thenRun(callback);
         } else {
             callback.run();

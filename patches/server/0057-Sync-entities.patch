@@ -567,7 +567,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..43c4111e8e69fee0712330721b4c2eee
          FRESH, PENDING, LOADED;
  
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index f7f22526bb862d1b2cff27fe06a61de24c6e5b47..1841af7db493067388b0ede57bdd856e2664dadf 100644
+index 0dc131b3a46c55b9ff3c93791b0d4837798c622f..4a9858c2938323b41ae7f015040bd9c663739ce0 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
 @@ -7,6 +7,7 @@ import net.minecraft.network.Connection;
@@ -578,26 +578,27 @@ index f7f22526bb862d1b2cff27fe06a61de24c6e5b47..1841af7db493067388b0ede57bdd856e
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
  import net.minecraft.server.network.ServerGamePacketListenerImpl;
-@@ -16,8 +17,10 @@ import org.apache.logging.log4j.Logger;
+@@ -16,9 +17,11 @@ import org.apache.logging.log4j.Logger;
  import org.bukkit.Bukkit;
  import org.bukkit.craftbukkit.CraftServer;
  import org.bukkit.craftbukkit.CraftWorld;
 +import puregero.multipaper.externalserverprotocol.EntityUpdatePacket;
  
  import javax.annotation.Nullable;
+ import java.net.InetSocketAddress;
 +import java.util.Collections;
  import java.util.UUID;
  
  public class ExternalPlayer extends ServerPlayer {
-@@ -25,6 +28,7 @@ public class ExternalPlayer extends ServerPlayer {
-     private static final Logger LOGGER = LogManager.getLogger(ExternalPlayer.class.getSimpleName());
+@@ -27,6 +30,7 @@ public class ExternalPlayer extends ServerPlayer {
      public ExternalServerConnection externalServerConnection;
+     private final InetSocketAddress address;
      private boolean sendPackets = true;
 +    public boolean updatingData = false;
  
-     public static void create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode) {
-         new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, yaw, pitch, gamemode);
-@@ -41,6 +45,17 @@ public class ExternalPlayer extends ServerPlayer {
+     public static ExternalPlayer create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address) {
+         return new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address);
+@@ -44,6 +48,17 @@ public class ExternalPlayer extends ServerPlayer {
          setPos(x, y, z);
          setYRot(yaw);
          setXRot(pitch);
@@ -615,7 +616,7 @@ index f7f22526bb862d1b2cff27fe06a61de24c6e5b47..1841af7db493067388b0ede57bdd856e
          getServer().getPlayerList().addPlayer(this);
          ((ServerLevel) level).addNewPlayer(this);
          sendPackets = false;
-@@ -50,6 +65,14 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -53,6 +68,14 @@ public class ExternalPlayer extends ServerPlayer {
          gameMode.changeGameModeForPlayer(gamemode);
      }
  
@@ -630,7 +631,7 @@ index f7f22526bb862d1b2cff27fe06a61de24c6e5b47..1841af7db493067388b0ede57bdd856e
      private class ExternalPlayerConnection extends Connection {
          public ExternalPlayerConnection(PacketFlow side) {
              super(side);
-@@ -81,11 +104,6 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -85,11 +108,6 @@ public class ExternalPlayer extends ServerPlayer {
          }
      }
  
@@ -1698,7 +1699,7 @@ index 286f2f964822059d7bb58c6b7d8f6b6e1853b956..1172e49de361cb41dd5e1f7ddbc9de99
      }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index cfbb7ea72d9675a87dd84476f2dadcd0a002005b..ddee67246544daafa2eb48d8b5f435952282e0d2 100644
+index 0316b2f9c5d103e50f16781f0a206b8beefec3f0..6e584df98a39661561583588f77ae76fafed357b 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 @@ -1,10 +1,14 @@
@@ -1717,7 +1718,7 @@ index cfbb7ea72d9675a87dd84476f2dadcd0a002005b..ddee67246544daafa2eb48d8b5f43595
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
  import puregero.multipaper.*;
-@@ -82,8 +86,30 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -102,8 +106,30 @@ public class PlayerCreatePacket extends ExternalServerPacket {
      public static void sendPlayer(ExternalServerConnection connection, ServerPlayer player) {
          connection.send(new PlayerCreatePacket(player));
          connection.send(new PlayerActionPacket(player, new ServerboundSetCarriedItemPacket(player.getInventory().selected)));

@@ -234,10 +234,10 @@ index cd08f9b16c065be8f0eacaeba51d3e72d332daf9..cc8bdbb869434c98df58126607b687b1
              // CraftBukkit start
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ec509a18e6cc9937f1216b38f0f4c3f3df66c3d8
+index 0000000000000000000000000000000000000000..223d6be4f9c52e713ccfe48d82b720566fe09174
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,80 @@
 +package puregero.multipaper;
 +
 +import com.mojang.authlib.GameProfile;
@@ -257,21 +257,24 @@ index 0000000000000000000000000000000000000000..ec509a18e6cc9937f1216b38f0f4c3f3
 +import org.bukkit.craftbukkit.CraftWorld;
 +
 +import javax.annotation.Nullable;
++import java.net.InetSocketAddress;
 +import java.util.UUID;
 +
 +public class ExternalPlayer extends ServerPlayer {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(ExternalPlayer.class.getSimpleName());
 +    public ExternalServerConnection externalServerConnection;
++    private final InetSocketAddress address;
 +    private boolean sendPackets = true;
 +
-+    public static void create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode) {
-+        new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, yaw, pitch, gamemode);
++    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address) {
++        return new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address);
 +    }
 +
-+    public ExternalPlayer(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode) {
++    public ExternalPlayer(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address) {
 +        super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), new GameProfile(uuid, name));
 +        this.externalServerConnection = externalServerConnection;
++        this.address = address;
 +        this.isRealPlayer = true;
 +        this.didPlayerJoinEvent = true;
 +        this.valid = true;
@@ -292,6 +295,7 @@ index 0000000000000000000000000000000000000000..ec509a18e6cc9937f1216b38f0f4c3f3
 +    private class ExternalPlayerConnection extends Connection {
 +        public ExternalPlayerConnection(PacketFlow side) {
 +            super(side);
++            this.address = ExternalPlayer.this.address;
 +        }
 +
 +        @Override
@@ -584,10 +588,10 @@ index 0000000000000000000000000000000000000000..2f8858724fae9c15290a3a3b6b3d5b52
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f75ddc7f2122856dc803e7d0d6a4f871bd82e40e
+index 0000000000000000000000000000000000000000..d6f187e142ba4c5bcf66aba896693d03ad616cb1
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,105 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.MinecraftServer;
@@ -602,6 +606,9 @@ index 0000000000000000000000000000000000000000..f75ddc7f2122856dc803e7d0d6a4f871
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
 +import java.io.IOException;
++import java.net.InetAddress;
++import java.net.InetSocketAddress;
++import java.net.UnknownHostException;
 +import java.util.UUID;
 +
 +public class PlayerCreatePacket extends ExternalServerPacket {
@@ -614,9 +621,11 @@ index 0000000000000000000000000000000000000000..f75ddc7f2122856dc803e7d0d6a4f871
 +    private final double x;
 +    private final double y;
 +    private final double z;
-+    private float yaw;
-+    private float pitch;
++    private final float yaw;
++    private final float pitch;
 +    private final GameType gamemode;
++    private final byte[] ip;
++    private final short port;
 +
 +    private PlayerCreatePacket(ServerPlayer player) {
 +        this.name = player.getScoreboardName();
@@ -628,6 +637,8 @@ index 0000000000000000000000000000000000000000..f75ddc7f2122856dc803e7d0d6a4f871
 +        this.yaw = player.getYRot();
 +        this.pitch = player.getXRot();
 +        this.gamemode = player.gameMode.getGameModeForPlayer();
++        this.ip = ((InetSocketAddress) player.connection.connection.address).getAddress().getAddress();
++        this.port = (short) ((InetSocketAddress) player.connection.connection.address).getPort();
 +    }
 +
 +    public PlayerCreatePacket(FriendlyDataInputStream in) throws IOException {
@@ -640,6 +651,9 @@ index 0000000000000000000000000000000000000000..f75ddc7f2122856dc803e7d0d6a4f871
 +        yaw = in.readFloat();
 +        pitch = in.readFloat();
 +        gamemode = GameType.byId(in.read());
++        ip = new byte[in.readVarInt()];
++        in.readFully(ip);
++        port = in.readShort();
 +    }
 +
 +    @Override
@@ -653,6 +667,9 @@ index 0000000000000000000000000000000000000000..f75ddc7f2122856dc803e7d0d6a4f871
 +        out.writeFloat(yaw);
 +        out.writeFloat(pitch);
 +        out.write(gamemode.getId());
++        out.writeVarInt(ip.length);
++        out.write(ip);
++        out.writeShort(port);
 +    }
 +
 +    @Override
@@ -665,7 +682,14 @@ index 0000000000000000000000000000000000000000..f75ddc7f2122856dc803e7d0d6a4f871
 +                existingPlayer.connection.disconnect("Logged in from another location");
 +            }
 +
-+            ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode);
++            InetSocketAddress address = null;
++            try {
++                address = new InetSocketAddress(InetAddress.getByAddress(ip), port & 0xFFFF);
++            } catch (UnknownHostException e) {
++                e.printStackTrace();
++            }
++
++            ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address);
 +        });
 +    }
 +

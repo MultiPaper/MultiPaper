@@ -15,7 +15,7 @@ public class ReadChunkHandler implements Handler {
         int cx = in.readInt();
         int cz = in.readInt();
 
-        ChunkLockManager.waitForLock(world, cx, cz, () -> {
+        Runnable callback = () -> {
             try {
                 if (path.equals("region")) {
                     ServerConnection alreadyLoadedChunk = ChunkSubscriptionManager.getOwnerOrSubscriber(world, cx, cz);
@@ -53,7 +53,13 @@ public class ReadChunkHandler implements Handler {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        });
+        };
+
+        if (path.equals("region")) {
+            ChunkLockManager.waitForLock(world, cx, cz, callback);
+        } else {
+            callback.run();
+        }
     }
 
     static File getWorldDir(String world, String path) {

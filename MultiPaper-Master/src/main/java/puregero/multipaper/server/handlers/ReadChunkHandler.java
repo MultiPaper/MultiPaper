@@ -15,32 +15,12 @@ public class ReadChunkHandler implements Handler {
         int cx = in.readInt();
         int cz = in.readInt();
 
+        if (checkIfLoadedOnAnotherServer(connection, world, path, cx, cz, out)) {
+            return;
+        }
+
         Runnable callback = () -> {
             try {
-                if (path.equals("region")) {
-                    ServerConnection alreadyLoadedChunk = ChunkSubscriptionManager.getOwnerOrSubscriber(world, cx, cz);
-                    ChunkSubscriptionManager.subscribe(connection, world, cx, cz);
-                    if (alreadyLoadedChunk != null && alreadyLoadedChunk != connection) {
-                        out.writeUTF("chunkData");
-                        out.writeUTF(alreadyLoadedChunk.getBungeeCordName());
-                        out.writeInt(0);
-                        out.send();
-                        return;
-                    }
-                }
-
-                if (path.equals("entities")) {
-                    ServerConnection alreadyLoadedEntities = EntitiesSubscriptionManager.getSubscriber(world, cx, cz);
-                    EntitiesSubscriptionManager.subscribe(connection, world, cx, cz);
-                    if (alreadyLoadedEntities != null && alreadyLoadedEntities != connection) {
-                        out.writeUTF("chunkData");
-                        out.writeUTF(alreadyLoadedEntities.getBungeeCordName());
-                        out.writeInt(0);
-                        out.send();
-                        return;
-                    }
-                }
-
                 byte[] b = RegionFileCache.getChunkDeflatedData(getWorldDir(world, path), cx, cz);
                 if (b == null) {
                     b = new byte[0];
@@ -60,6 +40,34 @@ public class ReadChunkHandler implements Handler {
         } else {
             callback.run();
         }
+    }
+
+    private boolean checkIfLoadedOnAnotherServer(ServerConnection connection, String world, String path, int cx, int cz, DataOutputSender out) throws IOException {
+        if (path.equals("region")) {
+            ServerConnection alreadyLoadedChunk = ChunkSubscriptionManager.getOwnerOrSubscriber(world, cx, cz);
+            ChunkSubscriptionManager.subscribe(connection, world, cx, cz);
+            if (alreadyLoadedChunk != null && alreadyLoadedChunk != connection) {
+                out.writeUTF("chunkData");
+                out.writeUTF(alreadyLoadedChunk.getBungeeCordName());
+                out.writeInt(0);
+                out.send();
+                return true;
+            }
+        }
+
+        if (path.equals("entities")) {
+            ServerConnection alreadyLoadedEntities = EntitiesSubscriptionManager.getSubscriber(world, cx, cz);
+            EntitiesSubscriptionManager.subscribe(connection, world, cx, cz);
+            if (alreadyLoadedEntities != null && alreadyLoadedEntities != connection) {
+                out.writeUTF("chunkData");
+                out.writeUTF(alreadyLoadedEntities.getBungeeCordName());
+                out.writeInt(0);
+                out.send();
+                return true;
+            }
+        }
+
+        return false;
     }
 
     static File getWorldDir(String world, String path) {

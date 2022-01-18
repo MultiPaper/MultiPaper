@@ -96,7 +96,7 @@ index d271871563fa883efb77b35ec3b1dfbba87f0b62..9f8c73d3ad985160f82fb58bd28b37d4
      public interface LevelChangeListener {
  
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 63096c9d1181e26097590fdebf5da025150700ce..b364498cedcceee1f8f3a50221be4a9651cc1ffb 100644
+index 63096c9d1181e26097590fdebf5da025150700ce..0b87c8fb0257d02055b0042859e40697152e46e5 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -110,6 +110,7 @@ import org.bukkit.entity.Player;
@@ -107,15 +107,23 @@ index 63096c9d1181e26097590fdebf5da025150700ce..b364498cedcceee1f8f3a50221be4a96
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -1054,6 +1055,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1019,6 +1020,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+                 // Paper start
+                 boolean removed;
+                 if ((removed = this.pendingUnloads.remove(pos, holder)) && ichunkaccess != null) {
++                    MultiPaperChunkHandler.onChunkUnload(level, holder.pos, ichunkaccess); // MultiPaper
+                     for (int index = 0, len = this.regionManagers.size(); index < len; ++index) {
+                         this.regionManagers.get(index).removeChunk(holder.pos.x, holder.pos.z);
                      }
-                     this.getPoiManager().queueUnload(holder.pos.longKey, MinecraftServer.currentTickLong + 1); // Paper - unload POI data
-                 } // Paper end
-+                if (removed) MultiPaperChunkHandler.onChunkUnload(level, holder.pos, ichunkaccess); // MultiPaper
-                 } finally { this.unloadingPlayerChunk = unloadingBefore; } // Paper - do not allow ticket level changes while unloading chunks
- 
-             }
-@@ -1228,6 +1230,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1049,6 +1051,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+                     this.lightEngine.tryScheduleUpdate();
+                     this.progressListener.onStatusChange(ichunkaccess.getPos(), (ChunkStatus) null);
+                 } else if (removed) { // Paper start
++                    MultiPaperChunkHandler.onChunkUnload(level, holder.pos, ichunkaccess); // MultiPaper
+                     for (int index = 0, len = this.regionManagers.size(); index < len; ++index) {
+                         this.regionManagers.get(index).removeChunk(holder.pos.x, holder.pos.z);
+                     }
+@@ -1228,6 +1231,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                          return this.protoChunkToFullChunk(holder);
                      }, list, false);
  
@@ -124,7 +132,7 @@ index 63096c9d1181e26097590fdebf5da025150700ce..b364498cedcceee1f8f3a50221be4a96
                      this.progressListener.onStatusChange(chunkcoordintpair, requiredStatus);
                      return completablefuture1;
                  } catch (Exception exception) {
-@@ -1668,6 +1672,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1668,6 +1673,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              }
              return ret;
          }
@@ -132,7 +140,7 @@ index 63096c9d1181e26097590fdebf5da025150700ce..b364498cedcceee1f8f3a50221be4a96
          return super.read(chunkcoordintpair);
      }
  
-@@ -1679,6 +1684,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1679,6 +1685,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
                  com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread());
              return;
          }
@@ -145,7 +153,7 @@ index 63096c9d1181e26097590fdebf5da025150700ce..b364498cedcceee1f8f3a50221be4a96
          super.write(chunkcoordintpair, nbttagcompound);
      }
      // Paper end
-@@ -1722,6 +1733,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1722,6 +1734,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
              return status;
          }
  

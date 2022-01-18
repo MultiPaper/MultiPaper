@@ -830,10 +830,10 @@ index 215850f28d980ea5803d6c28319d2a51cfd72848..ff85da6bdeeb0872dabd5e2b1b056553
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..af6da633cb60db569b731dc3e84619c3e9db7c66
+index 0000000000000000000000000000000000000000..390b89fc8668abdb6b3a06a327fb63bd78a3d270
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,241 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -896,6 +896,15 @@ index 0000000000000000000000000000000000000000..af6da633cb60db569b731dc3e84619c3
 +            MultiPaper.getConnection().unsubscribeChunk(level.convertable.getLevelId(), pos.x, pos.z);
 +        } catch (IOException e) {
 +            e.printStackTrace();
++        }
++    }
++
++    public static void onChunkUnsubscribed(String world, int cx, int cz) {
++        ChunkHolder holder = MultiPaper.getChunkHolder(world, cx, cz);
++
++        if (holder != null) {
++            LOGGER.warn("Unsubscribed from " + world + "," + cx + "," + cz + ", but it's loaded! Resubscribing...");
++            MultiPaper.getConnection().subscribeChunk(world, cx, cz);
 +        }
 +    }
 +
@@ -1067,7 +1076,7 @@ index 0000000000000000000000000000000000000000..af6da633cb60db569b731dc3e84619c3
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..e1b1a0a4c6e0b0d466066dbeb71c40093c81d5cf 100644
+index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..83ce9258e38b02685dbd4196027a673645d31782 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -1,16 +1,29 @@
@@ -1242,7 +1251,7 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..e1b1a0a4c6e0b0d466066dbeb71c4009
      public void writeTickTime(long time, double tps) throws IOException {
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeTickTime");
-@@ -147,4 +281,159 @@ public class MultiPaperConnection extends Thread {
+@@ -147,4 +281,169 @@ public class MultiPaperConnection extends Thread {
          out.writeInt(port);
          out.send(null);
      }
@@ -1376,7 +1385,17 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..e1b1a0a4c6e0b0d466066dbeb71c4009
 +        out.writeUTF(world);
 +        out.writeInt(cx);
 +        out.writeInt(cz);
-+        out.send(null);
++        out.send(in -> {
++            try {
++                String world2 = in.readUTF();
++                int cx2 = in.readInt();
++                int cz2 = in.readInt();
++
++                MultiPaper.runSync(() -> MultiPaperChunkHandler.onChunkUnsubscribed(world2, cx2, cz2));
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
 +    }
 +
 +    public void syncChunkSubscribers(String world, int cx, int cz) {

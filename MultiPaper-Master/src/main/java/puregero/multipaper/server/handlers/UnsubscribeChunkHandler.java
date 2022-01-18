@@ -15,5 +15,15 @@ public class UnsubscribeChunkHandler implements Handler {
         int cz = in.readInt();
 
         ChunkSubscriptionManager.unsubscribe(connection, world, cx, cz);
+
+        try {
+            out.writeUTF("unsubscribeChunk");
+            out.writeUTF(world);
+            out.writeInt(cx);
+            out.writeInt(cz);
+            out.send();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }

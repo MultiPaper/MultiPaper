@@ -847,10 +847,10 @@ index 215850f28d980ea5803d6c28319d2a51cfd72848..ff85da6bdeeb0872dabd5e2b1b056553
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..be8fec516815b1df5c94435e8d276d19b02da6ae
+index 0000000000000000000000000000000000000000..a34d119b3ed8055686e41b691589aaf9eda5b478
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,241 @@
+@@ -0,0 +1,244 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -860,6 +860,7 @@ index 0000000000000000000000000000000000000000..be8fec516815b1df5c94435e8d276d19
 +import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 +import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
 +import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
++import net.minecraft.server.MCUtil;
 +import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.level.ChunkPos;
@@ -971,7 +972,7 @@ index 0000000000000000000000000000000000000000..be8fec516815b1df5c94435e8d276d19
 +
 +    public static ChunkAccess blockUpdateChunk = null;
 +    private static ChunkHolder holder = null;
-+    public static void handleBlockUpdate(String world, Packet<?> packet) {
++    public static void handleBlockUpdate(String world, Packet<?> packet, int depth) {
 +        holder = null;
 +        blockUpdateChunk = null;
 +        ChunkAccess tempChunk = null;
@@ -1017,6 +1018,8 @@ index 0000000000000000000000000000000000000000..be8fec516815b1df5c94435e8d276d19
 +                if (existingBlockEntity != null && existingBlockEntity.getMinecraftKey().toString().equals(update.getTag().getString("id"))) {
 +                    existingBlockEntity.load(update.getTag());
 +                    holder.blockChanged(update.getPos());
++                } else if (!blockUpdateChunk.getBlockState(update.getPos()).hasBlockEntity() && depth < 1) {
++                    MCUtil.scheduleTask(1, () -> handleBlockUpdate(world, packet, depth + 1));
 +                } else if (!update.getTag().getString("id").equals("minecraft:piston")) {
 +                    blockUpdateChunk.removeBlockEntity(update.getPos());
 +                    blockUpdateChunk.setBlockEntityNbt(update.getTag());
@@ -1784,7 +1787,7 @@ index 0000000000000000000000000000000000000000..0e22b440c1ed4a7fb9295a2057607ad9
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d2a3a04e77ef7898b1eaddb37783d15413f3f34e
+index 0000000000000000000000000000000000000000..e53688b5d01769f26b05a0c4a5ba637a18fab8ea
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
 @@ -0,0 +1,70 @@
@@ -1852,7 +1855,7 @@ index 0000000000000000000000000000000000000000..d2a3a04e77ef7898b1eaddb37783d154
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
 +        if (packet instanceof ClientboundBlockUpdatePacket || packet instanceof ClientboundSectionBlocksUpdatePacket || packet instanceof ClientboundLightUpdatePacket || packet instanceof ClientboundBlockEntityDataPacket) {
-+            MultiPaper.runSync(() -> MultiPaperChunkHandler.handleBlockUpdate(world, packet));
++            MultiPaper.runSync(() -> MultiPaperChunkHandler.handleBlockUpdate(world, packet, 0));
 +        } else {
 +            LOGGER.warn("Unhandled update packet of type " + packet.getClass().getSimpleName());
 +        }

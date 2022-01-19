@@ -4,6 +4,23 @@ Date: Tue, 16 Nov 2021 19:23:16 +1000
 Subject: [PATCH] Add chunk syncing
 
 
+diff --git a/src/main/java/com/destroystokyo/paper/util/map/QueuedChangesMapLong2Object.java b/src/main/java/com/destroystokyo/paper/util/map/QueuedChangesMapLong2Object.java
+index 7bab31a312463cc963d9621cdc543a281459bd32..7d49a0bdb11afd8616a97d6c7f043f9d2b0ce073 100644
+--- a/src/main/java/com/destroystokyo/paper/util/map/QueuedChangesMapLong2Object.java
++++ b/src/main/java/com/destroystokyo/paper/util/map/QueuedChangesMapLong2Object.java
+@@ -42,6 +42,12 @@ public class QueuedChangesMapLong2Object<V> {
+         return this.updatingMap.remove(k);
+     }
+ 
++    // MultiPaper start
++    public boolean isQueuedToRemove(final long k) {
++        return this.queuedChanges.get(k) == REMOVED;
++    }
++    // MultiPaper end
++
+     public V getUpdating(final long k) {
+         return this.updatingMap.get(k);
+     }
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
 index d271871563fa883efb77b35ec3b1dfbba87f0b62..9f8c73d3ad985160f82fb58bd28b37d4613ef07a 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
@@ -830,7 +847,7 @@ index 215850f28d980ea5803d6c28319d2a51cfd72848..ff85da6bdeeb0872dabd5e2b1b056553
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..390b89fc8668abdb6b3a06a327fb63bd78a3d270
+index 0000000000000000000000000000000000000000..be8fec516815b1df5c94435e8d276d19b02da6ae
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 @@ -0,0 +1,241 @@
@@ -902,7 +919,7 @@ index 0000000000000000000000000000000000000000..390b89fc8668abdb6b3a06a327fb63bd
 +    public static void onChunkUnsubscribed(String world, int cx, int cz) {
 +        ChunkHolder holder = MultiPaper.getChunkHolder(world, cx, cz);
 +
-+        if (holder != null) {
++        if (holder != null && !holder.getWorld().chunkSource.chunkMap.updatingChunks.isQueuedToRemove(holder.getPos().longKey)) {
 +            LOGGER.warn("Unsubscribed from " + world + "," + cx + "," + cz + ", but it's loaded! Resubscribing...");
 +            MultiPaper.getConnection().subscribeChunk(world, cx, cz);
 +        }

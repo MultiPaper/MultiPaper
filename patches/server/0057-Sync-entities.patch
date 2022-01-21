@@ -148,18 +148,21 @@ index 887556052a8dd36453aef8b92cf2e1c81932876b..6032128a4eb2ea88000e5288261599e5
          this.entity.startSeenByPlayer(player);
      }
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index e432899edd62b5449c30c9cb954c67271fa020ec..aa128b263843de2551aa798ffb1934c98fd09041 100644
+index e432899edd62b5449c30c9cb954c67271fa020ec..34a412cd2c8a906b09d91f8bcd0c0abfaf1f2e15 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -92,6 +92,7 @@ import net.minecraft.world.entity.boss.EnderDragonPart;
+@@ -90,8 +90,10 @@ import net.minecraft.world.entity.animal.WaterAnimal;
+ import net.minecraft.world.entity.animal.horse.SkeletonHorse;
+ import net.minecraft.world.entity.boss.EnderDragonPart;
  import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
++import net.minecraft.world.entity.decoration.ArmorStand;
  import net.minecraft.world.entity.npc.Npc;
  import net.minecraft.world.entity.player.Player;
 +import net.minecraft.world.entity.projectile.FishingHook;
  import net.minecraft.world.entity.raid.Raid;
  import net.minecraft.world.entity.raid.Raids;
  import net.minecraft.world.item.crafting.RecipeManager;
-@@ -163,6 +164,7 @@ import org.bukkit.event.world.TimeSkipEvent;
+@@ -163,6 +165,7 @@ import org.bukkit.event.world.TimeSkipEvent;
  import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
  import puregero.multipaper.MultiPaper;
  import puregero.multipaper.MultiPaperChunkHandler;
@@ -167,13 +170,20 @@ index e432899edd62b5449c30c9cb954c67271fa020ec..aa128b263843de2551aa798ffb1934c9
  import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
  
  public class ServerLevel extends Level implements WorldGenLevel {
-@@ -652,6 +654,13 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -652,6 +655,20 @@ public class ServerLevel extends Level implements WorldGenLevel {
              org.spigotmc.ActivationRange.activateEntities(this); // Spigot
              timings.entityTick.startTiming(); // Spigot
              this.entityTickList.forEach((entity) -> {
 +                // MultiPaper start - Are we ticking this entity?
 +                LevelChunk chunk = getChunkIfLoaded(entity.blockPosition());
 +                if (!MultiPaper.isRealPlayer(entity) && !MultiPaper.isChunkLocal(chunk) && !(entity instanceof FishingHook)) {
++                    if (entity instanceof ArmorStand armorStand) {
++                        boolean temp = armorStand.canTick;
++                        armorStand.canTick = false;
++                        armorStand.tick();
++                        armorStand.canTick = temp;
++                    }
++
 +                    return;
 +                }
 +                // MultiPaper end
@@ -181,7 +191,7 @@ index e432899edd62b5449c30c9cb954c67271fa020ec..aa128b263843de2551aa798ffb1934c9
                  if (!entity.isRemoved()) {
                      if (false && this.shouldDiscardEntity(entity)) { // CraftBukkit - We prevent spawning in general, so this butchering is not needed
                          entity.discard();
-@@ -1432,6 +1441,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1432,6 +1449,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
              }
              // CraftBukkit end
  
@@ -2046,7 +2056,7 @@ index 0000000000000000000000000000000000000000..dff311e7e4648d0f2b381603e79be503
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
-index d2a3a04e77ef7898b1eaddb37783d15413f3f34e..700161f76bac0a60391d38f9244c11906bc830d0 100644
+index e53688b5d01769f26b05a0c4a5ba637a18fab8ea..84f91bfca758f20cd7f159f0a46abb601f81c5d8 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
 @@ -10,6 +10,7 @@ import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;

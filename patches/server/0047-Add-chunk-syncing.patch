@@ -317,7 +317,7 @@ index 5601d0c2fe635a2a4f073c333531e1a8adf1833c..dd35cc82ce15dd7a76081109a8d29b3d
          if (!state.isAir()) {
              world.updateNeighbourForOutputSignal(pos, state.getBlock());
 diff --git a/src/main/java/net/minecraft/world/level/border/WorldBorder.java b/src/main/java/net/minecraft/world/level/border/WorldBorder.java
-index 3063a45e5d124d4405e940daff24877866165d3f..6f0270bfc524d5262a590c4e05130d04c8a637c0 100644
+index 3063a45e5d124d4405e940daff24877866165d3f..490e7d65b0c469f5122509cc2f30fc9a5b977ce6 100644
 --- a/src/main/java/net/minecraft/world/level/border/WorldBorder.java
 +++ b/src/main/java/net/minecraft/world/level/border/WorldBorder.java
 @@ -14,6 +14,7 @@ import net.minecraft.world.phys.AABB;
@@ -337,6 +337,23 @@ index 3063a45e5d124d4405e940daff24877866165d3f..6f0270bfc524d5262a590c4e05130d04
  
      public boolean isWithinBounds(BlockPos pos) {
          return (double) (pos.getX() + 1) > this.getMinX() && (double) pos.getX() < this.getMaxX() && (double) (pos.getZ() + 1) > this.getMinZ() && (double) pos.getZ() < this.getMaxZ();
+@@ -293,6 +294,7 @@ public class WorldBorder {
+     }
+ 
+     public void applySettings(WorldBorder.Settings properties) {
++        MultiPaperWorldBorderHandler.updatingWorldBorder = true; // MultiPaper
+         this.setCenter(properties.getCenterX(), properties.getCenterZ());
+         this.setDamagePerBlock(properties.getDamagePerBlock());
+         this.setDamageSafeZone(properties.getSafeZone());
+@@ -303,7 +305,7 @@ public class WorldBorder {
+         } else {
+             this.setSize(properties.getSize());
+         }
+-
++        MultiPaperWorldBorderHandler.updatingWorldBorder = false; // MultiPaper
+     }
+ 
+     private class StaticBorderExtent implements WorldBorder.BorderExtent {
 diff --git a/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java b/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java
 index 5aeaaae6f15050a2da271fe196d0a234ecafc8a1..e44120e0aaf3513f2b0f72658b8919f88f4f3cec 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java
@@ -1463,7 +1480,7 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..83ce9258e38b02685dbd4196027a6736
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperWorldBorderHandler.java b/src/main/java/puregero/multipaper/MultiPaperWorldBorderHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2ea24ac71ad1ded04c137646c3ef23748c6917c5
+index 0000000000000000000000000000000000000000..1d3df885830b956992a70ba3b8ea5bc4440f0e12
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperWorldBorderHandler.java
 @@ -0,0 +1,76 @@
@@ -1481,7 +1498,7 @@ index 0000000000000000000000000000000000000000..2ea24ac71ad1ded04c137646c3ef2374
 +
 +public class MultiPaperWorldBorderHandler implements BorderChangeListener {
 +
-+    private static boolean updatingWorldBorder = false;
++    public static boolean updatingWorldBorder = false;
 +
 +    @Override
 +    public void onBorderSizeSet(@NotNull WorldBorder border, double size) {

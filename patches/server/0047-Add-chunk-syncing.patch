@@ -316,6 +316,27 @@ index 5601d0c2fe635a2a4f073c333531e1a8adf1833c..dd35cc82ce15dd7a76081109a8d29b3d
          world.blockEntityChanged(pos);
          if (!state.isAir()) {
              world.updateNeighbourForOutputSignal(pos, state.getBlock());
+diff --git a/src/main/java/net/minecraft/world/level/border/WorldBorder.java b/src/main/java/net/minecraft/world/level/border/WorldBorder.java
+index 3063a45e5d124d4405e940daff24877866165d3f..6f0270bfc524d5262a590c4e05130d04c8a637c0 100644
+--- a/src/main/java/net/minecraft/world/level/border/WorldBorder.java
++++ b/src/main/java/net/minecraft/world/level/border/WorldBorder.java
+@@ -14,6 +14,7 @@ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.shapes.BooleanOp;
+ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++import puregero.multipaper.MultiPaperWorldBorderHandler;
+ 
+ public class WorldBorder {
+ 
+@@ -31,7 +32,7 @@ public class WorldBorder {
+     public static final WorldBorder.Settings DEFAULT_SETTINGS = new WorldBorder.Settings(0.0D, 0.0D, 0.2D, 5.0D, 5, 15, 5.9999968E7D, 0L, 0.0D);
+     public net.minecraft.server.level.ServerLevel world; // CraftBukkit
+ 
+-    public WorldBorder() {}
++    public WorldBorder() { listeners.add(new MultiPaperWorldBorderHandler()); } // MultiPaper - Add our own world border listener
+ 
+     public boolean isWithinBounds(BlockPos pos) {
+         return (double) (pos.getX() + 1) > this.getMinX() && (double) pos.getX() < this.getMaxX() && (double) (pos.getZ() + 1) > this.getMinZ() && (double) pos.getZ() < this.getMaxZ();
 diff --git a/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java b/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java
 index 5aeaaae6f15050a2da271fe196d0a234ecafc8a1..e44120e0aaf3513f2b0f72658b8919f88f4f3cec 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/ChunkAccess.java
@@ -1440,6 +1461,88 @@ index a07fee59d0907e2263426ec0ba47fb7bec6b9aee..83ce9258e38b02685dbd4196027a6736
 +        out.send(null);
 +    }
  }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperWorldBorderHandler.java b/src/main/java/puregero/multipaper/MultiPaperWorldBorderHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..2ea24ac71ad1ded04c137646c3ef23748c6917c5
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperWorldBorderHandler.java
+@@ -0,0 +1,76 @@
++package puregero.multipaper;
++
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.game.*;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.border.BorderChangeListener;
++import net.minecraft.world.level.border.WorldBorder;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import org.jetbrains.annotations.NotNull;
++import puregero.multipaper.externalserverprotocol.SendUpdatePacket;
++
++public class MultiPaperWorldBorderHandler implements BorderChangeListener {
++
++    private static boolean updatingWorldBorder = false;
++
++    @Override
++    public void onBorderSizeSet(@NotNull WorldBorder border, double size) {
++        onWorldBorderChange(new ClientboundSetBorderSizePacket(border), border.world);
++    }
++
++    @Override
++    public void onBorderSizeLerping(@NotNull WorldBorder border, double fromSize, double toSize, long time) {
++        onWorldBorderChange(new ClientboundSetBorderLerpSizePacket(border), border.world);
++    }
++
++    @Override
++    public void onBorderCenterSet(@NotNull WorldBorder border, double centerX, double centerZ) {
++        onWorldBorderChange(new ClientboundSetBorderCenterPacket(border), border.world);
++    }
++
++    @Override
++    public void onBorderSetWarningTime(@NotNull WorldBorder border, int warningTime) {
++        onWorldBorderChange(new ClientboundSetBorderWarningDelayPacket(border), border.world);
++    }
++
++    @Override
++    public void onBorderSetWarningBlocks(@NotNull WorldBorder border, int warningBlockDistance) {
++        onWorldBorderChange(new ClientboundSetBorderWarningDistancePacket(border), border.world);
++    }
++
++    @Override
++    public void onBorderSetDamagePerBlock(@NotNull WorldBorder border, double damagePerBlock) {}
++
++    @Override
++    public void onBorderSetDamageSafeZOne(@NotNull WorldBorder border, double safeZoneRadius) {}
++
++    private void onWorldBorderChange(Packet<?> packet, ServerLevel level) {
++        if (!updatingWorldBorder) {
++            MultiPaper.broadcastPacketToExternalServers(level.getWorld().getName(), new SendUpdatePacket(level.getWorld().getName(), packet));
++
++            // Save the level.dat
++            level.saveIncrementally(true);
++        }
++    }
++
++    public static void handle(String world, Packet<?> packet) {
++        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++
++        updatingWorldBorder = true;
++
++        if (packet instanceof ClientboundSetBorderSizePacket setBorderSizePacket) {
++            level.getWorldBorder().setSize(setBorderSizePacket.getSize());
++        } else if (packet instanceof ClientboundSetBorderLerpSizePacket setBorderLerpSizePacket) {
++            level.getWorldBorder().lerpSizeBetween(setBorderLerpSizePacket.getOldSize(), setBorderLerpSizePacket.getNewSize(), setBorderLerpSizePacket.getLerpTime());
++        } else if (packet instanceof ClientboundSetBorderCenterPacket setBorderCenterPacket) {
++            level.getWorldBorder().setCenter(setBorderCenterPacket.getNewCenterX(), setBorderCenterPacket.getNewCenterZ());
++        } else if (packet instanceof ClientboundSetBorderWarningDelayPacket setBorderWarningDelayPacket) {
++            level.getWorldBorder().setWarningTime(setBorderWarningDelayPacket.getWarningDelay());
++        } else if (packet instanceof ClientboundSetBorderWarningDistancePacket setBorderWarningDistancePacket) {
++            level.getWorldBorder().setWarningBlocks(setBorderWarningDistancePacket.getWarningBlocks());
++        }
++
++        updatingWorldBorder = false;
++    }
++}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 index 4020f07f7ba5f8e4f68b8e6f0818a507f3f3b344..6d53a1c5fb71ba4b8629e4c3b2d06ea999dccea0 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
@@ -1786,7 +1889,7 @@ index 0000000000000000000000000000000000000000..0e22b440c1ed4a7fb9295a2057607ad9
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e53688b5d01769f26b05a0c4a5ba637a18fab8ea
+index 0000000000000000000000000000000000000000..fa3bc4daa36878cacf051342247e7d10c8518827
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
 @@ -0,0 +1,70 @@
@@ -1798,15 +1901,13 @@ index 0000000000000000000000000000000000000000..e53688b5d01769f26b05a0c4a5ba637a
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.network.protocol.Packet;
 +import net.minecraft.network.protocol.PacketFlow;
-+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
-+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
-+import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
-+import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
++import net.minecraft.network.protocol.game.*;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperChunkHandler;
++import puregero.multipaper.MultiPaperWorldBorderHandler;
 +
 +import java.io.DataInputStream;
 +import java.io.DataOutputStream;
@@ -1855,6 +1956,8 @@ index 0000000000000000000000000000000000000000..e53688b5d01769f26b05a0c4a5ba637a
 +    public void handle(ExternalServerConnection connection) {
 +        if (packet instanceof ClientboundBlockUpdatePacket || packet instanceof ClientboundSectionBlocksUpdatePacket || packet instanceof ClientboundLightUpdatePacket || packet instanceof ClientboundBlockEntityDataPacket) {
 +            MultiPaper.runSync(() -> MultiPaperChunkHandler.handleBlockUpdate(world, packet, 0));
++        } else if (packet instanceof ClientboundSetBorderSizePacket || packet instanceof ClientboundSetBorderLerpSizePacket || packet instanceof ClientboundSetBorderCenterPacket || packet instanceof ClientboundSetBorderWarningDelayPacket || packet instanceof ClientboundSetBorderWarningDistancePacket) {
++            MultiPaper.runSync(() -> MultiPaperWorldBorderHandler.handle(world, packet));
 +        } else {
 +            LOGGER.warn("Unhandled update packet of type " + packet.getClass().getSimpleName());
 +        }

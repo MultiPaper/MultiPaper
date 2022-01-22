@@ -72,7 +72,8 @@ following results:
 activity.
 
 MultiPaper-Pro will be available for 50 cents per player slot per month.
-Contact puregero@gmail.com if you're interested.
+Contact puregero@gmail.com if you're interested. A $50/hour service is also
+available for converting plugins to become compatible with MultiPaper.
 
 ## Commands
 MultiPaper includes a few commands mainly for debug purposes:

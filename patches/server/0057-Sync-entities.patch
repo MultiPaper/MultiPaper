@@ -1221,10 +1221,10 @@ index 0000000000000000000000000000000000000000..a69c0ab8a07a32020946489acf97b9bd
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4ec11d32bb2c9e286cc5db8408eb8f794b26e12a
+index 0000000000000000000000000000000000000000..a9ca50e9a3e920896df86605c9a86385d11cd409
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,65 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.level.ServerLevel;
@@ -1237,20 +1237,24 @@ index 0000000000000000000000000000000000000000..4ec11d32bb2c9e286cc5db8408eb8f79
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
 +import java.io.IOException;
 +import java.util.HashSet;
 +import java.util.UUID;
 +
 +public class EntityRemovePacket extends ExternalServerPacket {
 +
++    public static final HashSet<UUID> removedEntities = new HashSet<>();
++
 +    private final String world;
 +    private final UUID uuid;
 +
 +    public EntityRemovePacket(Entity entity) {
-+        this.world = ((ServerLevel) entity.level).convertable.getLevelId();
-+        this.uuid = entity.getUUID();
++        this(((ServerLevel) entity.level).convertable.getLevelId(), entity.getUUID());
++    }
++
++    public EntityRemovePacket(String world, UUID uuid) {
++        this.world = world;
++        this.uuid = uuid;
 +    }
 +
 +    public EntityRemovePacket(FriendlyDataInputStream in) throws IOException {
@@ -1279,13 +1283,11 @@ index 0000000000000000000000000000000000000000..4ec11d32bb2c9e286cc5db8408eb8f79
 +        });
 +    }
 +
-+    public static HashSet<UUID> removedEntities = new HashSet<>();
-+
 +    public static void setEntityRemoved(UUID uuid) {
 +        removedEntities.add(uuid);
 +        ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
 +            removedEntities.remove(uuid);
-+        }, 5, "EntityRemovePacket-removeEntryIntoRemovedEntities");
++        }, 300, "EntityRemovePacket-removeEntryFromRemovedEntities");
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java

@@ -333,10 +333,10 @@ index 0000000000000000000000000000000000000000..e3855d2d88b302213e0b79171fde87d6
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerTouchEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerTouchEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..485381095ae6f20339e1ca9b76216e42c74099f8
+index 0000000000000000000000000000000000000000..7bd3fe2c0501fff1cd5567ffb125411524514a66
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerTouchEntityPacket.java
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,65 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.server.MinecraftServer;
@@ -349,8 +349,6 @@ index 0000000000000000000000000000000000000000..485381095ae6f20339e1ca9b76216e42
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
 +import java.io.IOException;
 +import java.util.UUID;
 +
@@ -367,14 +365,14 @@ index 0000000000000000000000000000000000000000..485381095ae6f20339e1ca9b76216e42
 +    }
 +
 +    public PlayerTouchEntityPacket(FriendlyDataInputStream in) throws IOException {
-+        uuid = readUUID(in);
-+        entityUuid = readUUID(in);
++        uuid = in.readUUID();
++        entityUuid = in.readUUID();
 +    }
 +
 +    @Override
 +    public void write(FriendlyDataOutputStream out) throws IOException {
-+        writeUUID(out, uuid);
-+        writeUUID(out, entityUuid);
++        out.writeUUID(uuid);
++        out.writeUUID(entityUuid);
 +    }
 +
 +    @Override
@@ -391,6 +389,7 @@ index 0000000000000000000000000000000000000000..485381095ae6f20339e1ca9b76216e42
 +
 +            if (entity == null) {
 +                if (EntityRemovePacket.removedEntities.contains(entityUuid)) {
++                    connection.send(new EntityRemovePacket(player.level.getWorld().getName(), entityUuid));
 +                    return;
 +                }
 +

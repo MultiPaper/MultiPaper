@@ -433,10 +433,10 @@ index da404af219b2c93f3c27a34cee8f53f595a83c3b..7312eeed723bf6647121ec5e15093b1a
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..140299c05bce61d3f3a87e04200fecfb0be5c57f
+index 0000000000000000000000000000000000000000..52c324b249b02b58ebf5414b9c6b10772354c197
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-@@ -0,0 +1,207 @@
+@@ -0,0 +1,270 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -450,12 +450,16 @@ index 0000000000000000000000000000000000000000..140299c05bce61d3f3a87e04200fecfb
 +import net.minecraft.world.item.FishingRodItem;
 +import net.minecraft.world.item.ItemStack;
 +import net.minecraft.world.level.chunk.LevelChunk;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
 +import puregero.multipaper.externalserverprotocol.PlayerInventoryUpdatePacket;
 +
 +import java.util.*;
 +
 +public class MultiPaperInventoryHandler {
++
++    private static final Logger LOGGER = LogManager.getLogger(MultiPaperInventoryHandler.class.getSimpleName());
 +
 +    private static boolean updatingInventory = false;
 +    private static final HashMap<UUID, ArrayList<AwaitingTeleport>> awaitingTeleports = new HashMap<>();
@@ -539,16 +543,63 @@ index 0000000000000000000000000000000000000000..140299c05bce61d3f3a87e04200fecfb
 +        return false;
 +    }
 +
-+    public static void updateInventory(ServerPlayer player, String name, int slot, ItemStack item) {
++    public static void updateInventory(ServerPlayer player, String name, int slot, ItemStack replacingItem, ItemStack item) {
 +        updatingInventory = true; // Don't let these changes mark the inventories as dirty
++        NonNullListFilter<ItemStack> component = null;
 +        switch (name) {
-+            case "items" -> player.getInventory().items.set(slot, item);
-+            case "armor" -> player.getInventory().armor.set(slot, item);
-+            case "offhand" -> player.getInventory().offhand.set(slot, item);
++            case "items" -> component = player.getInventory().items;
++            case "armor" -> component = player.getInventory().armor;
++            case "offhand" -> component = player.getInventory().offhand;
 +            default -> throw new IllegalArgumentException("Unknown inventory component of " + name);
 +        }
++
 +        item.dirty = false;
++
++        if (component != null) {
++            ItemStack lastItem = component.lastItems.get(slot);
++            ItemStack currentItem = component.get(slot);
++
++            if (!ItemStack.matches(lastItem, currentItem) && !MultiPaper.isRealPlayer(player)) {
++                // Our changes haven't been sent yet, send them
++                broadcastComponentChanges(player, component);
++            }
++
++            if (MultiPaper.isRealPlayer(player) && replacingItem != null && !ItemStack.matches(replacingItem, currentItem)) {
++                // The expected item doesn't match, a merge is required
++                item.dirty = true; // Resend the item afterwards to sync the other servers
++                if (ItemStack.isSameItemSameTags(replacingItem, item)) {
++                    if (replacingItem.getCount() != item.getCount()) {
++                        int countDiff = item.getCount() - replacingItem.getCount();
++                        if (countDiff > 0) {
++                            item.setCount(countDiff);
++                            addItem(item, player);
++                        } else {
++                            LOGGER.warn(player.getScoreboard() + ": An external server tried to remove " + countDiff + " items from " + replacingItem + ", but that item is now a " + currentItem);
++                        }
++                    } else if (replacingItem.getDamageValue() != item.getDamageValue()) {
++                        int damageDiff = item.getDamageValue() - replacingItem.getDamageValue();
++                        if (ItemStack.isSameItemSameTags(currentItem, item)) {
++                            item.setDamageValue(item.getDamageValue() + damageDiff);
++                        }
++                    } else {
++                        LOGGER.warn(player.getScoreboard() + ": Trying to merge the same item same tags, but neither the count nor the durability is different. " + item + " and " + replacingItem);
++                    }
++                } else {
++                    addItem(item, player);
++                }
++            } else {
++                component.set(slot, item);
++                component.lastItems.set(slot, item.copy()); // We don't need to do this if it's out player
++            }
++        }
++
 +        updatingInventory = false;
++    }
++
++    private static void addItem(ItemStack itemStack, ServerPlayer player) {
++        if (player.isDeadOrDying() || !player.getInventory().add(itemStack)) {
++            player.drop(itemStack, false);
++        }
 +    }
 +
 +    /**
@@ -569,29 +620,41 @@ index 0000000000000000000000000000000000000000..140299c05bce61d3f3a87e04200fecfb
 +                    player.getInventory().armor,
 +                    player.getInventory().offhand,
 +            }) {
-+                if (!((ServerPlayer) inventoryComponent.player).didPlayerJoinEvent) {
-+                    // Don't update the inventory until they fully join
-+                    continue;
-+                }
-+
-+                ListTag items = new ListTag();
-+                for (int i = 0; i < inventoryComponent.size(); i++) {
-+                    if (inventoryComponent.dirty[i] || inventoryComponent.get(i).dirty) {
-+                        CompoundTag item = new CompoundTag();
-+                        item.putInt("Slot", i);
-+                        inventoryComponent.get(i).save(item);
-+                        items.add(item);
-+                        inventoryComponent.dirty[i] = false;
-+                        inventoryComponent.get(i).dirty = false;
-+                    }
-+                }
-+
-+                if (!items.isEmpty()) {
-+                    CompoundTag itemsRoot = new CompoundTag();
-+                    itemsRoot.put("items", items);
-+                    MultiPaper.broadcastPacketToExternalServers((ServerPlayer) inventoryComponent.player, new PlayerInventoryUpdatePacket((ServerPlayer) inventoryComponent.player, inventoryComponent.name, itemsRoot));
-+                }
++                broadcastComponentChanges(player, inventoryComponent);
 +            }
++        }
++    }
++
++    public static void broadcastComponentChanges(ServerPlayer player, NonNullListFilter<? extends ItemStack> inventoryComponent) {
++        if (!((ServerPlayer) inventoryComponent.player).didPlayerJoinEvent) {
++            // Don't update the inventory until they fully join
++            return;
++        }
++
++        ListTag items = new ListTag();
++        for (int i = 0; i < inventoryComponent.size(); i++) {
++            if (inventoryComponent.dirty[i] || inventoryComponent.get(i).dirty) {
++                CompoundTag item = new CompoundTag();
++                item.putInt("Slot", i);
++                inventoryComponent.get(i).save(item);
++                items.add(item);
++
++                if (!MultiPaper.isRealPlayer(player)) {
++                    CompoundTag replacingItem = new CompoundTag();
++                    inventoryComponent.lastItems.get(i).save(replacingItem);
++                    item.put("Replacing", replacingItem);
++                }
++
++                inventoryComponent.dirty[i] = false;
++                inventoryComponent.get(i).dirty = false;
++                inventoryComponent.lastItems.set(i, inventoryComponent.get(i).copy());
++            }
++        }
++
++        if (!items.isEmpty()) {
++            CompoundTag itemsRoot = new CompoundTag();
++            itemsRoot.put("items", items);
++            MultiPaper.broadcastPacketToExternalServers(player, new PlayerInventoryUpdatePacket(player, inventoryComponent.name, itemsRoot));
 +        }
 +    }
 +
@@ -646,10 +709,10 @@ index 0000000000000000000000000000000000000000..140299c05bce61d3f3a87e04200fecfb
 +}
 diff --git a/src/main/java/puregero/multipaper/NonNullListFilter.java b/src/main/java/puregero/multipaper/NonNullListFilter.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..79b5ec18fc80714daac2c70c6a385fb1abe58a01
+index 0000000000000000000000000000000000000000..f55917e9ab8be2828d803eb79eafa55d48ca31dd
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/NonNullListFilter.java
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,64 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.NonNullList;
@@ -662,12 +725,14 @@ index 0000000000000000000000000000000000000000..79b5ec18fc80714daac2c70c6a385fb1
 +import java.util.List;
 +
 +public class NonNullListFilter<E extends ItemStack> extends NonNullList<E> {
++    public NonNullList<ItemStack> lastItems;
 +    public final boolean[] dirty;
 +    public final Player player;
 +    public final String name;
 +
 +    protected NonNullListFilter(List<E> delegate, @Nullable E initialElement, Player player, String name) {
 +        super(delegate, initialElement);
++        this.lastItems = NonNullList.withSize(delegate.size(), initialElement);
 +        this.dirty = new boolean[delegate.size()];
 +        this.player = player;
 +        this.name = name;
@@ -834,10 +899,10 @@ index d6f187e142ba4c5bcf66aba896693d03ad616cb1..0dc31a246d126afa5f81cc1de12f86b1
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3e80db80144b6c1c2517cfaeda174c4971f4f2f3
+index 0000000000000000000000000000000000000000..d8d3662ea53a4fd9fd7107af0bd9b23114cbd1a5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,76 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -852,8 +917,6 @@ index 0000000000000000000000000000000000000000..3e80db80144b6c1c2517cfaeda174c49
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperInventoryHandler;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
 +import java.io.IOException;
 +import java.util.UUID;
 +
@@ -905,7 +968,13 @@ index 0000000000000000000000000000000000000000..3e80db80144b6c1c2517cfaeda174c49
 +            items.forEach(i -> {
 +                CompoundTag item = (CompoundTag) i;
 +                ItemStack itemStack = ItemStack.of(item);
-+                MultiPaperInventoryHandler.updateInventory(player, component, item.getInt("Slot"), itemStack);
++
++                ItemStack replacingItem = null;
++                if (item.contains("Replacing")) {
++                    replacingItem = ItemStack.of(item.getCompound("Replacing"));
++                }
++
++                MultiPaperInventoryHandler.updateInventory(player, component, item.getInt("Slot"), replacingItem, itemStack);
 +            });
 +        });
 +    }

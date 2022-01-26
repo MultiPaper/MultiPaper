@@ -130,7 +130,7 @@ index 5ea2fdbd2c762e0e632093fc07294327eb061ada..0bdfbac4e4e69d443816d50b129a8134
      public boolean isEmpty() {
          return this.getNMS().isAir();
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index 69223b13e894d86d9529f2ef8b60a08a1f7a9267..a5bab4b65068d309f5960425220fa733aa6d3a9f 100644
+index a3673e2943f251e056ecf84a9bff2de12efdb52a..69fa1df864678115a682db4140d3642787500df5 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 @@ -181,6 +181,7 @@ import org.bukkit.plugin.Plugin;
@@ -163,10 +163,18 @@ index 69223b13e894d86d9529f2ef8b60a08a1f7a9267..a5bab4b65068d309f5960425220fa733
      public int getFireTicks() {
          return entity.remainingFireTicks;
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 1bdfda29bdf033bf0ba904693d2d18e787bfe3fc..3741f83a860ff0f28dc97edd6777c3795bcfe2f6 100644
+index 1bdfda29bdf033bf0ba904693d2d18e787bfe3fc..aa3bf30f50b2b0c077267c926c0604b2583ca44f 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-@@ -32,6 +32,7 @@ import net.minecraft.advancements.AdvancementProgress;
+@@ -24,6 +24,7 @@ import java.util.Optional;
+ import java.util.Set;
+ import java.util.UUID;
+ import java.util.WeakHashMap;
++import java.util.concurrent.ConcurrentHashMap;
+ import java.util.logging.Level;
+ import java.util.logging.Logger;
+ import javax.annotation.Nullable;
+@@ -32,6 +33,7 @@ import net.minecraft.advancements.AdvancementProgress;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.SectionPos; // Paper
  import net.minecraft.nbt.CompoundTag;
@@ -174,7 +182,7 @@ index 1bdfda29bdf033bf0ba904693d2d18e787bfe3fc..3741f83a860ff0f28dc97edd6777c379
  import net.minecraft.network.FriendlyByteBuf;
  import net.minecraft.network.chat.ChatType;
  import net.minecraft.network.chat.Component;
-@@ -141,12 +142,15 @@ import org.jetbrains.annotations.NotNull;
+@@ -141,12 +143,15 @@ import org.jetbrains.annotations.NotNull;
  
  import net.md_5.bungee.api.chat.BaseComponent; // Spigot
  import puregero.multipaper.MultiPaper;
@@ -185,12 +193,12 @@ index 1bdfda29bdf033bf0ba904693d2d18e787bfe3fc..3741f83a860ff0f28dc97edd6777c379
      private long firstPlayed = 0;
      private long lastPlayed = 0;
      private boolean hasPlayedBefore = false;
-+    public HashMap<String, String> data = new HashMap<>(); // MultiPaper
-+    public HashMap<String, String> persistentData = new HashMap<>(); // MultiPaper
++    public ConcurrentHashMap<String, String> data = new ConcurrentHashMap<>(); // MultiPaper
++    public ConcurrentHashMap<String, String> persistentData = new ConcurrentHashMap<>(); // MultiPaper
      private final ConversationTracker conversationTracker = new ConversationTracker();
      private final Set<String> channels = new HashSet<String>();
      private final Map<UUID, Set<WeakReference<Plugin>>> hiddenEntities = new HashMap<>();
-@@ -988,6 +992,16 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -988,6 +993,16 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
              net.minecraft.util.Mth.floor(loc.getZ()) >> 4), 28, 3); // Load area high priority
          return super.teleportAsync(loc, cause);
      }
@@ -207,7 +215,7 @@ index 1bdfda29bdf033bf0ba904693d2d18e787bfe3fc..3741f83a860ff0f28dc97edd6777c379
      // Paper end
  
      @Override
-@@ -1141,6 +1155,50 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1141,6 +1156,50 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
          }
      }
  
@@ -258,7 +266,7 @@ index 1bdfda29bdf033bf0ba904693d2d18e787bfe3fc..3741f83a860ff0f28dc97edd6777c379
      @Override
      public Location getBedLocation() {
          Preconditions.checkState(isSleeping(), "Not sleeping");
-@@ -1687,6 +1745,13 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1687,6 +1746,13 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
                  handle.keepLevel = data.getBoolean("keepLevel");
              }
          }
@@ -272,7 +280,7 @@ index 1bdfda29bdf033bf0ba904693d2d18e787bfe3fc..3741f83a860ff0f28dc97edd6777c379
      }
  
      public void setExtraData(CompoundTag nbttagcompound) {
-@@ -1716,6 +1781,12 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1716,6 +1782,12 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
          paper.putLong("LastLogin", handle.loginTime);
          paper.putLong("LastSeen", System.currentTimeMillis());
          // Paper end
@@ -387,24 +395,25 @@ index 24bda46194469b214e5ae2c609383f45095c3d0a..feb500a28c61d6ff59d5664ee3004d02
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index 6e584df98a39661561583588f77ae76fafed357b..2b944f52bede3d14110c7aed8c86b218e03da2a2 100644
+index 6e584df98a39661561583588f77ae76fafed357b..84727a84000fe71eb0ff1c301bfa512566c98921 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -19,6 +19,8 @@ import java.io.IOException;
+@@ -19,7 +19,9 @@ import java.io.IOException;
  import java.net.InetAddress;
  import java.net.InetSocketAddress;
  import java.net.UnknownHostException;
-+import java.util.HashMap;
 +import java.util.Map;
  import java.util.UUID;
++import java.util.concurrent.ConcurrentHashMap;
  
  public class PlayerCreatePacket extends ExternalServerPacket {
+ 
 @@ -36,6 +38,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
      private final GameType gamemode;
      private final byte[] ip;
      private final short port;
-+    private final HashMap<String, String> data;
-+    private final HashMap<String, String> persistentData;
++    private final ConcurrentHashMap<String, String> data;
++    private final ConcurrentHashMap<String, String> persistentData;
  
      private PlayerCreatePacket(ServerPlayer player) {
          this.name = player.getScoreboardName();
@@ -422,13 +431,13 @@ index 6e584df98a39661561583588f77ae76fafed357b..2b944f52bede3d14110c7aed8c86b218
          in.readFully(ip);
          port = in.readShort();
 +
-+        data = new HashMap<>();
++        data = new ConcurrentHashMap<>();
 +        int dataLength = in.readInt();
 +        for (int i = 0; i < dataLength; i++) {
 +            data.put(in.readString(), in.readString());
 +        }
 +
-+        persistentData = new HashMap<>();
++        persistentData = new ConcurrentHashMap<>();
 +        int persistentDataLength = in.readInt();
 +        for (int i = 0; i < persistentDataLength; i++) {
 +            persistentData.put(in.readString(), in.readString());

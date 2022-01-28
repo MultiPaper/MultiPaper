@@ -9,7 +9,9 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 public class ProxyServer extends Thread {
 
@@ -151,21 +153,31 @@ public class ProxyServer extends Thread {
     }
 
     private SocketAddress getSuitableServer() {
-        ServerConnection bestServer = null;
-        long lowestTickTime = Long.MAX_VALUE;
+        long highestTickTime = 0;
 
         for (ServerConnection connection : ServerConnection.getConnections()) {
-            if (connection != null && connection.isOnline() && connection.getPort() > 0 && connection.getTimer().averageInMillis() < lowestTickTime) {
-                lowestTickTime = connection.getTimer().averageInMillis();
-                bestServer = connection;
+            if (connection != null && connection.isOnline() && connection.getPort() > 0 && connection.getTimer().averageInMillis() > highestTickTime) {
+                highestTickTime = connection.getTimer().averageInMillis();
             }
         }
 
-        if (bestServer != null) {
-            return new InetSocketAddress(((InetSocketAddress) bestServer.getAddress()).getAddress(), bestServer.getPort());
+        List<ServerConnection> connections = new ArrayList<>();
+
+        for (ServerConnection connection : ServerConnection.getConnections()) {
+            if (connection != null && connection.isOnline() && connection.getPort() > 0) {
+                int count = (int) (highestTickTime - connection.getTimer().averageInMillis() + 1);
+                for (int i = 0; i < count; i++) {
+                    connections.add(connection);
+                }
+            }
         }
 
-        return null;
+        if (connections.size() == 0) {
+            return null;
+        }
+
+        ServerConnection bestServer = connections.get((int) (Math.random() * connections.size()));
+        return new InetSocketAddress(((InetSocketAddress) bestServer.getAddress()).getAddress(), bestServer.getPort());
     }
 
 }

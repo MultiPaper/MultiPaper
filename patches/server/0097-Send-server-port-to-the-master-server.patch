@@ -17,10 +17,39 @@ index 8c392224518b61edad3dbe7ee5d23611fff247af..bb77f89e2e00cd29c1f331d630eed771
          // Paper end
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 9d8d9275437fb5119dc1b79b1c642d5fc812ffc6..764242e3dcbb6b0c8dd278e3a9197aa7ad374670 100644
+index 9d8d9275437fb5119dc1b79b1c642d5fc812ffc6..7484388a468c7e475419581c0551b38a29c714cf 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -560,4 +560,8 @@ public class MultiPaper {
+@@ -90,6 +90,14 @@ public class MultiPaper {
+         return externalServerPort;
+     }
+ 
++    private static Boolean advertiseToBuiltInProxy = null;
++    public static boolean shouldAdvertiseToBuiltInProxy() {
++        if (advertiseToBuiltInProxy == null) {
++            loadConfig();
++        }
++        return advertiseToBuiltInProxy;
++    }
++
+     private static void loadConfig() {
+         YamlConfiguration config = new YamlConfiguration();
+         File file = new File("multipaper.yml");
+@@ -124,6 +132,13 @@ public class MultiPaper {
+ 
+         externalServerPort = config.getInt("externalServerPort");
+ 
++        if (!config.contains("advertiseToBuiltInProxy")) {
++            save = true;
++            config.set("advertiseToBuiltInProxy", true);
++        }
++
++        advertiseToBuiltInProxy = config.getBoolean("advertiseToBuiltInProxy");
++
+         try {
+             if (save) {
+                 config.save(file);
+@@ -560,4 +575,8 @@ public class MultiPaper {
      public static void broadcastPlayerAction(ServerPlayer player, ServerboundSetCarriedItemPacket packet) {
          broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
      }
@@ -30,7 +59,7 @@ index 9d8d9275437fb5119dc1b79b1c642d5fc812ffc6..764242e3dcbb6b0c8dd278e3a9197aa7
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index cf8e7361ce0aa1c0adfed51cdb13374d6f077141..22aa3dacc2c9ca34aa8e2dd4c60ae84183a18f3a 100644
+index 16dd00f9016e4cf87c9e1a0cbbf6ef67d8f5c10a..db2daabf2bee2d36b099969944a6bb467133edef 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -40,6 +40,7 @@ public class MultiPaperConnection extends Thread {
@@ -45,7 +74,7 @@ index cf8e7361ce0aa1c0adfed51cdb13374d6f077141..22aa3dacc2c9ca34aa8e2dd4c60ae841
                      }
                  }
  
-+                if (port >= 0) {
++                if (port >= 0 && MultiPaper.shouldAdvertiseToBuiltInProxy()) {
 +                    sendPort(port);
 +                }
 +

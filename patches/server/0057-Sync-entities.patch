@@ -36,7 +36,7 @@ index 2e2bfccfc6cec6582a5b595e0343c27be5267b7a..c686026fe455fbc2c4ba692fbd7f2ca8
          /*
          this.lock.readLock().lock();
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 0b87c8fb0257d02055b0042859e40697152e46e5..1bd0227dc091974be7dbc7a60468e7aa8755bd6c 100644
+index 1e6631ca1284ebb13d5ba8732e34256d4a381ff3..94ae56c6e6235d6d5d51d41f4f92beb03b4fc22e 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -61,11 +61,7 @@ import net.minecraft.core.Registry;
@@ -148,21 +148,22 @@ index 887556052a8dd36453aef8b92cf2e1c81932876b..6032128a4eb2ea88000e5288261599e5
          this.entity.startSeenByPlayer(player);
      }
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index e432899edd62b5449c30c9cb954c67271fa020ec..34a412cd2c8a906b09d91f8bcd0c0abfaf1f2e15 100644
+index e432899edd62b5449c30c9cb954c67271fa020ec..9bb67427b3e85609bee7dae5e0d71b51c94bfdd3 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -90,8 +90,10 @@ import net.minecraft.world.entity.animal.WaterAnimal;
+@@ -90,8 +90,11 @@ import net.minecraft.world.entity.animal.WaterAnimal;
  import net.minecraft.world.entity.animal.horse.SkeletonHorse;
  import net.minecraft.world.entity.boss.EnderDragonPart;
  import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 +import net.minecraft.world.entity.decoration.ArmorStand;
  import net.minecraft.world.entity.npc.Npc;
  import net.minecraft.world.entity.player.Player;
++import net.minecraft.world.entity.projectile.FireworkRocketEntity;
 +import net.minecraft.world.entity.projectile.FishingHook;
  import net.minecraft.world.entity.raid.Raid;
  import net.minecraft.world.entity.raid.Raids;
  import net.minecraft.world.item.crafting.RecipeManager;
-@@ -163,6 +165,7 @@ import org.bukkit.event.world.TimeSkipEvent;
+@@ -163,6 +166,7 @@ import org.bukkit.event.world.TimeSkipEvent;
  import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
  import puregero.multipaper.MultiPaper;
  import puregero.multipaper.MultiPaperChunkHandler;
@@ -170,13 +171,23 @@ index e432899edd62b5449c30c9cb954c67271fa020ec..34a412cd2c8a906b09d91f8bcd0c0abf
  import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
  
  public class ServerLevel extends Level implements WorldGenLevel {
-@@ -652,6 +655,20 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -652,6 +656,30 @@ public class ServerLevel extends Level implements WorldGenLevel {
              org.spigotmc.ActivationRange.activateEntities(this); // Spigot
              timings.entityTick.startTiming(); // Spigot
              this.entityTickList.forEach((entity) -> {
 +                // MultiPaper start - Are we ticking this entity?
 +                LevelChunk chunk = getChunkIfLoaded(entity.blockPosition());
-+                if (!MultiPaper.isRealPlayer(entity) && !MultiPaper.isChunkLocal(chunk) && !(entity instanceof FishingHook)) {
++                if (entity instanceof FireworkRocketEntity fireworkRocket
++                        && fireworkRocket.attachedToEntity instanceof ServerPlayer
++                        && !MultiPaper.isRealPlayer(fireworkRocket.attachedToEntity)
++                        && fireworkRocket.attachedToEntity.level == fireworkRocket.level
++                        && fireworkRocket.position().distanceToSqr(fireworkRocket.attachedToEntity.position()) < 32 * 32) {
++                    // Let the server that owns the player with the fireworkRocket tick it (as long as they probably have this chunk loaded)
++                    return;
++                } else if (!MultiPaper.isRealPlayer(entity)
++                        && !MultiPaper.isChunkLocal(chunk)
++                        && !(entity instanceof FishingHook)
++                        && !(entity instanceof FireworkRocketEntity fireworkRocket && MultiPaper.isRealPlayer(fireworkRocket.attachedToEntity))) {
 +                    if (entity instanceof ArmorStand armorStand) {
 +                        boolean temp = armorStand.canTick;
 +                        armorStand.canTick = false;
@@ -191,7 +202,7 @@ index e432899edd62b5449c30c9cb954c67271fa020ec..34a412cd2c8a906b09d91f8bcd0c0abf
                  if (!entity.isRemoved()) {
                      if (false && this.shouldDiscardEntity(entity)) { // CraftBukkit - We prevent spawning in general, so this butchering is not needed
                          entity.discard();
-@@ -1432,6 +1449,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1432,6 +1460,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
              }
              // CraftBukkit end
  

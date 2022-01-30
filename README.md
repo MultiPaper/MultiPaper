@@ -1,6 +1,6 @@
 # MultiPaper
 
-[Discord](https://discord.gg/dN3WCZkSRV)
+[![Discord](https://img.shields.io/discord/937309618743427113.svg?color=738ad6&label=Join%20the%20Discord%20server&logo=discord&logoColor=ffffff)](https://discord.gg/dN3WCZkSRV)
 
 1.18 [Airplane](https://github.com/TECHNOVE/Airplane) and
 [Pufferfish](https://github.com/pufferfish-gg/Pufferfish) fork

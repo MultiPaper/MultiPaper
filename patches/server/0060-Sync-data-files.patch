@@ -1,0 +1,272 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 25 Nov 2021 17:55:12 +1000
+Subject: [PATCH] Sync data files
+
+
+diff --git a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
+index 5d60a4ebbd039077c4d2458ac8d8110097eb74a3..9f1d30c55e3d59c879be9aaf69edfb6533af06e8 100644
+--- a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
++++ b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
+@@ -7,6 +7,7 @@ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.nbt.NbtIo;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public abstract class SavedData {
+     private static final Logger LOGGER = LogManager.getLogger();
+@@ -33,7 +34,7 @@ public abstract class SavedData {
+             compoundTag.putInt("DataVersion", SharedConstants.getCurrentVersion().getWorldVersion());
+ 
+             try {
+-                NbtIo.writeCompressed(compoundTag, file);
++                MultiPaper.writeData(file.getPath(), compoundTag); // NbtIo.writeCompressed(compoundTag, file); // MultiPaper
+             } catch (IOException var4) {
+                 LOGGER.error("Could not save data {}", this, var4);
+             }
+diff --git a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
+index 77209dfe179f97a5be89bdf812622773b90e6214..ed1689972acae701ea6ca78654496e3c925faeab 100644
+--- a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
++++ b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
+@@ -326,7 +326,8 @@ public class MapItemSavedData extends SavedData {
+             --this.trackedDecorationCount;
+         }
+ 
+-        this.setDecorationsDirty();
++        if (mapicon != null) // MultiPaper - don't set dirty unless it's actually removed something
++        this.setDecorationsDirty(mapicon.getType()); // MultiPaper - track the decoration being made dirty
+     }
+ 
+     public static void addTargetDecoration(ItemStack stack, BlockPos pos, String id, MapDecoration.Type type) {
+@@ -421,7 +422,7 @@ public class MapItemSavedData extends SavedData {
+                 ++this.trackedDecorationCount;
+             }
+ 
+-            this.setDecorationsDirty();
++            this.setDecorationsDirty(mapicon.getType()); // MultiPaper - track the decoration being made dirty
+         }
+ 
+     }
+@@ -445,7 +446,8 @@ public class MapItemSavedData extends SavedData {
+ 
+     }
+ 
+-    public void setDecorationsDirty() {
++    public void setDecorationsDirty(MapDecoration.Type type) { // MultiPaper - track the decoration being made dirty
++        if (type != MapDecoration.Type.FRAME && type != MapDecoration.Type.PLAYER && type != MapDecoration.Type.PLAYER_OFF_LIMITS && type != MapDecoration.Type.PLAYER_OFF_MAP) // MultiPaper - don't save for these decorations
+         this.setDirty();
+         this.carriedBy.forEach(MapItemSavedData.HoldingPlayer::markDecorationsDirty);
+     }
+diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+index e84b99ca10621cb1021d7ec17ba21df24e8c7474..e3446424a7ef518aaf499b1857621085d0cfcbe0 100644
+--- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
++++ b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
+@@ -2,11 +2,8 @@ package net.minecraft.world.level.storage;
+ 
+ import com.google.common.collect.Maps;
+ import com.mojang.datafixers.DataFixer;
+-import java.io.DataInputStream;
+-import java.io.File;
+-import java.io.FileInputStream;
+-import java.io.IOException;
+-import java.io.PushbackInputStream;
++
++import java.io.*;
+ import java.util.Map;
+ import java.util.function.Function;
+ import java.util.function.Supplier;
+@@ -19,6 +16,7 @@ import net.minecraft.util.datafix.DataFixTypes;
+ import net.minecraft.world.level.saveddata.SavedData;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class DimensionDataStorage {
+     private static final Logger LOGGER = LogManager.getLogger();
+@@ -61,8 +59,11 @@ public class DimensionDataStorage {
+     private <T extends SavedData> T readSavedData(Function<CompoundTag, T> readFunction, String id) {
+         try {
+             File file = this.getDataFile(id);
+-            if (file.exists()) {
++            if (true || file.exists()) { // MultiPaper
+                 CompoundTag compoundTag = this.readTagFromDisk(id, SharedConstants.getCurrentVersion().getWorldVersion());
++
++                if (compoundTag == null) return null; // MultiPaper
++
+                 return readFunction.apply(compoundTag.getCompound("data"));
+             }
+         } catch (Exception var5) {
+@@ -78,7 +79,14 @@ public class DimensionDataStorage {
+ 
+     public CompoundTag readTagFromDisk(String id, int dataVersion) throws IOException {
+         File file = this.getDataFile(id);
+-        FileInputStream fileInputStream = new FileInputStream(file);
++        // MultiPaper start
++        byte[] data = MultiPaper.readData(file.getPath());
++        if (data == null || data.length == 0) {
++            return null;
++        }
++        // FileInputStream fileInputStream = new FileInputStream(file);
++        ByteArrayInputStream fileInputStream = new ByteArrayInputStream(data);
++        // MultiPaper end
+ 
+         CompoundTag var8;
+         try {
+@@ -160,4 +168,10 @@ public class DimensionDataStorage {
+ 
+         });
+     }
++
++    // MultiPaper start - save a PersistentBase
++    public void save(String id, SavedData savedData) {
++        savedData.save(this.getDataFile(id));
++    }
++    // MultiPaper end
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 1a9eba089fc104f29e456ab09f187e1576068476..da404af219b2c93f3c27a34cee8f53f595a83c3b 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -17,6 +17,9 @@ import net.minecraft.world.level.chunk.ChunkAccess;
+ import net.minecraft.world.level.chunk.ChunkStatus;
+ import net.minecraft.world.level.chunk.ImposterProtoChunk;
+ import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.level.saveddata.maps.MapIndex;
++import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
++import net.minecraft.world.level.storage.DimensionDataStorage;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
+@@ -50,6 +53,7 @@ public class MultiPaper {
+     private static ExternalServerSocket externalServerSocket = null;
+     private final static List<ChunkHolder> visibleChunksToCheck = new ArrayList<>();
+     public static boolean levelDatNeedsSaving = false;
++    private static long last1Seconds = System.currentTimeMillis();
+ 
+     public static MultiPaperConnection getConnection() {
+         if (multiPaperConnection == null) {
+@@ -160,6 +164,19 @@ public class MultiPaper {
+                 level.saveIncrementally(true);
+             }
+         }
++        
++        boolean hasBeen1Seconds = last1Seconds < System.currentTimeMillis() - 1000;
++
++        if (hasBeen1Seconds) last1Seconds = System.currentTimeMillis();
++
++        Bukkit.getWorlds().forEach(world -> {
++            DimensionDataStorage persistentData = ((CraftWorld) world).getHandle().getDataStorage();
++            persistentData.cache.forEach((key, value) -> {
++                if (value instanceof MapIndex || (value instanceof MapItemSavedData && hasBeen1Seconds)) {
++                    persistentData.save(key, value);
++                }
++            });
++        });
+     }
+ 
+     public static void sendTickTime(long time, double tps) {
+@@ -370,6 +387,26 @@ public class MultiPaper {
+         getConnection().writeUid(world, data);
+     }
+ 
++    public static byte[] readData(String path) {
++        if (path.contains("raids.dat")) {
++            // Don't load raids from dist
++            return null;
++        }
++        
++        try {
++            return getConnection().readData(path).join();
++        } catch (IOException e) {
++            e.printStackTrace();
++            return null;
++        }
++    }
++
++    public static void writeData(String path, CompoundTag compoundTag) throws IOException {
++        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
++        NbtIo.writeCompressed(compoundTag, buffer);
++        getConnection().writeData(path, buffer.toByteArray());
++    }
++
+     private static String getWorld(File path) {
+         do {
+             path = path.getParentFile();
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 99689db1417c12d9e846c8ca7e84a01c083dfd7d..bd2e20062efd5066478d72ae284190534390eb89 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -11,6 +11,9 @@ import net.minecraft.world.level.chunk.ChunkStatus;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.World;
++import org.bukkit.craftbukkit.CraftWorld;
+ import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
+ import puregero.multipaper.externalserverprotocol.SendTickListPacket;
+ 
+@@ -176,6 +179,26 @@ public class MultiPaperConnection extends Thread {
+         });
+     }
+ 
++    public void clearData(DataInputStream in, DataOutputSender out) throws IOException {
++        String pathStr = in.readUTF();
++        File path = new File(pathStr);
++        String file = path.getName().substring(0, path.getName().length() - 4); // Remove .dat suffix
++        while (!path.getParentFile().equals(new File(".")) && !path.getParentFile().equals(path)) {
++            path = path.getParentFile();
++        }
++
++        World world = Bukkit.getWorld(path.getName());
++        if (world == null) {
++            LOGGER.warn("Unknown world '" + path.getPath() + "' in path " + pathStr + " for clearData");
++            return;
++        }
++
++        // Clear the data from the world's data cache
++        MultiPaper.runSync(() -> {
++            ((CraftWorld) world).getHandle().getDataStorage().cache.remove(file);
++        });
++    }
++
+     public void chunkOwner(DataInputStream in, DataOutputSender out) throws IOException {
+         String world = in.readUTF();
+         int cx = in.readInt();
+@@ -584,6 +607,35 @@ public class MultiPaperConnection extends Thread {
+         out.send(in -> { /* Do nothing */ });
+     }
+ 
++    public CompletableFuture<byte[]> readData(String path) throws IOException {
++        CompletableFuture<byte[]> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("readData");
++        out.writeUTF(path);
++        out.send(in -> {
++            try {
++                byte[] data = new byte[in.readInt()];
++                in.readFully(data);
++
++                future.complete(data);
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
++
++    public void writeData(String path, byte[] data) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeData");
++        out.writeUTF(path);
++        out.writeInt(data.length);
++        out.write(data);
++        out.send(in -> { /* Do nothing */ });
++    }
++
+     public void lockChunk(String world, int cx, int cz) throws IOException {
+         DataOutputSender out = new DataOutputSender(this);
+         out.writeUTF("lockChunk");

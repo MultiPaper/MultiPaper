@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 5 Jan 2022 16:43:52 +1000
+Subject: [PATCH] Send server port to the master server
+
+
+diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+index 681ed57929602535ebae9852bddba9a0b3920da9..65e51146e9ad892b66523f3238fbb783ee09de50 100644
+--- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -270,6 +270,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+             this.setPort(dedicatedserverproperties.serverPort);
+         }
+         bindAddress = new java.net.InetSocketAddress(inetaddress, this.getPort());
++        MultiPaper.setPort(this.getPort()); // MultiPaper
+         }
+         // Paper end
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 9d8d9275437fb5119dc1b79b1c642d5fc812ffc6..7484388a468c7e475419581c0551b38a29c714cf 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -90,6 +90,14 @@ public class MultiPaper {
+         return externalServerPort;
+     }
+ 
++    private static Boolean advertiseToBuiltInProxy = null;
++    public static boolean shouldAdvertiseToBuiltInProxy() {
++        if (advertiseToBuiltInProxy == null) {
++            loadConfig();
++        }
++        return advertiseToBuiltInProxy;
++    }
++
+     private static void loadConfig() {
+         YamlConfiguration config = new YamlConfiguration();
+         File file = new File("multipaper.yml");
+@@ -124,6 +132,13 @@ public class MultiPaper {
+ 
+         externalServerPort = config.getInt("externalServerPort");
+ 
++        if (!config.contains("advertiseToBuiltInProxy")) {
++            save = true;
++            config.set("advertiseToBuiltInProxy", true);
++        }
++
++        advertiseToBuiltInProxy = config.getBoolean("advertiseToBuiltInProxy");
++
+         try {
+             if (save) {
+                 config.save(file);
+@@ -560,4 +575,8 @@ public class MultiPaper {
+     public static void broadcastPlayerAction(ServerPlayer player, ServerboundSetCarriedItemPacket packet) {
+         broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
+     }
++
++    public static void setPort(int port) {
++        getConnection().sendPort(port);
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 16dd00f9016e4cf87c9e1a0cbbf6ef67d8f5c10a..b176b89012feed702bf5988917057e488764001e 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -40,6 +40,7 @@ public class MultiPaperConnection extends Thread {
+     private final Map<Integer, Request> callbacks = new ConcurrentHashMap<>();
+     private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
+     private String myName = null;
++    private int port = -1;
+ 
+     public MultiPaperConnection() {
+         super("MultiPaperConnection Thread");
+@@ -113,6 +114,10 @@ public class MultiPaperConnection extends Thread {
+                     }
+                 }
+ 
++                if (port >= 0) {
++                    sendPort(port);
++                }
++
+                 DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+                 while (!socket.isClosed()) {
+                     int id = in.readInt();
+@@ -817,4 +822,20 @@ public class MultiPaperConnection extends Thread {
+             e.printStackTrace();
+         }
+     }
++
++    public void sendPort(int port) {
++        if (!MultiPaper.shouldAdvertiseToBuiltInProxy()) {
++            return;
++        }
++
++        this.port = port;
++        try {
++            DataOutputSender out = new DataOutputSender(this);
++            out.writeUTF("setPort");
++            out.writeInt(port);
++            out.send(null);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
+ }

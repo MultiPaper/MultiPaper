@@ -1,6 +1,7 @@
 # MultiPaper
 
-1.18 [Airplane](https://github.com/TECHNOVE/Airplane) fork
+1.18 [Airplane](https://github.com/TECHNOVE/Airplane) and
+[Pufferfish](https://github.com/pufferfish-gg/Pufferfish) fork
 that enables a server admin to run a single world across multiple
 servers. Multiple MultiPaper servers run the same world and use a
 MultiPaper-Master to coordinate with eachother and store server data. While the

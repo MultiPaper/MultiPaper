@@ -1,0 +1,230 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kevin Raneri <kevin.raneri@gmail.com>
+Date: Tue, 9 Nov 2021 23:36:56 -0500
+Subject: [PATCH] Pufferfish Utils
+
+
+diff --git a/src/main/java/com/destroystokyo/paper/util/misc/AreaMap.java b/src/main/java/com/destroystokyo/paper/util/misc/AreaMap.java
+index c89f6986eda5a132a948732ea1b6923370685317..a69c13e20040c1561d9c2d4d89ec7d4e635134fc 100644
+--- a/src/main/java/com/destroystokyo/paper/util/misc/AreaMap.java
++++ b/src/main/java/com/destroystokyo/paper/util/misc/AreaMap.java
+@@ -26,7 +26,7 @@ public abstract class AreaMap<E> {
+ 
+     // we use linked for better iteration.
+     // map of: coordinate to set of objects in coordinate
+-    protected final Long2ObjectOpenHashMap<PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<E>> areaMap = new Long2ObjectOpenHashMap<>(1024, 0.7f);
++    protected Long2ObjectOpenHashMap<PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<E>> areaMap = new Long2ObjectOpenHashMap<>(1024, 0.7f); // Pufferfish - not actually final
+     protected final PooledLinkedHashSets<E> pooledHashSets;
+ 
+     protected final ChangeCallback<E> addCallback;
+@@ -160,7 +160,8 @@ public abstract class AreaMap<E> {
+     protected abstract PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<E> getEmptySetFor(final E object);
+ 
+     // expensive op, only for debug
+-    protected void validate(final E object, final int viewDistance) {
++    protected void validate0(final E object, final int viewDistance) { // Pufferfish - rename this thing just in case it gets used I'd rather a compile time error.
++        if (true) throw new UnsupportedOperationException(); // Pufferfish - not going to put in the effort to fix this if it doesn't ever get used.
+         int entiesGot = 0;
+         int expectedEntries = (2 * viewDistance + 1);
+         expectedEntries *= expectedEntries;
+diff --git a/src/main/java/com/destroystokyo/paper/util/misc/PlayerAreaMap.java b/src/main/java/com/destroystokyo/paper/util/misc/PlayerAreaMap.java
+index 46954db7ecd35ac4018fdf476df7c8020d7ce6c8..1ad890a244bdf6df48a8db68cb43450e08c788a6 100644
+--- a/src/main/java/com/destroystokyo/paper/util/misc/PlayerAreaMap.java
++++ b/src/main/java/com/destroystokyo/paper/util/misc/PlayerAreaMap.java
+@@ -5,7 +5,7 @@ import net.minecraft.server.level.ServerPlayer;
+ /**
+  * @author Spottedleaf
+  */
+-public final class PlayerAreaMap extends AreaMap<ServerPlayer> {
++public class PlayerAreaMap extends AreaMap<ServerPlayer> { // Pufferfish - not actually final
+ 
+     public PlayerAreaMap() {
+         super();
+diff --git a/src/main/java/gg/pufferfish/pufferfish/PufferfishLogger.java b/src/main/java/gg/pufferfish/pufferfish/PufferfishLogger.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..53f2df00c6809618a9ee3d2ea72e85e8052fbcf1
+--- /dev/null
++++ b/src/main/java/gg/pufferfish/pufferfish/PufferfishLogger.java
+@@ -0,0 +1,16 @@
++package gg.pufferfish.pufferfish;
++
++import java.util.logging.Level;
++import java.util.logging.Logger;
++import org.bukkit.Bukkit;
++
++public class PufferfishLogger extends Logger {
++    public static final PufferfishLogger LOGGER = new PufferfishLogger();
++
++    private PufferfishLogger() {
++        super("Pufferfish", null);
++
++        setParent(Bukkit.getLogger());
++        setLevel(Level.ALL);
++    }
++}
+diff --git a/src/main/java/gg/pufferfish/pufferfish/util/AsyncExecutor.java b/src/main/java/gg/pufferfish/pufferfish/util/AsyncExecutor.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..9d6dc2c80945bec9bea74714c657c7a2e0bdde9e
+--- /dev/null
++++ b/src/main/java/gg/pufferfish/pufferfish/util/AsyncExecutor.java
+@@ -0,0 +1,51 @@
++package gg.pufferfish.pufferfish.util;
++
++import com.google.common.collect.Queues;
++import gg.pufferfish.pufferfish.PufferfishLogger;
++import java.util.Queue;
++import java.util.concurrent.locks.LockSupport;
++import java.util.function.BooleanSupplier;
++import java.util.logging.Level;
++
++public class AsyncExecutor implements Runnable {
++	
++	private Queue<Runnable> jobs = Queues.newConcurrentLinkedQueue();
++	private final Thread thread;
++	private final BooleanSupplier shouldRun;
++	private volatile boolean killswitch = false;
++	
++	public AsyncExecutor(String threadName, BooleanSupplier shouldRun) {
++		this.thread = new Thread(this, threadName);
++		this.shouldRun = shouldRun;
++	}
++	
++	public void start() {
++		thread.start();
++	}
++	
++	public void kill() {
++		killswitch = true;
++	}
++	
++	public void submit(Runnable runnable) {
++		jobs.offer(runnable);
++	}
++	
++	@Override
++	public void run() {
++		while (!killswitch) {
++			if (shouldRun.getAsBoolean()) {
++				try {
++					Runnable runnable;
++					while ((runnable = jobs.poll()) != null) {
++						runnable.run();
++					}
++				} catch (Exception e) {
++					PufferfishLogger.LOGGER.log(Level.SEVERE, e, () -> "Failed to execute async job for thread " + thread.getName());
++				}
++			}
++			LockSupport.parkNanos("executing tasks", 1000L);
++		}
++	}
++	
++}
+diff --git a/src/main/java/gg/pufferfish/pufferfish/util/AsyncPlayerAreaMap.java b/src/main/java/gg/pufferfish/pufferfish/util/AsyncPlayerAreaMap.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..fdcb62d12164024a5f354d60cc863821a18d1b2a
+--- /dev/null
++++ b/src/main/java/gg/pufferfish/pufferfish/util/AsyncPlayerAreaMap.java
+@@ -0,0 +1,31 @@
++package gg.pufferfish.pufferfish.util;
++
++import com.destroystokyo.paper.util.misc.PlayerAreaMap;
++import com.destroystokyo.paper.util.misc.PooledLinkedHashSets;
++import java.util.concurrent.ConcurrentHashMap;
++import net.minecraft.server.level.ServerPlayer;
++
++public final class AsyncPlayerAreaMap extends PlayerAreaMap {
++	
++	public AsyncPlayerAreaMap() {
++		super();
++		this.areaMap = new Long2ObjectOpenHashMapWrapper<>(new ConcurrentHashMap<>(1024, 0.7f));
++	}
++	
++	public AsyncPlayerAreaMap(final PooledLinkedHashSets<ServerPlayer> pooledHashSets) {
++		super(pooledHashSets);
++		this.areaMap = new Long2ObjectOpenHashMapWrapper<>(new ConcurrentHashMap<>(1024, 0.7f));
++	}
++	
++	public AsyncPlayerAreaMap(final PooledLinkedHashSets<ServerPlayer> pooledHashSets, final ChangeCallback<ServerPlayer> addCallback,
++			final ChangeCallback<ServerPlayer> removeCallback) {
++		this(pooledHashSets, addCallback, removeCallback, null);
++	}
++	
++	public AsyncPlayerAreaMap(final PooledLinkedHashSets<ServerPlayer> pooledHashSets, final ChangeCallback<ServerPlayer> addCallback,
++			final ChangeCallback<ServerPlayer> removeCallback, final ChangeSourceCallback<ServerPlayer> changeSourceCallback) {
++		super(pooledHashSets, addCallback, removeCallback, changeSourceCallback);
++		this.areaMap = new Long2ObjectOpenHashMapWrapper<>(new ConcurrentHashMap<>(1024, 0.7f));
++	}
++
++}
+diff --git a/src/main/java/gg/pufferfish/pufferfish/util/IterableWrapper.java b/src/main/java/gg/pufferfish/pufferfish/util/IterableWrapper.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c1929840254a3e6d721816f4a20415bea1742580
+--- /dev/null
++++ b/src/main/java/gg/pufferfish/pufferfish/util/IterableWrapper.java
+@@ -0,0 +1,20 @@
++package gg.pufferfish.pufferfish.util;
++
++import java.util.Iterator;
++import org.jetbrains.annotations.NotNull;
++
++public class IterableWrapper<T> implements Iterable<T> {
++
++	private final Iterator<T> iterator;
++
++	public IterableWrapper(Iterator<T> iterator) {
++		this.iterator = iterator;
++	}
++
++	@NotNull
++	@Override
++	public Iterator<T> iterator() {
++		return iterator;
++	}
++
++}
+diff --git a/src/main/java/gg/pufferfish/pufferfish/util/Long2ObjectOpenHashMapWrapper.java b/src/main/java/gg/pufferfish/pufferfish/util/Long2ObjectOpenHashMapWrapper.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..facd55463d44cb7e3d2ca6892982f5497b8dded1
+--- /dev/null
++++ b/src/main/java/gg/pufferfish/pufferfish/util/Long2ObjectOpenHashMapWrapper.java
+@@ -0,0 +1,40 @@
++package gg.pufferfish.pufferfish.util;
++
++import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
++import java.util.Map;
++import org.jetbrains.annotations.Nullable;
++
++public class Long2ObjectOpenHashMapWrapper<V> extends Long2ObjectOpenHashMap<V> {
++	
++	private final Map<Long, V> backingMap;
++	
++	public Long2ObjectOpenHashMapWrapper(Map<Long, V> map) {
++		backingMap = map;
++	}
++	
++	@Override
++	public V put(Long key, V value) {
++		return backingMap.put(key, value);
++	}
++	
++	@Override
++	public V get(Object key) {
++		return backingMap.get(key);
++	}
++	
++	@Override
++	public V remove(Object key) {
++		return backingMap.remove(key);
++	}
++	
++	@Nullable
++	@Override
++	public V putIfAbsent(Long key, V value) {
++		return backingMap.putIfAbsent(key, value);
++	}
++	
++	@Override
++	public int size() {
++		return backingMap.size();
++	}
++}

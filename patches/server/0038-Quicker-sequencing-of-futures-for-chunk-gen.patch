@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paul <paul@technove.co>
+Date: Fri, 2 Jul 2021 17:02:32 -0500
+Subject: [PATCH] Quicker sequencing of futures for chunk gen
+
+
+diff --git a/src/main/java/net/minecraft/Util.java b/src/main/java/net/minecraft/Util.java
+index 9c111d479bbcc101886c12950c97f10941125ae7..61c2fdb6067a81599c3b6ee79e9848f99c938cb6 100644
+--- a/src/main/java/net/minecraft/Util.java
++++ b/src/main/java/net/minecraft/Util.java
+@@ -391,6 +391,10 @@ public class Util {
+     }
+ 
+     public static <V> CompletableFuture<List<V>> sequence(List<? extends CompletableFuture<? extends V>> futures) {
++        // Airplane start - faster sequencing without all of.. _that_
++        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()]))
++                .thenApply(unused -> futures.stream().map(CompletableFuture::join).collect(Collectors.toList()));
++        /*
+         return futures.stream().reduce(CompletableFuture.completedFuture(Lists.newArrayList()), (completableFuture, completableFuture2) -> {
+             return completableFuture2.thenCombine(completableFuture, (object, list) -> {
+                 List<V> list2 = Lists.newArrayListWithCapacity(list.size() + 1);
+@@ -406,6 +410,8 @@ public class Util {
+                 return list3;
+             });
+         });
++         */
++        // Airplane end
+     }
+ 
+     public static <V> CompletableFuture<List<V>> sequenceFailFast(List<? extends CompletableFuture<? extends V>> futures) {

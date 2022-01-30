@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paul <paul@technove.co>
+Date: Mon, 20 Sep 2021 12:53:35 -0500
+Subject: [PATCH] Ensure level height is inlined
+
+
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index 7643f7900e9da00ea304d3e57fe20bdbe7f6d40f..482c82f2b1057ee3083b4aa6af9801347db743a6 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -308,6 +308,15 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+     }
+     // Paper end - optimise checkDespawn
+ 
++    // Airplane start - ensure these get inlined
++    private final int minBuildHeight, minSection, height, maxBuildHeight, maxSection;
++    @Override public final int getMaxBuildHeight() { return this.maxBuildHeight; }
++    @Override public final int getMinSection() { return this.minSection; }
++    @Override public final int getMaxSection() { return this.maxSection; }
++    @Override public final int getMinBuildHeight() { return this.minBuildHeight; }
++    @Override public final int getHeight() { return this.height; }
++    // Airplane end
++
+     protected Level(WritableLevelData worlddatamutable, ResourceKey<Level> resourcekey, final DimensionType dimensionmanager, Supplier<ProfilerFiller> supplier, boolean flag, boolean flag1, long i, org.bukkit.generator.ChunkGenerator gen, org.bukkit.generator.BiomeProvider biomeProvider, org.bukkit.World.Environment env, java.util.concurrent.Executor executor) { // Paper - Async-Anti-Xray - Pass executor
+         this.spigotConfig = new org.spigotmc.SpigotWorldConfig(((net.minecraft.world.level.storage.PrimaryLevelData) worlddatamutable).getLevelName()); // Spigot
+         this.paperConfig = new com.destroystokyo.paper.PaperWorldConfig(((net.minecraft.world.level.storage.PrimaryLevelData) worlddatamutable).getLevelName(), this.spigotConfig); // Paper
+@@ -323,6 +332,13 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+         this.profiler = supplier;
+         this.levelData = worlddatamutable;
+         this.dimensionType = dimensionmanager;
++        // Airplane start
++        this.minBuildHeight = dimensionmanager.minY();
++        this.minSection = SectionPos.blockToSectionCoord(this.minBuildHeight);
++        this.height = dimensionmanager.height();
++        this.maxBuildHeight = this.minBuildHeight + this.height;
++        this.maxSection = SectionPos.blockToSectionCoord(this.maxBuildHeight - 1) + 1;
++        // Airplane end
+         this.dimension = resourcekey;
+         this.isClientSide = flag;
+         if (dimensionmanager.coordinateScale() != 1.0D) {

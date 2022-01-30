@@ -1,0 +1,167 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 25 Nov 2021 15:25:30 +1000
+Subject: [PATCH] Sync json files
+
+
+diff --git a/src/main/java/net/minecraft/server/players/StoredUserList.java b/src/main/java/net/minecraft/server/players/StoredUserList.java
+index 8982562721c3a5a5a3305e90bd8b5bc21585a425..14aca3fcdcc8b35eb483afbe996a81133b3ae5ee 100644
+--- a/src/main/java/net/minecraft/server/players/StoredUserList.java
++++ b/src/main/java/net/minecraft/server/players/StoredUserList.java
+@@ -26,6 +26,7 @@ import net.minecraft.Util;
+ import net.minecraft.util.GsonHelper;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
+ 
+@@ -159,10 +160,10 @@ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
+ 
+         Objects.requireNonNull(jsonarray);
+         stream.forEach(jsonarray::add);
+-        BufferedWriter bufferedwriter = Files.newWriter(this.file, StandardCharsets.UTF_8);
++        BufferedWriter bufferedwriter = null; // Files.newWriter(this.file, StandardCharsets.UTF_8); // MultiPaper - don't touch files
+ 
+         try {
+-            StoredUserList.GSON.toJson(jsonarray, bufferedwriter);
++            MultiPaper.writeJson(this.file.getName(), StoredUserList.GSON.toJson(jsonarray)); // StoredUserList.GSON.toJson(jsonarray, bufferedwriter); // MultiPaper
+         } catch (Throwable throwable) {
+             if (bufferedwriter != null) {
+                 try {
+@@ -182,11 +183,18 @@ public abstract class StoredUserList<K, V extends StoredUserEntry<K>> {
+     }
+ 
+     public void load() throws IOException {
+-        if (this.file.exists()) {
+-            BufferedReader bufferedreader = Files.newReader(this.file, StandardCharsets.UTF_8);
++        if (true || this.file.exists()) { // MultiPaper
++            BufferedReader bufferedreader = null; // Files.newReader(this.file, StandardCharsets.UTF_8); // MultiPaper
++            
++            // MultiPaper start
++            String json = MultiPaper.readJson(this.file.getName());
++            if (json == null || json.isEmpty()) {
++                return;
++            }
++            // MultiPaper end
+ 
+             try {
+-                JsonArray jsonarray = (JsonArray) StoredUserList.GSON.fromJson(bufferedreader, JsonArray.class);
++                JsonArray jsonarray = (JsonArray) StoredUserList.GSON.fromJson(json, JsonArray.class); // MultiPaper
+                 com.google.common.base.Preconditions.checkState(jsonarray != null, "The file \"" + this.file.getName() + "\" is either empty or corrupt"); // Paper
+ 
+                 this.map.clear();
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 9b0471d75dcfc4f9e21a7d967de504cb57a0f6f1..10d4bba5757f030b1949bc88bfa579b906b0b813 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -326,6 +326,14 @@ public class MultiPaper {
+         getConnection().writeLevel(world, buffer.toByteArray());
+     }
+ 
++    public static String readJson(String name) throws IOException {
++        return getConnection().readJson(name).join();
++    }
++
++    public static void writeJson(String name, String json) throws IOException {
++        getConnection().writeJson(name, json);
++    }
++
+     private static String getWorld(File path) {
+         do {
+             path = path.getParentFile();
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 263840cb6c12199e918344d061281a6f976cecfd..5976d5ce4bb38194329a305580b2db22ad916d86 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -3,6 +3,7 @@ package puregero.multipaper;
+ import net.minecraft.core.Registry;
+ import net.minecraft.resources.ResourceLocation;
+ import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.dedicated.DedicatedServer;
+ import net.minecraft.server.level.ChunkHolder;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.world.level.chunk.ChunkAccess;
+@@ -17,6 +18,7 @@ import javax.annotation.Nullable;
+ import java.io.*;
+ import java.net.Socket;
+ import java.net.SocketException;
++import java.nio.charset.StandardCharsets;
+ import java.util.HashSet;
+ import java.util.Map;
+ import java.util.concurrent.CompletableFuture;
+@@ -143,6 +145,37 @@ public class MultiPaperConnection extends Thread {
+         server.setLastAlive(System.currentTimeMillis());
+     }
+ 
++    public void loadJson(DataInputStream in, DataOutputSender out) throws IOException {
++        String file = in.readUTF();
++        LOGGER.info("Reloading json " + file);
++        CompletableFuture.runAsync(() -> {
++            try {
++                if (DedicatedServer.getServer() == null) {
++                    return;
++                }
++
++                switch (file) {
++                    case "banned-players.json":
++                        DedicatedServer.getServer().getPlayerList().getBans().load();
++                        break;
++                    case "banned-ips.json":
++                        DedicatedServer.getServer().getPlayerList().getIpBans().load();
++                        break;
++                    case "ops.json":
++                        DedicatedServer.getServer().getPlayerList().getOps().load();
++                        break;
++                    case "whitelist.json":
++                        DedicatedServer.getServer().getPlayerList().getWhiteList().load();
++                        break;
++                    default:
++                        throw new IllegalArgumentException("Invalid json file to load " + file);
++                }
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++    }
++
+     public void chunkOwner(DataInputStream in, DataOutputSender out) throws IOException {
+         String world = in.readUTF();
+         int cx = in.readInt();
+@@ -403,6 +436,36 @@ public class MultiPaperConnection extends Thread {
+         out.send(in -> { /* Do nothing */ });
+     }
+ 
++    public CompletableFuture<String> readJson(String name) throws IOException {
++        CompletableFuture<String> future = new CompletableFuture<>();
++
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("readJson");
++        out.writeUTF(name);
++        out.send(in -> {
++            try {
++                byte[] data = new byte[in.readInt()];
++                in.readFully(data);
++
++                future.complete(new String(data, StandardCharsets.UTF_8));
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++
++        return future;
++    }
++
++    public void writeJson(String name, String json) throws IOException {
++        byte[] data = json.getBytes(StandardCharsets.UTF_8);
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("writeJson");
++        out.writeUTF(name);
++        out.writeInt(data.length);
++        out.write(data);
++        out.send(in -> { /* Do nothing */ });
++    }
++
+     public void lockChunk(String world, int cx, int cz) throws IOException {
+         DataOutputSender out = new DataOutputSender(this);
+         out.writeUTF("lockChunk");

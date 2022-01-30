@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kevin Raneri <kevin.raneri@gmail.com>
+Date: Tue, 9 Nov 2021 14:21:50 -0500
+Subject: [PATCH] Add option to disable books
+
+Books are commonly the target of duping-related exploits. If you
+anticipate that your server will be an early target of duping attacks in
+the event that new exploits are found, you may want to consider removing
+the ability for non-privileged players to edit books. This patch allows
+you to easily disable books, should you want to preemptively remove this
+functionality before additional exploits are found.
+
+diff --git a/src/main/java/gg/pufferfish/pufferfish/PufferfishConfig.java b/src/main/java/gg/pufferfish/pufferfish/PufferfishConfig.java
+index f81a4985a24520ab5c7dce0b49a864e09c01e5b7..337da4c2666e4c7d393540bb45884d2dbd976a11 100644
+--- a/src/main/java/gg/pufferfish/pufferfish/PufferfishConfig.java
++++ b/src/main/java/gg/pufferfish/pufferfish/PufferfishConfig.java
+@@ -80,6 +80,15 @@ public class PufferfishConfig {
+ 		}
+ 	}
+ 	
++	public static boolean enableBooks;
++	private static void books() {
++		enableBooks = getBoolean("enable-books", true,
++				"Whether or not books should be writeable.",
++				"Servers that anticipate being a target for duping may want to consider",
++				"disabling this option.",
++				"This can be overridden per-player with the permission pufferfish.usebooks");
++	}
++	
+ 	private static void ensureDefault(String key, Object defaultValue, String... comment) {
+ 		if (!config.contains(key)) {
+ 			config.set(key, defaultValue);
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 5c9310fe424943a7256f6f77c414147384bad0aa..2cb12547c778fe439536e2e2aa479d4a25ab4a6e 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -1110,6 +1110,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+ 
+     @Override
+     public void handleEditBook(ServerboundEditBookPacket packet) {
++        if (!gg.pufferfish.pufferfish.PufferfishConfig.enableBooks && !this.player.getBukkitEntity().hasPermission("pufferfish.usebooks")) return; // Pufferfish
+         // Paper start
+         if (!this.cserver.isPrimaryThread()) {
+             List<String> pageList = packet.getPages();

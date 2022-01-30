@@ -1,6 +1,6 @@
 # MultiPaper
 
-[Discord](https://discord.gg/dtmzpuvQ)
+[Discord](https://discord.gg/dN3WCZkSRV)
 
 1.18 [Airplane](https://github.com/TECHNOVE/Airplane) and
 [Pufferfish](https://github.com/pufferfish-gg/Pufferfish) fork

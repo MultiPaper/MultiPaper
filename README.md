@@ -1,5 +1,7 @@
 # MultiPaper
 
+[Discord](https://discord.gg/dtmzpuvQ)
+
 1.18 [Airplane](https://github.com/TECHNOVE/Airplane) and
 [Pufferfish](https://github.com/pufferfish-gg/Pufferfish) fork
 that enables a server admin to run a single world across multiple

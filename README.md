@@ -2,14 +2,13 @@
 
 [![Discord](https://img.shields.io/discord/937309618743427113.svg?color=738ad6&label=Join%20the%20Discord%20server&logo=discord&logoColor=ffffff)](https://discord.gg/dN3WCZkSRV)
 
-1.18 [Airplane](https://github.com/TECHNOVE/Airplane) and
-[Pufferfish](https://github.com/pufferfish-gg/Pufferfish) fork
-that enables a server admin to run a single world across multiple
-servers. Multiple MultiPaper servers run the same world and use a
-MultiPaper-Master to coordinate with eachother and store server data. While the
-MultiPaper-Master is usually run as a standalone server, it can also be run as a
-BungeeCord plugin, which has some benefits including being able to send players
-to the least busiest server when they join.
+1.18 [Paper](https://github.com/PaperMC/Paper) fork that enables a server admin
+to run a single world across multiple servers. Multiple MultiPaper servers run
+the same world and use a MultiPaper-Master to coordinate with eachother and
+store server data. While the MultiPaper-Master is usually run as a standalone
+server, it can also be run as a BungeeCord plugin, which has some benefits
+including being able to send players to the least busiest server when they
+join.
 
 MultiPaper 2.0:
 
@@ -210,6 +209,12 @@ Build instructions:
 ## Publishing to maven local
 Publish to your local maven repository with: `./gradlew publishToMavenLocal`
 
-### Note
+### Acknowledgements
 
-The fork uses PaperMC's paperweight framework found [here](https://github.com/PaperMC/paperweight)
+This fork includes optimisations from both
+[Airplane](https://github.com/TECHNOVE/Airplane) and
+[Pufferfish](https://github.com/pufferfish-gg/Pufferfish).
+
+This fork uses PaperMC's paperweight framework found
+[here](https://github.com/PaperMC/paperweight).
+

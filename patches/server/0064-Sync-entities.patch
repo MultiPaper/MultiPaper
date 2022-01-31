@@ -588,7 +588,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..43c4111e8e69fee0712330721b4c2eee
          FRESH, PENDING, LOADED;
  
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 0dc131b3a46c55b9ff3c93791b0d4837798c622f..6d731a270d3c4a543e2a8796e8ecdea17f95b246 100644
+index b3062f4c12cb66e6361e758bb029164a6a42cdfb..2b23fbc35e62249f13d8093625288fca69bc0334 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
 @@ -7,6 +7,7 @@ import net.minecraft.network.Connection;
@@ -637,33 +637,26 @@ index 0dc131b3a46c55b9ff3c93791b0d4837798c622f..6d731a270d3c4a543e2a8796e8ecdea1
          getServer().getPlayerList().addPlayer(this);
          ((ServerLevel) level).addNewPlayer(this);
          sendPackets = false;
-@@ -53,6 +68,14 @@ public class ExternalPlayer extends ServerPlayer {
-         gameMode.changeGameModeForPlayer(gamemode);
+@@ -91,12 +106,15 @@ public class ExternalPlayer extends ServerPlayer {
      }
  
-+    @Override
+     @Override
+-    public boolean broadcastToPlayer(ServerPlayer spectator) {
+-        return false;
++    public void checkInsideBlocks() {
++        super.checkInsideBlocks();
+     }
+ 
+     @Override
+-    public void checkInsideBlocks() {
+-        super.checkInsideBlocks();
 +    public void onSyncedDataUpdated(EntityDataAccessor<?> data) {
 +        if (!updatingData && didPlayerJoinEvent) {
 +            MultiPaper.broadcastPacketToExternalServers(new EntityUpdatePacket(this,
 +                    new ClientboundSetEntityDataPacket(getId(), Collections.singletonList(getEntityData().getItem(data)))));
 +        }
-+    }
-+
-     private class ExternalPlayerConnection extends Connection {
-         public ExternalPlayerConnection(PacketFlow side) {
-             super(side);
-@@ -85,11 +108,6 @@ public class ExternalPlayer extends ServerPlayer {
-         }
      }
- 
--    @Override
--    public boolean broadcastToPlayer(ServerPlayer spectator) {
--        return false;
--    }
--
-     @Override
-     public void checkInsideBlocks() {
-         super.checkInsideBlocks();
+ }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 index 8e71b5b207ecbd0aba028bca62d19274bc0484ae..b559e6c686feaa347e29bce872487b6d81524232 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java

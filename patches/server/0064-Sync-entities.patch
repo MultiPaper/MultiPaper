@@ -928,10 +928,10 @@ index bd2e20062efd5066478d72ae284190534390eb89..3b5ec91c1ffbf92d118238daa682e93d
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..14478d14c6585a6e887fed6e86a4084b80a84e3f
+index 0000000000000000000000000000000000000000..5d9ff09b287eae3a57bb75e7d5c183cff95062d9
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,277 @@
+@@ -0,0 +1,289 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -1034,6 +1034,7 @@ index 0000000000000000000000000000000000000000..14478d14c6585a6e887fed6e86a4084b
 +                return;
 +            }
 +            entity.preserveMotion = true;
++            setFallDistance(entity, vector.y);
 +            if (moveEntityPacket.hasRotation()) {
 +                entity.moveTo(vector.x, vector.y, vector.z, moveEntityPacket.getyRot() * 360f / 256, moveEntityPacket.getxRot() * 360f / 256);
 +            } else {
@@ -1047,6 +1048,7 @@ index 0000000000000000000000000000000000000000..14478d14c6585a6e887fed6e86a4084b
 +                return;
 +            }
 +            entity.preserveMotion = true;
++            setFallDistance(entity, teleportEntityPacket.getY());
 +            entity.moveTo(teleportEntityPacket.getX(), teleportEntityPacket.getY(), teleportEntityPacket.getZ(), teleportEntityPacket.getyRot() * 360f / 256, teleportEntityPacket.getxRot() * 360f / 256);
 +            entity.onGround = teleportEntityPacket.isOnGround();
 +        } else if (packet instanceof ClientboundSetEntityMotionPacket setEntityMotionPacket) {
@@ -1100,6 +1102,16 @@ index 0000000000000000000000000000000000000000..14478d14c6585a6e887fed6e86a4084b
 +            }
 +        } else {
 +            LOGGER.warn("Unhandled packet " + packet);
++        }
++    }
++
++    private static void setFallDistance(Entity entity, double newY) {
++        double oldY = entity.getY();
++
++        if (newY >= oldY) {
++            entity.fallDistance = 0;
++        } else {
++            entity.fallDistance += oldY - newY;
 +        }
 +    }
 +

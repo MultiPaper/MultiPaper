@@ -26,6 +26,8 @@ MultiPaper 2.0:
     - Runs as a standalone process
         - For your convenience, it can also run as a BungeeCord plugin
 
+![MultiPaper diagram](assets/multipaper-diagram.jpg)
+
 How chunk syncing works:
 
 - When a server reads a chunk, it asks the Master to load the chunk from the

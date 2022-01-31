@@ -3,7 +3,7 @@
 [![Discord](https://img.shields.io/discord/937309618743427113.svg?color=738ad6&label=Join%20the%20Discord%20server&logo=discord&logoColor=ffffff)](https://discord.gg/dN3WCZkSRV)
 
 1.18 [Paper](https://github.com/PaperMC/Paper) fork that enables a server admin
-to run a single world across multiple servers. Multiple MultiPaper servers run
+to scale a single world across multiple servers. Multiple MultiPaper servers run
 the same world and use a MultiPaper-Master to coordinate with eachother and
 store server data. While the MultiPaper-Master is usually run as a standalone
 server, it can also be run as a BungeeCord plugin, which has some benefits
@@ -30,17 +30,18 @@ How chunk syncing works:
 
 - When a server reads a chunk, it asks the Master to load the chunk from the
   region file. If another server has ownership of the chunk, the Master will
-  notify the server to load the chunk from that server instead.
-- If the chunk has no owner and is loaded, it won't immediately be taken
-  ownership of as it could be an edge chunk that won't get ticked.
+  notify the server to request the chunk from that server instead, so that it
+  gets the most up-to-date copy.
 - When the server wants to tick an unowned chunk, it won't, but will instead
   send a request to the Master to take ownership of it. If ownership is
   granted, the chunk will be ticked on next tick. If ownership is denied since
   another server owns it, the server will keep the chunk in sync with that
   server.
-- When a server has a chunk loaded into memory, it will be subscribed to
-  any changes made in that chunk. That means if any server changes a block
-  within the chunk, it will be updated on all servers subscribed to that chunk.
+- A chunk may be loaded on a server but have no owner if it's outside the
+  simulation distance. This is since the chunk won't be ticked by any server.
+- When a server has a chunk loaded into memory, it will subscribe to any
+  changes made within that chunk. This means if any server changes a block
+  inside the chunk, it will be updated on all servers subscribed to that chunk.
 
 ## The use case
 
@@ -50,7 +51,7 @@ player count up, they have to sacrifice various mechanics such as render
 distance, mob spawning, and redstone.
 
 With MultiPaper, there is no need to ruin the vanilla experience. All you need
-is new servers when you wish to scale. Instead of having 1 server handling
+are new servers when you wish to scale. Instead of having 1 server handling
 100 players, you can have 10 servers handling 10 players each. This allows you
 to keep expensive vanilla mechanics like a large render distance, mob farms,
 and massive redstone contraptions.
@@ -122,8 +123,8 @@ MultiPaper provides a proxy (like Bungeecord or Velocity) that can be used to
 hide the multipaper servers behind a single address. The proxy automatically
 selects the multipaper server with the lowest load and forwards the player
 to it. The proxy provides no extra features and is designed to be as fast and
-light-weight as possible. To use the proxy, set `bungeecord` to `true` in
-the multipapers' spigot.yml.
+light-weight as possible. When using the proxy, you will need to set
+`bungeecord` to `true` in the multipapers' `spigot.yml`.
 
 This proxy is only available when running a standalone MultiPaper-Master
 installation and can be started by specifying a port for it to listen on:
@@ -147,14 +148,14 @@ database.
 
 Some other things to look out for:
 
-  * Caches can prevent the plugin from getting the most up to date data.
+  * Caches can prevent the plugin from getting the most up-to-date data.
   * `PlayerJoinEvent` and `PlayerQuitEvent` will only be called on one server,
     however other events for the player could be called on any server.
   * `Bukkit.broadcastMessage` will send the message to all players on all
     MultiPaper servers.
   * `Bukkit.getOnlinePlayers` will return the players on all MultiPaper
-    servers, an API will be made available for determining which players are
-    on your server, and which players are on other servers.
+    servers. You can use `Player.isLocalPlayer()` to determine if the player
+    is on your server or not.
 
 ### Using the MultiPaper API as a dependency
 
@@ -205,7 +206,7 @@ Build instructions:
 1. Patch paper with: `./gradlew applyPatches`
 2. Build the multipaper jar with: `./gradlew createReobfPaperclipJar`
 3. Get the multipaper jar from `build/libs`
-5. Get the multipaper-master jar from `MultiPaper-Master/build/libs`
+4. Get the multipaper-master jar from `MultiPaper-Master/build/libs`
 
 ## Publishing to maven local
 Publish to your local maven repository with: `./gradlew publishToMavenLocal`

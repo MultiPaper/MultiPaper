@@ -60,10 +60,11 @@ and massive redstone contraptions.
 
 ### MultiPaper Pro
 
-For those who wish to minimise their hardware costs, MultiPaper-Pro is for you.
-MultiPaper-Pro introduces various optimisations into both the MultiPaper engine
-and Minecraft itself, allowing your server to run more efficiently and hold
-more players.
+For those who wish to go above the typical 250 player limit imposed by
+existing server technology, and/or minimise their hardware costs,
+MultiPaper-Pro is for you. MultiPaper-Pro introduces various optimisations into
+both the MultiPaper engine and Minecraft itself, allowing your server to run
+more efficiently and hold huge numbers of players.
 
 Testing of MultiPaper-Pro against other popular server software gave us the
 following results:
@@ -215,10 +216,10 @@ Publish to your local maven repository with: `./gradlew publishToMavenLocal`
 
 ### Acknowledgements
 
-This fork includes optimisations from both
+MultiPaper includes optimisations from both
 [Airplane](https://github.com/TECHNOVE/Airplane) and
 [Pufferfish](https://github.com/pufferfish-gg/Pufferfish).
 
-This fork uses PaperMC's paperweight framework found
+MultiPaper uses PaperMC's paperweight framework found
 [here](https://github.com/PaperMC/paperweight).
 

@@ -52,7 +52,8 @@ distance, mob spawning, and redstone.
 With MultiPaper, there is no need to ruin the vanilla experience. All you need
 is a new server when you wish to scale. Instead of having 1 server handling
 100 players, you can have 10 servers handling 10 players each. This allows you
-to keep expensive vanilla mechanics like render distance.
+to keep expensive vanilla mechanics like a large render distance, mob farms,
+and massive redstone contraptions.
 
 ### MultiPaper Pro
 

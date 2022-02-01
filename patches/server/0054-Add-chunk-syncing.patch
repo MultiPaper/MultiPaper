@@ -4,6 +4,29 @@ Date: Tue, 16 Nov 2021 19:23:16 +1000
 Subject: [PATCH] Add chunk syncing
 
 
+diff --git a/src/main/java/ca/spottedleaf/starlight/common/light/StarLightInterface.java b/src/main/java/ca/spottedleaf/starlight/common/light/StarLightInterface.java
+index ef8dcbb6bbc0769e9ccfdadb05e6a46c070eda98..2f16f068e0c30a122eb6c2c76a8054b3bbccc483 100644
+--- a/src/main/java/ca/spottedleaf/starlight/common/light/StarLightInterface.java
++++ b/src/main/java/ca/spottedleaf/starlight/common/light/StarLightInterface.java
+@@ -373,6 +373,18 @@ public final class StarLightInterface {
+         }
+     }
+ 
++    // MultiPaper start
++    public CompletableFuture<Void> getChunkFuture(final ChunkPos chunkPos) {
++        LightQueue.ChunkTasks tasks = lightQueue.chunkTasks.get(chunkPos.longKey);
++
++        if (tasks == null) {
++            return CompletableFuture.completedFuture(null);
++        }
++
++        return tasks.onComplete;
++    }
++    // MultiPaper end
++
+     public CompletableFuture<Void> blockChange(final BlockPos pos) {
+         if (this.world == null || pos.getY() < WorldUtil.getMinBlockY(this.world) || pos.getY() > WorldUtil.getMaxBlockY(this.world)) { // empty world
+             return null;
 diff --git a/src/main/java/com/destroystokyo/paper/util/map/QueuedChangesMapLong2Object.java b/src/main/java/com/destroystokyo/paper/util/map/QueuedChangesMapLong2Object.java
 index 7bab31a312463cc963d9621cdc543a281459bd32..7d49a0bdb11afd8616a97d6c7f043f9d2b0ce073 100644
 --- a/src/main/java/com/destroystokyo/paper/util/map/QueuedChangesMapLong2Object.java
@@ -248,6 +271,19 @@ index 3e9979de1a49c49e3ac12c54d2c177b4972ff481..00f43c0a59de4f02bf40cd74c1d78742
              this.updateNeighborsAt(pos, block);
          }
  
+diff --git a/src/main/java/net/minecraft/server/level/ThreadedLevelLightEngine.java b/src/main/java/net/minecraft/server/level/ThreadedLevelLightEngine.java
+index ef898d7735504809e9187becb7a1471640de4845..b76176f217c69847ea5e3d41624ca02644bc49d8 100644
+--- a/src/main/java/net/minecraft/server/level/ThreadedLevelLightEngine.java
++++ b/src/main/java/net/minecraft/server/level/ThreadedLevelLightEngine.java
+@@ -171,7 +171,7 @@ public class ThreadedLevelLightEngine extends LevelLightEngine implements AutoCl
+     private final AtomicBoolean scheduled = new AtomicBoolean();
+ 
+     // Paper start - replace light engine impl
+-    protected final ca.spottedleaf.starlight.common.light.StarLightInterface theLightEngine;
++    public final ca.spottedleaf.starlight.common.light.StarLightInterface theLightEngine; // MultiPaper - make public
+     public final boolean hasBlockLight;
+     public final boolean hasSkyLight;
+     // Paper end - replace light engine impl
 diff --git a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
 index bbd9fdaa4b12543307b144da72b0604eae638cbb..9c88f14a6f17bb054887f236f1b2711202dadfa2 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
@@ -1577,16 +1613,17 @@ index 4020f07f7ba5f8e4f68b8e6f0818a507f3f3b344..6d53a1c5fb71ba4b8629e4c3b2d06ea9
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..80131d5838900a0d7d6538416933cf420f1dbf0b
+index 0000000000000000000000000000000000000000..330a5afa031f5068887dbe1910a9f36786365226
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,130 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import com.mojang.datafixers.util.Either;
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ThreadedLevelLightEngine;
 +import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.ImposterProtoChunk;
 +import net.minecraft.world.level.chunk.LevelChunk;
@@ -1662,6 +1699,14 @@ index 0000000000000000000000000000000000000000..80131d5838900a0d7d6538416933cf42
 +            if (either.left().isEmpty()) {
 +                LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we don't have it loaded.");
 +                connection.send(new SendChunkPacket(world, cx, cz, null));
++                return;
++            }
++
++            CompletableFuture<Void> lightFuture = ((ThreadedLevelLightEngine) level.getLightEngine()).theLightEngine.getChunkFuture(holder.getPos());
++
++            if (!lightFuture.isDone()) {
++                LOGGER.info("Waiting for lighting of chunk {},{},{} before sending it to {}", world, cx, cz, connection.externalServer.getName());
++                lightFuture.thenRunAsync(() -> handle(connection));
 +                return;
 +            }
 +

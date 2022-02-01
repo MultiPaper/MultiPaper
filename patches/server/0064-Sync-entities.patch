@@ -36,7 +36,7 @@ index 2e2bfccfc6cec6582a5b595e0343c27be5267b7a..c686026fe455fbc2c4ba692fbd7f2ca8
          /*
          this.lock.readLock().lock();
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index c55a727d09d95ae0a640e77f77961af74beb397f..a5537c65b0397d2d9880247a1d43b45d0695a398 100644
+index c55a727d09d95ae0a640e77f77961af74beb397f..1cd999ca0b5d7b779460cd9f8fa4c34562f09328 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -61,11 +61,7 @@ import net.minecraft.core.Registry;
@@ -60,7 +60,7 @@ index c55a727d09d95ae0a640e77f77961af74beb397f..a5537c65b0397d2d9880247a1d43b45d
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -2309,10 +2306,23 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -2309,10 +2306,24 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          public void broadcast(Packet<?> packet) {
              Iterator iterator = this.seenBy.iterator();
  
@@ -70,6 +70,7 @@ index c55a727d09d95ae0a640e77f77961af74beb397f..a5537c65b0397d2d9880247a1d43b45d
 +            if (!(MultiPaper.isExternalPlayer(entity.getControllingPassenger()) && isMovePacket) &&
 +                    (MultiPaper.isRealPlayer(entity) ||
 +                    (MultiPaper.isRealPlayer(entity.getControllingPassenger()) && isMovePacket) ||
++                    (entity.multipaperHasMoved && isMovePacket) ||
 +                    (!MultiPaper.isExternalPlayer(entity) && MultiPaper.isChunkLocal(chunk)))) {
 +                MultiPaperEntitiesHandler.onEntityUpdate(entity, packet); // MultiPaper
 +            }
@@ -333,27 +334,31 @@ index 5a947b404214ee37414a18ecd771a6996c6fe7e3..bd2260b461cece047c73ee89d0426c51
                      PlayerCreatePacket.sendPlayer(externalServer.getConnection(), entityplayer1);
                  } else if (subscribedToSoruce) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 1f009ca047f2d4fa97bd88907a2c4e126666ecf7..3d5a472990a8bee3774586ffeab33156fc09703a 100644
+index 1f009ca047f2d4fa97bd88907a2c4e126666ecf7..3869cdce081d1905c593329da09b4102cdf8a884 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -140,6 +140,8 @@ import org.bukkit.event.entity.EntityPoseChangeEvent;
+@@ -139,7 +139,10 @@ import org.bukkit.event.entity.EntityPortalEvent;
+ import org.bukkit.event.entity.EntityPoseChangeEvent;
  import org.bukkit.event.player.PlayerTeleportEvent;
  import org.bukkit.plugin.PluginManager;
++import puregero.multipaper.ExternalServer;
  import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
 +import puregero.multipaper.externalserverprotocol.EntityRemovePacket;
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource, io.papermc.paper.util.KeyedObject { // Paper
-@@ -269,6 +271,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -269,6 +272,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
      private static final int FLAG_INVISIBLE = 5;
      protected static final int FLAG_GLOWING = 6;
      protected static final int FLAG_FALL_FLYING = 7;
 +    public boolean isSyncing = false;  // MultiPaper - add isSyncing
++    public boolean multipaperHasMoved = false; // MultiPaper
++    public @Nullable ExternalServer multipaperLastServer = null; // MultiPaper
      private static final EntityDataAccessor<Integer> DATA_AIR_SUPPLY_ID = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.INT);
      private static final EntityDataAccessor<Optional<Component>> DATA_CUSTOM_NAME = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.OPTIONAL_COMPONENT);
      private static final EntityDataAccessor<Boolean> DATA_CUSTOM_NAME_VISIBLE = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.BOOLEAN);
-@@ -2395,7 +2398,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -2395,7 +2401,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
          EntityType<?> entitytypes = this.getType();
          ResourceLocation minecraftkey = EntityType.getKey(entitytypes);
  
@@ -362,7 +367,7 @@ index 1f009ca047f2d4fa97bd88907a2c4e126666ecf7..3d5a472990a8bee3774586ffeab33156
          // Paper end
      }
  
-@@ -4166,6 +4169,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4166,6 +4172,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
              int j = Mth.floor(y);
              int k = Mth.floor(z);
  
@@ -373,7 +378,17 @@ index 1f009ca047f2d4fa97bd88907a2c4e126666ecf7..3d5a472990a8bee3774586ffeab33156
              if (i != this.blockPosition.getX() || j != this.blockPosition.getY() || k != this.blockPosition.getZ()) {
                  this.blockPosition = new BlockPos(i, j, k);
                  this.feetBlockState = null;
-@@ -4258,6 +4265,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4188,6 +4198,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+             this.setBoundingBox(this.makeBoundingBox());
+         }
+         // Paper end
++
++        multipaperHasMoved = true; // MultiPaper
++        multipaperLastServer = MultiPaper.getConnection().getMe(); // MultiPaper
+     }
+ 
+     public void checkDespawn() {}
+@@ -4258,6 +4271,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
  
      @Override
      public void setRemoved(Entity.RemovalReason reason) {
@@ -383,7 +398,7 @@ index 1f009ca047f2d4fa97bd88907a2c4e126666ecf7..3d5a472990a8bee3774586ffeab33156
          if (this.removalReason == null) {
              this.removalReason = reason;
          }
-@@ -4281,7 +4291,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4281,7 +4297,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
  
      @Override
      public boolean shouldBeSaved() {
@@ -392,6 +407,19 @@ index 1f009ca047f2d4fa97bd88907a2c4e126666ecf7..3d5a472990a8bee3774586ffeab33156
      }
  
      @Override
+diff --git a/src/main/java/net/minecraft/world/entity/EntityType.java b/src/main/java/net/minecraft/world/entity/EntityType.java
+index c4e21c22189ee1ded7606c51d5af3453dab96286..c28eaa7f98566e295220ac737b0f96e3c6a68803 100644
+--- a/src/main/java/net/minecraft/world/entity/EntityType.java
++++ b/src/main/java/net/minecraft/world/entity/EntityType.java
+@@ -553,6 +553,8 @@ public class EntityType<T extends Entity> implements EntityTypeTest<Entity, T> {
+                 }
+             }
+ 
++            entity.multipaperLastServer = null; // MultiPaper
++
+             return entity;
+         }).orElse(null); // CraftBukkit - decompile error
+     }
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 index d91cddd085a7ff176787b5b053df24e56e6d9d8b..68f43793e75235b027fd4289818069ae5aff2466 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
@@ -720,7 +748,7 @@ index f672f4af721e099595f3c93a4997a19cdd93e68d..2280e191a58dbfd3f3007bbcad2940f4
              }
              getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index bd2e20062efd5066478d72ae284190534390eb89..3b5ec91c1ffbf92d118238daa682e93d12630b4e 100644
+index 50f51bbc44a403c92e0eff6acfe54a746801b9aa..d6cce640e28b0095668c9573f2a58a7b5dbbb6c7 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -2,10 +2,14 @@ package puregero.multipaper;
@@ -748,7 +776,7 @@ index bd2e20062efd5066478d72ae284190534390eb89..3b5ec91c1ffbf92d118238daa682e93d
  
  import javax.annotation.Nullable;
  import java.io.*;
-@@ -105,6 +108,9 @@ public class MultiPaperConnection extends Thread {
+@@ -109,6 +112,9 @@ public class MultiPaperConnection extends Thread {
                          level.chunkSource.chunkMap.updatingChunks.getUpdatingValuesCopy().forEach(chunkHolder -> {
                              subscribeChunk(level.convertable.getLevelId(), chunkHolder.pos.x, chunkHolder.pos.z);
                          });
@@ -758,7 +786,7 @@ index bd2e20062efd5066478d72ae284190534390eb89..3b5ec91c1ffbf92d118238daa682e93d
                      }
                  }
  
-@@ -210,6 +216,7 @@ public class MultiPaperConnection extends Thread {
+@@ -214,6 +220,7 @@ public class MultiPaperConnection extends Thread {
          if (chunk != null) {
              if (chunk instanceof LevelChunk levelChunk) {
                  if (levelChunk.externalOwner != null && levelChunk.externalOwner.isMe() && server != null && !server.isMe()) {
@@ -766,7 +794,7 @@ index bd2e20062efd5066478d72ae284190534390eb89..3b5ec91c1ffbf92d118238daa682e93d
                      server.getConnection().send(new SendTickListPacket(levelChunk));
                  }
                  levelChunk.externalOwner = server;
-@@ -291,6 +298,71 @@ public class MultiPaperConnection extends Thread {
+@@ -295,6 +302,71 @@ public class MultiPaperConnection extends Thread {
          });
      }
  
@@ -838,7 +866,7 @@ index bd2e20062efd5066478d72ae284190534390eb89..3b5ec91c1ffbf92d118238daa682e93d
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -394,6 +466,11 @@ public class MultiPaperConnection extends Thread {
+@@ -398,6 +470,11 @@ public class MultiPaperConnection extends Thread {
                          RequestChunkPacket.blocker = null;
                          future.complete(inputStream);
                      });
@@ -850,7 +878,7 @@ index bd2e20062efd5066478d72ae284190534390eb89..3b5ec91c1ffbf92d118238daa682e93d
                  } else {
                      future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
                  }
-@@ -414,10 +491,13 @@ public class MultiPaperConnection extends Thread {
+@@ -418,10 +495,13 @@ public class MultiPaperConnection extends Thread {
      }
  
      public void writeChunk(String world, String path, int cx, int cz, byte[] data) throws IOException {
@@ -868,7 +896,7 @@ index bd2e20062efd5066478d72ae284190534390eb89..3b5ec91c1ffbf92d118238daa682e93d
  
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeChunk");
-@@ -425,8 +505,8 @@ public class MultiPaperConnection extends Thread {
+@@ -429,8 +509,8 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(path);
          out.writeInt(cx);
          out.writeInt(cz);
@@ -879,7 +907,7 @@ index bd2e20062efd5066478d72ae284190534390eb89..3b5ec91c1ffbf92d118238daa682e93d
          out.send(in -> { /* Do nothing */ });
      }
      
-@@ -708,4 +788,39 @@ public class MultiPaperConnection extends Thread {
+@@ -712,4 +792,39 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(resource);
          out.send(null);
      }
@@ -921,10 +949,10 @@ index bd2e20062efd5066478d72ae284190534390eb89..3b5ec91c1ffbf92d118238daa682e93d
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..5d9ff09b287eae3a57bb75e7d5c183cff95062d9
+index 0000000000000000000000000000000000000000..2808316100022a09034dfe6e944d5b1912cd39aa
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,289 @@
+@@ -0,0 +1,302 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -1019,7 +1047,7 @@ index 0000000000000000000000000000000000000000..5d9ff09b287eae3a57bb75e7d5c183cf
 +        entity.setRemoved(Entity.RemovalReason.UNLOADED_TO_CHUNK);
 +    }
 +
-+    public static void handleEntityUpdate(Entity entity, Packet<?> packet) {
++    public static void handleEntityUpdate(ExternalServerConnection connection, Entity entity, Packet<?> packet) {
 +        if (packet instanceof ClientboundMoveEntityPacket moveEntityPacket) {
 +            Vec3 vector = moveEntityPacket.updateEntityPosition(entity.position());
 +            if (!(entity instanceof ServerPlayer) && !((ServerLevel) entity.level).entityManager.areEntitiesLoaded(new ChunkPos(new BlockPos(vector)).longKey)) {
@@ -1035,6 +1063,8 @@ index 0000000000000000000000000000000000000000..5d9ff09b287eae3a57bb75e7d5c183cf
 +                entity.moveTo(vector.x, vector.y, vector.z, entity.getYRot(), entity.getXRot());
 +            }
 +            entity.onGround = moveEntityPacket.isOnGround();
++            entity.multipaperHasMoved = false;
++            entity.multipaperLastServer = connection.externalServer;
 +        } else if (packet instanceof ClientboundTeleportEntityPacket teleportEntityPacket) {
 +            if (!(entity instanceof ServerPlayer) &&!((ServerLevel) entity.level).entityManager.areEntitiesLoaded(new ChunkPos(new BlockPos(teleportEntityPacket.getX(), teleportEntityPacket.getY(), teleportEntityPacket.getZ())).longKey)) {
 +                setRemovedRecursive(entity);
@@ -1044,6 +1074,8 @@ index 0000000000000000000000000000000000000000..5d9ff09b287eae3a57bb75e7d5c183cf
 +            setFallDistance(entity, teleportEntityPacket.getY());
 +            entity.moveTo(teleportEntityPacket.getX(), teleportEntityPacket.getY(), teleportEntityPacket.getZ(), teleportEntityPacket.getyRot() * 360f / 256, teleportEntityPacket.getxRot() * 360f / 256);
 +            entity.onGround = teleportEntityPacket.isOnGround();
++            entity.multipaperHasMoved = false;
++            entity.multipaperLastServer = connection.externalServer;
 +        } else if (packet instanceof ClientboundSetEntityMotionPacket setEntityMotionPacket) {
 +            entity.setDeltaMovement(setEntityMotionPacket.getXa() / 8000.0D, setEntityMotionPacket.getYa() / 8000.0D, setEntityMotionPacket.getZa() / 8000.0D);
 +        } else if (packet instanceof ClientboundRotateHeadPacket rotateHeadPacket) {
@@ -1205,6 +1237,15 @@ index 0000000000000000000000000000000000000000..5d9ff09b287eae3a57bb75e7d5c183cf
 +        if (MultiPaper.isRealPlayer(entity)) {
 +            MultiPaper.broadcastPacketToExternalServers(new EntityUpdatePacket(entity, packet));
 +            return;
++        }
++
++        if (packet instanceof ClientboundMoveEntityPacket || packet instanceof ClientboundTeleportEntityPacket) {
++            if (!entity.multipaperHasMoved && packet instanceof ClientboundMoveEntityPacket) {
++                // Another server has moved the entity, not us
++                return;
++            }
++
++            entity.multipaperHasMoved = false;
 +        }
 +
 +        if (chunk != null) {
@@ -1442,7 +1483,7 @@ index 0000000000000000000000000000000000000000..3860e91525ae755a40fb4cbaf6b6d3cd
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9120392720898fd7f97b333c9f2f7578de070107
+index 0000000000000000000000000000000000000000..38c5a388cf8032fdb127df9fa174d9fbb2f84fde
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 @@ -0,0 +1,103 @@
@@ -1545,7 +1586,7 @@ index 0000000000000000000000000000000000000000..9120392720898fd7f97b333c9f2f7578
 +                return;
 +            }
 +
-+            MultiPaperEntitiesHandler.handleEntityUpdate(entity, packet);
++            MultiPaperEntitiesHandler.handleEntityUpdate(connection, entity, packet);
 +        }
 +    }
 +}

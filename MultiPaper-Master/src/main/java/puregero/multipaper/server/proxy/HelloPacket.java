@@ -27,7 +27,8 @@ public class HelloPacket {
         }
 
         if (length > 127) {
-            System.err.println("HelloPacket read length is " + length + "!!!");
+            // This hello packet is very long - probably already contains BungeeCord details
+            return null;
         }
 
         int packetId = readVarInt(buffer);

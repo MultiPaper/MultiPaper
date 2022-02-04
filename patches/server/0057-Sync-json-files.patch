@@ -52,19 +52,66 @@ index 8982562721c3a5a5a3305e90bd8b5bc21585a425..14aca3fcdcc8b35eb483afbe996a8113
  
                  this.map.clear();
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 9b0471d75dcfc4f9e21a7d967de504cb57a0f6f1..10d4bba5757f030b1949bc88bfa579b906b0b813 100644
+index 9b0471d75dcfc4f9e21a7d967de504cb57a0f6f1..494c9e5b0f7657a1324da096f186abcc85d9c1a4 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -326,6 +326,14 @@ public class MultiPaper {
+@@ -27,6 +27,7 @@ import org.bukkit.craftbukkit.entity.CraftEntity;
+ import puregero.multipaper.externalserverprotocol.*;
+ 
+ import java.io.*;
++import java.nio.file.Files;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.HashSet;
+@@ -83,6 +84,14 @@ public class MultiPaper {
+         return externalServerPort;
+     }
+ 
++    private static Boolean syncJsonFiles = null;
++    public static boolean getSyncJsonFiles() {
++        if (syncJsonFiles == null) {
++            loadConfig();
++        }
++        return syncJsonFiles;
++    }
++
+     private static void loadConfig() {
+         YamlConfiguration config = new YamlConfiguration();
+         File file = new File("multipaper.yml");
+@@ -117,6 +126,13 @@ public class MultiPaper {
+ 
+         externalServerPort = config.getInt("externalServerPort");
+ 
++        if (!config.contains("syncJsonFiles")) {
++            save = true;
++            config.set("syncJsonFiles", true);
++        }
++
++        syncJsonFiles = config.getBoolean("syncJsonFiles");
++
+         try {
+             if (save) {
+                 config.save(file);
+@@ -326,6 +342,24 @@ public class MultiPaper {
          getConnection().writeLevel(world, buffer.toByteArray());
      }
  
 +    public static String readJson(String name) throws IOException {
-+        return getConnection().readJson(name).join();
++        if (getSyncJsonFiles()) {
++            return getConnection().readJson(name).join();
++        } else if (new File(name).isFile()) {
++            return Files.readString(new File(name).toPath());
++        } else {
++            return null;
++        }
 +    }
 +
 +    public static void writeJson(String name, String json) throws IOException {
-+        getConnection().writeJson(name, json);
++        if (getSyncJsonFiles()) {
++            getConnection().writeJson(name, json);
++        } else {
++            Files.writeString(new File(name).toPath(), json);
++        }
 +    }
 +
      private static String getWorld(File path) {

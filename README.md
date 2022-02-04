@@ -65,9 +65,10 @@ and massive redstone contraptions.
 
 For those who wish to go above the typical 250 player limit imposed by
 existing server technology, and/or minimise their hardware costs,
-MultiPaper-Pro is for you. MultiPaper-Pro introduces various optimisations into
+MultiPaper-Pro is for you. Extra time and money has been spent into
+MultiPaper-Pro to introduce various optimisations into
 both the MultiPaper engine and Minecraft itself, allowing your server to run
-more efficiently and hold huge numbers of players.
+more efficiently and hold insane numbers of players.
 
 Testing of MultiPaper-Pro against other popular server software gave us the
 following results:

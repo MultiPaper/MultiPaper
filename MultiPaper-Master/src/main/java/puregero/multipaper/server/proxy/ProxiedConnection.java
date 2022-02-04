@@ -91,7 +91,10 @@ public class ProxiedConnection {
             HelloPacket helloPacket = HelloPacket.read(buffer);
 
             if (helloPacket != null) {
-                helloPacket.host += "\00" + HelloPacket.sanitizeAddress((InetSocketAddress) socketChannel.getRemoteAddress());
+                if (helloPacket.host.indexOf(0) < 0) {
+                    // HelloPacket doesn't already contain bungeecord information, add it
+                    helloPacket.host += "\00" + HelloPacket.sanitizeAddress((InetSocketAddress) socketChannel.getRemoteAddress());
+                }
 
                 if (buffer.hasRemaining()) {
                     extraData = new byte[buffer.remaining()];

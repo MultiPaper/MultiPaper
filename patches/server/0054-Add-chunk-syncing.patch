@@ -229,7 +229,7 @@ index c710b4ef9eef02c050dd7e3a6e0824690522d502..7e5872cd67119eeb9f3d5d16c4b74c7a
                      chunk1.incrementInhabitedTime(j);
                      if (flag2 && (!gg.pufferfish.pufferfish.PufferfishConfig.enableAsyncMobSpawning || _pufferfish_spawnCountsReady.get()) && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair) && this.chunkMap.anyPlayerCloseEnoughForSpawning(holder, chunkcoordintpair, true)) { // Spigot // Paper - optimise anyPlayerCloseEnoughForSpawning & optimise chunk tick iteration
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 3e9979de1a49c49e3ac12c54d2c177b4972ff481..00f43c0a59de4f02bf40cd74c1d78742a6faac88 100644
+index 3e9979de1a49c49e3ac12c54d2c177b4972ff481..bc66aaae62488f187dc23cfe379d20561e019ec1 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -161,6 +161,8 @@ import org.bukkit.event.weather.LightningStrikeEvent;
@@ -241,25 +241,18 @@ index 3e9979de1a49c49e3ac12c54d2c177b4972ff481..00f43c0a59de4f02bf40cd74c1d78742
  
  public class ServerLevel extends Level implements WorldGenLevel {
  
-@@ -1076,6 +1078,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
-     }
- 
-     private void tickFluid(BlockPos pos, Fluid fluid) {
-+        if (!MultiPaperChunkHandler.shouldTick(this, pos)) return; // MultiPaper - should tick
-+
-         FluidState fluid1 = this.getFluidState(pos);
- 
-         if (fluid1.is(fluid)) {
-@@ -1085,6 +1089,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
-     }
- 
-     private void tickBlock(BlockPos pos, Block block) {
-+        if (!MultiPaperChunkHandler.shouldTick(this, pos)) return; // MultiPaper - should tick
-+
-         BlockState iblockdata = this.getBlockState(pos);
- 
-         if (iblockdata.is(block)) {
-@@ -2237,6 +2243,11 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -487,8 +489,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+         // CraftBukkit end
+         this.players = Lists.newArrayList();
+         this.entityTickList = new EntityTickList();
+-        this.blockTicks = new LevelTicks<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier());
+-        this.fluidTicks = new LevelTicks<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier());
++        this.blockTicks = new LevelTicks<>(this, this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier()); // MultiPaper - add level
++        this.fluidTicks = new LevelTicks<>(this, this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier()); // MultiPaper - add level
+         this.navigatingMobs = new ObjectOpenHashSet();
+         this.blockEvents = new ObjectLinkedOpenHashSet();
+         this.blockEventsToReschedule = new ArrayList(64);
+@@ -2237,6 +2239,11 @@ public class ServerLevel extends Level implements WorldGenLevel {
                  return;
              }
              // CraftBukkit end
@@ -352,6 +345,17 @@ index 5601d0c2fe635a2a4f073c333531e1a8adf1833c..dd35cc82ce15dd7a76081109a8d29b3d
          world.blockEntityChanged(pos);
          if (!state.isAir()) {
              world.updateNeighbourForOutputSignal(pos, state.getBlock());
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/ComparatorBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/ComparatorBlockEntity.java
+index 9b2c162c362fcf6093a3bf6da715ae8f18176c82..1fca610e6c1b217c381a0befbf71342fa3ed348f 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/ComparatorBlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/ComparatorBlockEntity.java
+@@ -29,5 +29,6 @@ public class ComparatorBlockEntity extends BlockEntity {
+ 
+     public void setOutputSignal(int outputSignal) {
+         this.output = outputSignal;
++        setChanged(); // MultiPaper
+     }
+ }
 diff --git a/src/main/java/net/minecraft/world/level/border/WorldBorder.java b/src/main/java/net/minecraft/world/level/border/WorldBorder.java
 index 3063a45e5d124d4405e940daff24877866165d3f..490e7d65b0c469f5122509cc2f30fc9a5b977ce6 100644
 --- a/src/main/java/net/minecraft/world/level/border/WorldBorder.java
@@ -547,7 +551,7 @@ index acb484e074391d2f1b6b83978ea9483cfb5c214c..c5ae969865a056a456ea4fc91675766d
              ListTag listTag = new ListTag();
              final java.util.Map<net.minecraft.world.entity.EntityType<?>, Integer> savedEntityCounts = new java.util.HashMap<>(); // Paper
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java
-index 834fa7048e3affb4fcc734d56526b9fba5fa69ca..70a68b0a8bacbc1a527b72f6fba4403f4fbfda1e 100644
+index 950efcc80455f73ec8ca4e991fcf9a5b2b7fa22e..838c003758fb567cf14806279b9b6dc32ba96658 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java
 @@ -894,6 +894,7 @@ public class RegionFile implements AutoCloseable {
@@ -571,6 +575,68 @@ index 834fa7048e3affb4fcc734d56526b9fba5fa69ca..70a68b0a8bacbc1a527b72f6fba4403f
          // Paper start - Prevent regionfiles from being closed during use
          this.fileLock.lock();
          synchronized (this) {
+diff --git a/src/main/java/net/minecraft/world/ticks/LevelTicks.java b/src/main/java/net/minecraft/world/ticks/LevelTicks.java
+index b51a94b3ad50ed5ecec8abb05cb86961c0fb323a..27c6d65d22f2dc08a59cb24a5974c32ea0723ed0 100644
+--- a/src/main/java/net/minecraft/world/ticks/LevelTicks.java
++++ b/src/main/java/net/minecraft/world/ticks/LevelTicks.java
+@@ -24,9 +24,12 @@ import net.minecraft.Util;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.SectionPos;
+ import net.minecraft.core.Vec3i;
++import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.util.profiling.ProfilerFiller;
+ import net.minecraft.world.level.ChunkPos;
++import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.level.levelgen.structure.BoundingBox;
++import puregero.multipaper.MultiPaper;
+ 
+ public class LevelTicks<T> implements LevelTickAccess<T> {
+     private static final Comparator<LevelChunkTicks<?>> CONTAINER_DRAIN_ORDER = (a, b) -> {
+@@ -49,7 +52,10 @@ public class LevelTicks<T> implements LevelTickAccess<T> {
+ 
+     };
+ 
+-    public LevelTicks(LongPredicate tickingFutureReadyPredicate, Supplier<ProfilerFiller> profilerGetter) {
++    public ServerLevel level; // MultiPaper - add level
++
++    public LevelTicks(ServerLevel level, LongPredicate tickingFutureReadyPredicate, Supplier<ProfilerFiller> profilerGetter) { // MultiPaper - add level
++        this.level = level; // MultiPaper - add level
+         this.tickCheck = tickingFutureReadyPredicate;
+         this.profiler = profilerGetter;
+     }
+@@ -116,6 +122,10 @@ public class LevelTicks<T> implements LevelTickAccess<T> {
+                 LevelChunkTicks<T> levelChunkTicks = this.allContainers.get(l);
+                 if (levelChunkTicks == null) {
+                     objectIterator.remove();
++                // MultiPaper start - Don't tick chunks that aren't owned by us
++                } else if (levelChunkTicks.count() > 0 && !MultiPaper.isChunkLocal(level.getChunkIfLoadedImmediately(ChunkPos.getX(l), ChunkPos.getZ(l)))) {
++                    levelChunkTicks.getAll().forEach(tick -> tick.triggerTick++);
++                // MultiPaper end - Don't tick chunks that aren't owned by us
+                 } else {
+                     ScheduledTick<T> scheduledTick = levelChunkTicks.peek();
+                     if (scheduledTick == null) {
+diff --git a/src/main/java/net/minecraft/world/ticks/ScheduledTick.java b/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
+index 58f8d0bac3fa3832da25a458c2b42bdaf50f0973..8977851a82db230e5263fa5cf19ffba5e49eb68b 100644
+--- a/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
++++ b/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
+@@ -5,7 +5,16 @@ import java.util.Comparator;
+ import javax.annotation.Nullable;
+ import net.minecraft.core.BlockPos;
+ 
+-public record ScheduledTick<T>(T type, BlockPos pos, long triggerTick, TickPriority priority, long subTickOrder) {
++// MultiPaper start - transform ScheduledTick from a record into a class
++public class ScheduledTick<T> {
++
++    public T type; public T type() { return type; }
++    public long triggerTick; public long triggerTick() { return triggerTick; }
++    public BlockPos pos; public BlockPos pos() { return pos; }
++    public TickPriority priority; public TickPriority priority() { return priority; }
++    public long subTickOrder; public long subTickOrder() { return subTickOrder; }
++// MultiPaper end
++
+     public static final Comparator<ScheduledTick<?>> DRAIN_ORDER = (first, second) -> {
+         int i = Long.compare(first.triggerTick, second.triggerTick);
+         if (i != 0) {
 diff --git a/src/main/java/puregero/multipaper/ChunkKey.java b/src/main/java/puregero/multipaper/ChunkKey.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8dbe4a2f3d
@@ -921,7 +987,7 @@ index 215850f28d980ea5803d6c28319d2a51cfd72848..ff85da6bdeeb0872dabd5e2b1b056553
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7b5c8a2cbbd2f57c5d34ba7d81ca760d7a689430
+index 0000000000000000000000000000000000000000..c32498c8348d610128ba391e0175ce7cb6a030a0
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 @@ -0,0 +1,243 @@
@@ -965,7 +1031,7 @@ index 0000000000000000000000000000000000000000..7b5c8a2cbbd2f57c5d34ba7d81ca760d
 +
 +    public static boolean shouldTick(Level level, BlockPos pos) {
 +        LevelChunk chunk = level.getChunkIfLoaded(pos);
-+        return !MultiPaper.isChunkExternal(chunk);
++        return MultiPaper.isChunkLocal(chunk);
 +    }
 +
 +    public static void onChunkLoad(LevelChunk chunk) {
@@ -1169,7 +1235,7 @@ index 0000000000000000000000000000000000000000..7b5c8a2cbbd2f57c5d34ba7d81ca760d
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 2a01530d1a8ce42d45908d689ff66c22f7649696..dd690afc636f4649f004d24199c2f72ad5fdaee0 100644
+index 2a01530d1a8ce42d45908d689ff66c22f7649696..c6f38ecc0d49c5811824de88b88d888af87f34aa 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -1,16 +1,29 @@
@@ -1220,7 +1286,7 @@ index 2a01530d1a8ce42d45908d689ff66c22f7649696..dd690afc636f4649f004d24199c2f72a
                  DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
                  while (!socket.isClosed()) {
                      int id = in.readInt();
-@@ -123,6 +147,98 @@ public class MultiPaperConnection extends Thread {
+@@ -123,6 +147,109 @@ public class MultiPaperConnection extends Thread {
          server.setLastAlive(System.currentTimeMillis());
      }
  
@@ -1237,7 +1303,17 @@ index 2a01530d1a8ce42d45908d689ff66c22f7649696..dd690afc636f4649f004d24199c2f72a
 +                if (levelChunk.externalOwner != null && levelChunk.externalOwner.isMe() && server != null && !server.isMe()) {
 +                    server.getConnection().send(new SendTickListPacket(levelChunk));
 +                }
-+                levelChunk.externalOwner = server;
++                if (server != null && server.isMe()) {
++                    // Wait a bit for extra data to arrive before ticking the chunk
++                    levelChunk.externalOwner = null;
++                    MultiPaper.runSync(() -> levelChunk.externalOwner = server);
++                } else if (server != null) {
++                    levelChunk.externalOwner = server;
++                    levelChunk.blockTicks.removeIf(tick -> true);
++                    levelChunk.fluidTicks.removeIf(tick -> true);
++                } else {
++                    levelChunk.externalOwner = null;
++                }
 +            }
 +            if (server != null && chunk.getStatus() != ChunkStatus.FULL) {
 +                // A server has locked the chunk, which means their chunk must be full.
@@ -1245,6 +1321,7 @@ index 2a01530d1a8ce42d45908d689ff66c22f7649696..dd690afc636f4649f004d24199c2f72a
 +                MultiPaper.reloadChunks.put(new ChunkKey(world, cx, cz), () -> server.getConnection().send(new RequestChunkPacket(world, cx, cz)));
 +            }
 +        }
++
 +    }
 +
 +    public void chunkSubscribe(DataInputStream in, DataOutputSender out) throws IOException {
@@ -1319,7 +1396,7 @@ index 2a01530d1a8ce42d45908d689ff66c22f7649696..dd690afc636f4649f004d24199c2f72a
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -137,6 +253,24 @@ public class MultiPaperConnection extends Thread {
+@@ -137,6 +264,24 @@ public class MultiPaperConnection extends Thread {
          });
      }
  
@@ -1344,7 +1421,7 @@ index 2a01530d1a8ce42d45908d689ff66c22f7649696..dd690afc636f4649f004d24199c2f72a
      public void writeTickTime(long time, double tps) throws IOException {
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeTickTime");
-@@ -151,4 +285,169 @@ public class MultiPaperConnection extends Thread {
+@@ -151,4 +296,169 @@ public class MultiPaperConnection extends Thread {
          out.writeInt(port);
          out.send(null);
      }

@@ -226,4 +226,3 @@ MultiPaper includes optimisations from both
 
 MultiPaper uses PaperMC's paperweight framework found
 [here](https://github.com/PaperMC/paperweight).
-

@@ -532,7 +532,7 @@ index bffb2915d84be3a1b642788e21c803b54b2db6ea..44435dc0e6ae92b99d92f989ec8a2291
          try { // Paper
          int attempts = 0; Exception laste = null; while (attempts++ < 5) { try { // Paper
 diff --git a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-index bd7967680d7a75caff98a827895c795f2d101f99..43c4111e8e69fee0712330721b4c2eee6dfc7ef7 100644
+index bd7967680d7a75caff98a827895c795f2d101f99..560dea01f75c57f44038d825be55442d58a5d37c 100644
 --- a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 +++ b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 @@ -25,15 +25,21 @@ import java.util.stream.Stream;
@@ -569,22 +569,23 @@ index bd7967680d7a75caff98a827895c795f2d101f99..43c4111e8e69fee0712330721b4c2eee
      public final io.papermc.paper.world.EntitySliceManager entitySliceManager; // Paper
  
      public PersistentEntitySectionManager(Class<T> entityClass, LevelCallback<T> handler, EntityPersistentStorage<T> dataAccess, io.papermc.paper.world.EntitySliceManager entitySliceManager) { // Paper
-@@ -347,6 +353,14 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -315,6 +321,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+             if (list.isEmpty()) {
+                 if (persistententitysectionmanager_b == PersistentEntitySectionManager.ChunkLoadStatus.LOADED) {
+                     if (callEvent) CraftEventFactory.callEntitiesUnloadEvent(((EntityStorage) this.permanentStorage).level, new ChunkPos(i), ImmutableList.of()); // CraftBukkit
++                    if (callEvent) MultiPaperEntitiesHandler.onEntitiesUnload(entitySliceManager.world, new ChunkPos(i)); // MultiPaper
+                     this.permanentStorage.storeEntities(new ChunkEntities<>(new ChunkPos(i), ImmutableList.of()));
+                 }
  
-     private boolean processChunkUnload(long chunkPos) {
-         org.spigotmc.AsyncCatcher.catchOp("Entity chunk unload process"); // Paper
-+        MultiPaperEntitiesHandler.onEntitiesUnload(entitySliceManager.world, new ChunkPos(chunkPos));
-+        // MultiPaper start
-+        for (Entity entity : getEntities(new ChunkPos(chunkPos))) {
-+            if (MultiPaper.isExternalPlayer(entity) && entity.getVehicle() != null) {
-+                entity.stopRiding();
-+            }
-+        }
-+        // MultiPaper end
-         boolean flag = this.storeChunkSections(chunkPos, (entityaccess) -> {
-             entityaccess.getPassengersAndSelf().forEach(this::unloadEntity);
-         }, true); // CraftBukkit - add boolean for event call
-@@ -375,14 +389,26 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -324,6 +331,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+                 return false;
+             } else {
+                 if (callEvent) CraftEventFactory.callEntitiesUnloadEvent(((EntityStorage) this.permanentStorage).level, new ChunkPos(i), list.stream().map(entity -> (Entity) entity).collect(Collectors.toList())); // CraftBukkit
++                if (callEvent) MultiPaperEntitiesHandler.onEntitiesUnload(entitySliceManager.world, new ChunkPos(i)); // MultiPaper
+                 this.permanentStorage.storeEntities(new ChunkEntities<>(new ChunkPos(i), list));
+                 list.forEach(consumer);
+                 return true;
+@@ -375,14 +383,26 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          ChunkEntities<T> chunkentities; // CraftBukkit - decompile error
  
          while ((chunkentities = (ChunkEntities) this.loadingInbox.poll()) != null) {
@@ -611,7 +612,7 @@ index bd7967680d7a75caff98a827895c795f2d101f99..43c4111e8e69fee0712330721b4c2eee
          }
  
      }
-@@ -507,7 +533,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+@@ -507,7 +527,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          return i + "," + this.visibleEntityStorage.count() + "," + this.sectionStorage.count() + "," + this.chunkLoadStatuses.size() + "," + this.chunkVisibility.size() + "," + this.loadingInbox.size() + "," + this.chunksToUnload.size();
      }
  

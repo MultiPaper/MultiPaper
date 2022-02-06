@@ -395,20 +395,22 @@ index e571b485cc1c166b59cf392a6d1cb49d8a7c674d..64865b14bacb10d758c6d16ff50048fa
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index 7bbd824a199f1fb9f1d597afac39667375320335..a972e23417e67297cd4dcb4d56f88725e4f17932 100644
+index 7bbd824a199f1fb9f1d597afac39667375320335..c0dc28a67090de7212b1a60300217423b74c322a 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -17,7 +17,9 @@ import puregero.multipaper.*;
+@@ -17,7 +17,11 @@ import puregero.multipaper.*;
  import java.net.InetAddress;
  import java.net.InetSocketAddress;
  import java.net.UnknownHostException;
++import java.util.ArrayList;
++import java.util.Collection;
 +import java.util.Map;
  import java.util.UUID;
 +import java.util.concurrent.ConcurrentHashMap;
  
  public class PlayerCreatePacket extends ExternalServerPacket {
  
-@@ -34,6 +36,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -34,6 +38,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
      private final GameType gamemode;
      private final byte[] ip;
      private final short port;
@@ -417,7 +419,7 @@ index 7bbd824a199f1fb9f1d597afac39667375320335..a972e23417e67297cd4dcb4d56f88725
  
      private PlayerCreatePacket(ServerPlayer player) {
          this.name = player.getScoreboardName();
-@@ -47,6 +51,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -47,6 +53,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          this.gamemode = player.gameMode.getGameModeForPlayer();
          this.ip = ((InetSocketAddress) player.connection.connection.address).getAddress().getAddress();
          this.port = (short) ((InetSocketAddress) player.connection.connection.address).getPort();
@@ -426,7 +428,7 @@ index 7bbd824a199f1fb9f1d597afac39667375320335..a972e23417e67297cd4dcb4d56f88725
      }
  
      public PlayerCreatePacket(FriendlyByteBuf in) {
-@@ -61,6 +67,18 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -61,6 +69,18 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          gamemode = GameType.byId(in.readByte());
          ip = in.readByteArray();
          port = in.readShort();
@@ -445,26 +447,28 @@ index 7bbd824a199f1fb9f1d597afac39667375320335..a972e23417e67297cd4dcb4d56f88725
      }
  
      @Override
-@@ -76,6 +94,18 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -76,6 +96,20 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          out.writeByte(gamemode.getId());
          out.writeByteArray(ip);
          out.writeShort(port);
 +
-+        out.writeInt(data.size());
-+        for (Map.Entry<String, String> entry : data.entrySet()) {
++        Collection<Map.Entry<String, String>> dataEntries = new ArrayList<>(data.entrySet());
++        out.writeInt(dataEntries.size());
++        for (Map.Entry<String, String> entry : dataEntries) {
 +            out.writeUtf(entry.getKey());
 +            out.writeUtf(entry.getValue());
 +        }
 +
-+        out.writeInt(persistentData.size());
-+        for (Map.Entry<String, String> entry : persistentData.entrySet()) {
++        Collection<Map.Entry<String, String>> persistentDataEntries = new ArrayList<>(persistentData.entrySet());
++        out.writeInt(persistentDataEntries.size());
++        for (Map.Entry<String, String> entry : persistentDataEntries) {
 +            out.writeUtf(entry.getKey());
 +            out.writeUtf(entry.getValue());
 +        }
      }
  
      @Override
-@@ -95,7 +125,9 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -95,7 +129,9 @@ public class PlayerCreatePacket extends ExternalServerPacket {
                  e.printStackTrace();
              }
  

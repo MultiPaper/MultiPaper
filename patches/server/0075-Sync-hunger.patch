@@ -83,22 +83,22 @@ index e7108dd70f1eb91f38e04ad71e595bc679560f75..204a3481624cc0d03a7dc6e7093cf98c
  
      @Override
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index feb500a28c61d6ff59d5664ee3004d0226dcac6b..353c7fea484aadf2b771bcd8ba6a0f2493203a58 100644
+index 64865b14bacb10d758c6d16ff50048fa886df57b..cdf370446c2ca7568a42382b3ac66ac6fa041f69 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -40,6 +40,7 @@ public class ExternalServerPacketSerializer {
+@@ -41,6 +41,7 @@ public class ExternalServerPacketSerializer {
          addPacket(MobSetNavigationGoalPacket.class, MobSetNavigationGoalPacket::new);
          addPacket(PlayerDataUpdatePacket.class, PlayerDataUpdatePacket::new);
          addPacket(PluginNotificationPacket.class, PluginNotificationPacket::new);
 +        addPacket(PlayerFoodUpdatePacket.class, PlayerFoodUpdatePacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index 84727a84000fe71eb0ff1c301bfa512566c98921..e4cb4caaec81940133dc221c3d1a4add13517e03 100644
+index a972e23417e67297cd4dcb4d56f88725e4f17932..76a69d00ec0dade01dfdae12b5732be663ea8be6 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -139,6 +139,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -135,6 +135,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          connection.send(new PlayerCreatePacket(player));
          connection.send(new PlayerActionPacket(player, new ServerboundSetCarriedItemPacket(player.getInventory().selected)));
          connection.send(new EntityUpdatePacket(player, new ClientboundSetEntityDataPacket(player.getId(), player.getEntityData(), true)));
@@ -108,21 +108,19 @@ index 84727a84000fe71eb0ff1c301bfa512566c98921..e4cb4caaec81940133dc221c3d1a4add
          MultiPaperEnderChestHandler.sendFullEnderChestUpdate(connection, player);
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerFoodUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerFoodUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0b61583c5fd629a7ce9f72b0f19418e3db0a8702
+index 0000000000000000000000000000000000000000..64c8845ff6bc0ca87c2a715f78900a7971ca7cfb
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerFoodUpdatePacket.java
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,46 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.player.Player;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.UUID;
 +
 +public class PlayerFoodUpdatePacket extends ExternalServerPacket {
@@ -137,15 +135,15 @@ index 0000000000000000000000000000000000000000..0b61583c5fd629a7ce9f72b0f19418e3
 +        this.saturationLevel = player.getFoodData().saturationLevel;
 +    }
 +
-+    public PlayerFoodUpdatePacket(FriendlyDataInputStream in) throws IOException {
-+        uuid = readUUID(in);
++    public PlayerFoodUpdatePacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
 +        foodLevel = in.readShort();
 +        saturationLevel = in.readFloat();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        writeUUID(out, uuid);
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
 +        out.writeShort(foodLevel);
 +        out.writeFloat(saturationLevel);
 +    }

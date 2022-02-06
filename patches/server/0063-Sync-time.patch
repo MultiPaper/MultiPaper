@@ -46,7 +46,7 @@ index da854c5bfaf9e791b272a497caf864748f3dfbda..1bdc5853b3bb7fe8a58b2421f933097b
              // CraftBukkit end
          }
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 00f43c0a59de4f02bf40cd74c1d78742a6faac88..e432899edd62b5449c30c9cb954c67271fa020ec 100644
+index bc66aaae62488f187dc23cfe379d20561e019ec1..3e36920abfa578b4622c0f3fc680ee5d4221f6e7 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -163,6 +163,7 @@ import org.bukkit.event.world.TimeSkipEvent;
@@ -87,10 +87,10 @@ index 5fb475b3ccaa98861e2c817b37cd1740e5bfed8d..cb0ba6d3677636764d8390c831230995
          // Forces the client to update to the new time immediately
          for (Player p : this.getPlayers()) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index a243e754c53d52e94bb22fff3f827f77e5efd6a1..9d6ca283d5d69c269c57f5f065ae5bd338f394fe 100644
+index 4797415017e8475ffeca2104b3fabcbbb1c48611..5d5071bd2ed6d004bdc02ac0e53767da3d89c25a 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -203,6 +203,12 @@ public class MultiPaper {
+@@ -189,6 +189,12 @@ public class MultiPaper {
                  externalPlayer.checkInsideBlocks();
              }
          }
@@ -104,25 +104,26 @@ index a243e754c53d52e94bb22fff3f827f77e5efd6a1..9d6ca283d5d69c269c57f5f065ae5bd3
  
      public static void sendTickTime(long time, double tps) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 1b58d7b815e9294c5bce5de02e4c8a1b3952fbfe..a086c845e915de7d65457bb8111f7083b23541f2 100644
+index 7c4ceee38111f299b0a2f54d5a5fdfacb08b911c..eb31802bc050e48dcbfef99a2e370235f2c3752c 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -24,6 +24,7 @@ public class ExternalServerPacketSerializer {
+@@ -25,6 +25,7 @@ public class ExternalServerPacketSerializer {
          addPacket(SendTickListPacket.class, SendTickListPacket::new);
          addPacket(PlayerActionPacket.class, PlayerActionPacket::new);
          addPacket(PlayerInventoryUpdatePacket.class, PlayerInventoryUpdatePacket::new);
 +        addPacket(TimeUpdatePacket.class, TimeUpdatePacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/TimeUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/TimeUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7726f80d599bf6a9f21e1cf7e17e3444b128f814
+index 0000000000000000000000000000000000000000..68e8c1cb4a60aca5173a28cdfb858bd1eef4ee3f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/TimeUpdatePacket.java
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,57 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.level.Level;
 +import net.minecraft.world.level.storage.PrimaryLevelData;
@@ -130,10 +131,6 @@ index 0000000000000000000000000000000000000000..7726f80d599bf6a9f21e1cf7e17e3444
 +import org.bukkit.World;
 +import org.bukkit.craftbukkit.CraftWorld;
 +import puregero.multipaper.ExternalServerConnection;
-+
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +
 +public class TimeUpdatePacket extends ExternalServerPacket {
 +
@@ -153,16 +150,16 @@ index 0000000000000000000000000000000000000000..7726f80d599bf6a9f21e1cf7e17e3444
 +        this.force = force;
 +    }
 +
-+    public TimeUpdatePacket(FriendlyDataInputStream in) throws IOException {
-+        world = in.readUTF();
++    public TimeUpdatePacket(FriendlyByteBuf in) {
++        world = in.readUtf();
 +        gameTime = in.readLong();
 +        dayTime = in.readLong();
 +        force = in.readBoolean();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
 +        out.writeLong(gameTime);
 +        out.writeLong(dayTime);
 +        out.writeBoolean(force);

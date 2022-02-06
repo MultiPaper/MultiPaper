@@ -18,32 +18,32 @@ index 5b09178d36ed74bc00a2c20fdf17c03447a70f78..ac7e1914992b98e5e80e7b088ff46487
  
      @Override
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 62656ea5006b0c63bb5b97cd042f421a168276f6..e8f8699a6fb129118310f77367213971568bd190 100644
+index b65d79db1e6865044e14013c30db5c9562bc9d56..7cec13504eeefbd637b94f4f57566cfc2ed84127 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -48,6 +48,7 @@ public class ExternalServerPacketSerializer {
+@@ -49,6 +49,7 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerStatsIncreasePacket.class, PlayerStatsIncreasePacket::new);
          addPacket(PlayerExperienceUpdatePacket.class, PlayerExperienceUpdatePacket::new);
          addPacket(PlayerListNameUpdatePacket.class, PlayerListNameUpdatePacket::new);
 +        addPacket(PlayerSetCameraPacket.class, PlayerSetCameraPacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSetCameraPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSetCameraPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..337c5c03293a09a866befae1fb2f83a5275d2101
+index 0000000000000000000000000000000000000000..5328f19ffd573098fd71adb97c0b638272a22469
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSetCameraPacket.java
 @@ -0,0 +1,50 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.IOException;
 +import java.util.UUID;
 +
 +public class PlayerSetCameraPacket extends ExternalServerPacket {
@@ -58,13 +58,13 @@ index 0000000000000000000000000000000000000000..337c5c03293a09a866befae1fb2f83a5
 +        this.uuidCamera = camera == null ? null : camera.getUUID();
 +    }
 +
-+    public PlayerSetCameraPacket(FriendlyDataInputStream in) throws IOException {
++    public PlayerSetCameraPacket(FriendlyByteBuf in) {
 +        uuid = in.readUUID();
 +        uuidCamera = in.readBoolean() ? in.readUUID() : null;
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
++    public void write(FriendlyByteBuf out) {
 +        out.writeUUID(uuid);
 +        out.writeBoolean(uuidCamera != null);
 +        if (uuidCamera != null) {

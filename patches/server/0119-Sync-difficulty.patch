@@ -26,12 +26,13 @@ index d811d63d35c7a31bc2f82b31b919361f2b01a3c4..868e1f664b6f0e906b6fcc6a37d01aba
  
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/DifficultyUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/DifficultyUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4e6dd7e379a4e7d61383e518ed19f8b53ae48fc2
+index 0000000000000000000000000000000000000000..693e97891b8f8ea7c7fe9e8985c8f843d2ee32e3
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/DifficultyUpdatePacket.java
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,46 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.Difficulty;
 +import org.bukkit.Bukkit;
@@ -39,8 +40,6 @@ index 0000000000000000000000000000000000000000..4e6dd7e379a4e7d61383e518ed19f8b5
 +import org.bukkit.craftbukkit.CraftWorld;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
-+
-+import java.io.IOException;
 +
 +public class DifficultyUpdatePacket extends ExternalServerPacket {
 +
@@ -54,15 +53,15 @@ index 0000000000000000000000000000000000000000..4e6dd7e379a4e7d61383e518ed19f8b5
 +        this.difficulty = level.serverLevelData.getDifficulty().getKey();
 +    }
 +
-+    public DifficultyUpdatePacket(FriendlyDataInputStream in) throws IOException {
-+        world = in.readUTF();
-+        difficulty = in.readUTF();
++    public DifficultyUpdatePacket(FriendlyByteBuf in) {
++        world = in.readUtf();
++        difficulty = in.readUtf();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
-+        out.writeUTF(difficulty);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUtf(difficulty);
 +    }
 +
 +    @Override
@@ -78,14 +77,14 @@ index 0000000000000000000000000000000000000000..4e6dd7e379a4e7d61383e518ed19f8b5
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index c39fc67694896237b6029cedc75359b5cf9b824d..8a6eaa248e2f8ec6f48119e75bd6eeca0322725f 100644
+index 67a04c15533b7041e3a88c57c66e4e1f52237a00..d93630692c7121922cc92fb2ad9ff910164b9190 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -50,6 +50,7 @@ public class ExternalServerPacketSerializer {
+@@ -51,6 +51,7 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerListNameUpdatePacket.class, PlayerListNameUpdatePacket::new);
          addPacket(PlayerSetCameraPacket.class, PlayerSetCameraPacket::new);
          addPacket(PlayerSetRespawnPosition.class, PlayerSetRespawnPosition::new);
 +        addPacket(DifficultyUpdatePacket.class, DifficultyUpdatePacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {

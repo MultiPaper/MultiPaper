@@ -25,10 +25,10 @@ index 6eff3bdab7ce445b703b983ddbebac0470559a53..6d8c431c115458a5d0f6bd5151e12f3d
      }
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 6fff4ec34024c8b97f3fc7d68f74faddb85deb6f..54927a61e8943f9936450c4bb00f486d00271a4c 100644
+index 8a69241c74812eefc63bff545833be65c6db9737..926d4248e0bdf6ed71defd829a0a3158adfff4b3 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -57,6 +57,7 @@ public class MultiPaper {
+@@ -58,6 +58,7 @@ public class MultiPaper {
      private final static List<ChunkHolder> visibleChunksToCheck = new ArrayList<>();
      public static boolean levelDatNeedsSaving = false;
      private static long last1Seconds = System.currentTimeMillis();
@@ -36,7 +36,7 @@ index 6fff4ec34024c8b97f3fc7d68f74faddb85deb6f..54927a61e8943f9936450c4bb00f486d
  
      public static MultiPaperConnection getConnection() {
          if (multiPaperConnection == null) {
-@@ -221,6 +222,14 @@ public class MultiPaper {
+@@ -207,6 +208,14 @@ public class MultiPaper {
          }
  
          MultiPaperExternalBlocksHandler.tick();
@@ -91,26 +91,29 @@ index 0000000000000000000000000000000000000000..37158bb5e836ca29ad3f82992c089935
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 0bfc1644f1f6219e5b052d59fba2260fa6d5a9aa..becab150b5efa9668717bf060471b1da24011635 100644
+index c6036d48f0516a85938b6dd776317ac892c803da..42bc717b1248a0841ef79b62b1e2b34bbb296c67 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -45,6 +45,7 @@ public class ExternalServerPacketSerializer {
+@@ -46,6 +46,7 @@ public class ExternalServerPacketSerializer {
          addPacket(GameRuleUpdatePacket.class, GameRuleUpdatePacket::new);
          addPacket(AdvancementGrantProgressPacket.class, AdvancementGrantProgressPacket::new);
          addPacket(WeatherUpdatePacket.class, WeatherUpdatePacket::new);
 +        addPacket(PlayerStatsIncreasePacket.class, PlayerStatsIncreasePacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerStatsIncreasePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerStatsIncreasePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ee66660753d87316265d0a83f4e7f0ea7ceeb7e6
+index 0000000000000000000000000000000000000000..475f9d17e101cd5b27221b0680d9098093949a6e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerStatsIncreasePacket.java
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,100 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.UnpooledByteBufAllocator;
 +import net.minecraft.core.Registry;
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.resources.ResourceLocation;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
@@ -121,10 +124,6 @@ index 0000000000000000000000000000000000000000..ee66660753d87316265d0a83f4e7f0ea
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperStatHandler;
 +
-+import java.io.ByteArrayOutputStream;
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.HashMap;
 +import java.util.Map;
 +import java.util.Set;
@@ -133,34 +132,27 @@ index 0000000000000000000000000000000000000000..ee66660753d87316265d0a83f4e7f0ea
 +public class PlayerStatsIncreasePacket extends ExternalServerPacket {
 +    private final UUID uuid;
 +    private final HashMap<Stat<?>, Integer> stats;
-+    private byte[] cache;
++    private ByteBuf cache;
 +
 +    public PlayerStatsIncreasePacket(Player player, HashMap<Stat<?>, Integer> stats) {
 +        this.uuid = player.getUUID();
 +        this.stats = stats;
 +
-+        try {
-+            // Write the packet now so that we can pool the stats hashmap
-+
-+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-+            FriendlyDataOutputStream out = new FriendlyDataOutputStream(byteArrayOutputStream);
-+
-+            write(out);
-+
-+            cache = byteArrayOutputStream.toByteArray();
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
++        // Write the packet now so that we can pool the stats hashmap
++        ByteBuf buffer = UnpooledByteBufAllocator.DEFAULT.buffer();
++        FriendlyByteBuf out = new FriendlyByteBuf(buffer);
++        write(out);
++        this.cache = buffer;
 +    }
 +
-+    public PlayerStatsIncreasePacket(FriendlyDataInputStream in) throws IOException {
-+        uuid = readUUID(in);
++    public PlayerStatsIncreasePacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
 +
 +        int length = in.readInt();
 +        this.stats = MultiPaperStatHandler.hashMapPool.acquire();
 +        for (int i = 0; i < length; i++) {
-+            String type = in.readUTF();
-+            String subtype = in.readUTF();
++            String type = in.readUtf();
++            String subtype = in.readUtf();
 +
 +            StatType<?> statType = Registry.STAT_TYPE.get(new ResourceLocation(type));
 +            Stat<?> stat = getStat(statType, subtype);
@@ -181,20 +173,20 @@ index 0000000000000000000000000000000000000000..ee66660753d87316265d0a83f4e7f0ea
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
++    public void write(FriendlyByteBuf out) {
 +        if (cache != null) {
-+            out.write(cache);
++            out.writeBytes(cache);
 +            return;
 +        }
 +
 +        Set<Map.Entry<Stat<?>, Integer>> entries = stats.entrySet();
 +
-+        writeUUID(out, uuid);
++        out.writeUUID(uuid);
 +        out.writeInt(entries.size());
 +
 +        for (Map.Entry<Stat<?>, Integer> entry : entries) {
-+            out.writeUTF(Registry.STAT_TYPE.getKey(entry.getKey().getType()).toString());
-+            out.writeUTF(getStatLocation(entry.getKey()).toString());
++            out.writeUtf(Registry.STAT_TYPE.getKey(entry.getKey().getType()).toString());
++            out.writeUtf(getStatLocation(entry.getKey()).toString());
 +            out.writeInt(entry.getValue());
 +        }
 +    }

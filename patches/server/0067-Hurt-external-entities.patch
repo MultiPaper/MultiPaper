@@ -66,26 +66,27 @@ index ae41c9fcd640e161f197e7113b1a4d0db9531886..27ce75ccf282cddd197ca4ce43c8f4a8
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 1b9e1ad071ee6e647c2f6fd8b95226cd9d56bb5d..13dd9aac95f4a5fc3c7b8d52e80a97c0c8ae8ef8 100644
+index 75c7a062ae774609e892f68220cca884a7f1efc8..eee175a5f43199ce98ad5fd3d2cacb6ce159251f 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -34,6 +34,7 @@ public class ExternalServerPacketSerializer {
+@@ -35,6 +35,7 @@ public class ExternalServerPacketSerializer {
          addPacket(EntityRemovePacket.class, EntityRemovePacket::new);
          addPacket(PlayerActionOnEntityPacket.class, PlayerActionOnEntityPacket::new);
          addPacket(PlayerTouchEntityPacket.class, PlayerTouchEntityPacket::new);
 +        addPacket(HurtEntityPacket.class, HurtEntityPacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..75c8e1d9ae15c95fc9bae504a1bb8c04ba62dd4f
+index 0000000000000000000000000000000000000000..8c031e466e1b95cedc93407bc89144d1f5659e64
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,115 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.core.BlockPos;
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.damagesource.DamageSource;
 +import net.minecraft.world.entity.Entity;
@@ -131,15 +132,14 @@ index 0000000000000000000000000000000000000000..75c8e1d9ae15c95fc9bae504a1bb8c04
 +
 +    }
 +
-+    public HurtEntityPacket(FriendlyDataInputStream in) throws IOException {
-+        world = in.readUTF();
-+        uuid = readUUID(in);
++    public HurtEntityPacket(FriendlyByteBuf in) {
++        world = in.readUtf();
++        uuid = in.readUUID();
 +        amount = in.readFloat();
-+        sourceBytes = new byte[in.readInt()];
-+        in.readFully(sourceBytes);
++        sourceBytes = in.readByteArray();
 +
 +        if (in.readBoolean()) {
-+            entityDamageUuid = readUUID(in);
++            entityDamageUuid = in.readUUID();
 +        } else {
 +            entityDamageUuid = null;
 +        }
@@ -152,16 +152,15 @@ index 0000000000000000000000000000000000000000..75c8e1d9ae15c95fc9bae504a1bb8c04
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
-+        writeUUID(out, uuid);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUUID(uuid);
 +        out.writeFloat(amount);
-+        out.writeInt(sourceBytes.length);
-+        out.write(sourceBytes);
++        out.writeByteArray(sourceBytes);
 +
 +        out.writeBoolean(entityDamageUuid != null);
 +        if (entityDamageUuid != null) {
-+            writeUUID(out, entityDamageUuid);
++            out.writeUUID(entityDamageUuid);
 +        }
 +
 +        out.writeBoolean(blockDamagePos != null);

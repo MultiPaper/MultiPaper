@@ -68,25 +68,26 @@ index 0000000000000000000000000000000000000000..7c4d005365c051f2699d0cda0f434c5c
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 6a50f0705b6aeeb47db7cede714ca8fb2cf00bbf..0bfc1644f1f6219e5b052d59fba2260fa6d5a9aa 100644
+index 2e44204ccb00ddcb7d3ec5a091d404d1a09a9f5d..c6036d48f0516a85938b6dd776317ac892c803da 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -44,6 +44,7 @@ public class ExternalServerPacketSerializer {
+@@ -45,6 +45,7 @@ public class ExternalServerPacketSerializer {
          addPacket(EntityUpdateEffectPacket.class, EntityUpdateEffectPacket::new);
          addPacket(GameRuleUpdatePacket.class, GameRuleUpdatePacket::new);
          addPacket(AdvancementGrantProgressPacket.class, AdvancementGrantProgressPacket::new);
 +        addPacket(WeatherUpdatePacket.class, WeatherUpdatePacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/WeatherUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/WeatherUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7ac957d1b19ba4d86d175c08d44eff604952a0f4
+index 0000000000000000000000000000000000000000..1b4bfe453a3b5ad9160c7e650e0fe9b8fbfd30a0
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/WeatherUpdatePacket.java
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,58 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.level.storage.PrimaryLevelData;
 +import org.bukkit.Bukkit;
@@ -95,10 +96,6 @@ index 0000000000000000000000000000000000000000..7ac957d1b19ba4d86d175c08d44eff60
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperRainHandler;
-+
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +
 +public class WeatherUpdatePacket extends ExternalServerPacket {
 +    private final String world;
@@ -117,8 +114,8 @@ index 0000000000000000000000000000000000000000..7ac957d1b19ba4d86d175c08d44eff60
 +        this.thunderingTime = levelData.getThunderTime();
 +    }
 +
-+    public WeatherUpdatePacket(FriendlyDataInputStream in) throws IOException {
-+        this.world = in.readUTF();
++    public WeatherUpdatePacket(FriendlyByteBuf in) {
++        this.world = in.readUtf();
 +        this.raining = in.readBoolean();
 +        this.thundering = in.readBoolean();
 +        this.clearWeatherTime = in.readInt();
@@ -126,8 +123,8 @@ index 0000000000000000000000000000000000000000..7ac957d1b19ba4d86d175c08d44eff60
 +        this.thunderingTime = in.readInt();
 +    }
 +
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(this.world);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(this.world);
 +        out.writeBoolean(this.raining);
 +        out.writeBoolean(this.thundering);
 +        out.writeInt(this.clearWeatherTime);

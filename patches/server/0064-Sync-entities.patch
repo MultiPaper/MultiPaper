@@ -686,18 +686,18 @@ index fb344552d4c8ab116ee30ead58dbc00872731744..ae41c9fcd640e161f197e7113b1a4d0d
      }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 8e71b5b207ecbd0aba028bca62d19274bc0484ae..b559e6c686feaa347e29bce872487b6d81524232 100644
+index d17820d4b26855cc46c60c06127c2a54ee648aa0..e485f450af2abc3097daf3c0177c5243d5dc57f8 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -27,6 +27,7 @@ public class ExternalServerConnection extends Thread implements Closeable {
+@@ -33,6 +33,7 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
      private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
      public final ConcurrentHashMap<ChunkKey, Consumer<DataInputStream>> chunkCallbacks = new ConcurrentHashMap<>();
 +    public final ConcurrentHashMap<ChunkKey, Consumer<DataInputStream>> entitiesCallbacks = new ConcurrentHashMap<>();
  
-     public ExternalServerConnection(Socket socket) {
-         this.socket = socket;
-@@ -149,4 +150,14 @@ public class ExternalServerConnection extends Thread implements Closeable {
+     public ExternalServerConnection() {
+ 
+@@ -148,4 +149,14 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
          RequestChunkPacket.blocker = externalServer;
          send(new RequestChunkPacket(world, cx, cz));
      }
@@ -713,10 +713,10 @@ index 8e71b5b207ecbd0aba028bca62d19274bc0484ae..b559e6c686feaa347e29bce872487b6d
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 9d6ca283d5d69c269c57f5f065ae5bd338f394fe..d32d3d56d9f65e316d76aae25ceb2c23bb8dc321 100644
+index 5d5071bd2ed6d004bdc02ac0e53767da3d89c25a..5b5b7a2b1157cfacae49f83e7c3daf9704166dc7 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -171,6 +171,9 @@ public class MultiPaper {
+@@ -157,6 +157,9 @@ public class MultiPaper {
              ChunkHolder holder = visibleChunksToCheck.remove(visibleChunksToCheck.size() - 1);
              if (holder.getAvailableChunkNow() != null && holder.getWorld().chunkSource.chunkMap.getVisibleChunkIfPresent(holder.pos.longKey) == holder) {
                  getConnection().syncChunkSubscribers(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z);
@@ -726,7 +726,7 @@ index 9d6ca283d5d69c269c57f5f065ae5bd338f394fe..d32d3d56d9f65e316d76aae25ceb2c23
                  break;
              }
          }
-@@ -209,6 +212,12 @@ public class MultiPaper {
+@@ -195,6 +198,12 @@ public class MultiPaper {
                  broadcastPacketToExternalServers(new TimeUpdatePacket(level));
              }
          }
@@ -739,7 +739,7 @@ index 9d6ca283d5d69c269c57f5f065ae5bd338f394fe..d32d3d56d9f65e316d76aae25ceb2c23
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -468,6 +477,7 @@ public class MultiPaper {
+@@ -453,6 +462,7 @@ public class MultiPaper {
      public static void unlockChunk(LevelChunk chunk) {
          try {
              if (MultiPaper.isChunkLocal(chunk)) {
@@ -748,11 +748,11 @@ index 9d6ca283d5d69c269c57f5f065ae5bd338f394fe..d32d3d56d9f65e316d76aae25ceb2c23
              }
              getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index d860bcc6583fc54cf32f97e74d995d22a5805a59..827993c7708b62bca51e01aef75c2e39ba66029c 100644
+index 58394854c700f272eb59995086f3be66df2ed346..425f999ea29a86375b3c63cc3dd5b4de424b82dc 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -2,10 +2,14 @@ package puregero.multipaper;
- 
+@@ -7,11 +7,15 @@ import io.netty.channel.epoll.EpollSocketChannel;
+ import io.netty.channel.socket.nio.NioSocketChannel;
  import net.minecraft.core.Registry;
  import net.minecraft.resources.ResourceLocation;
 +import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
@@ -761,12 +761,13 @@ index d860bcc6583fc54cf32f97e74d995d22a5805a59..827993c7708b62bca51e01aef75c2e39
  import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ChunkHolder;
  import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.network.ServerConnectionListener;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.level.ChunkPos;
  import net.minecraft.world.level.chunk.ChunkAccess;
  import net.minecraft.world.level.chunk.ChunkStatus;
  import net.minecraft.world.level.chunk.LevelChunk;
-@@ -14,8 +18,7 @@ import org.apache.logging.log4j.Logger;
+@@ -20,8 +24,7 @@ import org.apache.logging.log4j.Logger;
  import org.bukkit.Bukkit;
  import org.bukkit.World;
  import org.bukkit.craftbukkit.CraftWorld;
@@ -776,7 +777,7 @@ index d860bcc6583fc54cf32f97e74d995d22a5805a59..827993c7708b62bca51e01aef75c2e39
  
  import javax.annotation.Nullable;
  import java.io.*;
-@@ -109,6 +112,9 @@ public class MultiPaperConnection extends Thread {
+@@ -116,6 +119,9 @@ public class MultiPaperConnection extends Thread {
                          level.chunkSource.chunkMap.updatingChunks.getUpdatingValuesCopy().forEach(chunkHolder -> {
                              subscribeChunk(level.convertable.getLevelId(), chunkHolder.pos.x, chunkHolder.pos.z);
                          });
@@ -786,7 +787,7 @@ index d860bcc6583fc54cf32f97e74d995d22a5805a59..827993c7708b62bca51e01aef75c2e39
                      }
                  }
  
-@@ -214,6 +220,7 @@ public class MultiPaperConnection extends Thread {
+@@ -225,6 +231,7 @@ public class MultiPaperConnection extends Thread {
          if (chunk != null) {
              if (chunk instanceof LevelChunk levelChunk) {
                  if (levelChunk.externalOwner != null && levelChunk.externalOwner.isMe() && server != null && !server.isMe()) {
@@ -794,7 +795,7 @@ index d860bcc6583fc54cf32f97e74d995d22a5805a59..827993c7708b62bca51e01aef75c2e39
                      server.getConnection().send(new SendTickListPacket(levelChunk));
                  }
                  if (server != null && server.isMe()) {
-@@ -306,6 +313,71 @@ public class MultiPaperConnection extends Thread {
+@@ -317,6 +324,71 @@ public class MultiPaperConnection extends Thread {
          });
      }
  
@@ -866,7 +867,7 @@ index d860bcc6583fc54cf32f97e74d995d22a5805a59..827993c7708b62bca51e01aef75c2e39
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -409,6 +481,11 @@ public class MultiPaperConnection extends Thread {
+@@ -436,6 +508,11 @@ public class MultiPaperConnection extends Thread {
                          RequestChunkPacket.blocker = null;
                          future.complete(inputStream);
                      });
@@ -878,7 +879,7 @@ index d860bcc6583fc54cf32f97e74d995d22a5805a59..827993c7708b62bca51e01aef75c2e39
                  } else {
                      future.complete(data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
                  }
-@@ -429,10 +506,13 @@ public class MultiPaperConnection extends Thread {
+@@ -456,10 +533,13 @@ public class MultiPaperConnection extends Thread {
      }
  
      public void writeChunk(String world, String path, int cx, int cz, byte[] data) throws IOException {
@@ -896,7 +897,7 @@ index d860bcc6583fc54cf32f97e74d995d22a5805a59..827993c7708b62bca51e01aef75c2e39
  
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeChunk");
-@@ -440,8 +520,8 @@ public class MultiPaperConnection extends Thread {
+@@ -467,8 +547,8 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(path);
          out.writeInt(cx);
          out.writeInt(cz);
@@ -907,7 +908,7 @@ index d860bcc6583fc54cf32f97e74d995d22a5805a59..827993c7708b62bca51e01aef75c2e39
          out.send(in -> { /* Do nothing */ });
      }
      
-@@ -723,4 +803,39 @@ public class MultiPaperConnection extends Thread {
+@@ -750,4 +830,39 @@ public class MultiPaperConnection extends Thread {
          out.writeUTF(resource);
          out.send(null);
      }
@@ -1284,12 +1285,13 @@ index 0000000000000000000000000000000000000000..a69c0ab8a07a32020946489acf97b9bd
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a9ca50e9a3e920896df86605c9a86385d11cd409
+index 0000000000000000000000000000000000000000..b66638aac27b917ee09632cd971932ef08fe028c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 @@ -0,0 +1,65 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.player.Player;
@@ -1300,7 +1302,6 @@ index 0000000000000000000000000000000000000000..a9ca50e9a3e920896df86605c9a86385
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
 +
-+import java.io.IOException;
 +import java.util.HashSet;
 +import java.util.UUID;
 +
@@ -1320,15 +1321,15 @@ index 0000000000000000000000000000000000000000..a9ca50e9a3e920896df86605c9a86385
 +        this.uuid = uuid;
 +    }
 +
-+    public EntityRemovePacket(FriendlyDataInputStream in) throws IOException {
-+        this.world = in.readUTF();
-+        this.uuid = readUUID(in);
++    public EntityRemovePacket(FriendlyByteBuf in) {
++        this.world = in.readUtf();
++        this.uuid = in.readUUID();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
-+        writeUUID(out, uuid);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUUID(uuid);
 +    }
 +
 +    @Override
@@ -1355,14 +1356,15 @@ index 0000000000000000000000000000000000000000..a9ca50e9a3e920896df86605c9a86385
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3860e91525ae755a40fb4cbaf6b6d3cd3b7bd576
+index 0000000000000000000000000000000000000000..6fc2d4f26e138fc6660a395e981870c12862b449
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,118 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.nbt.ListTag;
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
@@ -1376,8 +1378,6 @@ index 0000000000000000000000000000000000000000..3860e91525ae755a40fb4cbaf6b6d3cd
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
 +import java.io.IOException;
 +import java.util.UUID;
 +
@@ -1410,20 +1410,17 @@ index 0000000000000000000000000000000000000000..3860e91525ae755a40fb4cbaf6b6d3cd
 +        }
 +    }
 +
-+    public EntityUpdateNBTPacket(FriendlyDataInputStream in) throws IOException {
-+        this.world = in.readUTF();
-+        this.uuid = readUUID(in);
-+        int byteLength = in.readInt();
-+        this.data = new byte[byteLength];
-+        in.readFully(data);
++    public EntityUpdateNBTPacket(FriendlyByteBuf in) {
++        this.world = in.readUtf();
++        this.uuid = in.readUUID();
++        this.data = in.readByteArray();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
-+        writeUUID(out, uuid);
-+        out.writeInt(data.length);
-+        out.write(data);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUUID(uuid);
++        out.writeByteArray(data);
 +    }
 +
 +    @Override
@@ -1483,10 +1480,10 @@ index 0000000000000000000000000000000000000000..3860e91525ae755a40fb4cbaf6b6d3cd
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..38c5a388cf8032fdb127df9fa174d9fbb2f84fde
+index 0000000000000000000000000000000000000000..2c285c065ecacb81703bd284840255cb736d7314
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
-@@ -0,0 +1,103 @@
+@@ -0,0 +1,95 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1507,9 +1504,6 @@ index 0000000000000000000000000000000000000000..38c5a388cf8032fdb127df9fa174d9fb
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.UUID;
 +
 +public class EntityUpdatePacket extends ExternalServerPacket {
@@ -1526,23 +1520,20 @@ index 0000000000000000000000000000000000000000..38c5a388cf8032fdb127df9fa174d9fb
 +        this.packet = packet;
 +    }
 +
-+    public EntityUpdatePacket(FriendlyDataInputStream in) throws IOException {
-+        world = in.readUTF();
-+        uuid = readUUID(in);
++    public EntityUpdatePacket(FriendlyByteBuf in) {
++        world = in.readUtf();
++        uuid = in.readUUID();
 +
-+        int length = in.readInt();
-+        byte[] bytes = new byte[length];
-+        in.readFully(bytes);
-+        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
++        ByteBuf buf = Unpooled.wrappedBuffer(in.readByteArray());
 +        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
 +        int packetId = friendlyByteBuf.readVarInt();
 +        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
-+        writeUUID(out, uuid);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUUID(uuid);
 +
 +        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
 +        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
@@ -1550,9 +1541,7 @@ index 0000000000000000000000000000000000000000..38c5a388cf8032fdb127df9fa174d9fb
 +        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
 +        friendlyByteBuf.writeVarInt(id);
 +        packet.write(friendlyByteBuf);
-+        byte[] bytes = buf.array();
-+        out.writeInt(bytes.length);
-+        out.write(bytes);
++        out.writeByteArray(buf.array());
 +    }
 +
 +    @Override
@@ -1592,10 +1581,10 @@ index 0000000000000000000000000000000000000000..38c5a388cf8032fdb127df9fa174d9fb
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..39c6bb2394068da0cf366bcd66fe78b03bf93797
+index 0000000000000000000000000000000000000000..0eb8feb92d13f2a89669bed928c44a01cdd9c6a9
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
-@@ -0,0 +1,133 @@
+@@ -0,0 +1,125 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1616,9 +1605,6 @@ index 0000000000000000000000000000000000000000..39c6bb2394068da0cf366bcd66fe78b0
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.Collection;
 +import java.util.Objects;
 +import java.util.UUID;
@@ -1639,33 +1625,30 @@ index 0000000000000000000000000000000000000000..39c6bb2394068da0cf366bcd66fe78b0
 +        this.packet = packet;
 +    }
 +
-+    public EntityUpdateWithDependenciesPacket(FriendlyDataInputStream in) throws IOException {
-+        world = in.readUTF();
-+        uuid = readUUID(in);
++    public EntityUpdateWithDependenciesPacket(FriendlyByteBuf in) {
++        world = in.readUtf();
++        uuid = in.readUUID();
 +
-+        uuids = new UUID[in.read()];
++        uuids = new UUID[in.readVarInt()];
 +
 +        for (int i = 0; i < uuids.length; i++) {
-+            uuids[i] = readUUID(in);
++            uuids[i] = in.readUUID();
 +        }
 +
-+        int length = in.readInt();
-+        byte[] bytes = new byte[length];
-+        in.readFully(bytes);
-+        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
++        ByteBuf buf = Unpooled.wrappedBuffer(in.readByteArray());
 +        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
 +        int packetId = friendlyByteBuf.readVarInt();
 +        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
-+        writeUUID(out, uuid);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUUID(uuid);
 +
-+        out.write(uuids.length);
++        out.writeVarInt(uuids.length);
 +        for (UUID uuid : uuids) {
-+            writeUUID(out, uuid);
++            out.writeUUID(uuid);
 +        }
 +
 +        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
@@ -1674,9 +1657,7 @@ index 0000000000000000000000000000000000000000..39c6bb2394068da0cf366bcd66fe78b0
 +        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
 +        friendlyByteBuf.writeVarInt(id);
 +        packet.write(friendlyByteBuf);
-+        byte[] bytes = buf.array();
-+        out.writeInt(bytes.length);
-+        out.write(bytes);
++        out.writeByteArray(buf.array());
 +    }
 +
 +    @Override
@@ -1730,10 +1711,10 @@ index 0000000000000000000000000000000000000000..39c6bb2394068da0cf366bcd66fe78b0
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index a086c845e915de7d65457bb8111f7083b23541f2..92d4021d5377ec7abe7869479885a2f37ad72904 100644
+index eb31802bc050e48dcbfef99a2e370235f2c3752c..e5e787c4894653cb56257f926dd634b86f67aa58 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -25,6 +25,13 @@ public class ExternalServerPacketSerializer {
+@@ -26,6 +26,13 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerActionPacket.class, PlayerActionPacket::new);
          addPacket(PlayerInventoryUpdatePacket.class, PlayerInventoryUpdatePacket::new);
          addPacket(TimeUpdatePacket.class, TimeUpdatePacket::new);
@@ -1746,12 +1727,20 @@ index a086c845e915de7d65457bb8111f7083b23541f2..92d4021d5377ec7abe7869479885a2f3
 +        addPacket(EntityRemovePacket.class, EntityRemovePacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
-index 286f2f964822059d7bb58c6b7d8f6b6e1853b956..1172e49de361cb41dd5e1f7ddbc9de99f02cfbcb 100644
+index 2e51741d76d2d209accb673f8043ed99010125a3..fd2a81936f4fb19534d165ea96f88cc6c2065b4f 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionPacket.java
-@@ -60,13 +60,15 @@ public class PlayerActionPacket extends ExternalServerPacket {
+@@ -12,6 +12,7 @@ import net.minecraft.server.level.ServerPlayer;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
+ 
+ import java.util.UUID;
+ 
+@@ -51,13 +52,15 @@ public class PlayerActionPacket extends ExternalServerPacket {
  
      @Override
      public void handle(ExternalServerConnection connection) {
@@ -1774,13 +1763,12 @@ index 286f2f964822059d7bb58c6b7d8f6b6e1853b956..1172e49de361cb41dd5e1f7ddbc9de99
      }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index 0316b2f9c5d103e50f16781f0a206b8beefec3f0..6e584df98a39661561583588f77ae76fafed357b 100644
+index c9e402803cf7e172ae95e1a16c963ee5213846f0..7bbd824a199f1fb9f1d597afac39667375320335 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -1,10 +1,14 @@
- package puregero.multipaper.externalserverprotocol;
+@@ -2,9 +2,14 @@ package puregero.multipaper.externalserverprotocol;
  
--import net.minecraft.network.protocol.game.ClientboundSetCarriedItemPacket;
+ import net.minecraft.network.FriendlyByteBuf;
  import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 +import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
 +import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
@@ -1793,7 +1781,7 @@ index 0316b2f9c5d103e50f16781f0a206b8beefec3f0..6e584df98a39661561583588f77ae76f
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
  import puregero.multipaper.*;
-@@ -102,8 +106,30 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -97,8 +102,30 @@ public class PlayerCreatePacket extends ExternalServerPacket {
      public static void sendPlayer(ExternalServerConnection connection, ServerPlayer player) {
          connection.send(new PlayerCreatePacket(player));
          connection.send(new PlayerActionPacket(player, new ServerboundSetCarriedItemPacket(player.getInventory().selected)));
@@ -1826,12 +1814,13 @@ index 0316b2f9c5d103e50f16781f0a206b8beefec3f0..6e584df98a39661561583588f77ae76f
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e958e2e9208817bf697fe2b1a3ed4f91fbf7f5b9
+index 0000000000000000000000000000000000000000..cb6d153158d5de470582b66f9253fde25e1545f0
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,68 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.level.ChunkPos;
 +import org.apache.logging.log4j.LogManager;
@@ -1842,9 +1831,6 @@ index 0000000000000000000000000000000000000000..e958e2e9208817bf697fe2b1a3ed4f91
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.ConcurrentModificationException;
 +
 +public class RequestEntitiesPacket extends ExternalServerPacket {
@@ -1861,15 +1847,15 @@ index 0000000000000000000000000000000000000000..e958e2e9208817bf697fe2b1a3ed4f91
 +        this.cz = cz;
 +    }
 +
-+    public RequestEntitiesPacket(FriendlyDataInputStream in) throws IOException {
-+        world = in.readUTF();
++    public RequestEntitiesPacket(FriendlyByteBuf in) {
++        world = in.readUtf();
 +        cx = in.readInt();
 +        cz = in.readInt();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
 +        out.writeInt(cx);
 +        out.writeInt(cz);
 +    }
@@ -1902,12 +1888,13 @@ index 0000000000000000000000000000000000000000..e958e2e9208817bf697fe2b1a3ed4f91
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9f90d53304843a4c5b8788edec0fa209746cccff
+index 0000000000000000000000000000000000000000..2748281a775dc98476a42be796e8caf94d9b7848
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,60 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
@@ -1918,9 +1905,6 @@ index 0000000000000000000000000000000000000000..9f90d53304843a4c5b8788edec0fa209
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.UUID;
 +
 +public class RequestEntityPacket extends ExternalServerPacket {
@@ -1935,15 +1919,15 @@ index 0000000000000000000000000000000000000000..9f90d53304843a4c5b8788edec0fa209
 +        this.uuid =uuid;
 +    }
 +
-+    public RequestEntityPacket(FriendlyDataInputStream in) throws IOException {
-+        this.world = in.readUTF();
-+        this.uuid = readUUID(in);
++    public RequestEntityPacket(FriendlyByteBuf in) {
++        this.world = in.readUtf();
++        this.uuid = in.readUUID();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
-+        writeUUID(out, uuid);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUUID(uuid);
 +    }
 +
 +    @Override
@@ -1970,14 +1954,18 @@ index 0000000000000000000000000000000000000000..9f90d53304843a4c5b8788edec0fa209
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..dff311e7e4648d0f2b381603e79be503ca5bb7fb
+index 0000000000000000000000000000000000000000..9f505d69e939b99f33822aa4ad402259dbe07fad
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,150 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.SharedConstants;
-+import net.minecraft.nbt.*;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.IntArrayTag;
++import net.minecraft.nbt.ListTag;
++import net.minecraft.nbt.Tag;
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.EntityType;
@@ -1997,7 +1985,6 @@ index 0000000000000000000000000000000000000000..dff311e7e4648d0f2b381603e79be503
 +
 +import java.io.ByteArrayInputStream;
 +import java.io.DataInputStream;
-+import java.io.DataOutputStream;
 +import java.io.IOException;
 +import java.util.List;
 +import java.util.function.Consumer;
@@ -2059,23 +2046,19 @@ index 0000000000000000000000000000000000000000..dff311e7e4648d0f2b381603e79be503
 +        }
 +    }
 +
-+    public SendEntitiesPacket(FriendlyDataInputStream in) throws IOException {
-+        world = in.readUTF();
++    public SendEntitiesPacket(FriendlyByteBuf in) {
++        world = in.readUtf();
 +        cx = in.readInt();
 +        cz = in.readInt();
-+
-+        int byteLength = in.readInt();
-+        data = new byte[byteLength];
-+        in.readFully(data);
++        data = in.readByteArray();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
 +        out.writeInt(cx);
 +        out.writeInt(cz);
-+        out.writeInt(data.length);
-+        out.write(data);
++        out.writeByteArray(data);
 +    }
 +
 +    @Override
@@ -2126,7 +2109,7 @@ index 0000000000000000000000000000000000000000..dff311e7e4648d0f2b381603e79be503
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
-index fa3bc4daa36878cacf051342247e7d10c8518827..abc5caf7bc226d988fcd7f7e63147b8347115860 100644
+index 7cda216bdf980eb65a002b7e1f593afda11d067a..c8983a9a33d09e381c06e43b1ae8793abd7de088 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
 @@ -7,6 +7,7 @@ import net.minecraft.network.FriendlyByteBuf;
@@ -2137,7 +2120,7 @@ index fa3bc4daa36878cacf051342247e7d10c8518827..abc5caf7bc226d988fcd7f7e63147b83
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
  import puregero.multipaper.ExternalServerConnection;
-@@ -25,6 +26,11 @@ public class SendUpdatePacket extends ExternalServerPacket {
+@@ -21,6 +22,11 @@ public class SendUpdatePacket extends ExternalServerPacket {
      private final String world;
      private final Packet<?> packet;
  
@@ -2150,17 +2133,18 @@ index fa3bc4daa36878cacf051342247e7d10c8518827..abc5caf7bc226d988fcd7f7e63147b83
          this.world = world;
          this.packet = packet;
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
-index ab69e1f3a6c9b4801763d802ff3c784be0710d95..530ceb36036034b5e421875e3e77bde946e0614c 100644
+index 5cbf42b51d99d13545b17be258e52f0638d73ef9..e2a9e52fb6e800d4586d42376049823208655c86 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
-@@ -1,5 +1,6 @@
+@@ -1,6 +1,7 @@
  package puregero.multipaper.externalserverprotocol;
  
+ import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerPlayer;
  import org.bukkit.Bukkit;
  import org.bukkit.World;
  import org.bukkit.craftbukkit.CraftWorld;
-@@ -38,6 +39,10 @@ public class SubscribeToWorldPacket extends ExternalServerPacket {
+@@ -35,6 +36,10 @@ public class SubscribeToWorldPacket extends ExternalServerPacket {
      }
  
      private void onWorldSubscribe(ExternalServerConnection connection, CraftWorld craftWorld) {

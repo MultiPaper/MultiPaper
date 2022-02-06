@@ -37,29 +37,31 @@ index 2808316100022a09034dfe6e944d5b1912cd39aa..7d80e3cb52d19c83ca3bd441832bf39b
              for (ExternalServer fromServer : chunkFrom.externalEntitiesSubscribers) {
                  if (fromServer.getConnection() != null && !chunkTo.externalEntitiesSubscribers.contains(fromServer)) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index d49829ed3b6b6d1db86eee25aa05854162af5bd8..24bda46194469b214e5ae2c609383f45095c3d0a 100644
+index 9bfaf0fc0c76cff0df2ee515d86a9d5c6d57395c..e571b485cc1c166b59cf392a6d1cb49d8a7c674d 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -37,6 +37,7 @@ public class ExternalServerPacketSerializer {
+@@ -38,6 +38,7 @@ public class ExternalServerPacketSerializer {
          addPacket(HurtEntityPacket.class, HurtEntityPacket::new);
          addPacket(AddItemToEntityContainerPacket.class, AddItemToEntityContainerPacket::new);
          addPacket(AddItemToContainerPacket.class, AddItemToContainerPacket::new);
 +        addPacket(MobSetNavigationGoalPacket.class, MobSetNavigationGoalPacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b3f57bedea191eb9ab7b20e55bd0efaf1a1e9273
+index 0000000000000000000000000000000000000000..1369ebb95e38919acaaefa64bf7f9faaa7e9fe13
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,63 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.core.BlockPos;
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.Mob;
++import net.minecraft.world.entity.ai.goal.WrappedGoal;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
@@ -67,9 +69,6 @@ index 0000000000000000000000000000000000000000..b3f57bedea191eb9ab7b20e55bd0efaf
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.UUID;
 +
 +public class MobSetNavigationGoalPacket extends ExternalServerPacket {
@@ -88,17 +87,17 @@ index 0000000000000000000000000000000000000000..b3f57bedea191eb9ab7b20e55bd0efaf
 +        this.speed = mob.getNavigation().speedModifier;
 +    }
 +
-+    public MobSetNavigationGoalPacket(FriendlyDataInputStream in) throws IOException {
-+        this.world = in.readUTF();
-+        this.uuid = readUUID(in);
++    public MobSetNavigationGoalPacket(FriendlyByteBuf in) {
++        this.world = in.readUtf();
++        this.uuid = in.readUUID();
 +        this.goal = BlockPos.of(in.readLong());
 +        this.speed = in.readDouble();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
-+        writeUUID(out, uuid);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUUID(uuid);
 +        out.writeLong(goal.asLong());
 +        out.writeDouble(speed);
 +    }
@@ -109,8 +108,8 @@ index 0000000000000000000000000000000000000000..b3f57bedea191eb9ab7b20e55bd0efaf
 +            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
 +            Entity entity = level.getEntity(uuid);
 +            if (entity instanceof Mob mob) {
-+                mob.goalSelector.getRunningGoals().forEach(goal -> goal.stop());
-+                mob.targetSelector.getRunningGoals().forEach(goal -> goal.stop());
++                mob.goalSelector.getRunningGoals().forEach(WrappedGoal::stop);
++                mob.targetSelector.getRunningGoals().forEach(WrappedGoal::stop);
 +                mob.getNavigation().moveTo(mob.getNavigation().createPath(goal, 0), speed);
 +            } else {
 +                LOGGER.warn("Couldn't find mob " + uuid + " for navigation goal");

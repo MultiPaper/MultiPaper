@@ -42,10 +42,10 @@ index 6f703df89d4873a05e4ccf588775bf4149b3e7bd..5b09178d36ed74bc00a2c20fdf17c034
          screenHandler.addSlotListener(this.containerListener);
          screenHandler.setSynchronizer(this.containerSynchronizer);
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 54927a61e8943f9936450c4bb00f486d00271a4c..9ce1d76638cba49cb0833784389f425508b631a4 100644
+index 926d4248e0bdf6ed71defd829a0a3158adfff4b3..4ce32c8abf43e3c0bc93f4b354bfed90a4720f87 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -219,6 +219,8 @@ public class MultiPaper {
+@@ -205,6 +205,8 @@ public class MultiPaper {
                  player.detectEquipmentUpdates();
                  player.tickAttackStrength();
              }
@@ -55,33 +55,31 @@ index 54927a61e8943f9936450c4bb00f486d00271a4c..9ce1d76638cba49cb0833784389f4255
  
          MultiPaperExternalBlocksHandler.tick();
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index becab150b5efa9668717bf060471b1da24011635..361ab7bc6a5b8a517ca0077e1961e438e0bc36a9 100644
+index 42bc717b1248a0841ef79b62b1e2b34bbb296c67..0b33cab2e9c8487f0aeddf2da28c527118b845ea 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -46,6 +46,7 @@ public class ExternalServerPacketSerializer {
+@@ -47,6 +47,7 @@ public class ExternalServerPacketSerializer {
          addPacket(AdvancementGrantProgressPacket.class, AdvancementGrantProgressPacket::new);
          addPacket(WeatherUpdatePacket.class, WeatherUpdatePacket::new);
          addPacket(PlayerStatsIncreasePacket.class, PlayerStatsIncreasePacket::new);
 +        addPacket(PlayerExperienceUpdatePacket.class, PlayerExperienceUpdatePacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8baf2ac91e0beec67bfb117da6befbe4951e82c8
+index 0000000000000000000000000000000000000000..e558a400216b4386d9f3dbeaeb9d9d25bf7645ec
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,49 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.UUID;
 +
 +public class PlayerExperienceUpdatePacket extends ExternalServerPacket {
@@ -97,16 +95,16 @@ index 0000000000000000000000000000000000000000..8baf2ac91e0beec67bfb117da6befbe4
 +        this.level = level;
 +    }
 +
-+    public PlayerExperienceUpdatePacket(FriendlyDataInputStream in) throws IOException {
-+        uuid = readUUID(in);
++    public PlayerExperienceUpdatePacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
 +        progress = in.readFloat();
 +        total = in.readInt();
 +        level = in.readInt();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        writeUUID(out, uuid);
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
 +        out.writeFloat(progress);
 +        out.writeInt(total);
 +        out.writeInt(level);

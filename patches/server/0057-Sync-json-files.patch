@@ -52,19 +52,19 @@ index 8982562721c3a5a5a3305e90bd8b5bc21585a425..14aca3fcdcc8b35eb483afbe996a8113
  
                  this.map.clear();
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 9b0471d75dcfc4f9e21a7d967de504cb57a0f6f1..494c9e5b0f7657a1324da096f186abcc85d9c1a4 100644
+index c2dc7aff7c17aa3618cab7370420b16484aac6d1..77c34a068462a90636640dd4c8984b4ce932db71 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -27,6 +27,7 @@ import org.bukkit.craftbukkit.entity.CraftEntity;
- import puregero.multipaper.externalserverprotocol.*;
- 
+@@ -29,6 +29,7 @@ import puregero.multipaper.externalserverprotocol.*;
  import java.io.*;
+ import java.net.InetSocketAddress;
+ import java.net.SocketAddress;
 +import java.nio.file.Files;
  import java.util.ArrayList;
  import java.util.Collection;
  import java.util.HashSet;
-@@ -83,6 +84,14 @@ public class MultiPaper {
-         return externalServerPort;
+@@ -76,6 +77,14 @@ public class MultiPaper {
+         return multipaperMasterAddress;
      }
  
 +    private static Boolean syncJsonFiles = null;
@@ -78,9 +78,9 @@ index 9b0471d75dcfc4f9e21a7d967de504cb57a0f6f1..494c9e5b0f7657a1324da096f186abcc
      private static void loadConfig() {
          YamlConfiguration config = new YamlConfiguration();
          File file = new File("multipaper.yml");
-@@ -117,6 +126,13 @@ public class MultiPaper {
+@@ -103,6 +112,13 @@ public class MultiPaper {
  
-         externalServerPort = config.getInt("externalServerPort");
+         multipaperMasterAddress = config.getString("multipaperMasterAddress");
  
 +        if (!config.contains("syncJsonFiles")) {
 +            save = true;
@@ -92,7 +92,7 @@ index 9b0471d75dcfc4f9e21a7d967de504cb57a0f6f1..494c9e5b0f7657a1324da096f186abcc
          try {
              if (save) {
                  config.save(file);
-@@ -326,6 +342,24 @@ public class MultiPaper {
+@@ -311,6 +327,24 @@ public class MultiPaper {
          getConnection().writeLevel(world, buffer.toByteArray());
      }
  
@@ -118,18 +118,18 @@ index 9b0471d75dcfc4f9e21a7d967de504cb57a0f6f1..494c9e5b0f7657a1324da096f186abcc
          do {
              path = path.getParentFile();
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index cc2e221d1b2cea38482629aba75a01b9d1aacee1..f8d990eb7a2bdb84de4b1d4717d95b95ad1ed2c9 100644
+index 90c500851d6bc4522d07f684d2e7dccb776da0e4..fe7e9ed4d6bb6d20bf25909bb7c53764587a506e 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -3,6 +3,7 @@ package puregero.multipaper;
+@@ -8,6 +8,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
  import net.minecraft.core.Registry;
  import net.minecraft.resources.ResourceLocation;
  import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ChunkHolder;
  import net.minecraft.server.level.ServerLevel;
- import net.minecraft.world.level.chunk.ChunkAccess;
-@@ -17,6 +18,7 @@ import javax.annotation.Nullable;
+ import net.minecraft.server.network.ServerConnectionListener;
+@@ -23,6 +24,7 @@ import javax.annotation.Nullable;
  import java.io.*;
  import java.net.Socket;
  import java.net.SocketException;
@@ -137,8 +137,8 @@ index cc2e221d1b2cea38482629aba75a01b9d1aacee1..f8d990eb7a2bdb84de4b1d4717d95b95
  import java.util.HashSet;
  import java.util.Map;
  import java.util.concurrent.CompletableFuture;
-@@ -147,6 +149,37 @@ public class MultiPaperConnection extends Thread {
-         server.setLastAlive(System.currentTimeMillis());
+@@ -158,6 +160,37 @@ public class MultiPaperConnection extends Thread {
+         secret = in.readUTF();
      }
  
 +    public void loadJson(DataInputStream in, DataOutputSender out) throws IOException {
@@ -175,7 +175,7 @@ index cc2e221d1b2cea38482629aba75a01b9d1aacee1..f8d990eb7a2bdb84de4b1d4717d95b95
      public void chunkOwner(DataInputStream in, DataOutputSender out) throws IOException {
          String world = in.readUTF();
          int cx = in.readInt();
-@@ -418,6 +451,36 @@ public class MultiPaperConnection extends Thread {
+@@ -445,6 +478,36 @@ public class MultiPaperConnection extends Thread {
          out.send(in -> { /* Do nothing */ });
      }
  

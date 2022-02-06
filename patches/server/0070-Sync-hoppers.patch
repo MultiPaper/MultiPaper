@@ -101,15 +101,16 @@ index 0000000000000000000000000000000000000000..0aeeaeef5b05f493505dd1509f7c2582
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7f94f73441deb00d50effdf291c446374eb7dfe6
+index 0000000000000000000000000000000000000000..ae6f4392e2a2633486ddb7381adb4d52437ebc24
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,82 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.core.Direction;
 +import net.minecraft.nbt.CompoundTag;
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.Container;
 +import net.minecraft.world.entity.item.ItemEntity;
@@ -123,8 +124,6 @@ index 0000000000000000000000000000000000000000..7f94f73441deb00d50effdf291c44637
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
 +import java.io.IOException;
 +
 +public class AddItemToContainerPacket extends ExternalServerPacket {
@@ -143,26 +142,29 @@ index 0000000000000000000000000000000000000000..7f94f73441deb00d50effdf291c44637
 +        this.itemStack = itemStack;
 +    }
 +
-+    public AddItemToContainerPacket(FriendlyDataInputStream in) throws IOException {
-+        world = in.readUTF();
++    public AddItemToContainerPacket(FriendlyByteBuf in) {
++        world = in.readUtf();
 +        pos = BlockPos.of(in.readLong());
-+        slot = in.read();
++        slot = in.readByte();
 +
-+        int length = in.readInt();
-+        byte[] bytes = new byte[length];
-+        in.readFully(bytes);
-+        itemStack = ItemStack.of(MultiPaper.nbtFromBytes(bytes));
++        try {
++            itemStack = ItemStack.of(MultiPaper.nbtFromBytes(in.readByteArray()));
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
 +        out.writeLong(pos.asLong());
-+        out.write(slot);
++        out.writeByte(slot);
 +
-+        byte[] bytes = MultiPaper.nbtToBytes(itemStack.save(new CompoundTag()));
-+        out.writeInt(bytes.length);
-+        out.write(bytes);
++        try {
++            out.writeByteArray(MultiPaper.nbtToBytes(itemStack.save(new CompoundTag())));
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
 +    }
 +
 +    @Override
@@ -187,14 +189,15 @@ index 0000000000000000000000000000000000000000..7f94f73441deb00d50effdf291c44637
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToEntityContainerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToEntityContainerPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c4c0710fe582bd3af5b380d7763965b5720a54e0
+index 0000000000000000000000000000000000000000..6a9eccfbb3b5f2eaab003b65f626340409d42233
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToEntityContainerPacket.java
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,82 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.core.Direction;
 +import net.minecraft.nbt.CompoundTag;
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.Container;
 +import net.minecraft.world.entity.Entity;
@@ -208,8 +211,6 @@ index 0000000000000000000000000000000000000000..c4c0710fe582bd3af5b380d7763965b5
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
 +import java.io.IOException;
 +import java.util.UUID;
 +
@@ -229,26 +230,29 @@ index 0000000000000000000000000000000000000000..c4c0710fe582bd3af5b380d7763965b5
 +        this.itemStack = itemStack;
 +    }
 +
-+    public AddItemToEntityContainerPacket(FriendlyDataInputStream in) throws IOException {
-+        world = in.readUTF();
-+        uuid = readUUID(in);
-+        slot = in.read();
++    public AddItemToEntityContainerPacket(FriendlyByteBuf in) {
++        world = in.readUtf();
++        uuid = in.readUUID();
++        slot = in.readByte();
 +
-+        int length = in.readInt();
-+        byte[] bytes = new byte[length];
-+        in.readFully(bytes);
-+        itemStack = ItemStack.of(MultiPaper.nbtFromBytes(bytes));
++        try {
++            itemStack = ItemStack.of(MultiPaper.nbtFromBytes(in.readByteArray()));
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
-+        writeUUID(out, uuid);
-+        out.write(slot);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUUID(uuid);
++        out.writeByte(slot);
 +
-+        byte[] bytes = MultiPaper.nbtToBytes(itemStack.save(new CompoundTag()));
-+        out.writeInt(bytes.length);
-+        out.write(bytes);
++        try {
++            out.writeByteArray(MultiPaper.nbtToBytes(itemStack.save(new CompoundTag())));
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
 +    }
 +
 +    @Override
@@ -272,10 +276,10 @@ index 0000000000000000000000000000000000000000..c4c0710fe582bd3af5b380d7763965b5
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 13dd9aac95f4a5fc3c7b8d52e80a97c0c8ae8ef8..d49829ed3b6b6d1db86eee25aa05854162af5bd8 100644
+index eee175a5f43199ce98ad5fd3d2cacb6ce159251f..9bfaf0fc0c76cff0df2ee515d86a9d5c6d57395c 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -35,6 +35,8 @@ public class ExternalServerPacketSerializer {
+@@ -36,6 +36,8 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerActionOnEntityPacket.class, PlayerActionOnEntityPacket::new);
          addPacket(PlayerTouchEntityPacket.class, PlayerTouchEntityPacket::new);
          addPacket(HurtEntityPacket.class, HurtEntityPacket::new);
@@ -283,4 +287,4 @@ index 13dd9aac95f4a5fc3c7b8d52e80a97c0c8ae8ef8..d49829ed3b6b6d1db86eee25aa058541
 +        addPacket(AddItemToContainerPacket.class, AddItemToContainerPacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {

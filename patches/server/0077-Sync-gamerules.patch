@@ -61,33 +61,30 @@ index ab390c79b14c68051242aef5049a1e6ed8d548bf..e885ddd9217bc298b72595bd7b241ad6
          GameRules.Value<?> handle = this.getHandle().getGameRules().getRule(CraftWorld.getGameRulesNMS().get(rule.getName()));
          handle.deserialize(event.getValue()); // Paper
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 0aac87f7d534c3805478a213d510377777f9cd53..6b58c3b338e95ee63c16b325e34a39513a9a7de3 100644
+index 7f7a21bd2676bd34f13698f9d5e3b644ea1a0de5..62f971ebabef0279de1d1808eeeba2782b85772e 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -42,6 +42,7 @@ public class ExternalServerPacketSerializer {
+@@ -43,6 +43,7 @@ public class ExternalServerPacketSerializer {
          addPacket(PluginNotificationPacket.class, PluginNotificationPacket::new);
          addPacket(PlayerFoodUpdatePacket.class, PlayerFoodUpdatePacket::new);
          addPacket(EntityUpdateEffectPacket.class, EntityUpdateEffectPacket::new);
 +        addPacket(GameRuleUpdatePacket.class, GameRuleUpdatePacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/GameRuleUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/GameRuleUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9c3956d267230f91c3c66ad725194d75df4cbb26
+index 0000000000000000000000000000000000000000..dbe6646c697e7cae7e22ae78740aab39aa73aac2
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/GameRuleUpdatePacket.java
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,53 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import org.bukkit.Bukkit;
 +import org.bukkit.World;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
-+
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +
 +public class GameRuleUpdatePacket extends ExternalServerPacket {
 +
@@ -103,17 +100,17 @@ index 0000000000000000000000000000000000000000..9c3956d267230f91c3c66ad725194d75
 +        this.value = value;
 +    }
 +
-+    public GameRuleUpdatePacket(FriendlyDataInputStream in) throws IOException {
-+        world = in.readUTF();
-+        name = in.readUTF();
-+        value = in.readUTF();
++    public GameRuleUpdatePacket(FriendlyByteBuf in) {
++        world = in.readUtf();
++        name = in.readUtf();
++        value = in.readUtf();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
-+        out.writeUTF(name);
-+        out.writeUTF(value);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUtf(name);
++        out.writeUtf(value);
 +    }
 +
 +    @Override

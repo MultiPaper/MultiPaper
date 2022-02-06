@@ -33,22 +33,22 @@ index ac7e1914992b98e5e80e7b088ff4648783afd0cf..7a283e63e58f4e26c24f1f9e893ef54a
  
      public void trackChunk(ChunkPos chunkPos, Packet<?> chunkDataPacket) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index e8f8699a6fb129118310f77367213971568bd190..c39fc67694896237b6029cedc75359b5cf9b824d 100644
+index 7cec13504eeefbd637b94f4f57566cfc2ed84127..67a04c15533b7041e3a88c57c66e4e1f52237a00 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -49,6 +49,7 @@ public class ExternalServerPacketSerializer {
+@@ -50,6 +50,7 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerExperienceUpdatePacket.class, PlayerExperienceUpdatePacket::new);
          addPacket(PlayerListNameUpdatePacket.class, PlayerListNameUpdatePacket::new);
          addPacket(PlayerSetCameraPacket.class, PlayerSetCameraPacket::new);
 +        addPacket(PlayerSetRespawnPosition.class, PlayerSetRespawnPosition::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index 0abd05c5dcf59b418cd6deececb049a7c87a0507..e1bd314c234a5ed035eaedbd78693479f4c56cba 100644
+index ceea502abe5af37f9f5daa0d67a375d145481d81..753c01eb05355751ade3f933f49164ec213bc50c 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -141,6 +141,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -137,6 +137,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          connection.send(new EntityUpdatePacket(player, new ClientboundSetEntityDataPacket(player.getId(), player.getEntityData(), true)));
          connection.send(new PlayerFoodUpdatePacket(player));
          connection.send(new PlayerListNameUpdatePacket(player));
@@ -58,7 +58,7 @@ index 0abd05c5dcf59b418cd6deececb049a7c87a0507..e1bd314c234a5ed035eaedbd78693479
          MultiPaperEnderChestHandler.sendFullEnderChestUpdate(connection, player);
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSetRespawnPosition.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSetRespawnPosition.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..49d64b8c82e1ca0508a8d2734d02f61b77217ede
+index 0000000000000000000000000000000000000000..81eb8c819b7119de8b2ab1ea123d2a17bad3176e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSetRespawnPosition.java
 @@ -0,0 +1,80 @@
@@ -66,6 +66,7 @@ index 0000000000000000000000000000000000000000..49d64b8c82e1ca0508a8d2734d02f61b
 +
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.core.Registry;
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.resources.ResourceKey;
 +import net.minecraft.resources.ResourceLocation;
 +import net.minecraft.server.MinecraftServer;
@@ -76,7 +77,6 @@ index 0000000000000000000000000000000000000000..49d64b8c82e1ca0508a8d2734d02f61b
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.IOException;
 +import java.util.UUID;
 +
 +public class PlayerSetRespawnPosition extends ExternalServerPacket {
@@ -98,18 +98,18 @@ index 0000000000000000000000000000000000000000..49d64b8c82e1ca0508a8d2734d02f61b
 +        this.forced = player.respawnForced;
 +    }
 +
-+    public PlayerSetRespawnPosition(FriendlyDataInputStream in) throws IOException {
++    public PlayerSetRespawnPosition(FriendlyByteBuf in) {
 +        uuid = in.readUUID();
-+        dimension = ResourceKey.elementKey(Registry.DIMENSION_REGISTRY).apply(new ResourceLocation(in.readString()));
++        dimension = ResourceKey.elementKey(Registry.DIMENSION_REGISTRY).apply(new ResourceLocation(in.readUtf()));
 +        pos = in.readBoolean() ? BlockPos.of(in.readLong()) : null;
 +        angle = in.readFloat();
 +        forced = in.readBoolean();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
++    public void write(FriendlyByteBuf out) {
 +        out.writeUUID(uuid);
-+        out.writeString(dimension.location().toString());
++        out.writeUtf(dimension.location().toString());
 +
 +        out.writeBoolean(pos != null);
 +        if (pos != null) {

@@ -33,22 +33,22 @@ index 81d4b009d7b8fb0d155ff4207ca8e07171388792..3edc482d1579c5a98a70a9ae79f2a8c7
  
      private net.kyori.adventure.text.Component playerListHeader; // Paper - Adventure
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 361ab7bc6a5b8a517ca0077e1961e438e0bc36a9..62656ea5006b0c63bb5b97cd042f421a168276f6 100644
+index 0b33cab2e9c8487f0aeddf2da28c527118b845ea..b65d79db1e6865044e14013c30db5c9562bc9d56 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -47,6 +47,7 @@ public class ExternalServerPacketSerializer {
+@@ -48,6 +48,7 @@ public class ExternalServerPacketSerializer {
          addPacket(WeatherUpdatePacket.class, WeatherUpdatePacket::new);
          addPacket(PlayerStatsIncreasePacket.class, PlayerStatsIncreasePacket::new);
          addPacket(PlayerExperienceUpdatePacket.class, PlayerExperienceUpdatePacket::new);
 +        addPacket(PlayerListNameUpdatePacket.class, PlayerListNameUpdatePacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index e4cb4caaec81940133dc221c3d1a4add13517e03..0abd05c5dcf59b418cd6deececb049a7c87a0507 100644
+index 76a69d00ec0dade01dfdae12b5732be663ea8be6..ceea502abe5af37f9f5daa0d67a375d145481d81 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -140,6 +140,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -136,6 +136,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          connection.send(new PlayerActionPacket(player, new ServerboundSetCarriedItemPacket(player.getInventory().selected)));
          connection.send(new EntityUpdatePacket(player, new ClientboundSetEntityDataPacket(player.getId(), player.getEntityData(), true)));
          connection.send(new PlayerFoodUpdatePacket(player));
@@ -58,12 +58,13 @@ index e4cb4caaec81940133dc221c3d1a4add13517e03..0abd05c5dcf59b418cd6deececb049a7
          MultiPaperEnderChestHandler.sendFullEnderChestUpdate(connection, player);
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0833ffb4b95b0ac78d048972aab65916aab56d75
+index 0000000000000000000000000000000000000000..0cb293e3977ce8c5b4b13e27c79e85c5efa4c279
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerListNameUpdatePacket.java
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,50 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.network.chat.Component;
 +import net.minecraft.network.protocol.game.ClientboundPlayerInfoPacket;
 +import net.minecraft.server.MinecraftServer;
@@ -71,9 +72,6 @@ index 0000000000000000000000000000000000000000..0833ffb4b95b0ac78d048972aab65916
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.UUID;
 +
 +public class PlayerListNameUpdatePacket extends ExternalServerPacket {
@@ -86,15 +84,15 @@ index 0000000000000000000000000000000000000000..0833ffb4b95b0ac78d048972aab65916
 +        this.listName = player.listName;
 +    }
 +
-+    public PlayerListNameUpdatePacket(FriendlyDataInputStream in) throws IOException {
-+        uuid = readUUID(in);
-+        listName = Component.Serializer.fromJson(in.readUTF());
++    public PlayerListNameUpdatePacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++        listName = Component.Serializer.fromJson(in.readUtf());
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        writeUUID(out, uuid);
-+        out.writeUTF(Component.Serializer.toJson(listName));
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeUtf(Component.Serializer.toJson(listName));
 +    }
 +
 +    @Override

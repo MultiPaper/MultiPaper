@@ -324,33 +324,38 @@ index 0000000000000000000000000000000000000000..578f369c90ef287e06a76eb8f3757a6e
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 0003197ea8802131ce3d8d8dfa5d19aa02565946..addc98997c8a599967c82725789e50af4f5a6be6 100644
+index 36cea938751fb0469c785bac44a60e303cfc76c3..d354bedb304fc66075c4c9f897165fffb84511af 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -1,6 +1,8 @@
- package puregero.multipaper;
- 
- import net.minecraft.server.MinecraftServer;
+@@ -6,6 +6,8 @@ import io.netty.channel.socket.SocketChannel;
+ import net.minecraft.network.*;
+ import net.minecraft.network.protocol.PacketFlow;
+ import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
 +import net.minecraft.server.dedicated.DedicatedServer;
 +import net.minecraft.server.level.ServerPlayer;
  import puregero.multipaper.externalserverprotocol.*;
  
- import java.io.*;
-@@ -72,6 +74,12 @@ public class ExternalServerConnection extends Thread implements Closeable {
-         }
- 
-         sendThread.shutdown();
+ import java.io.Closeable;
+@@ -68,6 +70,17 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+                 .addLast("prepender", new Varint21LengthFieldPrepender())
+                 .addLast("encoder", new ExternalServerPacketEncoder())
+                 .addLast("packet_handler", new ExternalServerPacketHandler(this));
 +
-+        for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
-+            if (player instanceof ExternalPlayer && ((ExternalPlayer) player).externalServerConnection == this) {
-+                MultiPaper.runSync(() -> player.connection.disconnect("External server disconnected"));
++        // And when this closes
++        channel.closeFuture().addListener(future -> {
++            if (future.isDone()) {
++                for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
++                    if (player instanceof ExternalPlayer && ((ExternalPlayer) player).externalServerConnection == this) {
++                        MultiPaper.runSync(() -> player.connection.disconnect("External server disconnected"));
++                    }
++                }
 +            }
-+        }
++        });
      }
  
-     public void send(ExternalServerPacket packet) {
+     @Override
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..5889308c15bd5e6dcf7b9dfcb15865f1bdc36c61 100644
+index 3c39787dfebae225df7295d21a7e426ce095a6d8..70e3f51ae6cf77324553e3b56dfe9ad9064c8663 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -4,7 +4,12 @@ import net.minecraft.server.level.ServerPlayer;
@@ -366,15 +371,15 @@ index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..5889308c15bd5e6dcf7b9dfcb15865f1
  
  import java.io.File;
  import java.io.FileNotFoundException;
-@@ -14,6 +19,7 @@ import java.util.function.Consumer;
+@@ -16,6 +21,7 @@ import java.util.function.Consumer;
  import java.util.function.Supplier;
  
  public class MultiPaper {
 +
      private static MultiPaperConnection multiPaperConnection = null;
-     private static ExternalServerSocket externalServerSocket = null;
  
-@@ -92,6 +98,9 @@ public class MultiPaper {
+     public static MultiPaperConnection getConnection() {
+@@ -78,6 +84,9 @@ public class MultiPaper {
          }
      }
  
@@ -384,7 +389,7 @@ index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..5889308c15bd5e6dcf7b9dfcb15865f1
      public static void sendTickTime(long time, double tps) {
          try {
              getConnection().writeTickTime(time, tps);
-@@ -147,4 +156,35 @@ public class MultiPaper {
+@@ -132,4 +141,35 @@ public class MultiPaper {
      public static void broadcastPacketToExternalServers(ServerPlayer player, ExternalServerPacket packet) {
          broadcastPacketToExternalServers(player.getLevel().getWorld().getName(), packet);
      }
@@ -420,40 +425,11 @@ index de38fd3dd41815791a07ad013c37cfe7f9f2a21d..5889308c15bd5e6dcf7b9dfcb15865f1
 +        return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
 +    }
  }
-diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
-index b4bb3e44ca3ea626c9170e636ee2d67c441b4800..526640e28a04a7fbc380cb9d48fb167f1edaa402 100644
---- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
-+++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
-@@ -2,8 +2,10 @@ package puregero.multipaper.externalserverprotocol;
- 
- import puregero.multipaper.ExternalServerConnection;
- 
-+import java.io.DataInputStream;
- import java.io.DataOutputStream;
- import java.io.IOException;
-+import java.util.UUID;
- 
- public abstract class ExternalServerPacket {
- 
-@@ -11,4 +13,13 @@ public abstract class ExternalServerPacket {
- 
-     public abstract void write(FriendlyDataOutputStream out) throws IOException;
- 
-+    protected UUID readUUID(DataInputStream in) throws IOException {
-+        return new UUID(in.readLong(), in.readLong());
-+    }
-+
-+    protected void writeUUID(DataOutputStream out, UUID uuid) throws IOException {
-+        out.writeLong(uuid.getMostSignificantBits());
-+        out.writeLong(uuid.getLeastSignificantBits());
-+    }
-+
- }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index aa9e79748ef682de68ecea928c80e021a955a791..4d3f43ce98e5ad09ed0bf23dce09d6099df054cb 100644
+index 4f85ce75025c090c08b1def93d881b1fbbed2202..1bd2efec2f12078d46d3cd6f973e9ba918584929 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -12,6 +12,11 @@ public class ExternalServerPacketSerializer {
+@@ -13,6 +13,11 @@ public class ExternalServerPacketSerializer {
      static {
          addPacket(HelloPacket.class, HelloPacket::new);
          addPacket(SubscribeToWorldPacket.class, SubscribeToWorldPacket::new);
@@ -464,15 +440,16 @@ index aa9e79748ef682de68ecea928c80e021a955a791..4d3f43ce98e5ad09ed0bf23dce09d609
 +        addPacket(PlayerChangeDimensionPacket.class, PlayerChangeDimensionPacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..35497d398a2bbf35cc4d910f36ab5d050d7b1ffe
+index 0000000000000000000000000000000000000000..28784d2cb62328bb087bd22485696ae0c359bbe8
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,73 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
@@ -482,9 +459,6 @@ index 0000000000000000000000000000000000000000..35497d398a2bbf35cc4d910f36ab5d05
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.UUID;
 +
 +public class PlayerChangeDimensionPacket extends ExternalServerPacket {
@@ -505,9 +479,9 @@ index 0000000000000000000000000000000000000000..35497d398a2bbf35cc4d910f36ab5d05
 +        this.reset = reset;
 +    }
 +
-+    public PlayerChangeDimensionPacket(FriendlyDataInputStream in) throws IOException {
-+        uuid = readUUID(in);
-+        world = in.readUTF();
++    public PlayerChangeDimensionPacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++        world = in.readUtf();
 +        x = in.readDouble();
 +        y = in.readDouble();
 +        z = in.readDouble();
@@ -515,9 +489,9 @@ index 0000000000000000000000000000000000000000..35497d398a2bbf35cc4d910f36ab5d05
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        writeUUID(out, uuid);
-+        out.writeUTF(world);
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeUtf(world);
 +        out.writeDouble(x);
 +        out.writeDouble(y);
 +        out.writeDouble(z);
@@ -548,21 +522,19 @@ index 0000000000000000000000000000000000000000..35497d398a2bbf35cc4d910f36ab5d05
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2f8858724fae9c15290a3a3b6b3d5b52821b3931
+index 0000000000000000000000000000000000000000..a9814bbe4fc9eff864f30b389e88cb1375704de0
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,37 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.level.GameType;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.UUID;
 +
 +public class PlayerChangeGamemodePacket extends ExternalServerPacket {
@@ -575,15 +547,15 @@ index 0000000000000000000000000000000000000000..2f8858724fae9c15290a3a3b6b3d5b52
 +        this.gamemode = player.gameMode.getGameModeForPlayer();
 +    }
 +
-+    public PlayerChangeGamemodePacket(FriendlyDataInputStream in) throws IOException {
-+        uuid = readUUID(in);
-+        gamemode = GameType.byId(in.read());
++    public PlayerChangeGamemodePacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++        gamemode = GameType.byId(in.readByte());
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        writeUUID(out, uuid);
-+        out.write(gamemode.getId());
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeByte(gamemode.getId());
 +    }
 +
 +    @Override
@@ -593,12 +565,13 @@ index 0000000000000000000000000000000000000000..2f8858724fae9c15290a3a3b6b3d5b52
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d6f187e142ba4c5bcf66aba896693d03ad616cb1
+index 0000000000000000000000000000000000000000..36900d795213278befe51dc5c7a42706ee5aaec8
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,101 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.level.GameType;
@@ -608,9 +581,6 @@ index 0000000000000000000000000000000000000000..d6f187e142ba4c5bcf66aba896693d03
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.net.InetAddress;
 +import java.net.InetSocketAddress;
 +import java.net.UnknownHostException;
@@ -646,34 +616,32 @@ index 0000000000000000000000000000000000000000..d6f187e142ba4c5bcf66aba896693d03
 +        this.port = (short) ((InetSocketAddress) player.connection.connection.address).getPort();
 +    }
 +
-+    public PlayerCreatePacket(FriendlyDataInputStream in) throws IOException {
-+        name = in.readUTF();
-+        uuid = readUUID(in);
-+        world = in.readUTF();
++    public PlayerCreatePacket(FriendlyByteBuf in) {
++        name = in.readUtf();
++        uuid = in.readUUID();
++        world = in.readUtf();
 +        x = in.readDouble();
 +        y = in.readDouble();
 +        z = in.readDouble();
 +        yaw = in.readFloat();
 +        pitch = in.readFloat();
-+        gamemode = GameType.byId(in.read());
-+        ip = new byte[in.readVarInt()];
-+        in.readFully(ip);
++        gamemode = GameType.byId(in.readByte());
++        ip = in.readByteArray();
 +        port = in.readShort();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(name);
-+        writeUUID(out, uuid);
-+        out.writeUTF(world);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(name);
++        out.writeUUID(uuid);
++        out.writeUtf(world);
 +        out.writeDouble(x);
 +        out.writeDouble(y);
 +        out.writeDouble(z);
 +        out.writeFloat(yaw);
 +        out.writeFloat(pitch);
-+        out.write(gamemode.getId());
-+        out.writeVarInt(ip.length);
-+        out.write(ip);
++        out.writeByte(gamemode.getId());
++        out.writeByteArray(ip);
 +        out.writeShort(port);
 +    }
 +
@@ -704,12 +672,13 @@ index 0000000000000000000000000000000000000000..d6f187e142ba4c5bcf66aba896693d03
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..511c62f60426376fdb77dd3436d571c6fb398087
+index 0000000000000000000000000000000000000000..d01a2ca89a83f6878faf9215cfd1d5123e9fed0e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,45 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import org.apache.logging.log4j.LogManager;
@@ -717,9 +686,6 @@ index 0000000000000000000000000000000000000000..511c62f60426376fdb77dd3436d571c6
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.UUID;
 +
 +public class PlayerRemovePacket extends ExternalServerPacket {
@@ -732,13 +698,13 @@ index 0000000000000000000000000000000000000000..511c62f60426376fdb77dd3436d571c6
 +        this.uuid = player.getUUID();
 +    }
 +
-+    public PlayerRemovePacket(FriendlyDataInputStream in) throws IOException {
-+        uuid = readUUID(in);
++    public PlayerRemovePacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        writeUUID(out, uuid);
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
 +    }
 +
 +    @Override
@@ -757,12 +723,13 @@ index 0000000000000000000000000000000000000000..511c62f60426376fdb77dd3436d571c6
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRespawnPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRespawnPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..dbac30515b1889a830a1e0589a0e5ef94489856b
+index 0000000000000000000000000000000000000000..4d92fd923e58058422f0cdaa7df47c6c3ead888b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRespawnPacket.java
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,86 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
@@ -773,9 +740,6 @@ index 0000000000000000000000000000000000000000..dbac30515b1889a830a1e0589a0e5ef9
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
-+import java.io.IOException;
 +import java.util.UUID;
 +
 +public class PlayerRespawnPacket extends ExternalServerPacket {
@@ -804,9 +768,9 @@ index 0000000000000000000000000000000000000000..dbac30515b1889a830a1e0589a0e5ef9
 +        this.respawnFlags = respawnFlags;
 +    }
 +
-+    public PlayerRespawnPacket(FriendlyDataInputStream in) throws IOException {
-+        uuid = readUUID(in);
-+        world = in.readUTF();
++    public PlayerRespawnPacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++        world = in.readUtf();
 +        alive = in.readBoolean();
 +        x = in.readDouble();
 +        y = in.readDouble();
@@ -817,14 +781,14 @@ index 0000000000000000000000000000000000000000..dbac30515b1889a830a1e0589a0e5ef9
 +
 +        respawnFlags = new PlayerRespawnEvent.RespawnFlag[in.readInt()];
 +        for (int i = 0; i < respawnFlags.length; i++) {
-+            respawnFlags[i] = PlayerRespawnEvent.RespawnFlag.valueOf(in.readUTF());
++            respawnFlags[i] = PlayerRespawnEvent.RespawnFlag.valueOf(in.readUtf());
 +        }
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        writeUUID(out, uuid);
-+        out.writeUTF(world);
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeUtf(world);
 +        out.writeBoolean(alive);
 +        out.writeDouble(x);
 +        out.writeDouble(y);
@@ -835,7 +799,7 @@ index 0000000000000000000000000000000000000000..dbac30515b1889a830a1e0589a0e5ef9
 +
 +        out.writeInt(respawnFlags.length);
 +        for (PlayerRespawnEvent.RespawnFlag flag : respawnFlags) {
-+            out.writeUTF(flag.name());
++            out.writeUtf(flag.name());
 +        }
 +    }
 +

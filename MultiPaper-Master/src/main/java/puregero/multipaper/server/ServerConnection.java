@@ -4,6 +4,7 @@ import puregero.multipaper.server.handlers.Handler;
 import puregero.multipaper.server.handlers.Handlers;
 
 import java.io.*;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ public class ServerConnection extends Thread {
     private final List<Player> players = new ArrayList<>();
     private double tps;
     private int port = -1;
+    private String host;
 
     /**
      * This connection map may include dead servers! Check if a server is alive
@@ -142,6 +144,7 @@ public class ServerConnection extends Thread {
             DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
 
             name = in.readUTF();
+            host = ((InetSocketAddress) getAddress()).getAddress().getHostAddress();
 
             synchronized (connections) {
                 connections.add(this);
@@ -150,6 +153,8 @@ public class ServerConnection extends Thread {
 
             System.out.println("Connection from " + socket.getRemoteSocketAddress() + " (" + name + ")");
 
+            sendSecret();
+            
             while (!socket.isClosed()) {
                 int id = in.readInt();
                 String command = in.readUTF();
@@ -191,6 +196,17 @@ public class ServerConnection extends Thread {
         System.out.println(socket.getRemoteSocketAddress() + " (" + name + ") closed");
     }
 
+    private void sendSecret() {
+        try {
+            DataOutputSender out = buffer();
+            out.writeUTF("secret");
+            out.writeUTF(MultiPaperServer.SECRET);
+            out.send();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     public String getBungeeCordName() {
         return name;
     }
@@ -225,5 +241,13 @@ public class ServerConnection extends Thread {
 
     public void setPort(int port) {
         this.port = port;
+    }
+
+    public String getHost() {
+        return host;
+    }
+
+    public void setHost(String host) {
+        this.host = host;
     }
 }

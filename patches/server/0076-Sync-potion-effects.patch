@@ -127,13 +127,14 @@ index 0000000000000000000000000000000000000000..d0aacf35c7d10113dca9f37dd2c9c71a
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateEffectPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateEffectPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c0578aab7a61e86521200dd41d437e8c1cb02363
+index 0000000000000000000000000000000000000000..38c8469e96a680b74a36c096bdbbfd1ffce75ac8
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateEffectPacket.java
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,69 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
++import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.effect.MobEffectInstance;
 +import net.minecraft.world.entity.Entity;
@@ -143,8 +144,6 @@ index 0000000000000000000000000000000000000000..c0578aab7a61e86521200dd41d437e8c
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEffectsHandler;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
 +import java.io.IOException;
 +import java.util.UUID;
 +
@@ -169,24 +168,19 @@ index 0000000000000000000000000000000000000000..c0578aab7a61e86521200dd41d437e8c
 +        }
 +    }
 +
-+    public EntityUpdateEffectPacket(FriendlyDataInputStream in) throws IOException {
-+        this.world = in.readUTF();
-+        this.uuid = readUUID(in);
++    public EntityUpdateEffectPacket(FriendlyByteBuf in) {
++        this.world = in.readUtf();
++        this.uuid = in.readUUID();
 +        this.remove = in.readBoolean();
-+
-+        int byteLength = in.readInt();
-+        this.data = new byte[byteLength];
-+        in.readFully(data);
++        this.data = in.readByteArray();
 +    }
 +
 +    @Override
-+    public void write(FriendlyDataOutputStream out) throws IOException {
-+        out.writeUTF(world);
-+        writeUUID(out, uuid);
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUUID(uuid);
 +        out.writeBoolean(remove);
-+
-+        out.writeInt(data.length);
-+        out.write(data);
++        out.writeByteArray(data);
 +    }
 +
 +    @Override
@@ -207,14 +201,14 @@ index 0000000000000000000000000000000000000000..c0578aab7a61e86521200dd41d437e8c
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 353c7fea484aadf2b771bcd8ba6a0f2493203a58..0aac87f7d534c3805478a213d510377777f9cd53 100644
+index cdf370446c2ca7568a42382b3ac66ac6fa041f69..7f7a21bd2676bd34f13698f9d5e3b644ea1a0de5 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -41,6 +41,7 @@ public class ExternalServerPacketSerializer {
+@@ -42,6 +42,7 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerDataUpdatePacket.class, PlayerDataUpdatePacket::new);
          addPacket(PluginNotificationPacket.class, PluginNotificationPacket::new);
          addPacket(PlayerFoodUpdatePacket.class, PlayerFoodUpdatePacket::new);
 +        addPacket(EntityUpdateEffectPacket.class, EntityUpdateEffectPacket::new);
      }
  
-     private static void addPacket(Class<? extends ExternalServerPacket> clazz, IOExceptionFunction<FriendlyDataInputStream, ExternalServerPacket> deserializer) {
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {

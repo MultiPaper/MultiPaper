@@ -4,9 +4,11 @@ import puregero.multipaper.server.proxy.ProxyServer;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.UUID;
 
 public class MultiPaperServer extends Thread {
     public static final int DEFAULT_PORT = 35353;
+    public static final String SECRET = UUID.randomUUID().toString();
 
     public static void main(String[] args) throws IOException {
         int port = DEFAULT_PORT;
@@ -34,7 +36,7 @@ public class MultiPaperServer extends Thread {
         new CommandLineInput().run();
     }
 
-    private ServerSocket serverSocket;
+    private final ServerSocket serverSocket;
 
     public MultiPaperServer(int port) throws IOException {
         serverSocket = new ServerSocket(port);

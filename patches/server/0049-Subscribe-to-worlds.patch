@@ -26,7 +26,7 @@ index ac899bc74d5effb09403d2c5a7a9da103017cd08..b9af114edca03233afed19fe4728cef1
  
      @Override
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index dff30517ca9e754c1ab620b4bab4345be2df713e..36cea938751fb0469c785bac44a60e303cfc76c3 100644
+index b7f258a6cf78d47518d429151f930f2aa8fc5b9c..f5d645d179f32b62bb8cbfe34100686db8c47d42 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -12,6 +12,7 @@ import java.io.Closeable;
@@ -38,7 +38,7 @@ index dff30517ca9e754c1ab620b4bab4345be2df713e..36cea938751fb0469c785bac44a60e30
  public class ExternalServerConnection extends ChannelInitializer<SocketChannel> implements Closeable {
  
 @@ -19,6 +20,7 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
-     public boolean sentHello = false;
+     public long nanoTime = 0;
      public ExternalServer externalServer = null;
      private static final ExecutorService sendThread = Executors.newSingleThreadExecutor();
 +    public HashSet<String> subscribedWorlds = new HashSet<>();
@@ -86,7 +86,7 @@ index a18780b676d0e4ee1a5bf89d0bde396e9eea3804..4f85ce75025c090c08b1def93d881b1f
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
-index fd6a7b0b94fbf16415304a299848bc0864e39f4b..29a464d19e4cbd1939ae3deef6cd5ba1f180ec26 100644
+index 8301efa17176aec75e9d198d19585aab6ab4777d..b77e991a73a03f55268cfab1cc9182b6004b1209 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 @@ -3,6 +3,8 @@ package puregero.multipaper.externalserverprotocol;
@@ -98,9 +98,9 @@ index fd6a7b0b94fbf16415304a299848bc0864e39f4b..29a464d19e4cbd1939ae3deef6cd5ba1
  import puregero.multipaper.ExternalServerConnection;
  import puregero.multipaper.MultiPaper;
  
-@@ -35,5 +37,9 @@ public class HelloPacket extends ExternalServerPacket {
-             connection.sentHello = true;
-             connection.send(new HelloPacket(MultiPaper.getBungeeCordName()));
+@@ -61,5 +63,9 @@ public class HelloPacket extends ExternalServerPacket {
+             connection.nanoTime = nanoTime;
+             connection.send(new HelloPacket(MultiPaper.getBungeeCordName(), nanoTime));
          }
 +
 +        for (World world : Bukkit.getWorlds()) {

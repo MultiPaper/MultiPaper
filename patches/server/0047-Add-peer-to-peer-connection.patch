@@ -130,7 +130,7 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..dff30517ca9e754c1ab620b4bab4345be2df713e
+index 0000000000000000000000000000000000000000..b7f258a6cf78d47518d429151f930f2aa8fc5b9c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -0,0 +1,87 @@
@@ -152,7 +152,7 @@ index 0000000000000000000000000000000000000000..dff30517ca9e754c1ab620b4bab4345b
 +public class ExternalServerConnection extends ChannelInitializer<SocketChannel> implements Closeable {
 +
 +    private Channel channel;
-+    public boolean sentHello = false;
++    public long nanoTime = 0;
 +    public ExternalServer externalServer = null;
 +    private static final ExecutorService sendThread = Executors.newSingleThreadExecutor();
 +
@@ -163,8 +163,8 @@ index 0000000000000000000000000000000000000000..dff30517ca9e754c1ab620b4bab4345b
 +    public ExternalServerConnection(Channel channel) {
 +        this.channel = channel;
 +        setupPipeline();
-+        sentHello = true;
-+        send(new HelloPacket(MultiPaper.getBungeeCordName()));
++        nanoTime = System.nanoTime();
++        send(new HelloPacket(MultiPaper.getBungeeCordName(), nanoTime));
 +    }
 +
 +    @Override
@@ -540,10 +540,10 @@ index 0000000000000000000000000000000000000000..a18780b676d0e4ee1a5bf89d0bde396e
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..fd6a7b0b94fbf16415304a299848bc0864e39f4b
+index 0000000000000000000000000000000000000000..8301efa17176aec75e9d198d19585aab6ab4777d
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,65 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
@@ -557,29 +557,55 @@ index 0000000000000000000000000000000000000000..fd6a7b0b94fbf16415304a299848bc08
 +    private static final Logger LOGGER = LogManager.getLogger(HelloPacket.class.getSimpleName());
 +
 +    private final String bungeecordName;
++    private final long nanoTime;
 +
 +    public HelloPacket(String bungeecordName) {
++        this(bungeecordName, System.nanoTime());
++    }
++
++    public HelloPacket(String bungeecordName, long nanoTime) {
 +        this.bungeecordName = bungeecordName;
++        this.nanoTime = nanoTime;
 +    }
 +
 +    public HelloPacket(FriendlyByteBuf in) {
 +        bungeecordName = in.readUtf();
++        nanoTime = in.readLong();
 +    }
 +
 +    @Override
 +    public void write(FriendlyByteBuf out) {
 +        out.writeUtf(bungeecordName);
++        out.writeLong(nanoTime);
 +    }
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        LOGGER.info("Connected to external server " + bungeecordName);
 +        connection.externalServer = MultiPaper.getConnection().getOrCreateServer(bungeecordName);
-+        connection.externalServer.setConnection(connection);
 +
-+        if (!connection.sentHello) {
-+            connection.sentHello = true;
-+            connection.send(new HelloPacket(MultiPaper.getBungeeCordName()));
++        ExternalServerConnection previousConnection = connection.externalServer.getConnection();
++        if (previousConnection == null || previousConnection.nanoTime < nanoTime) {
++            LOGGER.info("Connected to external server " + bungeecordName);
++            connection.externalServer.setConnection(connection);
++            onConnect(connection);
++        } else if (previousConnection.nanoTime == nanoTime) {
++            // How lucky do you have to be for nano time to be the same?
++            LOGGER.info("A new connection to external server " + bungeecordName + " had the same nano time as a previous connection, resending with a new nano time...");
++            HelloPacket helloPacket = new HelloPacket(bungeecordName);
++            if (helloPacket.nanoTime == nanoTime) {
++                // Oh, nano time is broken, that's why
++                throw new RuntimeException("System.nanoTime() does not work. (Returned " + helloPacket.nanoTime + ")");
++            }
++            connection.send(helloPacket);
++        } else {
++            LOGGER.info("A new connection to external server " + bungeecordName + " failed as a preview connection had a newer nano time.");
++        }
++    }
++
++    private void onConnect(ExternalServerConnection connection) {
++        if (connection.nanoTime != nanoTime) {
++            connection.nanoTime = nanoTime;
++            connection.send(new HelloPacket(MultiPaper.getBungeeCordName(), nanoTime));
 +        }
 +    }
 +}

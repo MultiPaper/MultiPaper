@@ -46,7 +46,7 @@ index b7f258a6cf78d47518d429151f930f2aa8fc5b9c..f5d645d179f32b62bb8cbfe34100686d
      public ExternalServerConnection() {
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index a6964570485ca62bb8245320f23c3e47f29a67b1..3c39787dfebae225df7295d21a7e426ce095a6d8 100644
+index e82475730f2be2a2c8a326924610c75f260515fb..cd4c4917b0266cb4dcba6bbaf96c96b09342bda6 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,5 +1,6 @@
@@ -56,7 +56,7 @@ index a6964570485ca62bb8245320f23c3e47f29a67b1..3c39787dfebae225df7295d21a7e426c
  import org.bukkit.configuration.InvalidConfigurationException;
  import org.bukkit.configuration.file.YamlConfiguration;
  import net.minecraft.server.MinecraftServer;
-@@ -119,4 +120,16 @@ public class MultiPaper {
+@@ -127,4 +128,16 @@ public class MultiPaper {
              });
          }
      }
@@ -86,7 +86,7 @@ index a18780b676d0e4ee1a5bf89d0bde396e9eea3804..4f85ce75025c090c08b1def93d881b1f
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
-index 8301efa17176aec75e9d198d19585aab6ab4777d..b77e991a73a03f55268cfab1cc9182b6004b1209 100644
+index 8fd3e37dea839ccc39aac19b50790705016beda6..772381766bebf388664e7488fd38ebb0bdbf913f 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 @@ -3,6 +3,8 @@ package puregero.multipaper.externalserverprotocol;
@@ -98,14 +98,16 @@ index 8301efa17176aec75e9d198d19585aab6ab4777d..b77e991a73a03f55268cfab1cc9182b6
  import puregero.multipaper.ExternalServerConnection;
  import puregero.multipaper.MultiPaper;
  
-@@ -61,5 +63,9 @@ public class HelloPacket extends ExternalServerPacket {
+@@ -61,5 +63,11 @@ public class HelloPacket extends ExternalServerPacket {
              connection.nanoTime = nanoTime;
              connection.send(new HelloPacket(MultiPaper.getBungeeCordName(), nanoTime));
          }
 +
-+        for (World world : Bukkit.getWorlds()) {
-+            connection.send(new SubscribeToWorldPacket(world.getName()));
-+        }
++        MultiPaper.runSync(() -> {
++            for (World world : Bukkit.getWorlds()) {
++                connection.send(new SubscribeToWorldPacket(world.getName()));
++            }
++        });
      }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java

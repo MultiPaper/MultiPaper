@@ -25,8 +25,21 @@ index 6299c769c56bd6c2b2f3a26c1f5766e17b6fb660..17ebc0ac3d4c91d6818c79e8821681b6
  
                  metrics.addCustomChart(new Metrics.DrilldownPie("java_version", () -> {
                      Map<String, Map<String, Integer>> map = new HashMap<>();
+diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
+index 81dde0efc1a06420c0791520b9e40b24dd1f0318..a866f2bb5265dd60413c1c8ead94ec2360371ff5 100644
+--- a/src/main/java/net/minecraft/network/Connection.java
++++ b/src/main/java/net/minecraft/network/Connection.java
+@@ -513,7 +513,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+         // Paper end
+         if (this.packetListener instanceof ServerLoginPacketListenerImpl) {
+             if ( ((ServerLoginPacketListenerImpl) this.packetListener).state != ServerLoginPacketListenerImpl.State.READY_TO_ACCEPT // Paper
+-                     || (joinAttemptsThisTick++ < MAX_PER_TICK)) { // Paper - limit the number of joins which can be processed each tick
++                     || (joinAttemptsThisTick++ < com.destroystokyo.paper.PaperConfig.maxJoinsPerTick)) { // Paper - limit the number of joins which can be processed each tick // MultiPaper - reference paper config directly, not intermediate values
+             ((ServerLoginPacketListenerImpl) this.packetListener).tick();
+             } // Paper
+         }
 diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
-index 5ba9aca70eecb530ae363ccded5744fa50b5016e..e80411cf991d9fd8b7d280cb381c54eff123be73 100644
+index 5ba9aca70eecb530ae363ccded5744fa50b5016e..a187e36aca089ec6b024b19760c935f7c9fa6cd4 100644
 --- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
 +++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
 @@ -67,6 +67,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
@@ -37,17 +50,39 @@ index 5ba9aca70eecb530ae363ccded5744fa50b5016e..e80411cf991d9fd8b7d280cb381c54ef
  // CraftBukkit end
  
  public class DedicatedServer extends MinecraftServer implements ServerInterface {
-@@ -290,6 +291,8 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
-         server.enablePlugins(org.bukkit.plugin.PluginLoadOrder.STARTUP);
-         // CraftBukkit end
+@@ -284,6 +285,8 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+             return false;
+         }
  
 +        MultiPaper.onStart(bindAddress); // MultiPaper
 +
-         if (!this.usesAuthentication()) {
-             DedicatedServer.LOGGER.warn("**** SERVER IS RUNNING IN OFFLINE/INSECURE MODE!");
-             DedicatedServer.LOGGER.warn("The server will make no attempt to authenticate usernames. Beware.");
+         // CraftBukkit start
+         // this.setPlayerList(new DedicatedPlayerList(this, this.registryHolder, this.playerDataStorage)); // Spigot - moved up
+         server.loadPlugins();
+diff --git a/src/main/java/net/minecraft/server/network/ServerConnectionListener.java b/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
+index 54477f1d0d0e2f09fc2d2b1f4c57413e5a0736f9..53d0ec25fdc71e918355c1e6e5b6a7bcfacc78b4 100644
+--- a/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
++++ b/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
+@@ -62,7 +62,7 @@ public class ServerConnectionListener {
+     private final List<ChannelFuture> channels = Collections.synchronizedList(Lists.newArrayList());
+     final List<Connection> connections = Collections.synchronizedList(Lists.newArrayList());
+     // Paper start - prevent blocking on adding a new network manager while the server is ticking
+-    private final java.util.Queue<Connection> pending = new java.util.concurrent.ConcurrentLinkedQueue<>();
++    public final java.util.Queue<Connection> pending = new java.util.concurrent.ConcurrentLinkedQueue<>(); // MultiPaper - make public
+     private static final boolean disableFlushConsolidation = Boolean.getBoolean("Paper.disableFlushConsolidate"); // Paper
+     private final void addPending() {
+         Connection manager = null;
+@@ -128,7 +128,7 @@ public class ServerConnectionListener {
+                     ((Connection) object).setListener(new ServerHandshakePacketListenerImpl(ServerConnectionListener.this.server, (Connection) object));
+                     io.papermc.paper.network.ChannelInitializeListenerHolder.callListeners(channel); // Paper
+                 }
+-            }).group((EventLoopGroup) lazyinitvar.get()).localAddress(address)).option(ChannelOption.AUTO_READ, false).bind().syncUninterruptibly()); // CraftBukkit // Paper
++            }).group((EventLoopGroup) lazyinitvar.get()).localAddress(address)).option(ChannelOption.AUTO_READ, true).bind().syncUninterruptibly()); // CraftBukkit // Paper // MultiPaper - set auto read to true
+         }
+     }
+ 
 diff --git a/src/main/java/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
-index 150050fb343ef6119204b7d5220207765a6937bc..030437dd0439d4644d9c204af4e3dee182140996 100644
+index 150050fb343ef6119204b7d5220207765a6937bc..63df2d1ca7208b436798e7ad21afc7bd7e6a96b1 100644
 --- a/src/main/java/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
 @@ -10,6 +10,8 @@ import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
@@ -59,13 +94,15 @@ index 150050fb343ef6119204b7d5220207765a6937bc..030437dd0439d4644d9c204af4e3dee1
  
  // CraftBukkit start
  import java.net.InetAddress;
-@@ -39,6 +41,15 @@ public class ServerHandshakePacketListenerImpl implements ServerHandshakePacketL
+@@ -39,6 +41,17 @@ public class ServerHandshakePacketListenerImpl implements ServerHandshakePacketL
  
      @Override
      public void handleIntention(ClientIntentionPacket packet) {
 +        // MultiPaper start - Check if this is a MultiPaper peer connection
 +        for (String part : packet.getHostName().split("\00")) {
 +            if (part.equals(MultiPaper.getConnection().secret)) {
++                server.getConnection().pending.remove(connection);
++                server.getConnection().getConnections().remove(connection);
 +                new ExternalServerConnection(connection.channel);
 +                return;
 +            }
@@ -222,10 +259,10 @@ index 0000000000000000000000000000000000000000..b7f258a6cf78d47518d429151f930f2a
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 7c34a6624baa715409538d57a02672e70bd42d48..a6964570485ca62bb8245320f23c3e47f29a67b1 100644
+index 7c34a6624baa715409538d57a02672e70bd42d48..e82475730f2be2a2c8a326924610c75f260515fb 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -2,10 +2,17 @@ package puregero.multipaper;
+@@ -2,10 +2,19 @@ package puregero.multipaper;
  
  import org.bukkit.configuration.InvalidConfigurationException;
  import org.bukkit.configuration.file.YamlConfiguration;
@@ -238,12 +275,14 @@ index 7c34a6624baa715409538d57a02672e70bd42d48..a6964570485ca62bb8245320f23c3e47
 +import java.net.InetSocketAddress;
 +import java.net.SocketAddress;
 +import java.util.Collection;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.TimeUnit;
 +import java.util.function.Consumer;
 +import java.util.function.Supplier;
  
  public class MultiPaper {
      private static MultiPaperConnection multiPaperConnection = null;
-@@ -77,4 +84,39 @@ public class MultiPaper {
+@@ -77,4 +86,45 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -257,6 +296,12 @@ index 7c34a6624baa715409538d57a02672e70bd42d48..a6964570485ca62bb8245320f23c3e47
 +    }
 +    
 +    public static void runSync(Runnable runnable) {
++        if (MinecraftServer.getServer() == null) {
++            // Wait a bit for the server to start up
++            CompletableFuture.delayedExecutor(50, TimeUnit.MILLISECONDS).execute(() -> runSync(runnable));
++            return;
++        }
++
 +        MinecraftServer.getServer().scheduleOnMain(runnable);
 +    }
 +
@@ -540,7 +585,7 @@ index 0000000000000000000000000000000000000000..a18780b676d0e4ee1a5bf89d0bde396e
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8301efa17176aec75e9d198d19585aab6ab4777d
+index 0000000000000000000000000000000000000000..8fd3e37dea839ccc39aac19b50790705016beda6
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 @@ -0,0 +1,65 @@
@@ -598,7 +643,7 @@ index 0000000000000000000000000000000000000000..8301efa17176aec75e9d198d19585aab
 +            }
 +            connection.send(helloPacket);
 +        } else {
-+            LOGGER.info("A new connection to external server " + bungeecordName + " failed as a preview connection had a newer nano time.");
++            LOGGER.info("A new connection to external server " + bungeecordName + " failed as a previous connection had a newer nano time.");
 +        }
 +    }
 +

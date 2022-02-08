@@ -109,6 +109,8 @@ simulation range on your server, it's shown as white. Chunks not loaded on your
 server as shown as grey.
 
 ## Setting up MultiPaper
+  * Download MultiPaper and MultiPaper-Master from
+    [multipaper.io](https://multipaper.io)
   * Place your worlds inside the directory being used for MultiPaper-Master
   * Start the MultiPaper-Master by either:
     * Standalone: `java -jar multipaper-master.jar <port> [optionalProxyPort]`

@@ -16,6 +16,10 @@ public class WriteDataHandler implements Handler {
         byte[] data = new byte[in.readInt()];
         in.readFully(data);
 
+        while (path.startsWith("./")) {
+            path = path.substring("./".length());
+        }
+
         try {
             FileLocker.writeBytes(new File(path), data);
             out.writeUTF("dataWritten");

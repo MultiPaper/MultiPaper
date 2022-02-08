@@ -15,6 +15,17 @@ public class ReadJsonHandler implements Handler {
         String file = in.readUTF();
 
         try {
+            synchronized (WriteJsonHandler.writesInProgress) {
+                if (WriteJsonHandler.writesInProgress.containsKey(file)) {
+                    byte[] b = WriteJsonHandler.writesInProgress.get(file);
+                    out.writeUTF("jsonData");
+                    out.writeInt(b.length);
+                    out.write(b);
+                    out.send();
+                    return;
+                }
+            }
+
             try{
                 byte[] b = Files.readAllBytes(new File(file).toPath());
                 out.writeUTF("jsonData");

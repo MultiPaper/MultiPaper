@@ -44,7 +44,7 @@ index 578f369c90ef287e06a76eb8f3757a6e8142e94e..46a054e2c23c1fd57c85fe86d37efa06
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 172a24866ebafbda8811e52034e797e3fd9e7d97..35ce2069d31413298f842b20f2ba0dc0cf178dd8 100644
+index cf4471a560ee895eda90943bc0877cce506b0cab..057f74992efb3d8f948b40d42b991c140bf5bb20 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -4,6 +4,7 @@ import io.netty.channel.Channel;
@@ -55,28 +55,26 @@ index 172a24866ebafbda8811e52034e797e3fd9e7d97..35ce2069d31413298f842b20f2ba0dc0
  import net.minecraft.network.protocol.PacketFlow;
  import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
  import net.minecraft.server.dedicated.DedicatedServer;
-@@ -12,9 +13,9 @@ import puregero.multipaper.externalserverprotocol.*;
+@@ -12,7 +13,7 @@ import puregero.multipaper.externalserverprotocol.*;
  
  import java.io.Closeable;
  import java.io.IOException;
-+import java.util.*;
- import java.util.concurrent.ExecutorService;
- import java.util.concurrent.Executors;
 -import java.util.HashSet;
++import java.util.*;
  
  public class ExternalServerConnection extends ChannelInitializer<SocketChannel> implements Closeable {
  
-@@ -23,6 +24,8 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+@@ -20,6 +21,8 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+     public long nanoTime = 0;
      public ExternalServer externalServer = null;
-     private static final ExecutorService sendThread = Executors.newSingleThreadExecutor();
      public HashSet<String> subscribedWorlds = new HashSet<>();
 +    private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
 +    private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
  
      public ExternalServerConnection() {
  
-@@ -99,4 +102,32 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
-             sendThread.execute(() -> channel.writeAndFlush(packet));
+@@ -96,4 +99,32 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+             channel.writeAndFlush(packet);
          }
      }
 +

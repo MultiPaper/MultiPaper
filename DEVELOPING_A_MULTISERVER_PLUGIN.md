@@ -167,6 +167,13 @@ public void updateBalance(Player player, int value) throws SQLException {
 }
 ```
 
+### Options 3b: Notifications with MultiLib
+
+MultiLib is a Bukkit plugin library that allows you to send notifications to
+other servers without requiring PostgreSQL, letting you continue using MySQL
+or whichever database system you currently use.
+Check it out [here](https://github.com/PureGero/MultiLib).
+
 ## Options 4: Subscriptions with Firestore (not covered)
 
 The final option is a subscription-based model. This is where the database will

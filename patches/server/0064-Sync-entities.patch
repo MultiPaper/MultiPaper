@@ -334,7 +334,7 @@ index 5a947b404214ee37414a18ecd771a6996c6fe7e3..bd2260b461cece047c73ee89d0426c51
                      PlayerCreatePacket.sendPlayer(externalServer.getConnection(), entityplayer1);
                  } else if (subscribedToSoruce) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 145c54326f36119541c834a667a3a640c8c2b5b4..e102bd131437294d0f11906362b7b47b05afc78a 100644
+index 145c54326f36119541c834a667a3a640c8c2b5b4..1397a900a12e6faed060163df8c474dc759254bd 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -139,7 +139,10 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -348,7 +348,7 @@ index 145c54326f36119541c834a667a3a640c8c2b5b4..e102bd131437294d0f11906362b7b47b
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource, io.papermc.paper.util.KeyedObject { // Paper
-@@ -269,6 +272,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -269,12 +272,15 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
      private static final int FLAG_INVISIBLE = 5;
      protected static final int FLAG_GLOWING = 6;
      protected static final int FLAG_FALL_FLYING = 7;
@@ -358,6 +358,13 @@ index 145c54326f36119541c834a667a3a640c8c2b5b4..e102bd131437294d0f11906362b7b47b
      private static final EntityDataAccessor<Integer> DATA_AIR_SUPPLY_ID = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.INT);
      private static final EntityDataAccessor<Optional<Component>> DATA_CUSTOM_NAME = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.OPTIONAL_COMPONENT);
      private static final EntityDataAccessor<Boolean> DATA_CUSTOM_NAME_VISIBLE = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.BOOLEAN);
+     private static final EntityDataAccessor<Boolean> DATA_SILENT = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.BOOLEAN);
+     private static final EntityDataAccessor<Boolean> DATA_NO_GRAVITY = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.BOOLEAN);
+-    protected static final EntityDataAccessor<net.minecraft.world.entity.Pose> DATA_POSE = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.POSE);
++    public static final EntityDataAccessor<net.minecraft.world.entity.Pose> DATA_POSE = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.POSE); // MultiPaper - make public
+     private static final EntityDataAccessor<Integer> DATA_TICKS_FROZEN = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.INT);
+     private EntityInLevelCallback levelCallback;
+     private Vec3 packetCoordinates;
 @@ -2395,7 +2401,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
          EntityType<?> entitytypes = this.getType();
          ResourceLocation minecraftkey = EntityType.getKey(entitytypes);
@@ -952,10 +959,10 @@ index 3f2d3ab24cd2bc49ae821c107a4b581be3486dd9..3d3bc8b094c39108473a836f84689aac
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2808316100022a09034dfe6e944d5b1912cd39aa
+index 0000000000000000000000000000000000000000..b132111958b132b72cef4f3eec8dd04a30aa9406
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,302 @@
+@@ -0,0 +1,307 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -1090,9 +1097,14 @@ index 0000000000000000000000000000000000000000..2808316100022a09034dfe6e944d5b19
 +            if (setEntityDataPacket.getUnpackedData() != null) {
 +                for (SynchedEntityData.DataItem item : setEntityDataPacket.getUnpackedData()) {
 +                    if (item.getAccessor().equals(LivingEntity.DATA_HEALTH_ID) && entity instanceof LivingEntity livingEntity) {
++                        // Dumb CraftBukkit needs us to set the health using setHealth instead of simply updating the entity data
 +                        livingEntity.setHealth((Float) item.getValue());
 +                    } else {
 +                        entity.getEntityData().set(item.getAccessor(), item.getValue());
++                        if (Entity.DATA_POSE.equals(item.getAccessor())) {
++                            entity.multipaperHasMoved = false;
++                            entity.multipaperLastServer = connection.externalServer;
++                        }
 +                    }
 +                }
 +            } else {

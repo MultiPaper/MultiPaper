@@ -5,7 +5,7 @@ Subject: [PATCH] Sync player inventories between servers
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 7aaa378e4c3239173c7fc032ded8252aac5d2c0b..b71b743a8e43843757993898ee4f37d6b15e72bf 100644
+index 56c7e9748e9fd8294bf7cf1df97cf6e5fd3b90bc..36b656ce8d76bcd3e5919e3c0e45ba11f0025b61 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -164,6 +164,7 @@ import org.bukkit.event.player.PlayerPortalEvent;
@@ -23,7 +23,7 @@ index 7aaa378e4c3239173c7fc032ded8252aac5d2c0b..b71b743a8e43843757993898ee4f37d6
 +    @Nullable public ExternalServer openContainer; // MultiPaper
      public int latency;
      public boolean wonGame;
-     private int containerUpdateDelay; // Paper
+     public int containerUpdateDelay; // Paper // MultiPaper - make public
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 index 307527c542516b3e7f2d8bdd0707316c7c6ff0dd..7d7fe17d35e633ef1b4da394130ea2a400bb35ea 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
@@ -379,7 +379,7 @@ index 46a054e2c23c1fd57c85fe86d37efa06a9db3c72..fb344552d4c8ab116ee30ead58dbc008
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 365130c5695d8c7e96f01af5becc4a18f45a2640..9bd649efccac35cd8c27acd6d22079f8973c3f3b 100644
+index d00d1c8a515bc5166c83060b0a81759e640d6893..ade9a858fd0ee3539befb797b56719475f069704 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -5,6 +5,7 @@ import org.bukkit.configuration.InvalidConfigurationException;
@@ -398,22 +398,25 @@ index 365130c5695d8c7e96f01af5becc4a18f45a2640..9bd649efccac35cd8c27acd6d22079f8
  import java.util.HashSet;
  import java.util.List;
  import java.util.concurrent.CompletableFuture;
-@@ -180,6 +182,14 @@ public class MultiPaper {
+@@ -142,6 +144,8 @@ public class MultiPaper {
+                     externalPlayer.containerUpdateDelay = externalPlayer.level.paperConfig.containerUpdateTickRate;
+                 }
+                 // Copied from Paper end
++
++                externalPlayer.checkInsideBlocks();
+             }
+         }
+ 
+@@ -191,6 +195,8 @@ public class MultiPaper {
                  }
              });
          });
 +
 +        MultiPaperInventoryHandler.tick();
-+
-+        for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
-+            if (player instanceof ExternalPlayer externalPlayer) {
-+                externalPlayer.checkInsideBlocks();
-+            }
-+        }
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -453,7 +463,7 @@ public class MultiPaper {
+@@ -464,7 +470,7 @@ public class MultiPaper {
              e.printStackTrace();
          }
      }
@@ -422,7 +425,7 @@ index 365130c5695d8c7e96f01af5becc4a18f45a2640..9bd649efccac35cd8c27acd6d22079f8
      public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
          if (compoundTag == null) {
              return new byte[0];
-@@ -527,4 +537,8 @@ public class MultiPaper {
+@@ -538,4 +544,8 @@ public class MultiPaper {
              e.printStackTrace();
          };
      }

@@ -213,7 +213,7 @@ index 3e36920abfa578b4622c0f3fc680ee5d4221f6e7..33b4e361786eb7f0e8da6e69af76d8d3
          }
      }
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index f3dbee900b9147687e40810f0a60673b6c28139a..6f703df89d4873a05e4ccf588775bf4149b3e7bd 100644
+index f4427b1ea9087ce5820319f7c18384f63014204c..10d707144fd9c81e09f0cb7264b7b173e95cb751 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -164,9 +164,7 @@ import org.bukkit.event.player.PlayerPortalEvent;
@@ -719,10 +719,19 @@ index 2da4aac6bd63c5e79dfd69df44ff842ca58aafa7..92519bc13c78c9be12a0cb15e52632e3
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 22cd6c8a1e47757d7b94c641086881d93c4fa593..cfa324e14db198ff90992427a628be1d6a74db7f 100644
+index c68a2f87b6225d6503d123b10cedfaee4fae6482..73f9b3fbb038f53c1fef8d270e53596f238376f0 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -158,6 +158,9 @@ public class MultiPaper {
+@@ -146,6 +146,8 @@ public class MultiPaper {
+                 // Copied from Paper end
+ 
+                 externalPlayer.checkInsideBlocks();
++
++                externalPlayer.detectEquipmentUpdates();
+             }
+         }
+ 
+@@ -171,6 +173,9 @@ public class MultiPaper {
              ChunkHolder holder = visibleChunksToCheck.remove(visibleChunksToCheck.size() - 1);
              if (holder.getAvailableChunkNow() != null && holder.getWorld().chunkSource.chunkMap.getVisibleChunkIfPresent(holder.pos.longKey) == holder) {
                  getConnection().syncChunkSubscribers(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z);
@@ -732,20 +741,7 @@ index 22cd6c8a1e47757d7b94c641086881d93c4fa593..cfa324e14db198ff90992427a628be1d
                  break;
              }
          }
-@@ -196,6 +199,12 @@ public class MultiPaper {
-                 broadcastPacketToExternalServers(new TimeUpdatePacket(level));
-             }
-         }
-+
-+        for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
-+            if (player instanceof ExternalPlayer) {
-+                player.detectEquipmentUpdates();
-+            }
-+        }
-     }
- 
-     public static void sendTickTime(long time, double tps) {
-@@ -460,6 +469,7 @@ public class MultiPaper {
+@@ -467,6 +472,7 @@ public class MultiPaper {
      public static void unlockChunk(LevelChunk chunk) {
          try {
              if (MultiPaper.isChunkLocal(chunk)) {

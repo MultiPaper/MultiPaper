@@ -31,7 +31,7 @@ index 34697742e26c083d16eb234555b1954ada5030a1..0eb5873d807d444a56b4b1b8456f9ef1
          int playerSaveInterval = com.destroystokyo.paper.PaperConfig.playerAutoSaveRate;
          if (playerSaveInterval < 0) {
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 7b23535a680d2a8534dcb8dd87770f66fb982c13..7aaa378e4c3239173c7fc032ded8252aac5d2c0b 100644
+index 7b23535a680d2a8534dcb8dd87770f66fb982c13..56c7e9748e9fd8294bf7cf1df97cf6e5fd3b90bc 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -164,6 +164,11 @@ import org.bukkit.event.player.PlayerPortalEvent;
@@ -46,7 +46,7 @@ index 7b23535a680d2a8534dcb8dd87770f66fb982c13..7aaa378e4c3239173c7fc032ded8252a
  // CraftBukkit end
  
  public class ServerPlayer extends Player {
-@@ -219,6 +224,7 @@ public class ServerPlayer extends Player {
+@@ -219,12 +224,13 @@ public class ServerPlayer extends Player {
      private final TextFilter textFilter;
      private boolean textFilteringEnabled;
      private boolean allowsListing;
@@ -54,6 +54,13 @@ index 7b23535a680d2a8534dcb8dd87770f66fb982c13..7aaa378e4c3239173c7fc032ded8252a
      private final ContainerSynchronizer containerSynchronizer;
      private final ContainerListener containerListener;
      private int containerCounter;
+     public int latency;
+     public boolean wonGame;
+-    private int containerUpdateDelay; // Paper
++    public int containerUpdateDelay; // Paper // MultiPaper - make public
+     public long loginTime; // Paper
+     public int patrolSpawnDelay; // Paper - per player patrol spawns
+     // Paper start - cancellable death event
 @@ -1175,6 +1181,24 @@ public class ServerPlayer extends Player {
              }
              // Paper end
@@ -355,7 +362,7 @@ index 2b05d88d64987d40d4080ce8c4557ceebff6454e..cf4471a560ee895eda90943bc0877cce
  
      @Override
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index cd4c4917b0266cb4dcba6bbaf96c96b09342bda6..632adc081ef8b4b3028b303597fc778c9a0b581d 100644
+index cd4c4917b0266cb4dcba6bbaf96c96b09342bda6..4453063044d4244c5970bc368a55f8814da0a40c 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -4,7 +4,12 @@ import net.minecraft.server.level.ServerPlayer;
@@ -379,17 +386,27 @@ index cd4c4917b0266cb4dcba6bbaf96c96b09342bda6..632adc081ef8b4b3028b303597fc778c
      private static MultiPaperConnection multiPaperConnection = null;
  
      public static MultiPaperConnection getConnection() {
-@@ -80,6 +86,9 @@ public class MultiPaper {
+@@ -80,6 +86,19 @@ public class MultiPaper {
          }
      }
  
 +    public static void tick() {
++        for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
++            if (player instanceof ExternalPlayer externalPlayer) {
++                // Copied from Paper start - Configurable container update tick rate
++                if (--externalPlayer.containerUpdateDelay <= 0) {
++                    externalPlayer.containerMenu.broadcastChanges();
++                    externalPlayer.containerUpdateDelay = externalPlayer.level.paperConfig.containerUpdateTickRate;
++                }
++                // Copied from Paper end
++            }
++        }
 +    }
 +
      public static void sendTickTime(long time, double tps) {
          try {
              getConnection().writeTickTime(time, tps);
-@@ -140,4 +149,35 @@ public class MultiPaper {
+@@ -140,4 +159,35 @@ public class MultiPaper {
      public static void broadcastPacketToExternalServers(ServerPlayer player, ExternalServerPacket packet) {
          broadcastPacketToExternalServers(player.getLevel().getWorld().getName(), packet);
      }

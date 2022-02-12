@@ -8,7 +8,7 @@ public class CommandLineInput extends Thread {
     public void run() {
         Scanner scanner = new Scanner(System.in);
 
-        while (true) {
+        while (scanner.hasNextLine()) {
             String line = scanner.nextLine();
 
             if (line.equalsIgnoreCase("shutdown")) {

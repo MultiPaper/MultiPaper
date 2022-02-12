@@ -9,14 +9,16 @@ public class CommandLineInput extends Thread {
         Scanner scanner = new Scanner(System.in);
 
         while (true) {
-            String line = scanner.nextLine();
+            if(scanner.hasNextLine()) {
+                String line = scanner.nextLine();
 
-            if (line.equalsIgnoreCase("shutdown")) {
-                System.out.println("Shutting down servers...");
-                ServerConnection.shutdownAndWait();
-                System.exit(0);
-            } else {
-                System.out.println("Unknown command, use 'shutdown' to shutdown all servers or ctrl+c to stop just this master server");
+                if (line.equalsIgnoreCase("shutdown")) {
+                    System.out.println("Shutting down servers...");
+                    ServerConnection.shutdownAndWait();
+                    System.exit(0);
+                } else {
+                    System.out.println("Unknown command, use 'shutdown' to shutdown all servers or ctrl+c to stop just this master server");
+                }
             }
         }
     }

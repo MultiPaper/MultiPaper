@@ -1309,10 +1309,10 @@ index 0000000000000000000000000000000000000000..52801f3648814566dddb27e4a6984aa4
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 59546ec0eccd0bcd852dd030ebc20b0637176dde..7b6649d8a71df5cd806ab8b915e67948bd0f9054 100644
+index 59546ec0eccd0bcd852dd030ebc20b0637176dde..ac07770d42c3b06b22568c220251c77eab074ae7 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -5,18 +5,31 @@ import io.netty.channel.ChannelOption;
+@@ -5,18 +5,33 @@ import io.netty.channel.ChannelOption;
  import io.netty.channel.epoll.Epoll;
  import io.netty.channel.epoll.EpollSocketChannel;
  import io.netty.channel.socket.nio.NioSocketChannel;
@@ -1327,6 +1327,8 @@ index 59546ec0eccd0bcd852dd030ebc20b0637176dde..7b6649d8a71df5cd806ab8b915e67948
 +import net.minecraft.world.level.chunk.LevelChunk;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.World;
 +import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
 +import puregero.multipaper.externalserverprotocol.SendTickListPacket;
  
@@ -1344,7 +1346,7 @@ index 59546ec0eccd0bcd852dd030ebc20b0637176dde..7b6649d8a71df5cd806ab8b915e67948
  
  public class MultiPaperConnection extends Thread {
  
-@@ -90,6 +103,17 @@ public class MultiPaperConnection extends Thread {
+@@ -90,6 +105,17 @@ public class MultiPaperConnection extends Thread {
                      }
                  }
  
@@ -1362,7 +1364,7 @@ index 59546ec0eccd0bcd852dd030ebc20b0637176dde..7b6649d8a71df5cd806ab8b915e67948
                  DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
                  while (!socket.isClosed()) {
                      int id = in.readInt();
-@@ -134,6 +158,109 @@ public class MultiPaperConnection extends Thread {
+@@ -134,6 +160,109 @@ public class MultiPaperConnection extends Thread {
          secret = in.readUTF();
      }
  
@@ -1472,7 +1474,7 @@ index 59546ec0eccd0bcd852dd030ebc20b0637176dde..7b6649d8a71df5cd806ab8b915e67948
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -163,6 +290,24 @@ public class MultiPaperConnection extends Thread {
+@@ -163,6 +292,24 @@ public class MultiPaperConnection extends Thread {
          });
      }
  
@@ -1497,7 +1499,7 @@ index 59546ec0eccd0bcd852dd030ebc20b0637176dde..7b6649d8a71df5cd806ab8b915e67948
      public void writeTickTime(long time, double tps) throws IOException {
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeTickTime");
-@@ -178,4 +323,169 @@ public class MultiPaperConnection extends Thread {
+@@ -178,4 +325,181 @@ public class MultiPaperConnection extends Thread {
          out.writeInt(port);
          out.send(null);
      }
@@ -1544,6 +1546,18 @@ index 59546ec0eccd0bcd852dd030ebc20b0637176dde..7b6649d8a71df5cd806ab8b915e67948
 +    }
 +
 +    public CompletableFuture<DataInputStream> readChunk(String world, String path, int cx, int cz) throws IOException {
++        if (path.equals("region")) {
++            World bukkitWorld = Bukkit.getWorld(world);
++            if (bukkitWorld == null || MultiPaper.getChunkHolder(world, cx, cz) == null) {
++                if (Bukkit.getPluginManager().getPlugin("Dynmap") == null) {
++                    // Dynmap uses this, so don't log for Dynmap servers
++                    LOGGER.warn(Thread.currentThread() + " has no chunk holder for reading chunk " + world + "," + path + "," + cx + "," + cz + ", reading it straight from disk instead");
++                }
++
++                return forceReadChunk(world, path, cx, cz).thenApply(data -> new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
++            }
++        }
++
 +        CompletableFuture<DataInputStream> future = new CompletableFuture<>();
 +
 +        Consumer<DataInputStream> callback = in -> {

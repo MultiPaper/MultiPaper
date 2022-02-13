@@ -136,16 +136,26 @@ public class RegionFileCache {
     }
 
     public static byte[] getChunkDeflatedData(File basePath, int chunkX, int chunkZ) {
-        RegionFile r = getRegionFileIfExists(basePath, chunkX, chunkZ);
-        if (r != null) {
-            return r.getDeflatedBytes(chunkX & 31, chunkZ & 31);
-        } else {
-            return null;
+        try {
+            RegionFile r = getRegionFileIfExists(basePath, chunkX, chunkZ);
+            if (r != null) {
+                return r.getDeflatedBytes(chunkX & 31, chunkZ & 31);
+            } else {
+                return null;
+            }
+        } catch (Throwable throwable) {
+            System.err.println("Error when trying to read chunk " + chunkX + "," + chunkZ + " in " + basePath);
+            throw throwable;
         }
     }
 
     public static void putChunkDeflatedData(File basePath, int chunkX, int chunkZ, byte[] data) {
-        RegionFile r = getRegionFile(basePath, chunkX, chunkZ);
-        r.putDeflatedBytes(chunkX & 31, chunkZ & 31, data);
+        try {
+            RegionFile r = getRegionFile(basePath, chunkX, chunkZ);
+            r.putDeflatedBytes(chunkX & 31, chunkZ & 31, data);
+        } catch (Throwable throwable) {
+            System.err.println("Error when trying to write chunk " + chunkX + "," + chunkZ + " in " + basePath);
+            throw throwable;
+        }
     }
 }

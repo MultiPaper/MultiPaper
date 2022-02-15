@@ -147,7 +147,7 @@ index 87167f16fa9dedf19abefe38864498edb0c40a1d..8fb5f47a1ffeb248266e6bfa12a26a1b
      }
  
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 409d30f0b175f9be9ac269c608337b6aa0c3e927..4c1d72fe8f7b6f2bbd4d1939a54cdcdde28242a5 100644
+index 409d30f0b175f9be9ac269c608337b6aa0c3e927..757c384d3a91e223dfbc860439879da36e14a2e8 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -84,14 +84,7 @@ import net.minecraft.world.level.Explosion;
@@ -174,16 +174,24 @@ index 409d30f0b175f9be9ac269c608337b6aa0c3e927..4c1d72fe8f7b6f2bbd4d1939a54cdcdd
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource, io.papermc.paper.util.KeyedObject { // Paper
-@@ -1441,6 +1435,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -1439,7 +1433,16 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+                 for (int j = blockposition.getY(); j <= blockposition1.getY(); ++j) {
+                     for (int k = blockposition.getZ(); k <= blockposition1.getZ(); ++k) {
                          blockposition_mutableblockposition.set(i, j, k);
-                         BlockState iblockdata = this.level.getBlockState(blockposition_mutableblockposition);
- 
-+                        boolean shouldTickOurPlayer = MultiPaper.isRealPlayer(this) && (iblockdata.getBlock() instanceof NetherPortalBlock || iblockdata.getBlock() instanceof EndPortalBlock); // MultiPaper - tick portals
-+                        if (!shouldTickOurPlayer && MultiPaper.isChunkExternal(this.level.getChunkAt(blockposition_mutableblockposition))) continue; // MultiPaper - Only check for blocks on our server
+-                        BlockState iblockdata = this.level.getBlockState(blockposition_mutableblockposition);
++                        // MultiPaper start - Only check for blocks on our server (or portals)
++                        // Lazy load - Load iblockdata here only if we'll use it for the check
++                        BlockState iblockdata = MultiPaper.isRealPlayer(this) ? this.level.getBlockState(blockposition_mutableblockposition) : null;
 +
++                        boolean shouldTickOurPlayer = MultiPaper.isRealPlayer(this) && (iblockdata.getBlock() instanceof NetherPortalBlock || iblockdata.getBlock() instanceof EndPortalBlock);
++                        if (!shouldTickOurPlayer && MultiPaper.isChunkExternal(this.level.getChunkAt(blockposition_mutableblockposition))) continue;
++
++                        // Lazy load - Fully load iblockdata here since we passed the check and will use it now
++                        iblockdata = iblockdata != null ? iblockdata : this.level.getBlockState(blockposition_mutableblockposition);
++                        // MultiPaper end
+ 
                          try {
                              iblockdata.entityInside(this.level, blockposition_mutableblockposition, this);
-                             this.onInsideBlock(iblockdata);
 diff --git a/src/main/java/net/minecraft/world/entity/player/Inventory.java b/src/main/java/net/minecraft/world/entity/player/Inventory.java
 index 8d329bca0818033df41fbd781028919c73e052a6..d43cdea5999da9f878bb6a84da1893f4767c90a1 100644
 --- a/src/main/java/net/minecraft/world/entity/player/Inventory.java
@@ -379,7 +387,7 @@ index 46a054e2c23c1fd57c85fe86d37efa06a9db3c72..fb344552d4c8ab116ee30ead58dbc008
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index d00d1c8a515bc5166c83060b0a81759e640d6893..ade9a858fd0ee3539befb797b56719475f069704 100644
+index e11eeb9ff1b71c12bf75f071d08025f3f9fcc546..71047607377e219d4d10a3530b7d226479876a2b 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -5,6 +5,7 @@ import org.bukkit.configuration.InvalidConfigurationException;

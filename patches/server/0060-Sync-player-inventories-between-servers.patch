@@ -25,7 +25,7 @@ index 56c7e9748e9fd8294bf7cf1df97cf6e5fd3b90bc..36b656ce8d76bcd3e5919e3c0e45ba11
      public boolean wonGame;
      public int containerUpdateDelay; // Paper // MultiPaper - make public
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index f0ec99341abc0cedb67c72a6d3ff6ff3cbc284d7..5e5be30cf7bf658b489ee3a520b8c5e14ef4a5f6 100644
+index f0ec99341abc0cedb67c72a6d3ff6ff3cbc284d7..ada14a5ac3e9dc5af7a176a45520a4f18d74d28a 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -214,6 +214,7 @@ import org.bukkit.inventory.InventoryView;
@@ -94,15 +94,16 @@ index f0ec99341abc0cedb67c72a6d3ff6ff3cbc284d7..5e5be30cf7bf658b489ee3a520b8c5e1
          this.player.resetLastActionTime();
          if (!itemstack.isEmpty()) {
              // CraftBukkit start
-@@ -2053,6 +2063,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2053,6 +2063,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
  
              this.player.getInventory().selected = packet.getSlot();
              this.player.resetLastActionTime();
 +            if (MultiPaper.isRealPlayer(this.player)) MultiPaper.broadcastPlayerAction(this.player, packet); // MultiPaper
++            else this.player.detectEquipmentUpdates(); // MultiPaper
          } else {
              ServerGamePacketListenerImpl.LOGGER.warn("{} tried to set an invalid carried item", this.player.getName().getString());
              this.disconnect("Invalid hotbar selection (Hacking?)", org.bukkit.event.player.PlayerKickEvent.Cause.ILLEGAL_ACTION); // CraftBukkit // Paper - kick event cause
-@@ -2606,6 +2617,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2606,6 +2618,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      public void handleContainerClose(ServerboundContainerClosePacket packetplayinclosewindow, InventoryCloseEvent.Reason reason) {
          // Paper end
          PacketUtils.ensureRunningOnSameThread(packetplayinclosewindow, this, this.player.getLevel());
@@ -110,7 +111,7 @@ index f0ec99341abc0cedb67c72a6d3ff6ff3cbc284d7..5e5be30cf7bf658b489ee3a520b8c5e1
  
          if (this.player.isImmobile()) return; // CraftBukkit
          CraftEventFactory.handleInventoryCloseEvent(this.player, reason); // CraftBukkit // Paper
-@@ -2616,6 +2628,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2616,6 +2629,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleContainerClick(ServerboundContainerClickPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -118,7 +119,7 @@ index f0ec99341abc0cedb67c72a6d3ff6ff3cbc284d7..5e5be30cf7bf658b489ee3a520b8c5e1
          if (this.player.isImmobile()) return; // CraftBukkit
          this.player.resetLastActionTime();
          if (this.player.containerMenu.containerId == packet.getContainerId() && this.player.containerMenu.stillValid(this.player)) { // CraftBukkit
-@@ -2926,6 +2939,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2926,6 +2940,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
  
      @Override
      public void handlePlaceRecipe(ServerboundPlaceRecipePacket packet) {
@@ -126,7 +127,7 @@ index f0ec99341abc0cedb67c72a6d3ff6ff3cbc284d7..5e5be30cf7bf658b489ee3a520b8c5e1
          // Paper start
          if (!org.bukkit.Bukkit.isPrimaryThread()) {
              if (recipeSpamPackets.addAndGet(com.destroystokyo.paper.PaperConfig.autoRecipeIncrement) > com.destroystokyo.paper.PaperConfig.autoRecipeLimit) {
-@@ -2951,6 +2965,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -2951,6 +2966,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handleContainerButtonClick(ServerboundContainerButtonClickPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -373,10 +374,10 @@ index 8bd12326e591213f0a093b96a5af3f04e19dc980..13c9b18be478f036b51577893612a833
  
      public void grow(int amount) {
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 46a054e2c23c1fd57c85fe86d37efa06a9db3c72..fb344552d4c8ab116ee30ead58dbc00872731744 100644
+index 20c25ee97c8c2c18f9ebe4bfd87f6ad4e6ea93b4..c0f39be29e6181b2ce74fe24286f8b7359309a9c 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -96,4 +96,9 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -97,4 +97,9 @@ public class ExternalPlayer extends ServerPlayer {
      public boolean broadcastToPlayer(ServerPlayer spectator) {
          return false;
      }
@@ -444,10 +445,10 @@ index e11eeb9ff1b71c12bf75f071d08025f3f9fcc546..71047607377e219d4d10a3530b7d2264
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d8adffcd3ebd0b4c2453ac914a847cef07638776
+index 0000000000000000000000000000000000000000..522dc510a964420818f1f30ef41d28adbe6f1b98
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-@@ -0,0 +1,285 @@
+@@ -0,0 +1,286 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -681,6 +682,7 @@ index 0000000000000000000000000000000000000000..d8adffcd3ebd0b4c2453ac914a847cef
 +            CompoundTag itemsRoot = new CompoundTag();
 +            itemsRoot.put("items", items);
 +            MultiPaper.broadcastPacketToExternalServers(player, new PlayerInventoryUpdatePacket(player, inventoryComponent.name, itemsRoot));
++            player.detectEquipmentUpdates();
 +        }
 +    }
 +
@@ -916,10 +918,10 @@ index 36900d795213278befe51dc5c7a42706ee5aaec8..8231b3c3e8722c59efb436aefad7e2ba
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..29c7f7c66751141829daa0affd379c3c5abe2aa5
+index 0000000000000000000000000000000000000000..3517b13be13c729056c6e05291b7f95312476432
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,82 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -997,6 +999,8 @@ index 0000000000000000000000000000000000000000..29c7f7c66751141829daa0affd379c3c
 +
 +                MultiPaperInventoryHandler.updateInventory(player, component, item.getInt("Slot"), replacingItem, itemStack);
 +            });
++
++            player.detectEquipmentUpdates();
 +        });
 +    }
 +}

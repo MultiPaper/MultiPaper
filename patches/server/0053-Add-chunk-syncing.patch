@@ -229,7 +229,7 @@ index 6fc64fe9833478bce834f4e5fbe4922da6148aaf..dc1a3b9b4c9e96d67f44d471a6cb4e8c
                      chunk1.incrementInhabitedTime(j);
                      if (flag2 && (!gg.pufferfish.pufferfish.PufferfishConfig.enableAsyncMobSpawning || _pufferfish_spawnCountsReady.get()) && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair) && this.chunkMap.anyPlayerCloseEnoughForSpawning(holder, chunkcoordintpair, true)) { // Spigot // Paper - optimise anyPlayerCloseEnoughForSpawning & optimise chunk tick iteration
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 3e9979de1a49c49e3ac12c54d2c177b4972ff481..bc66aaae62488f187dc23cfe379d20561e019ec1 100644
+index 6fd8c8cc75273184ad891880296c537ebe3149b5..acebfa96129b6d09f8157bc8d2c9d85d450d0214 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -161,6 +161,8 @@ import org.bukkit.event.weather.LightningStrikeEvent;
@@ -747,7 +747,7 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 057f74992efb3d8f948b40d42b991c140bf5bb20..2da4aac6bd63c5e79dfd69df44ff842ca58aafa7 100644
+index 4da68c4329648d3744f51b9ec7da18b5fe86f760..84458ed586bad25e2ee4cf6af093ba26f56474ed 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -9,20 +9,27 @@ import net.minecraft.network.protocol.PacketFlow;
@@ -778,7 +778,7 @@ index 057f74992efb3d8f948b40d42b991c140bf5bb20..2da4aac6bd63c5e79dfd69df44ff842c
  
      public ExternalServerConnection() {
  
-@@ -127,4 +134,15 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+@@ -129,4 +136,15 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
              players.add(player);
          }
      }
@@ -795,7 +795,7 @@ index 057f74992efb3d8f948b40d42b991c140bf5bb20..2da4aac6bd63c5e79dfd69df44ff842c
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index d40f79bafe20e4bd65a3c9959464c4ee5c1f7b3c..a9fbb063150bcd05970ea06462b0b9e6fd876124 100644
+index 39883d921a4ba06557e2854a3e9929861903cdee..8be50398d1b2a670635a511c15b02f43033544d8 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -3,28 +3,50 @@ package puregero.multipaper;
@@ -1056,10 +1056,10 @@ index d40f79bafe20e4bd65a3c9959464c4ee5c1f7b3c..a9fbb063150bcd05970ea06462b0b9e6
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..52801f3648814566dddb27e4a6984aa4431cb27e
+index 0000000000000000000000000000000000000000..1e1c01c34fd8f3dc217f89c04cedba7c5738363e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,248 @@
+@@ -0,0 +1,266 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -1199,6 +1199,16 @@ index 0000000000000000000000000000000000000000..52801f3648814566dddb27e4a6984aa4
 +            holder = MultiPaper.getChunkHolder(world, update.getX(), update.getZ());
 +        }
 +
++        if (holder != null && !holder.getLastAvailableChunkFuture().isDone()) {
++            holder.getLastAvailableChunkFuture().thenRun(() -> {
++                if (!Bukkit.isPrimaryThread()) {
++                    new Exception("Loaded chunk " + holder.getPos() + " outside of the main thread! (currentThread=" + Thread.currentThread() + ")").printStackTrace();
++                }
++                handleBlockUpdate(world, packet, depth);
++            });
++            return;
++        }
++
 +        if (holder != null) {
 +            tempChunk = holder.getAvailableChunkNow();
 +
@@ -1244,10 +1254,10 @@ index 0000000000000000000000000000000000000000..52801f3648814566dddb27e4a6984aa4
 +        } else if (blockUpdateChunk != null) {
 +            // Chunk is not loaded
 +            if (packet instanceof ClientboundBlockUpdatePacket update) {
-+                blockUpdateChunk.setBlockState(update.getPos(), update.getBlockState(), false);
++                setBlockInUnloadedChunk(blockUpdateChunk, update.getPos(), update.getBlockState());
 +            } else if (packet instanceof ClientboundSectionBlocksUpdatePacket update) {
 +                update.runUpdates((pos, state) -> {
-+                    blockUpdateChunk.setBlockState(pos, state, false);
++                    setBlockInUnloadedChunk(blockUpdateChunk, pos, state);
 +                });
 +            } else if (packet instanceof ClientboundBlockEntityDataPacket update) {
 +                BlockEntity entity = blockUpdateChunk.getBlockEntity(update.getPos());
@@ -1268,6 +1278,14 @@ index 0000000000000000000000000000000000000000..52801f3648814566dddb27e4a6984aa4
 +        }
 +
 +        blockUpdateChunk = null;
++    }
++
++    private static void setBlockInUnloadedChunk(ChunkAccess chunk, BlockPos pos, BlockState blockState) {
++        if (chunk instanceof LevelChunk levelChunk) {
++            levelChunk.setBlockState(pos, blockState, false, false);
++        } else {
++            chunk.setBlockState(pos, blockState, false);
++        }
 +    }
 +
 +    private static void setBlock(LevelChunk chunk, BlockPos pos, BlockState blockState) {

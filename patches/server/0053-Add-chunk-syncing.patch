@@ -1056,10 +1056,10 @@ index 39883d921a4ba06557e2854a3e9929861903cdee..8be50398d1b2a670635a511c15b02f43
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c8949c812a9c4d2601790a29cc413602378fa752
+index 0000000000000000000000000000000000000000..1e1c01c34fd8f3dc217f89c04cedba7c5738363e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,258 @@
+@@ -0,0 +1,266 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -1254,10 +1254,10 @@ index 0000000000000000000000000000000000000000..c8949c812a9c4d2601790a29cc413602
 +        } else if (blockUpdateChunk != null) {
 +            // Chunk is not loaded
 +            if (packet instanceof ClientboundBlockUpdatePacket update) {
-+                blockUpdateChunk.setBlockState(update.getPos(), update.getBlockState(), false);
++                setBlockInUnloadedChunk(blockUpdateChunk, update.getPos(), update.getBlockState());
 +            } else if (packet instanceof ClientboundSectionBlocksUpdatePacket update) {
 +                update.runUpdates((pos, state) -> {
-+                    blockUpdateChunk.setBlockState(pos, state, false);
++                    setBlockInUnloadedChunk(blockUpdateChunk, pos, state);
 +                });
 +            } else if (packet instanceof ClientboundBlockEntityDataPacket update) {
 +                BlockEntity entity = blockUpdateChunk.getBlockEntity(update.getPos());
@@ -1278,6 +1278,14 @@ index 0000000000000000000000000000000000000000..c8949c812a9c4d2601790a29cc413602
 +        }
 +
 +        blockUpdateChunk = null;
++    }
++
++    private static void setBlockInUnloadedChunk(ChunkAccess chunk, BlockPos pos, BlockState blockState) {
++        if (chunk instanceof LevelChunk levelChunk) {
++            levelChunk.setBlockState(pos, blockState, false, false);
++        } else {
++            chunk.setBlockState(pos, blockState, false);
++        }
 +    }
 +
 +    private static void setBlock(LevelChunk chunk, BlockPos pos, BlockState blockState) {

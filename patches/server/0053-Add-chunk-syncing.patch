@@ -229,7 +229,7 @@ index 6fc64fe9833478bce834f4e5fbe4922da6148aaf..dc1a3b9b4c9e96d67f44d471a6cb4e8c
                      chunk1.incrementInhabitedTime(j);
                      if (flag2 && (!gg.pufferfish.pufferfish.PufferfishConfig.enableAsyncMobSpawning || _pufferfish_spawnCountsReady.get()) && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair) && this.chunkMap.anyPlayerCloseEnoughForSpawning(holder, chunkcoordintpair, true)) { // Spigot // Paper - optimise anyPlayerCloseEnoughForSpawning & optimise chunk tick iteration
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 3e9979de1a49c49e3ac12c54d2c177b4972ff481..bc66aaae62488f187dc23cfe379d20561e019ec1 100644
+index 6fd8c8cc75273184ad891880296c537ebe3149b5..acebfa96129b6d09f8157bc8d2c9d85d450d0214 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -161,6 +161,8 @@ import org.bukkit.event.weather.LightningStrikeEvent;
@@ -1056,10 +1056,10 @@ index 39883d921a4ba06557e2854a3e9929861903cdee..8be50398d1b2a670635a511c15b02f43
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..52801f3648814566dddb27e4a6984aa4431cb27e
+index 0000000000000000000000000000000000000000..c8949c812a9c4d2601790a29cc413602378fa752
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,248 @@
+@@ -0,0 +1,258 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -1197,6 +1197,16 @@ index 0000000000000000000000000000000000000000..52801f3648814566dddb27e4a6984aa4
 +            holder = MultiPaper.getChunkHolder(world, update.getPos());
 +        } else if (packet instanceof ClientboundLightUpdatePacket update) {
 +            holder = MultiPaper.getChunkHolder(world, update.getX(), update.getZ());
++        }
++
++        if (holder != null && !holder.getLastAvailableChunkFuture().isDone()) {
++            holder.getLastAvailableChunkFuture().thenRun(() -> {
++                if (!Bukkit.isPrimaryThread()) {
++                    new Exception("Loaded chunk " + holder.getPos() + " outside of the main thread! (currentThread=" + Thread.currentThread() + ")").printStackTrace();
++                }
++                handleBlockUpdate(world, packet, depth);
++            });
++            return;
 +        }
 +
 +        if (holder != null) {

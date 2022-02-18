@@ -1,0 +1,208 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 11 Feb 2022 00:13:18 +1000
+Subject: [PATCH] Sync scoreboards
+
+
+diff --git a/src/main/java/net/minecraft/server/ServerScoreboard.java b/src/main/java/net/minecraft/server/ServerScoreboard.java
+index 3a4a0727ad44322e3ba85512cd077808dab080b7..27efc28ae07ab2ef5fb18aad517a02c1270e07ca 100644
+--- a/src/main/java/net/minecraft/server/ServerScoreboard.java
++++ b/src/main/java/net/minecraft/server/ServerScoreboard.java
+@@ -19,6 +19,10 @@ import net.minecraft.world.scores.PlayerTeam;
+ import net.minecraft.world.scores.Score;
+ import net.minecraft.world.scores.Scoreboard;
+ import net.minecraft.world.scores.ScoreboardSaveData;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.scoreboard.CraftScoreboard;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.ScoreboardUpdatePacket;
+ 
+ public class ServerScoreboard extends Scoreboard {
+ 
+@@ -291,11 +295,20 @@ public class ServerScoreboard extends Scoreboard {
+ 
+     // CraftBukkit start - Send to players
+     private void broadcastAll(Packet packet) {
++        if (Bukkit.getScoreboardManager() == null) return; // MultiPaper - Server hasn't started yet
++        boolean mainScoreboard = this == ((CraftScoreboard) Bukkit.getScoreboardManager().getMainScoreboard()).getHandle(); // MultiPaper
++
+         for (ServerPlayer entityplayer : (List<ServerPlayer>) this.server.getPlayerList().players) {
+-            if (entityplayer.getBukkitEntity().getScoreboard().getHandle() == this) {
++            if (entityplayer.getBukkitEntity().getScoreboard().getHandle() == this && !(mainScoreboard && MultiPaper.isExternalPlayer(entityplayer))) { // MultiPaper - Don't external scoreboards that we sync to other players
+                 entityplayer.connection.send(packet);
+             }
+         }
++
++        // MultiPaper start - Only sync the main scoreboard for now
++        if (mainScoreboard && !ScoreboardUpdatePacket.updating) {
++            MultiPaper.broadcastPacketToExternalServers(new ScoreboardUpdatePacket(null, packet));
++        }
++        // MultiPaper end
+     }
+     // CraftBukkit end
+ 
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 1d7e30df466f95b3d1e9f79c1b343ed1f1bc2219..e27c0443f3500453a6a8f7ac08b2bfa613078998 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -53,6 +53,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerSetRespawnPosition.class, PlayerSetRespawnPosition::new);
+         addPacket(DifficultyUpdatePacket.class, DifficultyUpdatePacket::new);
+         addPacket(SpawnUpdatePacket.class, SpawnUpdatePacket::new);
++        addPacket(ScoreboardUpdatePacket.class, ScoreboardUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c56ea55f8169973e6e5752be5de7010f491bc1c2
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
+@@ -0,0 +1,147 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import net.minecraft.network.ConnectionProtocol;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.game.*;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.ServerScoreboard;
++import net.minecraft.world.scores.Objective;
++import net.minecraft.world.scores.PlayerTeam;
++import net.minecraft.world.scores.Score;
++import net.minecraft.world.scores.Team;
++import net.minecraft.world.scores.criteria.ObjectiveCriteria;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++public class ScoreboardUpdatePacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(ScoreboardUpdatePacket.class.getSimpleName());
++    public static boolean updating = false;
++
++    private final String scoreboardId;
++    private final Packet<?> packet;
++
++    public ScoreboardUpdatePacket(String scoreboard, Packet<?> packet) {
++        this.scoreboardId = scoreboard;
++        this.packet = packet;
++    }
++
++    public ScoreboardUpdatePacket(FriendlyByteBuf in) {
++        String scoreboard = in.readUtf();
++        this.scoreboardId = scoreboard.isEmpty() ? null : scoreboard;
++
++        byte[] bytes = in.readByteArray();
++        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        int packetId = friendlyByteBuf.readVarInt();
++        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(scoreboardId == null ? "" : scoreboardId);
++
++        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
++        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
++        ByteBuf buf = Unpooled.buffer();
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        friendlyByteBuf.writeVarInt(id);
++        packet.write(friendlyByteBuf);
++        out.writeByteArray(buf.array());
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            if (scoreboardId != null) {
++                throw new UnsupportedOperationException("Modifying scoreboard '" + scoreboardId + "' is not supported!");
++            }
++
++            updating = true;
++
++            ServerScoreboard scoreboard = MinecraftServer.getServer().getScoreboard();
++
++            if (packet instanceof ClientboundSetPlayerTeamPacket setPlayerTeamPacket) {
++                handle(scoreboard, setPlayerTeamPacket);
++            } else if (packet instanceof ClientboundSetScorePacket setScorePacket) {
++                handle(scoreboard, setScorePacket);
++            } else if (packet instanceof ClientboundSetObjectivePacket setObjectivePacket) {
++                handle(scoreboard, setObjectivePacket);
++            } else if (packet instanceof ClientboundSetDisplayObjectivePacket setDisplayObjectivePacket) {
++                handle(scoreboard, setDisplayObjectivePacket);
++            } else {
++                LOGGER.warn("Unhandled scoreboard update packet " + packet);
++            }
++
++            updating = false;
++        });
++    }
++
++    private void handle(ServerScoreboard scoreboard, ClientboundSetPlayerTeamPacket setPlayerTeamPacket) {
++        PlayerTeam team = scoreboard.getPlayerTeam(setPlayerTeamPacket.getName());
++
++        if (setPlayerTeamPacket.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.ADD) {
++            team = scoreboard.addPlayerTeam(setPlayerTeamPacket.getName());
++        } else if (setPlayerTeamPacket.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.REMOVE) {
++            scoreboard.removePlayerTeam(team);
++        }
++
++        if (setPlayerTeamPacket.getPlayerAction() == ClientboundSetPlayerTeamPacket.Action.ADD) {
++            for (String player : setPlayerTeamPacket.getPlayers()) {
++                scoreboard.addPlayerToTeam(player, team);
++            }
++        } else if (setPlayerTeamPacket.getPlayerAction() == ClientboundSetPlayerTeamPacket.Action.REMOVE) {
++            for (String player : setPlayerTeamPacket.getPlayers()) {
++                scoreboard.removePlayerFromTeam(player, team);
++            }
++        }
++
++        if (setPlayerTeamPacket.getParameters().isPresent()) {
++            ClientboundSetPlayerTeamPacket.Parameters parameters = setPlayerTeamPacket.getParameters().get();
++            team.setDisplayName(parameters.getDisplayName());
++            team.unpackOptions(team.packOptions());
++            team.setNameTagVisibility(Team.Visibility.byName(parameters.getNametagVisibility()));
++            team.setCollisionRule(Team.CollisionRule.byName(parameters.getCollisionRule()));
++            team.setColor(parameters.getColor());
++            team.setPlayerPrefix(parameters.getPlayerPrefix());
++            team.setPlayerSuffix(parameters.getPlayerSuffix());
++        }
++    }
++
++    private void handle(ServerScoreboard scoreboard, ClientboundSetScorePacket setScorePacket) {
++        Objective objective = scoreboard.getObjective(setScorePacket.getObjectiveName());
++
++        if (setScorePacket.getMethod() == ServerScoreboard.Method.CHANGE) {
++            Score score = scoreboard.getOrCreatePlayerScore(setScorePacket.getOwner(), objective);
++            score.setScore(setScorePacket.getScore());
++        } else if (setScorePacket.getMethod() == ServerScoreboard.Method.REMOVE) {
++            scoreboard.resetPlayerScore(setScorePacket.getOwner(), objective);
++        }
++    }
++
++    private void handle(ServerScoreboard scoreboard, ClientboundSetObjectivePacket setObjectivePacket) {
++        Objective objective = scoreboard.getObjective(setObjectivePacket.getObjectiveName());
++
++        if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_ADD) {
++            // TODO Sync criterion
++            objective = scoreboard.addObjective(setObjectivePacket.getObjectiveName(), objective != null ? objective.getCriteria() : ObjectiveCriteria.DUMMY, setObjectivePacket.getDisplayName(), setObjectivePacket.getRenderType());
++        } else if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_REMOVE) {
++            scoreboard.removeObjective(objective);
++        } if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_CHANGE) {
++            objective.setDisplayName(setObjectivePacket.getDisplayName());
++            objective.setRenderType(setObjectivePacket.getRenderType());
++        }
++    }
++
++    private void handle(ServerScoreboard scoreboard, ClientboundSetDisplayObjectivePacket setDisplayObjectivePacket) {
++        Objective objective = scoreboard.getObjective(setDisplayObjectivePacket.getObjectiveName());
++
++        scoreboard.setDisplayObjective(setDisplayObjectivePacket.getSlot(), objective);
++    }
++}

@@ -795,11 +795,15 @@ index 4da68c4329648d3744f51b9ec7da18b5fe86f760..84458ed586bad25e2ee4cf6af093ba26
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 39883d921a4ba06557e2854a3e9929861903cdee..8be50398d1b2a670635a511c15b02f43033544d8 100644
+index 39883d921a4ba06557e2854a3e9929861903cdee..10eba5da28cf98e64560aa2a2697312feecb2729 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -3,28 +3,50 @@ package puregero.multipaper;
+@@ -1,30 +1,57 @@
+ package puregero.multipaper;
+ 
  import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.Container;
++import net.minecraft.world.level.block.entity.BlockEntity;
  import org.bukkit.configuration.InvalidConfigurationException;
  import org.bukkit.configuration.file.YamlConfiguration;
 +import net.minecraft.core.BlockPos;
@@ -824,6 +828,9 @@ index 39883d921a4ba06557e2854a3e9929861903cdee..8be50398d1b2a670635a511c15b02f43
 -import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
 -import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
 -import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.entity.HumanEntity;
++import org.bukkit.event.inventory.InventoryCloseEvent;
 +import puregero.multipaper.externalserverprotocol.*;
  
 -import java.io.File;
@@ -855,7 +862,7 @@ index 39883d921a4ba06557e2854a3e9929861903cdee..8be50398d1b2a670635a511c15b02f43
  
      public static MultiPaperConnection getConnection() {
          if (multiPaperConnection == null) {
-@@ -104,6 +126,25 @@ public class MultiPaper {
+@@ -104,6 +131,25 @@ public class MultiPaper {
                  server.getConnection().tick();
              }
          }
@@ -881,7 +888,7 @@ index 39883d921a4ba06557e2854a3e9929861903cdee..8be50398d1b2a670635a511c15b02f43
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -197,4 +238,172 @@ public class MultiPaper {
+@@ -197,4 +243,184 @@ public class MultiPaper {
      public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
          return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
      }
@@ -971,6 +978,18 @@ index 39883d921a4ba06557e2854a3e9929861903cdee..8be50398d1b2a670635a511c15b02f43
 +        try {
 +            if (MultiPaper.isChunkLocal(chunk)) {
 +                broadcastPacketToExternalServers(chunk.externalSubscribers, () -> new SendTickListPacket(chunk));
++                for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
++                    if (blockEntity instanceof Container container) {
++                        List<HumanEntity> viewers = container.getViewers();
++                        if (!viewers.isEmpty()) {
++                            for (org.bukkit.entity.HumanEntity viewer : new ArrayList<>(container.getViewers())) {
++                                if (viewer instanceof CraftPlayer craftPlayer) {
++                                    craftPlayer.closeInventory(InventoryCloseEvent.Reason.UNLOADED);
++                                }
++                            }
++                        }
++                    }
++                }
 +            }
 +            getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
 +            chunk.externalOwner = null;

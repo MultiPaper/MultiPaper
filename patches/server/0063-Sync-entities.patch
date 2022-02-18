@@ -149,7 +149,7 @@ index 887556052a8dd36453aef8b92cf2e1c81932876b..6032128a4eb2ea88000e5288261599e5
          this.entity.startSeenByPlayer(player);
      }
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 3e36920abfa578b4622c0f3fc680ee5d4221f6e7..33b4e361786eb7f0e8da6e69af76d8d3d7410376 100644
+index 0cae2500e905086999e9394191a31ec20f45e412..2c66ec1be2a955cf0cf5fa9e849c4deb9aff6fd5 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -90,8 +90,11 @@ import net.minecraft.world.entity.animal.WaterAnimal;
@@ -726,10 +726,10 @@ index 84458ed586bad25e2ee4cf6af093ba26f56474ed..3317b58bb108be73ca7f1db87d900433
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 39a1a09f2c65bbab5ad7b4b82c5d4396f65bcb51..bcbf7699be1e3a20e045db0029d8f20acdb07563 100644
+index 470056524d5824fe4b5e37746633e3748b307278..4cd822370dfb98605ab0ecca8d9726b74bb71df5 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -171,6 +171,9 @@ public class MultiPaper {
+@@ -176,6 +176,9 @@ public class MultiPaper {
              ChunkHolder holder = visibleChunksToCheck.remove(visibleChunksToCheck.size() - 1);
              if (holder.getAvailableChunkNow() != null && holder.getWorld().chunkSource.chunkMap.getVisibleChunkIfPresent(holder.pos.longKey) == holder) {
                  getConnection().syncChunkSubscribers(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z);
@@ -739,14 +739,14 @@ index 39a1a09f2c65bbab5ad7b4b82c5d4396f65bcb51..bcbf7699be1e3a20e045db0029d8f20a
                  break;
              }
          }
-@@ -467,6 +470,7 @@ public class MultiPaper {
+@@ -472,6 +475,7 @@ public class MultiPaper {
      public static void unlockChunk(LevelChunk chunk) {
          try {
              if (MultiPaper.isChunkLocal(chunk)) {
 +                broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new SendEntitiesPacket(chunk));
                  broadcastPacketToExternalServers(chunk.externalSubscribers, () -> new SendTickListPacket(chunk));
-             }
-             getConnection().unlockChunk(chunk.level.convertable.getLevelId(), chunk.locX, chunk.locZ);
+                 for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+                     if (blockEntity instanceof Container container) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 index b4bd79d384dd499208b428a78c0b3c4828b28712..6c7d49b4b8c51b166e045a01ad606f7329207cf6 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java

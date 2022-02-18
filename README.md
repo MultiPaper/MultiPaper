@@ -220,6 +220,11 @@ Build instructions:
 ## Publishing to maven local
 Publish to your local maven repository with: `./gradlew publishToMavenLocal`
 
+### Licensing
+
+All code is licensed under [GPLv3](LICENSE.txt) excluding MultiPaper-Master
+which is licensed under [MIT](MultiPaper-Master/LICENSE.txt).
+
 ### Acknowledgements
 
 MultiPaper includes optimisations from both

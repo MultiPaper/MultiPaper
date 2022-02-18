@@ -5,7 +5,7 @@ Subject: [PATCH] Sync scoreboards
 
 
 diff --git a/src/main/java/net/minecraft/server/ServerScoreboard.java b/src/main/java/net/minecraft/server/ServerScoreboard.java
-index 3a4a0727ad44322e3ba85512cd077808dab080b7..8c6ef319bae4d5923ac3d34ce111027a911bb4cd 100644
+index 3a4a0727ad44322e3ba85512cd077808dab080b7..af64daf6dd2207f51546972dea9612efb292fb33 100644
 --- a/src/main/java/net/minecraft/server/ServerScoreboard.java
 +++ b/src/main/java/net/minecraft/server/ServerScoreboard.java
 @@ -19,6 +19,10 @@ import net.minecraft.world.scores.PlayerTeam;
@@ -19,7 +19,7 @@ index 3a4a0727ad44322e3ba85512cd077808dab080b7..8c6ef319bae4d5923ac3d34ce111027a
  
  public class ServerScoreboard extends Scoreboard {
  
-@@ -291,11 +295,20 @@ public class ServerScoreboard extends Scoreboard {
+@@ -291,11 +295,25 @@ public class ServerScoreboard extends Scoreboard {
  
      // CraftBukkit start - Send to players
      private void broadcastAll(Packet packet) {
@@ -35,7 +35,12 @@ index 3a4a0727ad44322e3ba85512cd077808dab080b7..8c6ef319bae4d5923ac3d34ce111027a
 +
 +        // MultiPaper start - Only sync the main scoreboard for now
 +        if (mainScoreboard && MultiPaper.shouldSyncScoreboards() && !ScoreboardUpdatePacket.updating) {
-+            MultiPaper.broadcastPacketToExternalServers(new ScoreboardUpdatePacket(null, packet));
++            if (packet instanceof ClientboundSetObjectivePacket setObjectivePacket) {
++                Objective objective = getObjective(setObjectivePacket.getObjectiveName());
++                MultiPaper.broadcastPacketToExternalServers(new ScoreboardUpdatePacket(null, objective != null ? objective.getCriteria() : null, packet));
++            } else {
++                MultiPaper.broadcastPacketToExternalServers(new ScoreboardUpdatePacket(null, packet));
++            }
 +        }
 +        // MultiPaper end
      }
@@ -88,10 +93,10 @@ index 1d7e30df466f95b3d1e9f79c1b343ed1f1bc2219..e27c0443f3500453a6a8f7ac08b2bfa6
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c56ea55f8169973e6e5752be5de7010f491bc1c2
+index 0000000000000000000000000000000000000000..fd0b332ecfa7684c1e31a6e70395bf4571d0f983
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,163 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -113,22 +118,35 @@ index 0000000000000000000000000000000000000000..c56ea55f8169973e6e5752be5de7010f
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
++import javax.annotation.Nullable;
++
 +public class ScoreboardUpdatePacket extends ExternalServerPacket {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(ScoreboardUpdatePacket.class.getSimpleName());
 +    public static boolean updating = false;
 +
++    @Nullable
 +    private final String scoreboardId;
++    @Nullable
++    private final String criteria;
 +    private final Packet<?> packet;
 +
-+    public ScoreboardUpdatePacket(String scoreboard, Packet<?> packet) {
++    public ScoreboardUpdatePacket(@Nullable String scoreboard, Packet<?> packet) {
++        this(scoreboard, null, packet);
++    }
++
++    public ScoreboardUpdatePacket(@Nullable String scoreboard, @Nullable ObjectiveCriteria criteria, Packet<?> packet) {
 +        this.scoreboardId = scoreboard;
++        this.criteria = criteria == null ? null : criteria.getName();
 +        this.packet = packet;
 +    }
 +
 +    public ScoreboardUpdatePacket(FriendlyByteBuf in) {
 +        String scoreboard = in.readUtf();
 +        this.scoreboardId = scoreboard.isEmpty() ? null : scoreboard;
++
++        String criteria = in.readUtf();
++        this.criteria = criteria.isEmpty() ? null : criteria;
 +
 +        byte[] bytes = in.readByteArray();
 +        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
@@ -140,6 +158,8 @@ index 0000000000000000000000000000000000000000..c56ea55f8169973e6e5752be5de7010f
 +    @Override
 +    public void write(FriendlyByteBuf out) {
 +        out.writeUtf(scoreboardId == null ? "" : scoreboardId);
++
++        out.writeUtf(criteria == null ? "" : criteria);
 +
 +        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
 +        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
@@ -166,7 +186,7 @@ index 0000000000000000000000000000000000000000..c56ea55f8169973e6e5752be5de7010f
 +            } else if (packet instanceof ClientboundSetScorePacket setScorePacket) {
 +                handle(scoreboard, setScorePacket);
 +            } else if (packet instanceof ClientboundSetObjectivePacket setObjectivePacket) {
-+                handle(scoreboard, setObjectivePacket);
++                handle(scoreboard, criteria, setObjectivePacket);
 +            } else if (packet instanceof ClientboundSetDisplayObjectivePacket setDisplayObjectivePacket) {
 +                handle(scoreboard, setDisplayObjectivePacket);
 +            } else {
@@ -219,12 +239,13 @@ index 0000000000000000000000000000000000000000..c56ea55f8169973e6e5752be5de7010f
 +        }
 +    }
 +
-+    private void handle(ServerScoreboard scoreboard, ClientboundSetObjectivePacket setObjectivePacket) {
++    private void handle(ServerScoreboard scoreboard, String criteria, ClientboundSetObjectivePacket setObjectivePacket) {
 +        Objective objective = scoreboard.getObjective(setObjectivePacket.getObjectiveName());
++        ObjectiveCriteria objectiveCriteria = criteria == null ? null : ObjectiveCriteria.byName(criteria).get();
 +
 +        if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_ADD) {
 +            // TODO Sync criterion
-+            objective = scoreboard.addObjective(setObjectivePacket.getObjectiveName(), objective != null ? objective.getCriteria() : ObjectiveCriteria.DUMMY, setObjectivePacket.getDisplayName(), setObjectivePacket.getRenderType());
++            objective = scoreboard.addObjective(setObjectivePacket.getObjectiveName(), objectiveCriteria, setObjectivePacket.getDisplayName(), setObjectivePacket.getRenderType());
 +        } else if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_REMOVE) {
 +            scoreboard.removeObjective(objective);
 +        } if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_CHANGE) {

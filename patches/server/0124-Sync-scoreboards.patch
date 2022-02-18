@@ -91,12 +91,79 @@ index 1d7e30df466f95b3d1e9f79c1b343ed1f1bc2219..e27c0443f3500453a6a8f7ac08b2bfa6
      }
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+index 772381766bebf388664e7488fd38ebb0bdbf913f..ae79f84b755285d4072b7176ff515725c9fef13c 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+@@ -1,6 +1,12 @@
+ package puregero.multipaper.externalserverprotocol;
+ 
+ import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.ServerScoreboard;
++import net.minecraft.world.scores.Objective;
++import net.minecraft.world.scores.PlayerTeam;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
+@@ -8,6 +14,10 @@ import org.bukkit.World;
+ import puregero.multipaper.ExternalServerConnection;
+ import puregero.multipaper.MultiPaper;
+ 
++import java.util.HashSet;
++import java.util.List;
++import java.util.Set;
++
+ public class HelloPacket extends ExternalServerPacket {
+ 
+     private static final Logger LOGGER = LogManager.getLogger(HelloPacket.class.getSimpleName());
+@@ -69,5 +79,38 @@ public class HelloPacket extends ExternalServerPacket {
+                 connection.send(new SubscribeToWorldPacket(world.getName()));
+             }
+         });
++
++        if (MultiPaper.shouldSyncScoreboards()) {
++            MultiPaper.runSync(() -> {
++                // Only send scoreboards if we haven't just loaded
++                if (MinecraftServer.getServer().getTickCount() > 5) {
++                    sendScoreboard(MinecraftServer.getServer().getScoreboard(), connection);
++                }
++            });
++        }
++    }
++
++    private void sendScoreboard(ServerScoreboard scoreboard, ExternalServerConnection connection) {
++        String scoreboardId = null;
++
++        Set<Objective> set = new HashSet<>();
++
++        for (PlayerTeam scoreboardteam : scoreboard.getPlayerTeams()) {
++            connection.send(new ScoreboardUpdatePacket(scoreboardId, ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(scoreboardteam, true)));
++        }
++
++        for (int i = 0; i < 19; ++i) {
++            Objective scoreboardobjective = scoreboard.getDisplayObjective(i);
++
++            if (scoreboardobjective != null && !set.contains(scoreboardobjective)) {
++                List<Packet<?>> list = scoreboard.getStartTrackingPackets(scoreboardobjective);
++
++                for (Packet<?> value : list) {
++                    connection.send(new ScoreboardUpdatePacket(scoreboardId, scoreboardobjective.getCriteria(), value));
++                }
++
++                set.add(scoreboardobjective);
++            }
++        }
+     }
+ }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..fd0b332ecfa7684c1e31a6e70395bf4571d0f983
+index 0000000000000000000000000000000000000000..0a8ab55aefc35b6496045d46b079e506e063aeb3
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
-@@ -0,0 +1,163 @@
+@@ -0,0 +1,162 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -200,7 +267,7 @@ index 0000000000000000000000000000000000000000..fd0b332ecfa7684c1e31a6e70395bf45
 +    private void handle(ServerScoreboard scoreboard, ClientboundSetPlayerTeamPacket setPlayerTeamPacket) {
 +        PlayerTeam team = scoreboard.getPlayerTeam(setPlayerTeamPacket.getName());
 +
-+        if (setPlayerTeamPacket.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.ADD) {
++        if (setPlayerTeamPacket.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.ADD && team == null) {
 +            team = scoreboard.addPlayerTeam(setPlayerTeamPacket.getName());
 +        } else if (setPlayerTeamPacket.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.REMOVE) {
 +            scoreboard.removePlayerTeam(team);
@@ -243,12 +310,11 @@ index 0000000000000000000000000000000000000000..fd0b332ecfa7684c1e31a6e70395bf45
 +        Objective objective = scoreboard.getObjective(setObjectivePacket.getObjectiveName());
 +        ObjectiveCriteria objectiveCriteria = criteria == null ? null : ObjectiveCriteria.byName(criteria).get();
 +
-+        if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_ADD) {
-+            // TODO Sync criterion
++        if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_ADD && objective == null) {
 +            objective = scoreboard.addObjective(setObjectivePacket.getObjectiveName(), objectiveCriteria, setObjectivePacket.getDisplayName(), setObjectivePacket.getRenderType());
 +        } else if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_REMOVE) {
 +            scoreboard.removeObjective(objective);
-+        } if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_CHANGE) {
++        } if (setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_CHANGE || setObjectivePacket.getMethod() == ClientboundSetObjectivePacket.METHOD_ADD) {
 +            objective.setDisplayName(setObjectivePacket.getDisplayName());
 +            objective.setRenderType(setObjectivePacket.getRenderType());
 +        }

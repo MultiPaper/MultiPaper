@@ -194,7 +194,7 @@ index 6d85a3ca15e813797024cd2c4ffa5e6cb10e11c0..d247778f80862d57ed9f93370187ede7
          do {
              path = path.getParentFile();
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 3a1c83eecab91fda2a24fe740d52633068438541..473e95c68dc99cb7b6c9e4e0ec0a504a0bbb1fda 100644
+index 3a1c83eecab91fda2a24fe740d52633068438541..40a1da220cebf9a7bd93f18c2ab950e799f59f32 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -19,6 +19,7 @@ import org.apache.logging.log4j.LogManager;
@@ -205,7 +205,7 @@ index 3a1c83eecab91fda2a24fe740d52633068438541..473e95c68dc99cb7b6c9e4e0ec0a504a
  import org.bukkit.craftbukkit.entity.CraftPlayer;
  import org.bukkit.entity.Player;
  import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
-@@ -205,6 +206,26 @@ public class MultiPaperConnection extends Thread {
+@@ -205,6 +206,27 @@ public class MultiPaperConnection extends Thread {
          });
      }
  
@@ -217,14 +217,15 @@ index 3a1c83eecab91fda2a24fe740d52633068438541..473e95c68dc99cb7b6c9e4e0ec0a504a
 +            path = path.getParentFile();
 +        }
 +
-+        World world = Bukkit.getWorld(path.getName());
-+        if (world == null) {
-+            LOGGER.warn("Unknown world '" + path.getName() + "' in path " + pathStr + " for clearData");
-+            return;
-+        }
-+
 +        // Clear the data from the world's data cache
++        final File finalPath = path;
 +        MultiPaper.runSync(() -> {
++            World world = Bukkit.getWorld(finalPath.getName());
++            if (world == null) {
++                LOGGER.warn("Unknown world '" + finalPath.getName() + "' in path " + pathStr + " for clearData");
++                return;
++            }
++
 +            ((CraftWorld) world).getHandle().getDataStorage().cache.remove(file);
 +        });
 +    }
@@ -232,7 +233,7 @@ index 3a1c83eecab91fda2a24fe740d52633068438541..473e95c68dc99cb7b6c9e4e0ec0a504a
      public void chunkOwner(DataInputStream in, DataOutputSender out) throws IOException {
          String world = in.readUTF();
          int cx = in.readInt();
-@@ -652,6 +673,35 @@ public class MultiPaperConnection extends Thread {
+@@ -652,6 +674,35 @@ public class MultiPaperConnection extends Thread {
          out.send(in -> { /* Do nothing */ });
      }
  

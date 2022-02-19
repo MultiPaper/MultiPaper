@@ -118,7 +118,7 @@ index ef901eb0715c871dff99be69cdfae8a75c2cdfaa..305a32a567b2e16ae66db34016aab494
          do {
              path = path.getParentFile();
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 2aced44dcb23258925c1a2915cc4295f4eb41b71..9d20f7d7e98c35d6c3a9c341d93c643ee26a5a0f 100644
+index 2aced44dcb23258925c1a2915cc4295f4eb41b71..3edc75b7f04984171c293f157470e46d8de655ec 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -8,6 +8,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
@@ -129,15 +129,26 @@ index 2aced44dcb23258925c1a2915cc4295f4eb41b71..9d20f7d7e98c35d6c3a9c341d93c643e
  import net.minecraft.server.level.ChunkHolder;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.network.ServerConnectionListener;
-@@ -25,6 +26,7 @@ import javax.annotation.Nullable;
+@@ -18,6 +19,8 @@ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
+ import org.bukkit.World;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.entity.Player;
+ import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
+ import puregero.multipaper.externalserverprotocol.SendTickListPacket;
+ 
+@@ -25,7 +28,9 @@ import javax.annotation.Nullable;
  import java.io.*;
  import java.net.Socket;
  import java.net.SocketException;
 +import java.nio.charset.StandardCharsets;
  import java.util.HashSet;
++import java.util.List;
  import java.util.Map;
  import java.util.concurrent.CompletableFuture;
-@@ -160,6 +162,37 @@ public class MultiPaperConnection extends Thread {
+ import java.util.concurrent.ConcurrentHashMap;
+@@ -160,6 +165,46 @@ public class MultiPaperConnection extends Thread {
          secret = in.readUTF();
      }
  
@@ -158,7 +169,16 @@ index 2aced44dcb23258925c1a2915cc4295f4eb41b71..9d20f7d7e98c35d6c3a9c341d93c643e
 +                        DedicatedServer.getServer().getPlayerList().getIpBans().load();
 +                        break;
 +                    case "ops.json":
++                        List<? extends Player> ops = Bukkit.getOnlinePlayers().stream().filter(Player::isOp).toList();
 +                        DedicatedServer.getServer().getPlayerList().getOps().load();
++                        MultiPaper.runSync(() -> {
++                            for (Player player : Bukkit.getOnlinePlayers()) {
++                                if ((!player.isOp() && ops.contains(player)) || (player.isOp() && !ops.contains(player))) {
++                                    DedicatedServer.getServer().getPlayerList().sendPlayerPermissionLevel(((CraftPlayer) player).getHandle());
++                                    player.recalculatePermissions();
++                                }
++                            }
++                        });
 +                        break;
 +                    case "whitelist.json":
 +                        DedicatedServer.getServer().getPlayerList().getWhiteList().load();
@@ -175,7 +195,7 @@ index 2aced44dcb23258925c1a2915cc4295f4eb41b71..9d20f7d7e98c35d6c3a9c341d93c643e
      public void chunkOwner(DataInputStream in, DataOutputSender out) throws IOException {
          String world = in.readUTF();
          int cx = in.readInt();
-@@ -459,6 +492,36 @@ public class MultiPaperConnection extends Thread {
+@@ -459,6 +504,36 @@ public class MultiPaperConnection extends Thread {
          out.send(in -> { /* Do nothing */ });
      }
  

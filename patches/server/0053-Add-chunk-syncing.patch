@@ -1346,7 +1346,7 @@ index 0000000000000000000000000000000000000000..1e1c01c34fd8f3dc217f89c04cedba7c
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 59546ec0eccd0bcd852dd030ebc20b0637176dde..1f09b09fdb2f3a328368171515c6746a1c0d17aa 100644
+index 59546ec0eccd0bcd852dd030ebc20b0637176dde..ecb0c4d067c174979582d7eb746ced899ce81f91 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -5,18 +5,33 @@ import io.netty.channel.ChannelOption;
@@ -1401,7 +1401,7 @@ index 59546ec0eccd0bcd852dd030ebc20b0637176dde..1f09b09fdb2f3a328368171515c6746a
                  DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
                  while (!socket.isClosed()) {
                      int id = in.readInt();
-@@ -134,6 +160,109 @@ public class MultiPaperConnection extends Thread {
+@@ -134,6 +160,111 @@ public class MultiPaperConnection extends Thread {
          secret = in.readUTF();
      }
  
@@ -1424,8 +1424,10 @@ index 59546ec0eccd0bcd852dd030ebc20b0637176dde..1f09b09fdb2f3a328368171515c6746a
 +                    MultiPaper.runSync(() -> levelChunk.externalOwner = server);
 +                } else if (server != null) {
 +                    levelChunk.externalOwner = server;
-+                    levelChunk.blockTicks.removeIf(tick -> true);
-+                    levelChunk.fluidTicks.removeIf(tick -> true);
++                    MultiPaper.runSync(() -> {
++                        levelChunk.blockTicks.removeIf(tick -> true);
++                        levelChunk.fluidTicks.removeIf(tick -> true);
++                    });
 +                } else {
 +                    levelChunk.externalOwner = null;
 +                }
@@ -1511,7 +1513,7 @@ index 59546ec0eccd0bcd852dd030ebc20b0637176dde..1f09b09fdb2f3a328368171515c6746a
      public void start(DataInputStream in, DataOutputSender out) throws IOException {
          String address = in.readUTF();
          int port = in.readInt();
-@@ -163,6 +292,24 @@ public class MultiPaperConnection extends Thread {
+@@ -163,6 +294,24 @@ public class MultiPaperConnection extends Thread {
          });
      }
  
@@ -1536,7 +1538,7 @@ index 59546ec0eccd0bcd852dd030ebc20b0637176dde..1f09b09fdb2f3a328368171515c6746a
      public void writeTickTime(long time, double tps) throws IOException {
          DataOutputSender out = new DataOutputSender(this);
          out.writeUTF("writeTickTime");
-@@ -178,4 +325,181 @@ public class MultiPaperConnection extends Thread {
+@@ -178,4 +327,181 @@ public class MultiPaperConnection extends Thread {
          out.writeInt(port);
          out.send(null);
      }

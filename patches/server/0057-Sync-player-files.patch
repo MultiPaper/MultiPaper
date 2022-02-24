@@ -5,7 +5,7 @@ Subject: [PATCH] Sync player files
 
 
 diff --git a/src/main/java/net/minecraft/server/PlayerAdvancements.java b/src/main/java/net/minecraft/server/PlayerAdvancements.java
-index f7959fe8d5247504dd79a18010470d98781c7cfe..52c67c35e9c2d2b1a32713152fcf9e9459c06893 100644
+index f7959fe8d5247504dd79a18010470d98781c7cfe..ec1c1b82ea8677357feca09bc7eaadb7cc756272 100644
 --- a/src/main/java/net/minecraft/server/PlayerAdvancements.java
 +++ b/src/main/java/net/minecraft/server/PlayerAdvancements.java
 @@ -51,6 +51,7 @@ import net.minecraft.util.datafix.DataFixTypes;
@@ -24,7 +24,7 @@ index f7959fe8d5247504dd79a18010470d98781c7cfe..52c67c35e9c2d2b1a32713152fcf9e94
 +        // MultiPaper start
 +        String json = null;
 +        try {
-+            json = MultiPaper.readAdvancements(player.getStringUUID());
++            json = MultiPaper.readAdvancements(player.server.storageSource.levelPath.getFileName().toString(), player.getStringUUID());
 +        } catch (IOException e1) {
 +            e1.printStackTrace();
 +        }
@@ -42,7 +42,7 @@ index f7959fe8d5247504dd79a18010470d98781c7cfe..52c67c35e9c2d2b1a32713152fcf9e94
          try {
 +            // MultiPaper start
 +            if (true) {
-+                MultiPaper.writeAdvancements(player.getStringUUID(), PlayerAdvancements.GSON.toJson(jsonelement));
++                MultiPaper.writeAdvancements(player.server.storageSource.levelPath.getFileName().toString(), player.getStringUUID(), PlayerAdvancements.GSON.toJson(jsonelement));
 +                return;
 +            }
 +            // MultiPaper end
@@ -63,7 +63,7 @@ index cc8bdbb869434c98df58126607b687b154c7462a..5a947b404214ee37414a18ecd771a699
          ServerStatsCounter serverstatisticmanager = (ServerStatsCounter) player.getStats(); // CraftBukkit
  
 diff --git a/src/main/java/net/minecraft/stats/ServerStatsCounter.java b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
-index ee5bb1a8edb812d48d5af45ea8485f574dcb2ad5..db0673fbb7c1c72352388840aeae070e6318d0bb 100644
+index ee5bb1a8edb812d48d5af45ea8485f574dcb2ad5..8b9f21d8a4a9d3b61edef909f51f415c03934879 100644
 --- a/src/main/java/net/minecraft/stats/ServerStatsCounter.java
 +++ b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
 @@ -36,6 +36,7 @@ import net.minecraft.world.entity.player.Player;
@@ -81,7 +81,7 @@ index ee5bb1a8edb812d48d5af45ea8485f574dcb2ad5..db0673fbb7c1c72352388840aeae070e
 +        // MultiPaper start
 +        if (true) {
 +            try {
-+                String json = MultiPaper.readStats(this.file.getName().split("\\.")[0]);
++                String json = MultiPaper.readStats(server.storageSource.levelPath.getFileName().toString(), this.file.getName().split("\\.")[0]);
 +                if (!json.isEmpty()) {
 +                    this.parseLocal(server.getFixerUpper(), json);
 +                }
@@ -102,7 +102,7 @@ index ee5bb1a8edb812d48d5af45ea8485f574dcb2ad5..db0673fbb7c1c72352388840aeae070e
          try {
 +            // MultiPaper start
 +            if (true) {
-+                MultiPaper.writeStats(this.file.getName().split("\\.")[0], this.toJson());
++                MultiPaper.writeStats(server.storageSource.levelPath.getFileName().toString(), this.file.getName().split("\\.")[0], this.toJson());
 +                return;
 +            }
 +            // MultiPaper end
@@ -110,10 +110,10 @@ index ee5bb1a8edb812d48d5af45ea8485f574dcb2ad5..db0673fbb7c1c72352388840aeae070e
          } catch (IOException ioexception) {
              ServerStatsCounter.LOGGER.error("Couldn't save stats", ioexception);
 diff --git a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
-index 35c39aed9583275ef25d32c783715798b52bdb63..472b8e84b45537017bdcd5d67e743e588f6c02c4 100644
+index 35c39aed9583275ef25d32c783715798b52bdb63..641581f2c84100b84bed7254801b41f207dcf909 100644
 --- a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
 +++ b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
-@@ -17,6 +17,7 @@ import org.apache.logging.log4j.Logger;
+@@ -17,15 +17,18 @@ import org.apache.logging.log4j.Logger;
  import java.io.FileInputStream;
  import java.io.InputStream;
  import org.bukkit.craftbukkit.entity.CraftPlayer;
@@ -121,14 +121,25 @@ index 35c39aed9583275ef25d32c783715798b52bdb63..472b8e84b45537017bdcd5d67e743e58
  // CraftBukkit end
  
  public class PlayerDataStorage {
-@@ -35,6 +36,14 @@ public class PlayerDataStorage {
+ 
+     private static final Logger LOGGER = LogManager.getLogger();
+     private final File playerDir;
++    private final LevelStorageSource.LevelStorageAccess session; // MultiPaper
+     protected final DataFixer fixerUpper;
+ 
+     public PlayerDataStorage(LevelStorageSource.LevelStorageAccess session, DataFixer dataFixer) {
++        this.session = session; // MultiPaper
+         this.fixerUpper = dataFixer;
+         this.playerDir = session.getLevelPath(LevelResource.PLAYER_DATA_DIR).toFile();
+         this.playerDir.mkdirs();
+@@ -35,6 +38,14 @@ public class PlayerDataStorage {
          if (org.spigotmc.SpigotConfig.disablePlayerDataSaving) return; // Spigot
          try {
              CompoundTag nbttagcompound = player.saveWithoutId(new CompoundTag());
 +
 +            // MultiPaper start
 +            if (true) {
-+                MultiPaper.writePlayer(player.getStringUUID(), nbttagcompound);
++                MultiPaper.writePlayer(session.levelPath.getFileName().toString(), player.getStringUUID(), nbttagcompound);
 +                return;
 +            }
 +            // MultiPaper end
@@ -136,17 +147,17 @@ index 35c39aed9583275ef25d32c783715798b52bdb63..472b8e84b45537017bdcd5d67e743e58
              File file = File.createTempFile(player.getStringUUID() + "-", ".dat", this.playerDir);
  
              NbtIo.writeCompressed(nbttagcompound, file);
-@@ -53,6 +62,9 @@ public class PlayerDataStorage {
+@@ -53,6 +64,9 @@ public class PlayerDataStorage {
          CompoundTag nbttagcompound = null;
  
          try {
-+            nbttagcompound = MultiPaper.readPlayer(player.getStringUUID()); // MultiPaper
++            nbttagcompound = MultiPaper.readPlayer(session.levelPath.getFileName().toString(), player.getStringUUID()); // MultiPaper
 +
 +            if (false) { // MultiPaper
              File file = new File(this.playerDir, player.getStringUUID() + ".dat");
              // Spigot Start
              boolean usingWrongFile = false;
-@@ -76,11 +88,13 @@ public class PlayerDataStorage {
+@@ -76,11 +90,13 @@ public class PlayerDataStorage {
                  file.renameTo( new File( file.getPath() + ".offline-read" ) );
              }
              // Spigot End
@@ -160,7 +171,7 @@ index 35c39aed9583275ef25d32c783715798b52bdb63..472b8e84b45537017bdcd5d67e743e58
              // CraftBukkit start
              if (player instanceof ServerPlayer) {
                  CraftPlayer player1 = (CraftPlayer) player.getBukkitEntity();
-@@ -91,6 +105,7 @@ public class PlayerDataStorage {
+@@ -91,6 +107,7 @@ public class PlayerDataStorage {
                  }
              }
              // CraftBukkit end
@@ -168,11 +179,11 @@ index 35c39aed9583275ef25d32c783715798b52bdb63..472b8e84b45537017bdcd5d67e743e58
              int i = nbttagcompound.contains("DataVersion", 3) ? nbttagcompound.getInt("DataVersion") : -1;
  
              player.load(ca.spottedleaf.dataconverter.minecraft.MCDataConverter.convertTag(ca.spottedleaf.dataconverter.minecraft.datatypes.MCTypeRegistry.PLAYER, nbttagcompound, i, net.minecraft.SharedConstants.getCurrentVersion().getWorldVersion())); // Paper - replace player converter
-@@ -102,6 +117,8 @@ public class PlayerDataStorage {
+@@ -102,6 +119,8 @@ public class PlayerDataStorage {
      // CraftBukkit start
      public CompoundTag getPlayerData(String s) {
          try {
-+            if (true) return MultiPaper.readPlayer(s); // MultiPaper
++            if (true) return MultiPaper.readPlayer(session.levelPath.getFileName().toString(), s); // MultiPaper
 +
              File file1 = new File(this.playerDir, s + ".dat");
  
@@ -198,57 +209,58 @@ index d309d9f0b54e2a966ccfbb780359bb8e68d15ee3..f49628392792af16014e378c12148b14
      }
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 0c9cf1476c7ebc88cf199aec78882c20fb95867c..ab0709c51e6b56ae0aa71cdf4544d402a344e6f6 100644
+index 0c9cf1476c7ebc88cf199aec78882c20fb95867c..2444971ae17cb5393f514f9287901e67830c2a0b 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -368,6 +368,34 @@ public class MultiPaper {
          }
      }
  
-+    public static CompoundTag readPlayer(String uuid) throws IOException {
-+        DataInput in = getConnection().readPlayer(uuid).join();
++    public static CompoundTag readPlayer(String world, String uuid) throws IOException {
++        DataInput in = getConnection().readPlayer(world, uuid).join();
 +
 +        return in == null ? null : NbtIo.readCompressed((InputStream) in);
 +    }
 +
-+    public static void writePlayer(String uuid, CompoundTag compoundTag) throws IOException {
++    public static void writePlayer(String world, String uuid, CompoundTag compoundTag) throws IOException {
 +        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 +        NbtIo.writeCompressed(compoundTag, buffer);
-+        getConnection().writePlayer(uuid, buffer.toByteArray());
++        getConnection().writePlayer(world, uuid, buffer.toByteArray());
 +    }
 +
-+    public static String readAdvancements(String uuid) throws IOException {
-+        return getConnection().readAdvancements(uuid).join();
++    public static String readAdvancements(String world, String uuid) throws IOException {
++        return getConnection().readAdvancements(world, uuid).join();
 +    }
 +
-+    public static void writeAdvancements(String uuid, String json) throws IOException {
-+        getConnection().writeAdvancements(uuid, json);
++    public static void writeAdvancements(String world, String uuid, String json) throws IOException {
++        getConnection().writeAdvancements(world, uuid, json);
 +    }
 +
-+    public static String readStats(String uuid) throws IOException {
-+        return getConnection().readStats(uuid).join();
++    public static String readStats(String world, String uuid) throws IOException {
++        return getConnection().readStats(world, uuid).join();
 +    }
 +
-+    public static void writeStats(String uuid, String json) throws IOException {
-+        getConnection().writeStats(uuid, json);
++    public static void writeStats(String world, String uuid, String json) throws IOException {
++        getConnection().writeStats(world, uuid, json);
 +    }
 +
      private static String getWorld(File path) {
          do {
              path = path.getParentFile();
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 64712619b32544761b9c43d68715c92e92387b67..b608d412b0f8880f03cb4495168d76d7be64543b 100644
+index 64712619b32544761b9c43d68715c92e92387b67..37e16555a2be5bdb2bb7d5d13e6f3738f3cf6c00 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -536,6 +536,95 @@ public class MultiPaperConnection extends Thread {
+@@ -536,6 +536,101 @@ public class MultiPaperConnection extends Thread {
          out.send(in -> { /* Do nothing */ });
      }
  
-+    public CompletableFuture<DataInputStream> readPlayer(String uuid) throws IOException {
++    public CompletableFuture<DataInputStream> readPlayer(String world, String uuid) throws IOException {
 +        CompletableFuture<DataInputStream> future = new CompletableFuture<>();
 +
 +        DataOutputSender out = new DataOutputSender(this);
 +        out.writeUTF("readPlayer");
++        out.writeUTF(world);
 +        out.writeUTF(uuid);
 +        out.send(in -> {
 +            try {
@@ -264,20 +276,22 @@ index 64712619b32544761b9c43d68715c92e92387b67..b608d412b0f8880f03cb4495168d76d7
 +        return future;
 +    }
 +
-+    public void writePlayer(String uuid, byte[] data) throws IOException {
++    public void writePlayer(String world, String uuid, byte[] data) throws IOException {
 +        DataOutputSender out = new DataOutputSender(this);
 +        out.writeUTF("writePlayer");
++        out.writeUTF(world);
 +        out.writeUTF(uuid);
 +        out.writeInt(data.length);
 +        out.write(data);
 +        out.send(in -> { /* Do nothing */ });
 +    }
 +
-+    public CompletableFuture<String> readAdvancements(String uuid) throws IOException {
++    public CompletableFuture<String> readAdvancements(String world, String uuid) throws IOException {
 +        CompletableFuture<String> future = new CompletableFuture<>();
 +
 +        DataOutputSender out = new DataOutputSender(this);
 +        out.writeUTF("readAdvancements");
++        out.writeUTF(world);
 +        out.writeUTF(uuid);
 +        out.send(in -> {
 +            try {
@@ -293,21 +307,23 @@ index 64712619b32544761b9c43d68715c92e92387b67..b608d412b0f8880f03cb4495168d76d7
 +        return future;
 +    }
 +
-+    public void writeAdvancements(String uuid, String json) throws IOException {
++    public void writeAdvancements(String world, String uuid, String json) throws IOException {
 +        byte[] data = json.getBytes(StandardCharsets.UTF_8);
 +        DataOutputSender out = new DataOutputSender(this);
 +        out.writeUTF("writeAdvancements");
++        out.writeUTF(world);
 +        out.writeUTF(uuid);
 +        out.writeInt(data.length);
 +        out.write(data);
 +        out.send(in -> { /* Do nothing */ });
 +    }
 +
-+    public CompletableFuture<String> readStats(String uuid) throws IOException {
++    public CompletableFuture<String> readStats(String world, String uuid) throws IOException {
 +        CompletableFuture<String> future = new CompletableFuture<>();
 +
 +        DataOutputSender out = new DataOutputSender(this);
 +        out.writeUTF("readStats");
++        out.writeUTF(world);
 +        out.writeUTF(uuid);
 +        out.send(in -> {
 +            try {
@@ -323,10 +339,11 @@ index 64712619b32544761b9c43d68715c92e92387b67..b608d412b0f8880f03cb4495168d76d7
 +        return future;
 +    }
 +
-+    public void writeStats(String uuid, String json) throws IOException {
++    public void writeStats(String world, String uuid, String json) throws IOException {
 +        byte[] data = json.getBytes(StandardCharsets.UTF_8);
 +        DataOutputSender out = new DataOutputSender(this);
 +        out.writeUTF("writeStats");
++        out.writeUTF(world);
 +        out.writeUTF(uuid);
 +        out.writeInt(data.length);
 +        out.write(data);

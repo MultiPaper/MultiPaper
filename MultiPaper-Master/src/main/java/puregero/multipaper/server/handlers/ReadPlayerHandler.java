@@ -11,14 +11,15 @@ import java.io.IOException;
 public class ReadPlayerHandler implements Handler {
     @Override
     public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
+        String world = in.readUTF();
         String uuid = in.readUTF();
 
-        readAndSendPlayerData(uuid, out);
+        readAndSendPlayerData(world, uuid, out);
     }
 
-    private void readAndSendPlayerData(String uuid, DataOutputSender out) {
+    private void readAndSendPlayerData(String world, String uuid, DataOutputSender out) {
         try {
-            byte[] b = FileLocker.readBytes(new File("world/playerdata", uuid + ".dat"));
+            byte[] b = FileLocker.readBytes(new File(new File(world, "playerdata"), uuid + ".dat"));
             out.writeUTF("playerData");
             out.writeInt(b.length);
             out.write(b);

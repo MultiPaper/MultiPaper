@@ -11,14 +11,15 @@ import java.io.IOException;
 public class ReadStatsHandler implements Handler {
     @Override
     public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
+        String world = in.readUTF();
         String uuid = in.readUTF();
 
-        readAndSendStatsData(uuid, out);
+        readAndSendStatsData(world, uuid, out);
     }
 
-    private void readAndSendStatsData(String uuid, DataOutputSender out) {
+    private void readAndSendStatsData(String world, String uuid, DataOutputSender out) {
         try {
-            byte[] b = FileLocker.readBytes(new File("world/stats", uuid + ".json"));
+            byte[] b = FileLocker.readBytes(new File(new File(world, "stats"), uuid + ".json"));
             out.writeUTF("statsData");
             out.writeInt(b.length);
             out.write(b);

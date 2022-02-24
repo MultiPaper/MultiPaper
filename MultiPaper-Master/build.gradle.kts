@@ -1,4 +1,4 @@
-version = "2.1.6"
+version = "2.2.0"
 
 plugins {
     `java`

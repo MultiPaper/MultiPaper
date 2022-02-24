@@ -11,12 +11,13 @@ import java.io.IOException;
 public class WritePlayerHandler implements Handler {
     @Override
     public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
+        String world = in.readUTF();
         String uuid = in.readUTF();
         byte[] data = new byte[in.readInt()];
         in.readFully(data);
 
         try {
-            FileLocker.writeBytes(new File("world/playerdata", uuid + ".dat"), data);
+            FileLocker.writeBytes(new File(new File(world, "playerdata"), uuid + ".dat"), data);
 
             out.writeUTF("playerWritten");
             out.send();

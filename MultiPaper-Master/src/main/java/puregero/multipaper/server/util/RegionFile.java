@@ -166,7 +166,7 @@ public class RegionFile {
                 return null;
             }
 
-            int sectorNumber = offset >> 8;
+            int sectorNumber = offset >>> 8;
             int numSectors = offset & 0xFF;
 
             if (sectorNumber + numSectors > sectorFree.size()) {
@@ -229,7 +229,7 @@ public class RegionFile {
                 return null;
             }
 
-            int sectorNumber = offset >> 8;
+            int sectorNumber = offset >>> 8;
             int numSectors = offset & 0xFF;
 
             if (sectorNumber + numSectors > sectorFree.size()) {
@@ -268,7 +268,7 @@ public class RegionFile {
         int offset = getOffset(x, z);
 
         if (offset != 0) {
-            int sectorNumber = offset >> 8;
+            int sectorNumber = offset >>> 8;
             int sectorsAllocated = offset & 0xFF;
             setOffset(x, z, 0);
             setTimestamp(x, z, (int) (System.currentTimeMillis() / 1000L));
@@ -311,7 +311,7 @@ public class RegionFile {
             }
             
             int offset = getOffset(x, z);
-            int sectorNumber = offset >> 8;
+            int sectorNumber = offset >>> 8;
             int sectorsAllocated = offset & 0xFF;
             int sectorsNeeded = (length + CHUNK_HEADER_SIZE) / SECTOR_BYTES + 1;
 

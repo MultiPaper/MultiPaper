@@ -128,9 +128,9 @@ public class RegionFile {
             for (int i = 0; i < SECTOR_INTS; ++i) {
                 int offset = file.readInt();
                 offsets[i] = offset;
-                if (offset != 0 && (offset >> 8) + (offset & 0xFF) <= sectorFree.size()) {
+                if (offset != 0 && (offset >>> 8) + (offset & 0xFF) <= sectorFree.size()) {
                     for (int sectorNum = 0; sectorNum < (offset & 0xFF); ++sectorNum) {
-                        sectorFree.set((offset >> 8) + sectorNum, false);
+                        sectorFree.set((offset >>> 8) + sectorNum, false);
                     }
                 }
             }

@@ -108,9 +108,7 @@ public class RegionFile {
 
             if ((file.length() & 0xfff) != 0) {
                 /* the file size is not a multiple of 4KB, grow it */
-                for (int i = 0; i < (file.length() & 0xfff); ++i) {
-                    file.write((byte) 0);
-                }
+                file.setLength((file.length() / 4096 + 1) * 4096);
             }
 
             /* set up the available sector map */

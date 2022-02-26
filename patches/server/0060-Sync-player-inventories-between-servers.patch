@@ -148,7 +148,7 @@ index 87167f16fa9dedf19abefe38864498edb0c40a1d..8fb5f47a1ffeb248266e6bfa12a26a1b
      }
  
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 409d30f0b175f9be9ac269c608337b6aa0c3e927..757c384d3a91e223dfbc860439879da36e14a2e8 100644
+index 409d30f0b175f9be9ac269c608337b6aa0c3e927..313392dc0b1d88213c1130b995b05ed6a925a384 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -84,14 +84,7 @@ import net.minecraft.world.level.Explosion;
@@ -175,17 +175,18 @@ index 409d30f0b175f9be9ac269c608337b6aa0c3e927..757c384d3a91e223dfbc860439879da3
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource, io.papermc.paper.util.KeyedObject { // Paper
-@@ -1439,7 +1433,16 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -1439,7 +1433,17 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
                  for (int j = blockposition.getY(); j <= blockposition1.getY(); ++j) {
                      for (int k = blockposition.getZ(); k <= blockposition1.getZ(); ++k) {
                          blockposition_mutableblockposition.set(i, j, k);
 -                        BlockState iblockdata = this.level.getBlockState(blockposition_mutableblockposition);
 +                        // MultiPaper start - Only check for blocks on our server (or portals)
 +                        // Lazy load - Load iblockdata here only if we'll use it for the check
-+                        BlockState iblockdata = MultiPaper.isRealPlayer(this) ? this.level.getBlockState(blockposition_mutableblockposition) : null;
++                        BlockState iblockdata = this instanceof ServerPlayer ? this.level.getBlockState(blockposition_mutableblockposition) : null;
 +
-+                        boolean shouldTickOurPlayer = MultiPaper.isRealPlayer(this) && (iblockdata.getBlock() instanceof NetherPortalBlock || iblockdata.getBlock() instanceof EndPortalBlock);
-+                        if (!shouldTickOurPlayer && MultiPaper.isChunkExternal(this.level.getChunkAt(blockposition_mutableblockposition))) continue;
++                        boolean tickOnLocalServer = iblockdata.getBlock() instanceof NetherPortalBlock || iblockdata.getBlock() instanceof EndPortalBlock || iblockdata.getBlock() instanceof PowderSnowBlock || iblockdata.getBlock() instanceof SweetBerryBushBlock || iblockdata.getBlock() instanceof WebBlock;
++                        if (!(tickOnLocalServer && MultiPaper.isRealPlayer(this)) && MultiPaper.isChunkExternal(this.level.getChunkAt(blockposition_mutableblockposition))) continue;
++                        if (tickOnLocalServer && MultiPaper.isExternalPlayer(this)) continue;
 +
 +                        // Lazy load - Fully load iblockdata here since we passed the check and will use it now
 +                        iblockdata = iblockdata != null ? iblockdata : this.level.getBlockState(blockposition_mutableblockposition);
@@ -388,7 +389,7 @@ index 20c25ee97c8c2c18f9ebe4bfd87f6ad4e6ea93b4..c0f39be29e6181b2ce74fe24286f8b73
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index d247778f80862d57ed9f93370187ede72032497c..da9f95760fdb5c0145fcae973de43ef1ea31d2b2 100644
+index 2d5f9cc92e0162e46edfa237deae711e3c4c56f4..c77bc96ca47fdebd0150b363e021ba5db7717372 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -7,6 +7,7 @@ import org.bukkit.configuration.InvalidConfigurationException;

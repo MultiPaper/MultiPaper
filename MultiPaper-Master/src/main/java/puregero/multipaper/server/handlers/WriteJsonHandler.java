@@ -35,13 +35,6 @@ public class WriteJsonHandler implements Handler {
 
             out.writeUTF("jsonWritten");
             out.send();
-
-            System.out.println(connection.getBungeeCordName() + " has updated " + file + ", broadcasting reload request...");
-            DataOutputStream broadcast = connection.broadcastOthers();
-            broadcast.writeInt(-1);
-            broadcast.writeUTF("loadJson");
-            broadcast.writeUTF(file);
-            broadcast.close();
         } catch (IOException e) {
             e.printStackTrace();
         }

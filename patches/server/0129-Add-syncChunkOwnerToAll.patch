@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 27 Feb 2022 14:13:04 +1000
+Subject: [PATCH] Add syncChunkOwnerToAll
+
+
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 64bdeddb725d42c600d2cf52a721c528b2dcd3f6..8428bd34e5805e5d4c5271809bf9bbcb638d3b71 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -936,4 +936,17 @@ public class MultiPaperConnection extends Thread {
+             e.printStackTrace();
+         }
+     }
++
++    public void syncChunkOwnerToAll(String world, int cx, int cz) {
++        try {
++            DataOutputSender out = new DataOutputSender(this);
++            out.writeUTF("syncChunkOwnerToAll");
++            out.writeUTF(world);
++            out.writeInt(cx);
++            out.writeInt(cz);
++            out.send(null);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
+index c2d54a0da7f70e32d04d0d174627796385c59df8..cff490a9d6b0625c43330308f5648ca81ad257de 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
+@@ -36,7 +36,8 @@ public class MultiPaperEntityInteractHandler {
+             return true;
+         } else if (MultiPaper.isChunkExternal(chunk) && (entity.multipaperLastServer == null || !entity.multipaperLastServer.isMe())) {
+             if (MultiPaper.isExternalPlayer(player)) {
+-                LOGGER.warn("External player " + player.getScoreboardName() + " is interacting with an external entity " + entity + ". Forwarding to " + chunk.externalOwner.getName());
++                LOGGER.warn("External player " + player.getScoreboardName() + " is interacting with an external entity " + entity + ". Forwarding to " + chunk.externalOwner.getName() + ". Syncing subscribers for this chunk.");
++                MultiPaper.getConnection().syncChunkOwnerToAll(chunk.level.getWorld().getName(), chunk.getPos().x, chunk.getPos().z);
+             }
+ 
+             chunk.externalOwner.getConnection().send(new PlayerActionOnEntityPacket(player, entity, packet));

@@ -38,6 +38,7 @@ public class Handlers {
         handlers.put("chunkChangedStatus", new ChunkChangedStatusHandler());
         handlers.put("requestChunkOwnership", new RequestChunkOwnershipHandler());
         handlers.put("setPort", new SetPortHandler());
+        handlers.put("syncChunkOwnerToAll", new SyncChunkOwnerToAllHandler());
     }
 
     public static Handler get(String handler) {

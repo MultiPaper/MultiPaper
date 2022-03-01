@@ -1290,10 +1290,10 @@ index 0000000000000000000000000000000000000000..a69c0ab8a07a32020946489acf97b9bd
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b66638aac27b917ee09632cd971932ef08fe028c
+index 0000000000000000000000000000000000000000..b4389e4f527b520330b22b6bccf1ab8b7897479f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,69 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
@@ -1353,18 +1353,22 @@ index 0000000000000000000000000000000000000000..b66638aac27b917ee09632cd971932ef
 +    }
 +
 +    public static void setEntityRemoved(UUID uuid) {
++        setEntityRemoved(uuid, 300);
++    }
++
++    public static void setEntityRemoved(UUID uuid, int durationInTicks) {
 +        removedEntities.add(uuid);
 +        ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
 +            removedEntities.remove(uuid);
-+        }, 300, "EntityRemovePacket-removeEntryFromRemovedEntities");
++        }, durationInTicks, "EntityRemovePacket-removeEntryFromRemovedEntities");
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..6fc2d4f26e138fc6660a395e981870c12862b449
+index 0000000000000000000000000000000000000000..9cc60b26a0ae1703e1da67c183ed3a103afdf76f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,119 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1455,6 +1459,7 @@ index 0000000000000000000000000000000000000000..6fc2d4f26e138fc6660a395e981870c1
 +                    if (entity2 instanceof Mob mob) mob.restoreLeashFromSave();
 +                    return entity2;
 +                } else {
++                    EntityRemovePacket.setEntityRemoved(uuid, 20);
 +                    LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk aren't loaded: " + entity2);
 +                    return null;
 +                }
@@ -1586,10 +1591,10 @@ index 0000000000000000000000000000000000000000..2c285c065ecacb81703bd284840255cb
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0eb8feb92d13f2a89669bed928c44a01cdd9c6a9
+index 0000000000000000000000000000000000000000..81d5c0550519b5309a8328bc36629708c761db68
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
-@@ -0,0 +1,125 @@
+@@ -0,0 +1,133 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1678,6 +1683,10 @@ index 0000000000000000000000000000000000000000..0eb8feb92d13f2a89669bed928c44a01
 +            Entity entity = level.getEntity(uuid);
 +
 +            if (entity == null) {
++                if (EntityRemovePacket.removedEntities.contains(uuid)) {
++                    return;
++                }
++
 +                // If we can't find the entity, try again later,
 +                // the spawn entity packet is probably coming later
 +                if (depth > 5) {
@@ -1698,6 +1707,10 @@ index 0000000000000000000000000000000000000000..0eb8feb92d13f2a89669bed928c44a01
 +                entities[i] = level.getEntity(uuids[i]);
 +
 +                if (entities[i] == null) {
++                    if (EntityRemovePacket.removedEntities.contains(uuids[i])) {
++                        return;
++                    }
++
 +                    if (depth > 5) {
 +                        LOGGER.warn("Could not find dependent entity " + uuids[i] + " for " + packet.getClass().getSimpleName() + ", requesting it");
 +                        connection.send(new RequestEntityPacket(world, uuids[i]));

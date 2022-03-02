@@ -21,6 +21,11 @@ public class WriteDataHandler implements Handler {
             out.writeUTF("dataWritten");
             out.send();
 
+            if (path.contains("scoreboard")) {
+                // Scoreboards are synced with other methods
+                return;
+            }
+
             DataOutputStream broadcast = connection.broadcastOthers();
             broadcast.writeInt(-1);
             broadcast.writeUTF("clearData");

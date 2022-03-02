@@ -30,6 +30,8 @@ public class WriteDataHandler implements Handler {
             broadcast.writeInt(-1);
             broadcast.writeUTF("clearData");
             broadcast.writeUTF(path);
+            broadcast.writeInt(data.length);
+            broadcast.write(data);
             broadcast.close();
         } catch (IOException e) {
             e.printStackTrace();

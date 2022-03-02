@@ -194,10 +194,17 @@ index cffce1b71880c4aaf843e620dcd29edc14f8077d..2d5f9cc92e0162e46edfa237deae711e
          do {
              path = path.getParentFile();
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index e25f1d6503c0b3e6d279727bc7e6f6ba8c6fb0c1..4d046c9677c83d2c9c717b3e99d7be23e14d8cae 100644
+index e25f1d6503c0b3e6d279727bc7e6f6ba8c6fb0c1..dca4065e63eab21d0fcd9ee977738df14035b79b 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -19,6 +19,7 @@ import org.apache.logging.log4j.LogManager;
+@@ -1,5 +1,6 @@
+ package puregero.multipaper;
+ 
++import com.google.common.collect.Maps;
+ import io.netty.bootstrap.Bootstrap;
+ import io.netty.channel.ChannelOption;
+ import io.netty.channel.epoll.Epoll;
+@@ -19,6 +20,7 @@ import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
  import org.bukkit.Bukkit;
  import org.bukkit.World;
@@ -205,7 +212,15 @@ index e25f1d6503c0b3e6d279727bc7e6f6ba8c6fb0c1..4d046c9677c83d2c9c717b3e99d7be23
  import org.bukkit.craftbukkit.entity.CraftPlayer;
  import org.bukkit.entity.Player;
  import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
-@@ -205,6 +206,27 @@ public class MultiPaperConnection extends Thread {
+@@ -47,6 +49,7 @@ public class MultiPaperConnection extends Thread {
+     private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
+     private String myName = null;
+     public String secret;
++    public Map<String, byte[]> dataCache = Maps.newHashMap();
+ 
+     public MultiPaperConnection() {
+         super("MultiPaperConnection Thread");
+@@ -205,6 +208,33 @@ public class MultiPaperConnection extends Thread {
          });
      }
  
@@ -217,6 +232,10 @@ index e25f1d6503c0b3e6d279727bc7e6f6ba8c6fb0c1..4d046c9677c83d2c9c717b3e99d7be23
 +            path = path.getParentFile();
 +        }
 +
++        int dataLength = in.readInt();
++        byte[] data = new byte[dataLength];
++        in.readFully(data);
++
 +        // Clear the data from the world's data cache
 +        final File finalPath = path;
 +        MultiPaper.runSync(() -> {
@@ -226,19 +245,28 @@ index e25f1d6503c0b3e6d279727bc7e6f6ba8c6fb0c1..4d046c9677c83d2c9c717b3e99d7be23
 +                return;
 +            }
 +
-+            ((CraftWorld) world).getHandle().getDataStorage().cache.remove(file);
++            if (((CraftWorld) world).getHandle().getDataStorage().cache.remove(file) != null) {
++                dataCache.put(file, data);
++            }
 +        });
 +    }
 +
      public void chunkOwner(DataInputStream in, DataOutputSender out) throws IOException {
          String world = in.readUTF();
          int cx = in.readInt();
-@@ -660,6 +682,35 @@ public class MultiPaperConnection extends Thread {
+@@ -660,6 +690,42 @@ public class MultiPaperConnection extends Thread {
          out.send(in -> { /* Do nothing */ });
      }
  
 +    public CompletableFuture<byte[]> readData(String path) throws IOException {
 +        CompletableFuture<byte[]> future = new CompletableFuture<>();
++
++        File pathFile = new File(path);
++        String file = pathFile.getName().substring(0, pathFile.getName().length() - 4); // Remove .dat suffix
++        if (dataCache.containsKey(file)) {
++            future.complete(dataCache.remove(file));
++            return future;
++        }
 +
 +        DataOutputSender out = new DataOutputSender(this);
 +        out.writeUTF("readData");

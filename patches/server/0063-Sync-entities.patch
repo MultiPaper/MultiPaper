@@ -699,18 +699,18 @@ index c0f39be29e6181b2ce74fe24286f8b7359309a9c..666b6743c6e3b823427bcf99aa7bde5a
      }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index fb6f588eb1059fa1220acb230215d5ff48a56a36..88a97f1c1b470be68661e5e58a20e35ba2a874cc 100644
+index e49999b417da8e1680a85e26b862c72ce796d175..c5dd60ca07916a5aad4696ea4b4b0b9364a12fa9 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -30,6 +30,7 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
-     private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
-     private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
+@@ -32,6 +32,7 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
      public final ConcurrentHashMap<ChunkKey, Consumer<DataInputStream>> chunkCallbacks = new ConcurrentHashMap<>();
+     public long lastPacketSent = 0;
+     public long lastPacketReceived = 0;
 +    public final ConcurrentHashMap<ChunkKey, Consumer<DataInputStream>> entitiesCallbacks = new ConcurrentHashMap<>();
  
      public ExternalServerConnection() {
  
-@@ -147,4 +148,14 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+@@ -152,4 +153,15 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
          RequestChunkPacket.blocker = externalServer;
          send(new RequestChunkPacket(world, cx, cz));
      }
@@ -719,6 +719,7 @@ index fb6f588eb1059fa1220acb230215d5ff48a56a36..88a97f1c1b470be68661e5e58a20e35b
 +        if (callback != null) {
 +            if (entitiesCallbacks.put(new ChunkKey(world, cx, cz), callback) != null) {
 +                LOGGER.warn("An entities callback already existed for " + world + ", " + cx + ", " + cz + " (new request is to " + externalServer.getName() + ")");
++                LOGGER.warn("Stats for " + externalServer.getName() + ": last packet sent=" + (System.currentTimeMillis() - lastPacketSent) + "ms ago; last packet received=" + (System.currentTimeMillis() - lastPacketReceived) + "ms ago");
 +            }
 +        }
 +

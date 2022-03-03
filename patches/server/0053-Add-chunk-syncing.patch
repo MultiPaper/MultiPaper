@@ -747,10 +747,10 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 4da68c4329648d3744f51b9ec7da18b5fe86f760..fb6f588eb1059fa1220acb230215d5ff48a56a36 100644
+index 4da68c4329648d3744f51b9ec7da18b5fe86f760..e49999b417da8e1680a85e26b862c72ce796d175 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -9,20 +9,27 @@ import net.minecraft.network.protocol.PacketFlow;
+@@ -9,20 +9,29 @@ import net.minecraft.network.protocol.PacketFlow;
  import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
  import net.minecraft.server.dedicated.DedicatedServer;
  import net.minecraft.server.level.ServerPlayer;
@@ -775,10 +775,23 @@ index 4da68c4329648d3744f51b9ec7da18b5fe86f760..fb6f588eb1059fa1220acb230215d5ff
      private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
 +    public final ConcurrentHashMap<ChunkKey, Consumer<DataInputStream>> chunkCallbacks = new ConcurrentHashMap<>();
++    public long lastPacketSent = 0;
++    public long lastPacketReceived = 0;
  
      public ExternalServerConnection() {
  
-@@ -129,4 +136,15 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+@@ -96,8 +105,10 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+         if (!channel.isOpen()) {
+             new IOException("Channel is closed for " + externalServer.getName()).printStackTrace();
+         } else if (channel.eventLoop().inEventLoop()) {
++            lastPacketSent = System.currentTimeMillis();
+             channel.writeAndFlush(packet);
+         } else {
++            lastPacketSent = System.currentTimeMillis();
+             channel.eventLoop().execute(() -> channel.writeAndFlush(packet));
+         }
+     }
+@@ -129,4 +140,16 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
              players.add(player);
          }
      }
@@ -787,6 +800,7 @@ index 4da68c4329648d3744f51b9ec7da18b5fe86f760..fb6f588eb1059fa1220acb230215d5ff
 +        if (callback != null) {
 +            if (chunkCallbacks.put(new ChunkKey(world, cx, cz), callback) != null) {
 +                LOGGER.warn("A chunk callback already existed for " + world + ", " + cx + ", " + cz + " (new request is to " + externalServer.getName() + ")");
++                LOGGER.warn("Stats for " + externalServer.getName() + ": last packet sent=" + (System.currentTimeMillis() - lastPacketSent) + "ms ago; last packet received=" + (System.currentTimeMillis() - lastPacketReceived) + "ms ago");
 +            }
 +        }
 +
@@ -1802,8 +1816,20 @@ index 0000000000000000000000000000000000000000..1d3df885830b956992a70ba3b8ea5bc4
 +        updatingWorldBorder = false;
 +    }
 +}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java
+index 4b5bb154c26b6a1c95d013b571c1d0f7867f52d2..e4ecd29f6fe5c7d10613b9db6c7b7563d21ea02e 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java
+@@ -19,6 +19,7 @@ public class ExternalServerPacketHandler extends SimpleChannelInboundHandler<Ext
+ 
+     @Override
+     protected void channelRead0(ChannelHandlerContext ctx, ExternalServerPacket msg) {
++        connection.lastPacketReceived = System.currentTimeMillis();
+         msg.handle(connection);
+     }
+ 
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index fe04e97a2bdbb479ff738a4b068e8cb23b07f44b..cb9d9d817e52d9aa63a78d45e1611d09704a3eaa 100644
+index 685976bc13d07507b4ee953a317df92fc0faa0b2..058d319fc52025afc9b68e627a99d68eb60cc490 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 @@ -19,6 +19,10 @@ public class ExternalServerPacketSerializer {

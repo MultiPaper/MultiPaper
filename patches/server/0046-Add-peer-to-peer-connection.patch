@@ -167,24 +167,38 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..09c8dac93276237233e75d8f15d065339a1dfd97
+index 0000000000000000000000000000000000000000..8a41a6f59557243b9c1da688b69bab4cf025ccaf
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,113 @@
 +package puregero.multipaper;
 +
++import com.google.common.util.concurrent.ThreadFactoryBuilder;
 +import io.netty.channel.Channel;
++import io.netty.channel.ChannelFutureListener;
 +import io.netty.channel.ChannelInitializer;
++import io.netty.channel.epoll.EpollEventLoopGroup;
++import io.netty.channel.epoll.EpollSocketChannel;
++import io.netty.channel.nio.NioEventLoopGroup;
 +import io.netty.channel.socket.SocketChannel;
++import io.netty.util.internal.SystemPropertyUtil;
 +import net.minecraft.network.*;
 +import net.minecraft.network.protocol.PacketFlow;
 +import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
++import net.minecraft.util.LazyLoadedValue;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.externalserverprotocol.*;
 +
 +import java.io.Closeable;
 +import java.io.IOException;
 +
 +public class ExternalServerConnection extends ChannelInitializer<SocketChannel> implements Closeable {
++
++    private static final Logger LOGGER = LogManager.getLogger(ExternalServerConnection.class.getSimpleName());
++    private static final int EVENT_LOOP_THREADS = Math.max(1, Math.min(SystemPropertyUtil.getInt("multipaper.netty.eventLoopThreads", 2), SystemPropertyUtil.getInt("io.netty.eventLoopThreads", 2)));
++    public static final LazyLoadedValue<NioEventLoopGroup> SERVER_EVENT_GROUP = new LazyLoadedValue<>(() -> new NioEventLoopGroup(EVENT_LOOP_THREADS, (new ThreadFactoryBuilder()).setNameFormat("Netty MultiPaper IO #%d").setDaemon(true).setUncaughtExceptionHandler(new net.minecraft.DefaultUncaughtExceptionHandlerWithName(LOGGER)).build()));
++    public static final LazyLoadedValue<EpollEventLoopGroup> SERVER_EPOLL_EVENT_GROUP = new LazyLoadedValue<>(() -> new EpollEventLoopGroup(EVENT_LOOP_THREADS, (new ThreadFactoryBuilder()).setNameFormat("Netty Epoll MultiPaper IO #%d").setDaemon(true).setUncaughtExceptionHandler(new net.minecraft.DefaultUncaughtExceptionHandlerWithName(LOGGER)).build()));
 +
 +    private Channel channel;
 +    public long nanoTime = 0;
@@ -236,6 +250,19 @@ index 0000000000000000000000000000000000000000..09c8dac93276237233e75d8f15d06533
 +                .addLast("prepender", new Varint21LengthFieldPrepender())
 +                .addLast("encoder", new ExternalServerPacketEncoder())
 +                .addLast("packet_handler", new ExternalServerPacketHandler(this));
++
++        // And put it onto our own event loop
++        if (SystemPropertyUtil.getBoolean("multipaper.netty.useOwnEventLoop", true)) {
++            channel.deregister().addListener((ChannelFutureListener) future -> {
++                if (future.channel() instanceof EpollSocketChannel) {
++                    SERVER_EPOLL_EVENT_GROUP.get().register(future.channel()).sync();
++                } else {
++                    SERVER_EVENT_GROUP.get().register(future.channel()).sync();
++                }
++            });
++        } else {
++            LOGGER.info("Using Minecraft's event loop");
++        }
 +    }
 +
 +    @Override

@@ -39,6 +39,8 @@ public class Handlers {
         handlers.put("requestChunkOwnership", new RequestChunkOwnershipHandler());
         handlers.put("setPort", new SetPortHandler());
         handlers.put("syncChunkOwnerToAll", new SyncChunkOwnerToAllHandler());
+        handlers.put("playerConnect", new PlayerConnectHandler());
+        handlers.put("playerDisconnect", new PlayerDisconnectHandler());
     }
 
     public static Handler get(String handler) {

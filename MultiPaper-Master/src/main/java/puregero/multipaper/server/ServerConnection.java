@@ -7,9 +7,7 @@ import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -20,6 +18,7 @@ public class ServerConnection extends Thread {
     private long lastPing = System.currentTimeMillis();
     private final CircularTimer timer = new CircularTimer();
     private final Map<Integer, Consumer<DataInputStream>> callbacks = new ConcurrentHashMap<>();
+    private final HashSet<UUID> playerUUIDs = new HashSet<>();
     private final List<Player> players = new ArrayList<>();
     private double tps;
     private int port = -1;
@@ -213,6 +212,24 @@ public class ServerConnection extends Thread {
 
     public CircularTimer getTimer() {
         return timer;
+    }
+
+    public boolean hasPlayer(UUID uuid) {
+        synchronized (playerUUIDs) {
+            return playerUUIDs.contains(uuid);
+        }
+    }
+
+    public boolean addPlayer(UUID uuid) {
+        synchronized (playerUUIDs) {
+            return playerUUIDs.add(uuid);
+        }
+    }
+
+    public boolean removePlayer(UUID uuid) {
+        synchronized (playerUUIDs) {
+            return playerUUIDs.remove(uuid);
+        }
     }
 
     public List<Player> getPlayers() {

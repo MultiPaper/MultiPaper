@@ -1,4 +1,4 @@
-version = "2.5.1"
+version = "2.5.2"
 
 plugins {
     `java`
@@ -11,9 +11,14 @@ repositories {
     }
 }
 
+val masterDependency = configurations.create("masterDependency")
+configurations.compileClasspath.extendsFrom(masterDependency)
+
 dependencies {
     implementation("org.jetbrains:annotations:22.0.0")
     implementation("net.md-5:bungeecord-api:1.16-R0.4")
+
+    masterDependency("org.json:json:20211205")
 }
 
 tasks.jar {
@@ -22,4 +27,7 @@ tasks.jar {
                 "Main-Class" to "puregero.multipaper.server.MultiPaperServer"
         )
     }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    val dependencies = masterDependency.map(::zipTree)
+    from(dependencies)
 }

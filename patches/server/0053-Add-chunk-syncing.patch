@@ -1080,12 +1080,13 @@ index 990b40c0479c923d5c470b1a3bd697436c24c2ae..ec75e3730e43a360166c8d1448247964
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..1e1c01c34fd8f3dc217f89c04cedba7c5738363e
+index 0000000000000000000000000000000000000000..d7de0028dd28552f4c952bd8262c2d69717a3074
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,266 @@
+@@ -0,0 +1,265 @@
 +package puregero.multipaper;
 +
++import ca.spottedleaf.starlight.common.light.SWMRNibbleArray;
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.core.SectionPos;
 +import net.minecraft.network.protocol.Packet;
@@ -1176,11 +1177,6 @@ index 0000000000000000000000000000000000000000..1e1c01c34fd8f3dc217f89c04cedba7c
 +    }
 +
 +    public static void onBlockUpdate(ChunkHolder chunkHolder, Packet<?> packet) {
-+        if (packet instanceof ClientboundLightUpdatePacket) {
-+            // This packet doesn't work, no point in sending it
-+            return;
-+        }
-+
 +        if (chunkHolder == null) {
 +            // Chunk is still loading
 +            return;
@@ -1291,7 +1287,6 @@ index 0000000000000000000000000000000000000000..1e1c01c34fd8f3dc217f89c04cedba7c
 +                    blockUpdateChunk.setBlockEntityNbt(update.getTag());
 +                }
 +            } else if (packet instanceof ClientboundLightUpdatePacket update) {
-+                // TODO: Doesn't work
 +                handleLightUpdatePacket(level, blockUpdateChunk, update);
 +            }
 +        }
@@ -1331,21 +1326,25 @@ index 0000000000000000000000000000000000000000..1e1c01c34fd8f3dc217f89c04cedba7c
 +        BitSet bitset = packet.getLightData().getSkyYMask();
 +        BitSet bitset1 = packet.getLightData().getEmptySkyYMask();
 +        Iterator<byte[]> iterator = packet.getLightData().getSkyUpdates().iterator();
-+        readSectionList(i, j, levellightengine, LightLayer.SKY, bitset, bitset1, iterator, packet.getLightData().getTrustEdges());
++        readSectionList(chunk, i, j, levellightengine, LightLayer.SKY, bitset, bitset1, iterator, packet.getLightData().getTrustEdges());
 +        BitSet bitset2 = packet.getLightData().getBlockYMask();
 +        BitSet bitset3 = packet.getLightData().getEmptyBlockYMask();
 +        Iterator<byte[]> iterator1 = packet.getLightData().getBlockUpdates().iterator();
-+        readSectionList(i, j, levellightengine, LightLayer.BLOCK, bitset2, bitset3, iterator1, packet.getLightData().getTrustEdges());
++        readSectionList(chunk, i, j, levellightengine, LightLayer.BLOCK, bitset2, bitset3, iterator1, packet.getLightData().getTrustEdges());
 +    }
 +
 +    // From the client
-+    private static void readSectionList(int i, int j, LevelLightEngine levelLightEngine, LightLayer lightLayer, BitSet bitset2, BitSet bitset3, Iterator<byte[]> iterator1, boolean trustEdges) {
++    private static void readSectionList(ChunkAccess chunk, int i, int j, LevelLightEngine levelLightEngine, LightLayer lightLayer, BitSet bitset2, BitSet bitset3, Iterator<byte[]> iterator1, boolean trustEdges) {
 +        for(int k = 0; k < levelLightEngine.getLightSectionCount(); ++k) {
 +            int l = levelLightEngine.getMinLightSection() + k;
 +            boolean flag = bitset2.get(k);
 +            boolean flag1 = bitset3.get(k);
 +            if (flag || flag1) {
-+                levelLightEngine.queueSectionData(lightLayer, SectionPos.of(i, l, j), flag ? new DataLayer((byte[])iterator1.next().clone()) : new DataLayer(), trustEdges);
++                if (lightLayer == LightLayer.BLOCK) {
++                    chunk.getBlockNibbles()[k] = flag ? new SWMRNibbleArray(iterator1.next().clone()) : new SWMRNibbleArray();
++                } else if (lightLayer == LightLayer.SKY) {
++                    chunk.getSkyNibbles()[k] = flag ? new SWMRNibbleArray(iterator1.next().clone()) : new SWMRNibbleArray();
++                }
 +            }
 +        }
 +    }

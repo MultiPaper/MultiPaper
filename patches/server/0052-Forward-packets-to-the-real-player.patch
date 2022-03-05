@@ -1,0 +1,229 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 16 Nov 2021 01:58:28 +1000
+Subject: [PATCH] Forward packets to the real player
+
+
+diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
+index d89fe348e38d98197c97f09264a3417c873d969a..7c35f00c7f8a8d9416ef0003564b6791e10212e4 100644
+--- a/src/main/java/puregero/multipaper/ExternalPlayer.java
++++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
+@@ -6,6 +6,7 @@ import io.netty.util.concurrent.GenericFutureListener;
+ import net.minecraft.network.Connection;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.game.*;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.server.network.ServerGamePacketListenerImpl;
+@@ -77,11 +78,24 @@ public class ExternalPlayer extends ServerPlayer {
+ 
+         @Override
+         public void send(Packet<?> packet, @Nullable GenericFutureListener<? extends Future<? super Void>> callback) {
+-            if (sendPackets) {
+-
++            if (sendPackets && !(packet instanceof ClientboundPlayerAbilitiesPacket)
++                    && !(packet instanceof ClientboundSetPlayerTeamPacket)
++                    && !(packet instanceof ClientboundSetScorePacket)
++                    && !(packet instanceof ClientboundSetObjectivePacket)
++                    && !(packet instanceof ClientboundSetDisplayObjectivePacket)
++                    && !(packet instanceof ClientboundSetEntityDataPacket)
++                    && !(packet instanceof ClientboundSetChunkCacheCenterPacket)
++                    && !(packet instanceof ClientboundSetChunkCacheRadiusPacket)) {
++//                LOGGER.info("Forwarding packet " + packet);
++                externalServerConnection.sendPacket(ExternalPlayer.this, packet);
+             } else {
+ //                LOGGER.info("Not sending packet " + packet.getClass().getSimpleName());
+             }
+         }
+     }
++
++    @Override
++    public boolean broadcastToPlayer(ServerPlayer spectator) {
++        return false;
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+index f35c43e2032c8c07976355b580f6de4c1c0ff1a6..95060b93d5bdf18805065868a65058ba772db887 100644
+--- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
++++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+@@ -10,6 +10,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
+ import io.netty.channel.socket.SocketChannel;
+ import io.netty.util.internal.SystemPropertyUtil;
+ import net.minecraft.network.*;
++import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.PacketFlow;
+ import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
+ import net.minecraft.server.dedicated.DedicatedServer;
+@@ -21,7 +22,7 @@ import puregero.multipaper.externalserverprotocol.*;
+ 
+ import java.io.Closeable;
+ import java.io.IOException;
+-import java.util.HashSet;
++import java.util.*;
+ 
+ public class ExternalServerConnection extends ChannelInitializer<SocketChannel> implements Closeable {
+ 
+@@ -34,6 +35,8 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+     public long nanoTime = 0;
+     public ExternalServer externalServer = null;
+     public HashSet<String> subscribedWorlds = new HashSet<>();
++    private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
++    private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
+ 
+     public ExternalServerConnection() {
+ 
+@@ -125,4 +128,32 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+             channel.eventLoop().execute(() -> channel.writeAndFlush(packet));
+         }
+     }
++
++    public void tick() {
++        // Send the packets after each vanilla tick
++        synchronized (packetsToSend) {
++            packetsToSend.forEach((packet, players) -> {
++                send(new SendPacketPacket(players, packet));
++                players.clear();
++                externalPlayerListPool.add(players);
++            });
++            packetsToSend.clear();
++        }
++    }
++
++    public void sendPacket(ExternalPlayer player, Packet<?> packet) {
++        // Combine all the players that the packet's being sent to together
++        // so that the packet only needs to be sent to the external server
++        // just once, not duplicated for each player
++        synchronized (packetsToSend) {
++            List<ExternalPlayer> players = packetsToSend.computeIfAbsent(packet, key -> {
++                List<ExternalPlayer> list = externalPlayerListPool.poll();
++                if (list == null) {
++                    list = new ArrayList<>();
++                }
++                return list;
++            });
++            players.add(player);
++        }
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 00b85d67202a2e5b840414fc44873309f5a57b2d..182d24272acb889088e1a5b36e708ff09c3c6f52 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -40,6 +40,13 @@ public class MultiPaper {
+                 // Copied from Paper end
+             }
+         }
++
++        for (ExternalServer server : getConnection().getServersMap().values()) {
++            if (server.getConnection() != null) {
++                // This tick function must be run after the vanilla tick
++                server.getConnection().tick();
++            }
++        }
+     }
+ 
+     public static void sendTickTime(long time, double tps) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 63df2405527b339b82de5e66880b4c67a1c5c51c..685976bc13d07507b4ee953a317df92fc0faa0b2 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -18,6 +18,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerChangeGamemodePacket.class, PlayerChangeGamemodePacket::new);
+         addPacket(PlayerRespawnPacket.class, PlayerRespawnPacket::new);
+         addPacket(PlayerChangeDimensionPacket.class, PlayerChangeDimensionPacket::new);
++        addPacket(SendPacketPacket.class, SendPacketPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..716736c83da71a09c84d94f5fe10dc3c368d5f19
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendPacketPacket.java
+@@ -0,0 +1,85 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import net.minecraft.network.ConnectionProtocol;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++
++import java.util.List;
++import java.util.UUID;
++
++public class SendPacketPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(SendPacketPacket.class.getSimpleName());
++
++    private final UUID[] uuids;
++    private final Packet<?> packet;
++
++    public SendPacketPacket(List<? extends ServerPlayer> players, Packet<?> packet) {
++        this.uuids = new UUID[players.size()];
++        for (int i = 0; i < players.size(); i++) {
++            this.uuids[i] = players.get(i).getUUID();
++        }
++        this.packet = packet;
++    }
++
++    public SendPacketPacket(ServerPlayer player, Packet<?> packet) {
++        this.uuids = new UUID[1];
++        this.uuids[0] = player.getUUID();
++        this.packet = packet;
++    }
++
++    public SendPacketPacket(FriendlyByteBuf in) {
++        uuids = new UUID[in.readInt()];
++        for (int i = 0; i < uuids.length; i++) {
++            this.uuids[i] = in.readUUID();
++        }
++
++        byte[] bytes = in.readByteArray();
++        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        int packetId = friendlyByteBuf.readVarInt();
++        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeInt(uuids.length);
++        for (UUID uuid : uuids) {
++            out.writeUUID(uuid);
++        }
++
++        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(packet);
++        Integer id = protocol.getPacketId(PacketFlow.CLIENTBOUND, packet);
++        ByteBuf buf = Unpooled.buffer();
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        friendlyByteBuf.writeVarInt(id);
++        packet.write(friendlyByteBuf);
++        out.writeByteArray(buf.array());
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        doHandle(connection);
++    }
++
++    public void doHandle(ExternalServerConnection connection) {
++        for (UUID uuid : uuids) {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            if (player == null) {
++                LOGGER.warn("Tried to send a packet to a non-existent player uuid " + player);
++                return;
++            }
++
++            player.connection.send(packet);
++        }
++    }
++}

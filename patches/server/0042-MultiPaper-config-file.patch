@@ -1,0 +1,217 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 4 Mar 2022 20:33:33 +1000
+Subject: [PATCH] MultiPaper config file
+
+
+diff --git a/src/main/java/net/minecraft/server/Main.java b/src/main/java/net/minecraft/server/Main.java
+index e2c8f716af55ebb7e4233c2a3d6515f8f4a239fa..5fe7c7c6d3e486e3e145a5c78579fc2bc99142ed 100644
+--- a/src/main/java/net/minecraft/server/Main.java
++++ b/src/main/java/net/minecraft/server/Main.java
+@@ -55,6 +55,7 @@ import org.apache.logging.log4j.Logger;
+ 
+ // CraftBukkit start
+ import net.minecraft.SharedConstants;
++import puregero.multipaper.MultiPaperConfig;
+ 
+ public class Main {
+ 
+@@ -99,6 +100,8 @@ public class Main {
+                 JvmProfiler.INSTANCE.start(Environment.SERVER);
+             }
+ 
++            MultiPaperConfig.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper
++
+             Bootstrap.bootStrap();
+             Bootstrap.validate();
+             Util.startTimerHackThread();
+diff --git a/src/main/java/org/bukkit/craftbukkit/Main.java b/src/main/java/org/bukkit/craftbukkit/Main.java
+index f810bebfca3932c80e20646eb0680f7718506707..88444080d19bc362ee67ee6cb89b2388d182dd41 100644
+--- a/src/main/java/org/bukkit/craftbukkit/Main.java
++++ b/src/main/java/org/bukkit/craftbukkit/Main.java
+@@ -153,6 +153,14 @@ public class Main {
+                         .describedAs("Jar file");
+                 // Paper end
+ 
++                // MultiPaper start
++                acceptsAll(asList("multipaper", "multipaper-settings"), "File for multipaper settings")
++                        .withRequiredArg()
++                        .ofType(File.class)
++                        .defaultsTo(new File("multipaper.yml"))
++                        .describedAs("Yml file");
++                // MultiPaper end
++
+                 // Paper start
+                 acceptsAll(asList("server-name"), "Name of the server")
+                         .withRequiredArg()
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConfig.java b/src/main/java/puregero/multipaper/MultiPaperConfig.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..61818f7ee4a59a6034f8bf79323549d050755b0d
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperConfig.java
+@@ -0,0 +1,165 @@
++package puregero.multipaper;
++
++import com.google.common.base.Throwables;
++import org.bukkit.Bukkit;
++import org.bukkit.configuration.InvalidConfigurationException;
++import org.bukkit.configuration.file.YamlConfiguration;
++
++import java.io.File;
++import java.io.IOException;
++import java.lang.reflect.InvocationTargetException;
++import java.lang.reflect.Method;
++import java.lang.reflect.Modifier;
++import java.util.Arrays;
++import java.util.List;
++import java.util.logging.Level;
++
++public class MultiPaperConfig {
++
++    private static File CONFIG_FILE;
++    private static final String HEADER = """
++            This is the main configuration file for MultiPaper.
++            There's quite alot to configure. Read the docs for more information.
++
++            Docs: https://github.com/PureGero/MultiPaper/MULTIPAPER_YAML.md\s
++            """;
++    /*========================================================================*/
++    public static YamlConfiguration config;
++    private static boolean dirty = false;
++
++    public static void init(File configFile) {
++        CONFIG_FILE = configFile;
++        config = new YamlConfiguration();
++        try {
++            config.load(CONFIG_FILE);
++        } catch (IOException ex) {
++        } catch (InvalidConfigurationException ex) {
++            Bukkit.getLogger().log(Level.SEVERE, "Could not load multipaper.yml, please correct your syntax errors", ex);
++            throw Throwables.propagate(ex);
++        }
++        config.options().header(HEADER);
++        config.options().copyDefaults(true);
++
++        readConfig(MultiPaperConfig.class, null);
++    }
++
++    static void readConfig(Class<?> clazz, Object instance) {
++        for (Method method : clazz.getDeclaredMethods()) {
++            if (Modifier.isPrivate(method.getModifiers())) {
++                if (method.getParameterTypes().length == 0 && method.getReturnType() == Void.TYPE) {
++                    try {
++                        method.setAccessible(true);
++                        method.invoke(instance);
++                    } catch (InvocationTargetException ex) {
++                        throw Throwables.propagate(ex.getCause());
++                    } catch (Exception ex) {
++                        Bukkit.getLogger().log(Level.SEVERE, "Error invoking " + method, ex);
++                    }
++                }
++            }
++        }
++        if (dirty) {
++            saveConfig();
++        }
++    }
++
++    static void saveConfig() {
++        try {
++            config.save(CONFIG_FILE);
++        } catch (IOException ex) {
++            Bukkit.getLogger().log(Level.SEVERE, "Could not save " + CONFIG_FILE, ex);
++        }
++    }
++
++    private static boolean getBoolean(String path, boolean def) {
++        if (System.getProperty(path) != null) {
++            return Boolean.getBoolean(path);
++        }
++        if (!config.isBoolean(path)) {
++            dirty = true;
++            config.set(path, def);
++        }
++        return config.getBoolean(path);
++    }
++
++    private static double getDouble(String path, double def) {
++        if (System.getProperty(path) != null) {
++            return Double.parseDouble(System.getProperty(path));
++        }
++        if (!config.isDouble(path)) {
++            dirty = true;
++            config.set(path, def);
++        }
++        return config.getDouble(path);
++    }
++
++    private static int getInt(String path, int def) {
++        if (System.getProperty(path) != null) {
++            return Integer.getInteger(path);
++        }
++        if (!config.isInt(path)) {
++            dirty = true;
++            config.set(path, def);
++        }
++        return config.getInt(path);
++    }
++
++    private static <T> List<?> getList(String path, T def) {
++        if (!config.isList(path)) {
++            dirty = true;
++            config.set(path, def);
++        }
++        return config.getList(path);
++    }
++
++    private static String getString(String path, String def) {
++        if (System.getProperty(path) != null) {
++            return System.getProperty(path);
++        }
++        if (!config.isString(path)) {
++            dirty = true;
++            config.set(path, def);
++        }
++        return config.getString(path);
++    }
++
++    public static String bungeeCordName;
++    private static void bungeeCordName() {
++        bungeeCordName = getString("bungeecordName", "server" + Double.toString(Math.random()).substring(2, 7));
++    }
++
++    public static String multipaperMasterAddress;
++    private static void multipaperMasterAddress() {
++        multipaperMasterAddress = getString("multipaperMasterAddress", "localhost:35353");
++    }
++
++    public static boolean syncJsonFiles;
++    private static void syncJsonFiles() {
++        syncJsonFiles = getBoolean("syncJsonFiles", true);
++    }
++
++    public static boolean advertiseToBuiltInProxy;
++    private static void advertiseToBuiltInProxy() {
++        advertiseToBuiltInProxy = getBoolean("advertiseToBuiltInProxy", true);
++    }
++
++    public static boolean syncScoreboards;
++    private static void syncScoreboards() {
++        syncScoreboards = getBoolean("syncScoreboards", true);
++    }
++
++    public static List<String> filesToSyncOnStartup;
++    private static void filesToSyncOnStartup() {
++        filesToSyncOnStartup = getList("filesToSyncOnStartup", Arrays.asList("myconfigfile.yml", "plugins/MyPlugin.jar")).stream().map(Object::toString).toList();
++    }
++
++    public static List<String> filesToSyncInRealTime;
++    private static void filesToSyncInRealTime() {
++        filesToSyncInRealTime = getList("filesToSyncInRealTime", Arrays.asList("plugins/MyPluginDirectory")).stream().map(Object::toString).toList();
++    }
++
++    public static List<String> filesToNotSync;
++    private static void filesToNotSync() {
++        filesToNotSync = getList("filesToNotSync", Arrays.asList("plugins/bStats")).stream().map(Object::toString).toList();
++    }
++}

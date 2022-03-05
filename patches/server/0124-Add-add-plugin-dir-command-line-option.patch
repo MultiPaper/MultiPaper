@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 11 Feb 2022 00:13:18 +1000
+Subject: [PATCH] Add --add-plugin-dir command line option
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index dc507653feea47f82ad51a53a2b1c28cb21b5ab0..dcc535d7f7b929c52c46ef656cbdc3762e0f24a5 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -461,6 +461,20 @@ public final class CraftServer implements Server {
+             }
+             list.add(file);
+         }
++        // MultiPaper start
++        @SuppressWarnings("unchecked")
++        List<File> dirs = (List<File>) this.console.options.valuesOf("add-plugin-dir");
++        for (File dir : dirs) {
++            File[] files = dir.listFiles();
++            if (files != null) {
++                for (File file : files) {
++                    if (file.getName().endsWith(".jar")) {
++                        list.add(file);
++                    }
++                }
++            }
++        }
++        // MultiPaper end
+         return list;
+     }
+     // Paper end
+diff --git a/src/main/java/org/bukkit/craftbukkit/Main.java b/src/main/java/org/bukkit/craftbukkit/Main.java
+index 88444080d19bc362ee67ee6cb89b2388d182dd41..aa3df2ada44f40abd137456f8b19f4e7dabde8ef 100644
+--- a/src/main/java/org/bukkit/craftbukkit/Main.java
++++ b/src/main/java/org/bukkit/craftbukkit/Main.java
+@@ -159,6 +159,12 @@ public class Main {
+                         .ofType(File.class)
+                         .defaultsTo(new File("multipaper.yml"))
+                         .describedAs("Yml file");
++
++                acceptsAll(asList("add-plugin-dir", "add-plugin-directory", "add-extra-plugin-jars"), "Specify paths of a directory containing extra plugin jars to be loaded in addition to those in the plugins folder. This argument can be specified multiple times, once for each extra plugin directory path.")
++                        .withRequiredArg()
++                        .ofType(File.class)
++                        .defaultsTo(new File[] {})
++                        .describedAs("Plugin directory");
+                 // MultiPaper end
+ 
+                 // Paper start

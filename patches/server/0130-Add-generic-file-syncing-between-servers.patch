@@ -1,0 +1,429 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 5 Mar 2022 00:29:09 +1000
+Subject: [PATCH] Add generic file syncing between servers
+
+
+diff --git a/build.gradle.kts b/build.gradle.kts
+index b0dcfdc9c1cd374d1cbb3a49f4dd029e61a0489b..1a7d661591cd8d0499652c5d6462f4e9098a5ca9 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -58,6 +58,8 @@ dependencies {
+     }
+     // Pufferfish end
+ 
++    implementation("io.methvin:directory-watcher:0.15.0") // MultiPaper
++
+     implementation("com.github.technove:AIR:fe3dbb4420") // Airplane - config
+     implementation("org.yaml:snakeyaml:1.28")
+     implementation ("me.carleslc.Simple-YAML:Simple-Yaml:1.7.2") { // Airplane - more config
+diff --git a/src/main/java/net/minecraft/server/Main.java b/src/main/java/net/minecraft/server/Main.java
+index 5fe7c7c6d3e486e3e145a5c78579fc2bc99142ed..b7081b87cd63139725400797e8e16e75f7858146 100644
+--- a/src/main/java/net/minecraft/server/Main.java
++++ b/src/main/java/net/minecraft/server/Main.java
+@@ -56,6 +56,7 @@ import org.apache.logging.log4j.Logger;
+ // CraftBukkit start
+ import net.minecraft.SharedConstants;
+ import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.MultiPaperFileSyncer;
+ 
+ public class Main {
+ 
+@@ -101,6 +102,7 @@ public class Main {
+             }
+ 
+             MultiPaperConfig.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper
++            MultiPaperFileSyncer.init(); // MultiPaper
+ 
+             Bootstrap.bootStrap();
+             Bootstrap.validate();
+diff --git a/src/main/java/puregero/multipaper/FileInfo.java b/src/main/java/puregero/multipaper/FileInfo.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..de0a85f3325c94d9c10d75a4555d6de853667d60
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/FileInfo.java
+@@ -0,0 +1,28 @@
++package puregero.multipaper;
++
++import java.io.DataInputStream;
++import java.io.File;
++import java.io.IOException;
++
++public class FileInfo {
++    private final File file;
++    private final long lastModified;
++
++    public FileInfo(File file) {
++        this.file = file;
++        this.lastModified = file.lastModified();
++    }
++
++    public FileInfo(DataInputStream in) throws IOException {
++        this.file = new File(in.readUTF());
++        this.lastModified = in.readLong();
++    }
++
++    public File getFile() {
++        return file;
++    }
++
++    public long getLastModified() {
++        return lastModified;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 1fe45bdfa4c0d0b13c8a4ba27cf036f52c076689..449afbd9928c62defda64f032a1952b6e54460a1 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -34,6 +34,7 @@ import java.io.*;
+ import java.net.Socket;
+ import java.net.SocketException;
+ import java.nio.charset.StandardCharsets;
++import java.util.ArrayList;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
+@@ -464,6 +465,39 @@ public class MultiPaperConnection extends Thread {
+         }
+     }
+ 
++    public void syncFile(DataInputStream in, DataOutputSender out) throws IOException {
++        String path = in.readUTF();
++        long lastModified = in.readLong();
++        long length = in.readLong();
++        File file = new File(path);
++        file.getParentFile().mkdirs();
++        File fileTemp = new File(file.getParentFile(), "." + file.getName() + "." + Double.toString(Math.random()).substring(2, 7) + ".tmp");
++
++        try (FileOutputStream fout = new FileOutputStream(fileTemp)) {
++            int i;
++            long l = 0;
++            byte[] buffer = new byte[32768];
++            while (l < length && (i = in.read(buffer, 0, (int) Math.min(length - l, buffer.length))) > 0) {
++                fout.write(buffer ,0 ,i);
++                l += i;
++            }
++        }
++        fileTemp.setLastModified(lastModified);
++
++        synchronized (MultiPaperFileSyncer.pathsBeingModified) {
++            MultiPaperFileSyncer.pathsBeingModified.add(path);
++        }
++
++        if (!fileTemp.renameTo(file) && fileTemp.isFile()) {
++            file.delete();
++            if (!fileTemp.renameTo(file)) {
++                LOGGER.warn("Failed to rename " + fileTemp.getPath() + " to " + file.getPath());
++            }
++        }
++
++        LOGGER.info("Downloaded synced file " + file.getPath() + " (" + length / 1024 + "KB)");
++    }
++
+     public void shutdown(DataInputStream in, DataOutputSender out) throws IOException {
+         Bukkit.shutdown();
+     }
+@@ -975,4 +1009,106 @@ public class MultiPaperConnection extends Thread {
+             e.printStackTrace();
+         }
+     }
++
++    public CompletableFuture<List<FileInfo>> requestFileInformation() {
++        CompletableFuture<List<FileInfo>> future = new CompletableFuture<>();
++
++        try {
++            DataOutputSender out = new DataOutputSender(this);
++            out.writeUTF("requestFilesToSync");
++            out.send(in -> {
++                try {
++                    int count = in.readInt();
++                    List<FileInfo> list = new ArrayList<>(count);
++
++                    for (int i = 0; i < count; i++) {
++                        list.add(new FileInfo(in));
++                    }
++
++                    future.complete(list);
++                } catch (IOException e) {
++                    e.printStackTrace();
++                }
++            });
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++
++        return future;
++    }
++
++    public CompletableFuture<Void> downloadFile(File file) {
++        CompletableFuture<Void> future = new CompletableFuture<>();
++
++        try {
++            DataOutputSender out = new DataOutputSender(this);
++            out.writeUTF("downloadFile");
++            out.writeUTF(file.getPath());
++            out.send(in -> {
++                try {
++                    long lastModified = in.readLong();
++                    long length = in.readLong();
++                    try (FileOutputStream fout = new FileOutputStream(file)) {
++                        int i;
++                        long l = 0;
++                        byte[] buffer = new byte[32768];
++                        while (l < length && (i = in.read(buffer, 0, (int) Math.min(length - l, buffer.length))) > 0) {
++                            fout.write(buffer ,0 ,i);
++                            l += i;
++                        }
++                    }
++                    if (!file.setLastModified(lastModified)) {
++                        LOGGER.warn("Failed to setLastModified on file " + file);
++                    }
++                    LOGGER.info("Downloaded " + file.getPath() + " (" + length / 1024 + "KB)");
++                } catch (IOException e) {
++                    e.printStackTrace();
++                }
++                future.complete(null);
++            });
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++
++        return future;
++    }
++
++    public CompletableFuture<Void> uploadFile(File file, boolean immediatelySyncToOtherServers) {
++        CompletableFuture<Void> future = new CompletableFuture<>();
++
++        try {
++            long length = file.length();
++            long writtenBytes = 0;
++            byte[] buffer = new byte[32768];
++
++            DataOutputSender out = new DataOutputSender(this);
++            out.writeUTF("uploadFile");
++            out.writeBoolean(immediatelySyncToOtherServers);
++            out.writeUTF(file.getPath());
++            out.writeLong(file.lastModified());
++            out.writeLong(length);
++
++            // I hope no one uploads horrendously large files, as uploading gets cached into memory
++            try (FileInputStream fin = new FileInputStream(file)) {
++                for (int i; (i = fin.read(buffer)) > 0;) {
++                    writtenBytes += i;
++                    out.write(buffer, 0, i);
++                }
++            }
++
++            if (writtenBytes != length) {
++                LOGGER.warn("Wrote " + writtenBytes + " bytes while uploading " + file.getPath() + ", but expected to write " + length + " bytes. Retrying upload");
++                return uploadFile(file, immediatelySyncToOtherServers);
++            }
++
++            out.send(in -> {
++                LOGGER.info("Uploaded " + file.getPath() + " (" + length / 1024 + "KB)");
++                future.complete(null);
++            });
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++
++        return future;
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..41d99fc826d322b262a1c5ab1beba160107356e0
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
+@@ -0,0 +1,191 @@
++package puregero.multipaper;
++
++import io.methvin.watcher.DirectoryWatcher;
++
++import java.io.File;
++import java.io.IOException;
++import java.nio.file.*;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.List;
++import java.util.Locale;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.Executor;
++import java.util.concurrent.TimeUnit;
++
++public class MultiPaperFileSyncer extends Thread {
++
++    public static void init() {
++        MultiPaper.getConnection().requestFileInformation().thenApplyAsync(MultiPaperFileSyncer::uploadFiles).join();
++        try {
++            Thread.sleep(50);
++        } catch (InterruptedException e) {
++            e.printStackTrace();
++        }
++        new MultiPaperFileSyncer();
++    }
++
++    public MultiPaperFileSyncer() {
++        super("MultiPaperFileSyncer");
++
++        start();
++    }
++
++    public static final HashSet<String> pathsBeingModified = new HashSet<>();
++    private static final Executor DELAYED_EXECUTOR = CompletableFuture.delayedExecutor(50, TimeUnit.MILLISECONDS);
++    private final HashMap<File, CompletableFuture<Void>> queuedUploads = new HashMap<>();
++
++    @Override
++    public void run() {
++        try {
++            DirectoryWatcher.builder()
++                    .path(Paths.get("."))
++                    .listener(event -> {
++                        if (!event.isDirectory()) {
++                            switch (event.eventType()) {
++                                case CREATE:
++                                case MODIFY:
++                                    queueFileUpload(event.path());
++                            }
++                        }
++                    })
++                    .build()
++                    .watch();
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++
++    private synchronized void queueFileUpload(Path path) {
++        File file = new File(getPathWithoutDotSlash(path.toFile()));
++        if (file.getName().toLowerCase(Locale.ROOT).endsWith(".tmp") || file.getName().toLowerCase(Locale.ROOT).startsWith(".")) {
++            return;
++        }
++
++        boolean shouldWrite = false;
++        boolean immediatelySyncToOtherServers = false;
++
++        for (String toSync : MultiPaperConfig.filesToSyncInRealTime) {
++            if (file.getPath().startsWith(toSync)) {
++                shouldWrite = true;
++                immediatelySyncToOtherServers = true;
++            }
++        }
++
++        for (String toSync : MultiPaperConfig.filesToSyncOnStartup) {
++            if (file.getPath().startsWith(toSync)) {
++                shouldWrite = true;
++            }
++        }
++
++        for (String toNotSync : MultiPaperConfig.filesToNotSync) {
++            if (file.getPath().startsWith(toNotSync)) {
++                shouldWrite = false;
++            }
++        }
++
++        if (shouldWrite) {
++            synchronized (MultiPaperFileSyncer.pathsBeingModified) {
++                if (MultiPaperFileSyncer.pathsBeingModified.remove(file.getPath())) {
++                    return;
++                }
++            }
++
++            CompletableFuture<Void> completableFuture = new CompletableFuture<>();
++            queuedUploads.put(file, completableFuture);
++            boolean finalImmediatelySyncToOtherServers = immediatelySyncToOtherServers;
++            CompletableFuture.runAsync(() -> uploadFile(completableFuture, file, finalImmediatelySyncToOtherServers), DELAYED_EXECUTOR);
++        }
++    }
++
++    private void uploadFile(CompletableFuture<Void> future, File file, boolean immediatelySyncToOtherServers) {
++        if (queuedUploads.remove(file, future) && file.isFile()) {
++            MultiPaper.getConnection().uploadFile(file, immediatelySyncToOtherServers);
++        }
++    }
++
++    private void registerRecursively(Path path, WatchService watchService) throws IOException {
++        boolean listen = false;
++
++        for (String toSync : MultiPaperConfig.filesToSyncInRealTime) {
++            if (toSync.contains(getPathWithoutDotSlash(path.toFile()))) {
++                listen = true;
++            }
++        }
++
++        for (String toSync : MultiPaperConfig.filesToSyncOnStartup) {
++            if (toSync.contains(getPathWithoutDotSlash(path.toFile()))) {
++                listen = true;
++            }
++        }
++
++        for (String toNotSync : MultiPaperConfig.filesToNotSync) {
++            if ((getPathWithoutDotSlash(path.toFile()) + "/").contains(toNotSync)) {
++                listen = false;
++            }
++        }
++
++        if (listen) {
++            path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_MODIFY);
++
++            for (File child : path.toFile().listFiles()) {
++                if (child.isDirectory()) {
++                    registerRecursively(child.toPath(), watchService);
++                }
++            }
++        }
++    }
++
++    private static String getPathWithoutDotSlash(File file) {
++        if (file.getPath().startsWith("./")) {
++            return file.getPath().substring(2);
++        }
++
++        if (file.getPath().equals(".")) {
++            return "";
++        }
++
++        return file.getPath();
++    }
++
++    private static CompletableFuture<Void> uploadFiles(List<FileInfo> fileInfos) {
++        CompletableFuture<Void> future = CompletableFuture.completedFuture(null);
++        HashSet<String> paths = new HashSet<>();
++
++        for (FileInfo fileInfo : fileInfos) {
++            paths.add(fileInfo.getFile().getPath());
++            if (!fileInfo.getFile().isFile() || Math.abs(fileInfo.getLastModified() - fileInfo.getFile().lastModified()) > 2000) {
++                fileInfo.getFile().getParentFile().mkdirs();
++                future = CompletableFuture.allOf(future, MultiPaper.getConnection().downloadFile(fileInfo.getFile()));
++            }
++        }
++
++        for (String path : MultiPaperConfig.filesToSyncInRealTime) {
++            future = uploadFileIfNeededRecursively(new File(path), future, paths, true);
++        }
++
++        for (String path : MultiPaperConfig.filesToSyncOnStartup) {
++            future = uploadFileIfNeededRecursively(new File(path), future, paths, false);
++        }
++
++        return future;
++    }
++
++    private static CompletableFuture<Void> uploadFileIfNeededRecursively(File file, CompletableFuture<Void> future, HashSet<String> paths, boolean immediatelySyncToOtherServers) {
++        if (file.isDirectory()) {
++            for (File child : file.listFiles()) {
++                future = uploadFileIfNeededRecursively(child, future, paths, immediatelySyncToOtherServers);
++            }
++        } else if (file.isFile() && !paths.contains(getPathWithoutDotSlash(file)) && !file.getName().toLowerCase(Locale.ROOT).endsWith(".tmp") && !file.getName().toLowerCase(Locale.ROOT).startsWith(".")) {
++            for (String toNotSync : MultiPaperConfig.filesToNotSync) {
++                if (getPathWithoutDotSlash(file).startsWith(toNotSync)) {
++                    return future;
++                }
++            }
++
++            paths.add(getPathWithoutDotSlash(file));
++            return CompletableFuture.allOf(future, MultiPaper.getConnection().uploadFile(new File(getPathWithoutDotSlash(file)), immediatelySyncToOtherServers));
++        }
++        return future;
++    }
++}

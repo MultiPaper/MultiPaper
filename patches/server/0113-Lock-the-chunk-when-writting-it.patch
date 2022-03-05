@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 16 Jan 2022 11:51:16 +1000
+Subject: [PATCH] Lock the chunk when writting it
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index 6701e45d6877e338afde0fd6355b941149788d6d..3c43c87a4866e6148506d85af332882db3cc771b 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -1474,6 +1474,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+             asyncSaveData = ChunkSerializer.getAsyncSaveData(this.level, chunk);
+         }
+ 
++        MultiPaper.willSaveChunk(level, chunk);
+         this.level.asyncChunkTaskManager.scheduleChunkSave(chunkPos.x, chunkPos.z, com.destroystokyo.paper.io.PrioritizedTaskQueue.NORMAL_PRIORITY,
+             asyncSaveData, chunk);
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 0456b7cda6deb072f1401aeda476a3712ab8109d..740cf2a4f7eed6b6c82ce93bf8edc73738e96d22 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -470,6 +470,10 @@ public class MultiPaper {
+         }
+     }
+ 
++    public static void willSaveChunk(ServerLevel level, ChunkAccess chunk) {
++        getConnection().willSaveChunk(level.getWorld().getName(), chunk.locX, chunk.locZ);
++    }
++
+     public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
+         if (compoundTag == null) {
+             return new byte[0];
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 10aa515945fe45c3f3626c321245be6ed8d8d949..1fe45bdfa4c0d0b13c8a4ba27cf036f52c076689 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -962,4 +962,17 @@ public class MultiPaperConnection extends Thread {
+             e.printStackTrace();
+         }
+     }
++
++    public void willSaveChunk(String world, int cx, int cz) {
++        try {
++            DataOutputSender out = new DataOutputSender(this);
++            out.writeUTF("willSaveChunk");
++            out.writeUTF(world);
++            out.writeInt(cx);
++            out.writeInt(cz);
++            out.send(null);
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
+ }

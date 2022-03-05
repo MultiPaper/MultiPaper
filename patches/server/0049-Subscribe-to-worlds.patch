@@ -1,0 +1,159 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 22 Dec 2021 21:32:25 +1000
+Subject: [PATCH] Subscribe to worlds
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 04b2058be12d238b88a134994a72cfc62187e5f3..5672e72733f42b77d017f28b7f4b5b6133ca73da 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -246,6 +246,8 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
+ import org.yaml.snakeyaml.error.MarkedYAMLException;
+ 
+ import net.md_5.bungee.api.chat.BaseComponent; // Spigot
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.SubscribeToWorldPacket;
+ 
+ import javax.annotation.Nullable; // Paper
+ import javax.annotation.Nonnull; // Paper
+@@ -1358,6 +1360,7 @@ public final class CraftServer implements Server {
+             return;
+         }
+         this.worlds.put(world.getName().toLowerCase(java.util.Locale.ENGLISH), world);
++        MultiPaper.broadcastPacketToExternalServers(new SubscribeToWorldPacket(world.getName())); // MultiPaper
+     }
+ 
+     @Override
+diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+index c3b0556728e70b55966683334a9cddabe9c481e0..a58b1ac90b12a2fc25ab41240d5f2ee79f5199a0 100644
+--- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
++++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+@@ -19,6 +19,7 @@ import puregero.multipaper.externalserverprotocol.*;
+ 
+ import java.io.Closeable;
+ import java.io.IOException;
++import java.util.HashSet;
+ 
+ public class ExternalServerConnection extends ChannelInitializer<SocketChannel> implements Closeable {
+ 
+@@ -30,6 +31,7 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+     private Channel channel;
+     public long nanoTime = 0;
+     public ExternalServer externalServer = null;
++    public HashSet<String> subscribedWorlds = new HashSet<>();
+ 
+     public ExternalServerConnection() {
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index a20f3ef14f3e28b32e747c52fe9655a057586ca6..4476f9bf0e80543f1abb4e41f27b17bacbdf3ae5 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -1,6 +1,7 @@
+ package puregero.multipaper;
+ 
+ import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
+ import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
+ 
+ import java.io.IOException;
+@@ -71,4 +72,16 @@ public class MultiPaper {
+             });
+         }
+     }
++
++    public static void broadcastPacketToExternalServers(String world, ExternalServerPacket packet) {
++        forEachExternalServer(externalServer -> {
++            if (externalServer.getConnection() != null && externalServer.getConnection().isOpen() && externalServer.getConnection().subscribedWorlds.contains(world)) {
++                externalServer.getConnection().send(packet);
++            }
++        });
++    }
++
++    public static void broadcastPacketToExternalServers(ServerPlayer player, ExternalServerPacket packet) {
++        broadcastPacketToExternalServers(player.getLevel().getWorld().getName(), packet);
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 7c889bd5cd032c1381bd2350a7f7b168e33ee280..d6b8db5ad5a6ff2da1197e55129f1b30fa4cbad1 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -12,6 +12,7 @@ public class ExternalServerPacketSerializer {
+     private static final List<Function<FriendlyByteBuf, ExternalServerPacket>> PACKET_DESERIALIZERS = new ArrayList<>();
+     static {
+         addPacket(HelloPacket.class, HelloPacket::new);
++        addPacket(SubscribeToWorldPacket.class, SubscribeToWorldPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+index 10e00060e6f72a1b69d9066a9866553aabe991ec..ea54ada624015f3219cbdc134b1d15715b760f20 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+@@ -3,6 +3,8 @@ package puregero.multipaper.externalserverprotocol;
+ import net.minecraft.network.FriendlyByteBuf;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.World;
+ import puregero.multipaper.ExternalServerConnection;
+ import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperConfig;
+@@ -62,5 +64,11 @@ public class HelloPacket extends ExternalServerPacket {
+             connection.nanoTime = nanoTime;
+             connection.send(new HelloPacket(MultiPaperConfig.bungeeCordName, nanoTime));
+         }
++
++        MultiPaper.runSync(() -> {
++            for (World world : Bukkit.getWorlds()) {
++                connection.send(new SubscribeToWorldPacket(world.getName()));
++            }
++        });
+     }
+ }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..5cbf42b51d99d13545b17be258e52f0638d73ef9
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
+@@ -0,0 +1,40 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++import org.bukkit.Bukkit;
++import org.bukkit.World;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++public class SubscribeToWorldPacket extends ExternalServerPacket {
++
++    private final String world;
++
++    public SubscribeToWorldPacket(String world) {
++        this.world = world;
++    }
++
++    public SubscribeToWorldPacket(FriendlyByteBuf in) {
++        world = in.readUtf();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            World bukkitWorld = Bukkit.getWorld(world);
++            if (connection.subscribedWorlds.add(world) && bukkitWorld instanceof CraftWorld craftWorld) {
++                onWorldSubscribe(connection, craftWorld);
++            }
++        });
++    }
++
++    private void onWorldSubscribe(ExternalServerConnection connection, CraftWorld craftWorld) {
++
++    }
++}

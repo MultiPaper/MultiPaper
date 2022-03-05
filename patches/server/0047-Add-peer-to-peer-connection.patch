@@ -1,0 +1,686 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 15 Nov 2021 13:27:45 +1000
+Subject: [PATCH] Add peer-to-peer connection
+
+
+diff --git a/src/main/java/com/destroystokyo/paper/Metrics.java b/src/main/java/com/destroystokyo/paper/Metrics.java
+index 6299c769c56bd6c2b2f3a26c1f5766e17b6fb660..17ebc0ac3d4c91d6818c79e8821681b668bd95c6 100644
+--- a/src/main/java/com/destroystokyo/paper/Metrics.java
++++ b/src/main/java/com/destroystokyo/paper/Metrics.java
+@@ -8,6 +8,8 @@ import org.bukkit.plugin.Plugin;
+ 
+ import org.json.simple.JSONArray;
+ import org.json.simple.JSONObject;
++import puregero.multipaper.ExternalServer;
++import puregero.multipaper.MultiPaper;
+ 
+ import javax.net.ssl.HttpsURLConnection;
+ import java.io.ByteArrayOutputStream;
+@@ -604,6 +606,7 @@ public class Metrics {
+                 metrics.addCustomChart(new Metrics.SingleLineChart("players", () -> Bukkit.getOnlinePlayers().size()));
+                 metrics.addCustomChart(new Metrics.SimplePie("online_mode", () -> Bukkit.getOnlineMode() ? "online" : "offline"));
+                 metrics.addCustomChart(new Metrics.SimplePie("multipaper_version", () -> (Metrics.class.getPackage().getImplementationVersion() != null) ? Metrics.class.getPackage().getImplementationVersion() : "unknown")); // Tuinity - we have our own bstats page // Airplane // MultiPaper
++                metrics.addCustomChart(new Metrics.SimplePie("total_servers", () -> String.valueOf(MultiPaper.getConnection().getServersMap().values().stream().filter(ExternalServer::isAlive).count()))); // MultiPaper
+ 
+                 metrics.addCustomChart(new Metrics.DrilldownPie("java_version", () -> {
+                     Map<String, Map<String, Integer>> map = new HashMap<>();
+diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
+index 81dde0efc1a06420c0791520b9e40b24dd1f0318..a866f2bb5265dd60413c1c8ead94ec2360371ff5 100644
+--- a/src/main/java/net/minecraft/network/Connection.java
++++ b/src/main/java/net/minecraft/network/Connection.java
+@@ -513,7 +513,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+         // Paper end
+         if (this.packetListener instanceof ServerLoginPacketListenerImpl) {
+             if ( ((ServerLoginPacketListenerImpl) this.packetListener).state != ServerLoginPacketListenerImpl.State.READY_TO_ACCEPT // Paper
+-                     || (joinAttemptsThisTick++ < MAX_PER_TICK)) { // Paper - limit the number of joins which can be processed each tick
++                     || (joinAttemptsThisTick++ < com.destroystokyo.paper.PaperConfig.maxJoinsPerTick)) { // Paper - limit the number of joins which can be processed each tick // MultiPaper - reference paper config directly, not intermediate values
+             ((ServerLoginPacketListenerImpl) this.packetListener).tick();
+             } // Paper
+         }
+diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+index 5ba9aca70eecb530ae363ccded5744fa50b5016e..a187e36aca089ec6b024b19760c935f7c9fa6cd4 100644
+--- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -67,6 +67,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
+ import org.bukkit.event.server.ServerCommandEvent;
+ import org.bukkit.craftbukkit.util.Waitable;
+ import org.bukkit.event.server.RemoteServerCommandEvent;
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public class DedicatedServer extends MinecraftServer implements ServerInterface {
+@@ -284,6 +285,8 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+             return false;
+         }
+ 
++        MultiPaper.onStart(bindAddress); // MultiPaper
++
+         // CraftBukkit start
+         // this.setPlayerList(new DedicatedPlayerList(this, this.registryHolder, this.playerDataStorage)); // Spigot - moved up
+         server.loadPlugins();
+diff --git a/src/main/java/net/minecraft/server/network/ServerConnectionListener.java b/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
+index 54477f1d0d0e2f09fc2d2b1f4c57413e5a0736f9..53d0ec25fdc71e918355c1e6e5b6a7bcfacc78b4 100644
+--- a/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
++++ b/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
+@@ -62,7 +62,7 @@ public class ServerConnectionListener {
+     private final List<ChannelFuture> channels = Collections.synchronizedList(Lists.newArrayList());
+     final List<Connection> connections = Collections.synchronizedList(Lists.newArrayList());
+     // Paper start - prevent blocking on adding a new network manager while the server is ticking
+-    private final java.util.Queue<Connection> pending = new java.util.concurrent.ConcurrentLinkedQueue<>();
++    public final java.util.Queue<Connection> pending = new java.util.concurrent.ConcurrentLinkedQueue<>(); // MultiPaper - make public
+     private static final boolean disableFlushConsolidation = Boolean.getBoolean("Paper.disableFlushConsolidate"); // Paper
+     private final void addPending() {
+         Connection manager = null;
+@@ -128,7 +128,7 @@ public class ServerConnectionListener {
+                     ((Connection) object).setListener(new ServerHandshakePacketListenerImpl(ServerConnectionListener.this.server, (Connection) object));
+                     io.papermc.paper.network.ChannelInitializeListenerHolder.callListeners(channel); // Paper
+                 }
+-            }).group((EventLoopGroup) lazyinitvar.get()).localAddress(address)).option(ChannelOption.AUTO_READ, false).bind().syncUninterruptibly()); // CraftBukkit // Paper
++            }).group((EventLoopGroup) lazyinitvar.get()).localAddress(address)).option(ChannelOption.AUTO_READ, true).bind().syncUninterruptibly()); // CraftBukkit // Paper // MultiPaper - set auto read to true
+         }
+     }
+ 
+diff --git a/src/main/java/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
+index 150050fb343ef6119204b7d5220207765a6937bc..63df2d1ca7208b436798e7ad21afc7bd7e6a96b1 100644
+--- a/src/main/java/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
+@@ -10,6 +10,8 @@ import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
+ import net.minecraft.network.protocol.handshake.ServerHandshakePacketListener;
+ import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
+ import net.minecraft.server.MinecraftServer;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
+ 
+ // CraftBukkit start
+ import java.net.InetAddress;
+@@ -39,6 +41,17 @@ public class ServerHandshakePacketListenerImpl implements ServerHandshakePacketL
+ 
+     @Override
+     public void handleIntention(ClientIntentionPacket packet) {
++        // MultiPaper start - Check if this is a MultiPaper peer connection
++        for (String part : packet.getHostName().split("\00")) {
++            if (part.equals(MultiPaper.getConnection().secret)) {
++                server.getConnection().pending.remove(connection);
++                server.getConnection().getConnections().remove(connection);
++                new ExternalServerConnection(connection.channel);
++                return;
++            }
++        }
++        // MultiPaper end
++
+         switch (packet.getIntention()) {
+             case LOGIN:
+                 this.connection.setProtocol(ConnectionProtocol.LOGIN);
+diff --git a/src/main/java/net/minecraft/world/ticks/ScheduledTick.java b/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
+index 58f8d0bac3fa3832da25a458c2b42bdaf50f0973..f694b0b13ed3ee877d0c8026babdc982a95798c6 100644
+--- a/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
++++ b/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
+@@ -41,14 +41,16 @@ public record ScheduledTick<T>(T type, BlockPos pos, long triggerTick, TickPrior
+         this(type, pos, triggerTick, TickPriority.NORMAL, subTickOrder);
+     }
+ 
+-    public ScheduledTick(T object, BlockPos blockPos, long l, TickPriority tickPriority, long m) {
+-        blockPos = blockPos.immutable();
+-        this.type = object;
+-        this.pos = blockPos;
+-        this.triggerTick = l;
+-        this.priority = tickPriority;
+-        this.subTickOrder = m;
++    // MultiPaper start - Fix compilation issues
++    public ScheduledTick(T type, BlockPos pos, long triggerTick, TickPriority priority, long subTickOrder) {
++        pos = pos.immutable();
++        this.type = type;
++        this.pos = pos;
++        this.triggerTick = triggerTick;
++        this.priority = priority;
++        this.subTickOrder = subTickOrder;
+     }
++    // MultiPaper end
+ 
+     public static <T> ScheduledTick<T> probe(T type, BlockPos pos) {
+         return new ScheduledTick<>(type, pos, 0L, TickPriority.NORMAL, 0L);
+diff --git a/src/main/java/puregero/multipaper/ExternalServer.java b/src/main/java/puregero/multipaper/ExternalServer.java
+index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354304819b1 100644
+--- a/src/main/java/puregero/multipaper/ExternalServer.java
++++ b/src/main/java/puregero/multipaper/ExternalServer.java
+@@ -6,6 +6,7 @@ public class ExternalServer {
+     private int averageTickTime;
+     private double tps;
+     private long lastAlive;
++    private ExternalServerConnection connection;
+ 
+     public ExternalServer(String name, boolean me) {
+         this.name = name;
+@@ -47,4 +48,12 @@ public class ExternalServer {
+     public void setTps(double tps) {
+         this.tps = tps;
+     }
++
++    public void setConnection(ExternalServerConnection connection) {
++        this.connection = connection;
++    }
++
++    public ExternalServerConnection getConnection() {
++        return connection;
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c3b0556728e70b55966683334a9cddabe9c481e0
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+@@ -0,0 +1,113 @@
++package puregero.multipaper;
++
++import com.google.common.util.concurrent.ThreadFactoryBuilder;
++import io.netty.channel.Channel;
++import io.netty.channel.ChannelFutureListener;
++import io.netty.channel.ChannelInitializer;
++import io.netty.channel.epoll.EpollEventLoopGroup;
++import io.netty.channel.epoll.EpollSocketChannel;
++import io.netty.channel.nio.NioEventLoopGroup;
++import io.netty.channel.socket.SocketChannel;
++import io.netty.util.internal.SystemPropertyUtil;
++import net.minecraft.network.*;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
++import net.minecraft.util.LazyLoadedValue;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.externalserverprotocol.*;
++
++import java.io.Closeable;
++import java.io.IOException;
++
++public class ExternalServerConnection extends ChannelInitializer<SocketChannel> implements Closeable {
++
++    private static final Logger LOGGER = LogManager.getLogger(ExternalServerConnection.class.getSimpleName());
++    private static final int EVENT_LOOP_THREADS = Math.max(1, Math.min(SystemPropertyUtil.getInt("multipaper.netty.eventLoopThreads", 2), SystemPropertyUtil.getInt("io.netty.eventLoopThreads", 2)));
++    public static final LazyLoadedValue<NioEventLoopGroup> SERVER_EVENT_GROUP = new LazyLoadedValue<>(() -> new NioEventLoopGroup(EVENT_LOOP_THREADS, (new ThreadFactoryBuilder()).setNameFormat("Netty MultiPaper IO #%d").setDaemon(true).setUncaughtExceptionHandler(new net.minecraft.DefaultUncaughtExceptionHandlerWithName(LOGGER)).build()));
++    public static final LazyLoadedValue<EpollEventLoopGroup> SERVER_EPOLL_EVENT_GROUP = new LazyLoadedValue<>(() -> new EpollEventLoopGroup(EVENT_LOOP_THREADS, (new ThreadFactoryBuilder()).setNameFormat("Netty Epoll MultiPaper IO #%d").setDaemon(true).setUncaughtExceptionHandler(new net.minecraft.DefaultUncaughtExceptionHandlerWithName(LOGGER)).build()));
++
++    private Channel channel;
++    public long nanoTime = 0;
++    public ExternalServer externalServer = null;
++
++    public ExternalServerConnection() {
++
++    }
++
++    public ExternalServerConnection(Channel channel) {
++        this.channel = channel;
++        setupPipeline();
++        nanoTime = System.nanoTime();
++        send(new HelloPacket(MultiPaperConfig.bungeeCordName, nanoTime));
++    }
++
++    @Override
++    public void initChannel(SocketChannel channel) {
++        this.channel = channel;
++    }
++
++    public void sendMinecraftHandshake(String address, String secret, int port) {
++        channel.pipeline()
++                .addLast("prepender", new Varint21LengthFieldPrepender())
++                .addLast("encoder", new PacketEncoder(PacketFlow.SERVERBOUND));
++        channel.attr(Connection.ATTRIBUTE_PROTOCOL).set(ConnectionProtocol.HANDSHAKING);
++        channel.writeAndFlush(new ClientIntentionPacket(address + "\00" + secret, port, ConnectionProtocol.STATUS))
++                .addListener(future -> {
++                    if (future.isSuccess()) {
++                        setupPipeline();
++                    } else if (future.cause() != null) {
++                        future.cause().printStackTrace();
++                    }
++                });
++    }
++
++    public void setupPipeline() {
++        // Let's yeet minecraft's networking out of here
++        while (channel.pipeline().last() != null) {
++            channel.pipeline().removeLast();
++        }
++
++        // And add our own
++        if (!Boolean.getBoolean("Paper.disableFlushConsolidate")) channel.pipeline().addFirst(new io.netty.handler.flush.FlushConsolidationHandler());
++
++        channel.pipeline()
++                .addLast("splitter", new Varint21FrameDecoder())
++                .addLast("decoder", new ExternalServerPacketDecoder())
++                .addLast("prepender", new Varint21LengthFieldPrepender())
++                .addLast("encoder", new ExternalServerPacketEncoder())
++                .addLast("packet_handler", new ExternalServerPacketHandler(this));
++
++        // And put it onto our own event loop
++        if (SystemPropertyUtil.getBoolean("multipaper.netty.useOwnEventLoop", true)) {
++            channel.deregister().addListener((ChannelFutureListener) future -> {
++                if (future.channel() instanceof EpollSocketChannel) {
++                    SERVER_EPOLL_EVENT_GROUP.get().register(future.channel()).sync();
++                } else {
++                    SERVER_EVENT_GROUP.get().register(future.channel()).sync();
++                }
++            });
++        } else {
++            LOGGER.info("Using Minecraft's event loop");
++        }
++    }
++
++    @Override
++    public void close() throws IOException {
++        channel.close();
++    }
++
++    public boolean isOpen() {
++        return channel.isOpen();
++    }
++
++    public void send(ExternalServerPacket packet) {
++        if (!channel.isOpen()) {
++            new IOException("Channel is closed for " + externalServer.getName()).printStackTrace();
++        } else if (channel.eventLoop().inEventLoop()) {
++            channel.writeAndFlush(packet);
++        } else {
++            channel.eventLoop().execute(() -> channel.writeAndFlush(packet));
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 619feec83eebe8f6e6ec16a4a6b51665dabefe2d..a20f3ef14f3e28b32e747c52fe9655a057586ca6 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -1,6 +1,16 @@
+ package puregero.multipaper;
+ 
++import net.minecraft.server.MinecraftServer;
++import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
++
+ import java.io.IOException;
++import java.net.InetSocketAddress;
++import java.net.SocketAddress;
++import java.util.Collection;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.TimeUnit;
++import java.util.function.Consumer;
++import java.util.function.Supplier;
+ 
+ public class MultiPaper {
+     private static MultiPaperConnection multiPaperConnection = null;
+@@ -20,4 +30,45 @@ public class MultiPaper {
+             e.printStackTrace();
+         }
+     }
++
++    public static void onStart(SocketAddress bindAddress) {
++        try {
++            getConnection().sendStart(((InetSocketAddress) bindAddress).getAddress().getHostAddress(), ((InetSocketAddress) bindAddress).getPort());
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++    }
++    
++    public static void runSync(Runnable runnable) {
++        if (MinecraftServer.getServer() == null) {
++            // Wait a bit for the server to start up
++            CompletableFuture.delayedExecutor(50, TimeUnit.MILLISECONDS).execute(() -> runSync(runnable));
++            return;
++        }
++
++        MinecraftServer.getServer().scheduleOnMain(runnable);
++    }
++
++    public static void forEachExternalServer(Consumer<ExternalServer> externalServerConsumer) {
++        getConnection().getServersMap().values().forEach(externalServerConsumer);
++    }
++
++    public static void broadcastPacketToExternalServers(ExternalServerPacket packet) {
++        broadcastPacketToExternalServers(getConnection().getServersMap().values(), packet);
++    }
++
++    public static void broadcastPacketToExternalServers(Collection<ExternalServer> externalServers, ExternalServerPacket packet) {
++        broadcastPacketToExternalServers(externalServers, () -> packet);
++    }
++
++    public static void broadcastPacketToExternalServers(Collection<ExternalServer> externalServers, Supplier<ExternalServerPacket> generatePacketIfNeeded) {
++        if (!externalServers.isEmpty()) {
++            ExternalServerPacket packet = generatePacketIfNeeded.get();
++            externalServers.forEach(externalServer -> {
++                if (externalServer.getConnection() != null && externalServer.getConnection().isOpen()) {
++                    externalServer.getConnection().send(packet);
++                }
++            });
++        }
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 304c9b0f448063ddfd4ada88793d5fc0f016126c..71d10cfd0e759630c1412a73a7bee230bdd5a398 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -1,5 +1,12 @@
+ package puregero.multipaper;
+ 
++import io.netty.bootstrap.Bootstrap;
++import io.netty.channel.ChannelOption;
++import io.netty.channel.epoll.Epoll;
++import io.netty.channel.epoll.EpollSocketChannel;
++import io.netty.channel.socket.nio.NioSocketChannel;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.network.ServerConnectionListener;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ 
+@@ -19,6 +26,7 @@ public class MultiPaperConnection extends Thread {
+     private final Map<Integer, Request> callbacks = new ConcurrentHashMap<>();
+     private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
+     private String myName = null;
++    public String secret;
+ 
+     public MultiPaperConnection() {
+         super("MultiPaperConnection Thread");
+@@ -52,6 +60,14 @@ public class MultiPaperConnection extends Thread {
+         return new DataOutputSender(this, id);
+     }
+ 
++    public ExternalServer getOrCreateServer(String name) {
++        return serversMap.computeIfAbsent(name, key -> new ExternalServer(key, key.equals(myName)));
++    }
++
++    public ExternalServer getMe() {
++        return getOrCreateServer(myName);
++    }
++
+     @Override
+     public void run() {
+         while (true) {
+@@ -108,12 +124,45 @@ public class MultiPaperConnection extends Thread {
+     }
+ 
+     public void serverInfo(DataInputStream in, DataOutputSender out) throws IOException {
+-        ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
++        ExternalServer server = getOrCreateServer(in.readUTF());
+         server.setAverageTickTime(in.readInt());
+         server.setTps(in.readFloat());
+         server.setLastAlive(System.currentTimeMillis());
+     }
+ 
++    public void secret(DataInputStream in, DataOutputSender out) throws IOException {
++        secret = in.readUTF();
++    }
++
++    public void start(DataInputStream in, DataOutputSender out) throws IOException {
++        String address = in.readUTF();
++        int port = in.readInt();
++
++        LOGGER.info("Connecting to external server " + address + ":" + port + "...");
++
++        ExternalServerConnection externalServerConnection = new ExternalServerConnection();
++
++        Bootstrap bootstrap = new Bootstrap();
++        bootstrap.option(ChannelOption.SO_KEEPALIVE, true);
++        bootstrap.handler(externalServerConnection);
++
++        if (Epoll.isAvailable() && MinecraftServer.getServer().isEpollEnabled()) {
++            bootstrap.group(ServerConnectionListener.SERVER_EPOLL_EVENT_GROUP.get());
++            bootstrap.channel(EpollSocketChannel.class);
++        } else {
++            bootstrap.group(ServerConnectionListener.SERVER_EVENT_GROUP.get());
++            bootstrap.channel(NioSocketChannel.class);
++        }
++
++        bootstrap.connect(address, port).addListener(future -> {
++            if (future.isSuccess()) {
++                externalServerConnection.sendMinecraftHandshake(address, secret, port);
++            } else if (future.cause() != null) {
++                future.cause().printStackTrace();
++            }
++        });
++    }
++
+     public void writeTickTime(long time, double tps) throws IOException {
+         DataOutputSender out = new DataOutputSender(this);
+         out.writeUTF("writeTickTime");
+@@ -121,4 +170,12 @@ public class MultiPaperConnection extends Thread {
+         out.writeFloat((float) tps);
+         out.send(null);
+     }
++
++    public void sendStart(String address, int port) throws IOException {
++        DataOutputSender out = new DataOutputSender(this);
++        out.writeUTF("start");
++        out.writeUTF(System.getProperty("server.address", address));
++        out.writeInt(port);
++        out.send(null);
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..1a11a2f97e72936cf936d058e6d2a9183390f773
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java
+@@ -0,0 +1,12 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++import puregero.multipaper.ExternalServerConnection;
++
++public abstract class ExternalServerPacket {
++
++    public abstract void handle(ExternalServerConnection connection);
++
++    public abstract void write(FriendlyByteBuf out);
++
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketDecoder.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketDecoder.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..a3e8374a889f552dad40cf11cdcf514b0d948557
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketDecoder.java
+@@ -0,0 +1,22 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.channel.ChannelHandlerContext;
++import io.netty.handler.codec.ByteToMessageDecoder;
++import net.minecraft.network.FriendlyByteBuf;
++
++import java.util.List;
++import java.util.function.Function;
++
++public class ExternalServerPacketDecoder extends ByteToMessageDecoder {
++    @Override
++    protected void decode(ChannelHandlerContext ctx, ByteBuf byteBuf, List<Object> list) {
++        int i = byteBuf.readableBytes();
++        if (i != 0) {
++            FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(byteBuf);
++            int packetId = friendlyByteBuf.readVarInt();
++            Function<FriendlyByteBuf, ExternalServerPacket> deserializer = ExternalServerPacketSerializer.getDeserializer(packetId);
++            list.add(deserializer.apply(friendlyByteBuf));
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketEncoder.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketEncoder.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c2b8eb922ea1e4c70172f974e5e53faa7e8a876e
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketEncoder.java
+@@ -0,0 +1,17 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.channel.ChannelHandlerContext;
++import io.netty.handler.codec.MessageToByteEncoder;
++import net.minecraft.network.FriendlyByteBuf;
++
++public class ExternalServerPacketEncoder extends MessageToByteEncoder<ExternalServerPacket> {
++    @Override
++    protected void encode(ChannelHandlerContext ctx, ExternalServerPacket msg, ByteBuf out) throws Exception {
++        int packetId = ExternalServerPacketSerializer.getPacketId(msg);
++
++        FriendlyByteBuf byteBuf = new FriendlyByteBuf(out);
++        byteBuf.writeVarInt(packetId);
++        msg.write(byteBuf);
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..4b5bb154c26b6a1c95d013b571c1d0f7867f52d2
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java
+@@ -0,0 +1,46 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.channel.ChannelHandlerContext;
++import io.netty.channel.SimpleChannelInboundHandler;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++
++import java.net.SocketException;
++
++public class ExternalServerPacketHandler extends SimpleChannelInboundHandler<ExternalServerPacket> {
++    private static final Logger LOGGER = LogManager.getLogger(ExternalServerPacketHandler.class.getSimpleName());
++    private final ExternalServerConnection connection;
++    private boolean disconnectedWithException = false;
++
++    public ExternalServerPacketHandler(ExternalServerConnection connection) {
++        this.connection = connection;
++    }
++
++    @Override
++    protected void channelRead0(ChannelHandlerContext ctx, ExternalServerPacket msg) {
++        msg.handle(connection);
++    }
++
++    @Override
++    public void exceptionCaught(ChannelHandlerContext ctx, Throwable throwable) {
++        if (ctx.channel().isOpen()) {
++            if (throwable instanceof SocketException) {
++                disconnectedWithException = true;
++                if (connection.externalServer != null) {
++                    LOGGER.info("External server " + connection.externalServer.getName() + " has disconnected: " + throwable.getMessage());
++                }
++            } else {
++                throwable.printStackTrace();
++            }
++        }
++    }
++
++    @Override
++    public void channelInactive(ChannelHandlerContext ctx) {
++        connection.nanoTime = 0;
++        if (!disconnectedWithException && connection.externalServer != null) {
++            LOGGER.info("External server " + connection.externalServer.getName() + " has disconnected");
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..7c889bd5cd032c1381bd2350a7f7b168e33ee280
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -0,0 +1,34 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.function.Function;
++
++public class ExternalServerPacketSerializer {
++
++    private static final List<Class<? extends ExternalServerPacket>> PACKETS = new ArrayList<>();
++    private static final List<Function<FriendlyByteBuf, ExternalServerPacket>> PACKET_DESERIALIZERS = new ArrayList<>();
++    static {
++        addPacket(HelloPacket.class, HelloPacket::new);
++    }
++
++    private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
++        PACKETS.add(clazz);
++        PACKET_DESERIALIZERS.add(deserializer);
++    }
++
++    public static int getPacketId(ExternalServerPacket packet) {
++        int id = PACKETS.indexOf(packet.getClass());
++        if (id == -1) {
++            System.err.println("Unknown packet " + packet);
++            throw new IllegalArgumentException("Unknown packet " + packet);
++        }
++        return id;
++    }
++
++    public static Function<FriendlyByteBuf, ExternalServerPacket> getDeserializer(int packetId) {
++        return PACKET_DESERIALIZERS.get(packetId);
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..10e00060e6f72a1b69d9066a9866553aabe991ec
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+@@ -0,0 +1,66 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperConfig;
++
++public class HelloPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(HelloPacket.class.getSimpleName());
++
++    private final String bungeecordName;
++    private final long nanoTime;
++
++    public HelloPacket(String bungeecordName) {
++        this(bungeecordName, System.nanoTime());
++    }
++
++    public HelloPacket(String bungeecordName, long nanoTime) {
++        this.bungeecordName = bungeecordName;
++        this.nanoTime = nanoTime;
++    }
++
++    public HelloPacket(FriendlyByteBuf in) {
++        bungeecordName = in.readUtf();
++        nanoTime = in.readLong();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(bungeecordName);
++        out.writeLong(nanoTime);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        connection.externalServer = MultiPaper.getConnection().getOrCreateServer(bungeecordName);
++
++        ExternalServerConnection previousConnection = connection.externalServer.getConnection();
++        if (previousConnection == null || previousConnection.nanoTime < nanoTime) {
++            LOGGER.info("Connected to external server " + bungeecordName);
++            connection.externalServer.setConnection(connection);
++            onConnect(connection);
++        } else if (previousConnection.nanoTime == nanoTime) {
++            // How lucky do you have to be for nano time to be the same?
++            LOGGER.info("A new connection to external server " + bungeecordName + " had the same nano time as a previous connection, resending with a new nano time...");
++            HelloPacket helloPacket = new HelloPacket(bungeecordName);
++            if (helloPacket.nanoTime == nanoTime) {
++                // Oh, nano time is broken, that's why
++                throw new RuntimeException("System.nanoTime() does not work. (Returned " + helloPacket.nanoTime + ")");
++            }
++            connection.send(helloPacket);
++        } else {
++            LOGGER.info("A new connection to external server " + bungeecordName + " failed as a previous connection had a newer nano time.");
++        }
++    }
++
++    private void onConnect(ExternalServerConnection connection) {
++        if (connection.nanoTime != nanoTime) {
++            connection.nanoTime = nanoTime;
++            connection.send(new HelloPacket(MultiPaperConfig.bungeeCordName, nanoTime));
++        }
++    }
++}

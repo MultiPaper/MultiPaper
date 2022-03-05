@@ -41,6 +41,9 @@ public class Handlers {
         handlers.put("syncChunkOwnerToAll", new SyncChunkOwnerToAllHandler());
         handlers.put("playerConnect", new PlayerConnectHandler());
         handlers.put("playerDisconnect", new PlayerDisconnectHandler());
+        handlers.put("requestFilesToSync", new RequestFilesToSyncHandler());
+        handlers.put("downloadFile", new DownloadFileHandler());
+        handlers.put("uploadFile", new UploadFileHandler());
     }
 
     public static Handler get(String handler) {

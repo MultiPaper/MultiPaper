@@ -32,7 +32,7 @@ manually deleted from all servers at present.
 `filesToSyncInRealTime`  
 The same as filesToSyncOnStartup, except files are downloaded whenever they are
 modified. There is no guarantee that these files will be synced without delay.
-Note on macOS there is up to a 10 second delay when syncing files.
+Warning: SQLite and H2 database files cannot be synced with this method.
 
 `filesToNotSync`  
 Files or directories that should not be synced even if they're included in

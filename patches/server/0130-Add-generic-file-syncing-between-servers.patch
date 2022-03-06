@@ -72,7 +72,7 @@ index 0000000000000000000000000000000000000000..de0a85f3325c94d9c10d75a4555d6de8
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 63f9ebe0a44b854084add86cf6ba083f44bc4685..81ef7f27cf9d3824d8979bf40abb7ede9bad9ae6 100644
+index 63f9ebe0a44b854084add86cf6ba083f44bc4685..008f26e47f71ff53051934a4bca2d355e8d40b21 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -34,6 +34,7 @@ import java.io.*;
@@ -83,7 +83,7 @@ index 63f9ebe0a44b854084add86cf6ba083f44bc4685..81ef7f27cf9d3824d8979bf40abb7ede
  import java.util.HashSet;
  import java.util.List;
  import java.util.Map;
-@@ -468,6 +469,39 @@ public class MultiPaperConnection extends Thread {
+@@ -468,6 +469,44 @@ public class MultiPaperConnection extends Thread {
          }
      }
  
@@ -92,8 +92,13 @@ index 63f9ebe0a44b854084add86cf6ba083f44bc4685..81ef7f27cf9d3824d8979bf40abb7ede
 +        long lastModified = in.readLong();
 +        long length = in.readLong();
 +        File file = new File(path);
-+        file.getParentFile().mkdirs();
-+        File fileTemp = new File(file.getParentFile(), "." + file.getName() + "." + Double.toString(Math.random()).substring(2, 7) + ".tmp");
++        File fileTemp;
++        if (file.getParentFile() != null) {
++            file.getParentFile().mkdirs();
++            fileTemp = new File(file.getParentFile(), "." + file.getName() + "." + Double.toString(Math.random()).substring(2, 7) + ".tmp");
++        } else {
++            fileTemp = new File("." + file.getName() + "." + Double.toString(Math.random()).substring(2, 7) + ".tmp");
++        }
 +
 +        try (FileOutputStream fout = new FileOutputStream(fileTemp)) {
 +            int i;
@@ -123,7 +128,7 @@ index 63f9ebe0a44b854084add86cf6ba083f44bc4685..81ef7f27cf9d3824d8979bf40abb7ede
      public void shutdown(DataInputStream in, DataOutputSender out) throws IOException {
          Bukkit.shutdown();
      }
-@@ -979,4 +1013,106 @@ public class MultiPaperConnection extends Thread {
+@@ -979,4 +1018,106 @@ public class MultiPaperConnection extends Thread {
              e.printStackTrace();
          }
      }
@@ -232,10 +237,10 @@ index 63f9ebe0a44b854084add86cf6ba083f44bc4685..81ef7f27cf9d3824d8979bf40abb7ede
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..41d99fc826d322b262a1c5ab1beba160107356e0
+index 0000000000000000000000000000000000000000..30f1ec4c8aa4b09d27c08e4c44564a5c623362ff
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
-@@ -0,0 +1,191 @@
+@@ -0,0 +1,193 @@
 +package puregero.multipaper;
 +
 +import io.methvin.watcher.DirectoryWatcher;
@@ -393,7 +398,9 @@ index 0000000000000000000000000000000000000000..41d99fc826d322b262a1c5ab1beba160
 +        for (FileInfo fileInfo : fileInfos) {
 +            paths.add(fileInfo.getFile().getPath());
 +            if (!fileInfo.getFile().isFile() || Math.abs(fileInfo.getLastModified() - fileInfo.getFile().lastModified()) > 2000) {
-+                fileInfo.getFile().getParentFile().mkdirs();
++                if (fileInfo.getFile().getParentFile() != null) {
++                    fileInfo.getFile().getParentFile().mkdirs();
++                }
 +                future = CompletableFuture.allOf(future, MultiPaper.getConnection().downloadFile(fileInfo.getFile()));
 +            }
 +        }

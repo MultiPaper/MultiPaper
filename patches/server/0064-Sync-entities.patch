@@ -36,7 +36,7 @@ index 2e2bfccfc6cec6582a5b595e0343c27be5267b7a..c686026fe455fbc2c4ba692fbd7f2ca8
          /*
          this.lock.readLock().lock();
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index c55a727d09d95ae0a640e77f77961af74beb397f..5028b014b7a78925e30397d8489745564b547c24 100644
+index c55a727d09d95ae0a640e77f77961af74beb397f..e8e85b96c087caf30382e61b00a1fe513936eff1 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -61,11 +61,7 @@ import net.minecraft.core.Registry;
@@ -60,7 +60,7 @@ index c55a727d09d95ae0a640e77f77961af74beb397f..5028b014b7a78925e30397d848974556
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -2309,10 +2306,24 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -2309,10 +2306,23 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          public void broadcast(Packet<?> packet) {
              Iterator iterator = this.seenBy.iterator();
  
@@ -70,7 +70,6 @@ index c55a727d09d95ae0a640e77f77961af74beb397f..5028b014b7a78925e30397d848974556
 +            if (!(MultiPaper.isExternalPlayer(entity.getControllingPassenger()) && isMovePacket) &&
 +                    (MultiPaper.isRealPlayer(entity) ||
 +                    MultiPaper.isRealPlayer(entity.getControllingPassenger()) ||
-+                    (!MultiPaper.isExternalPlayer(entity) && entity.multipaperHasMoved && isMovePacket) ||
 +                    (!MultiPaper.isExternalPlayer(entity) && MultiPaper.isChunkLocal(chunk)))) {
 +                MultiPaperEntitiesHandler.onEntityUpdate(entity, packet); // MultiPaper
 +            }
@@ -334,7 +333,7 @@ index 128bdd27a05310aa95e40cfea4ed6fbebfba54eb..cb46e23def66aef2662105910be2e1e4
                      PlayerCreatePacket.sendPlayer(externalServer.getConnection(), entityplayer1);
                  } else if (subscribedToSoruce) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index ba12ef52932c003930b760595468a733bb49a515..5fe0b84b16052bd1ad0fb03c40dde6a8753b2a34 100644
+index ba12ef52932c003930b760595468a733bb49a515..a321782a76b1656e0f1d201032ca9d3def0210da 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -139,7 +139,10 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -348,13 +347,11 @@ index ba12ef52932c003930b760595468a733bb49a515..5fe0b84b16052bd1ad0fb03c40dde6a8
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource, io.papermc.paper.util.KeyedObject { // Paper
-@@ -269,12 +272,15 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -269,12 +272,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
      private static final int FLAG_INVISIBLE = 5;
      protected static final int FLAG_GLOWING = 6;
      protected static final int FLAG_FALL_FLYING = 7;
 +    public boolean isSyncing = false;  // MultiPaper - add isSyncing
-+    public boolean multipaperHasMoved = false; // MultiPaper
-+    public @Nullable ExternalServer multipaperLastServer = null; // MultiPaper
      private static final EntityDataAccessor<Integer> DATA_AIR_SUPPLY_ID = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.INT);
      private static final EntityDataAccessor<Optional<Component>> DATA_CUSTOM_NAME = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.OPTIONAL_COMPONENT);
      private static final EntityDataAccessor<Boolean> DATA_CUSTOM_NAME_VISIBLE = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.BOOLEAN);
@@ -365,7 +362,7 @@ index ba12ef52932c003930b760595468a733bb49a515..5fe0b84b16052bd1ad0fb03c40dde6a8
      private static final EntityDataAccessor<Integer> DATA_TICKS_FROZEN = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.INT);
      private EntityInLevelCallback levelCallback;
      private Vec3 packetCoordinates;
-@@ -2402,7 +2408,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -2402,7 +2406,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
          EntityType<?> entitytypes = this.getType();
          ResourceLocation minecraftkey = EntityType.getKey(entitytypes);
  
@@ -374,7 +371,7 @@ index ba12ef52932c003930b760595468a733bb49a515..5fe0b84b16052bd1ad0fb03c40dde6a8
          // Paper end
      }
  
-@@ -4177,6 +4183,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4177,6 +4181,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
              int j = Mth.floor(y);
              int k = Mth.floor(z);
  
@@ -385,17 +382,7 @@ index ba12ef52932c003930b760595468a733bb49a515..5fe0b84b16052bd1ad0fb03c40dde6a8
              if (i != this.blockPosition.getX() || j != this.blockPosition.getY() || k != this.blockPosition.getZ()) {
                  this.blockPosition = new BlockPos(i, j, k);
                  this.feetBlockState = null;
-@@ -4199,6 +4209,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
-             this.setBoundingBox(this.makeBoundingBox());
-         }
-         // Paper end
-+
-+        multipaperHasMoved = true; // MultiPaper
-+        multipaperLastServer = MultiPaper.getConnection().getMe(); // MultiPaper
-     }
- 
-     public void checkDespawn() {}
-@@ -4269,6 +4282,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4269,6 +4277,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
  
      @Override
      public void setRemoved(Entity.RemovalReason reason) {
@@ -405,7 +392,7 @@ index ba12ef52932c003930b760595468a733bb49a515..5fe0b84b16052bd1ad0fb03c40dde6a8
          if (this.removalReason == null) {
              this.removalReason = reason;
          }
-@@ -4292,7 +4308,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -4292,7 +4303,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
  
      @Override
      public boolean shouldBeSaved() {
@@ -414,19 +401,6 @@ index ba12ef52932c003930b760595468a733bb49a515..5fe0b84b16052bd1ad0fb03c40dde6a8
      }
  
      @Override
-diff --git a/src/main/java/net/minecraft/world/entity/EntityType.java b/src/main/java/net/minecraft/world/entity/EntityType.java
-index c4e21c22189ee1ded7606c51d5af3453dab96286..c28eaa7f98566e295220ac737b0f96e3c6a68803 100644
---- a/src/main/java/net/minecraft/world/entity/EntityType.java
-+++ b/src/main/java/net/minecraft/world/entity/EntityType.java
-@@ -553,6 +553,8 @@ public class EntityType<T extends Entity> implements EntityTypeTest<Entity, T> {
-                 }
-             }
- 
-+            entity.multipaperLastServer = null; // MultiPaper
-+
-             return entity;
-         }).orElse(null); // CraftBukkit - decompile error
-     }
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 index d91cddd085a7ff176787b5b053df24e56e6d9d8b..68f43793e75235b027fd4289818069ae5aff2466 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
@@ -951,10 +925,10 @@ index 1cd74b5a2f6426ab711c6b249db6cdb744b0486b..76962b91f5a4f01b0ad66a66781eb60c
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4c55cb9856d7f653ac9170339ae5dd7ee7ec611c
+index 0000000000000000000000000000000000000000..ac8898d118268cfc8180ea147c75494d0b6d8d8c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,307 @@
+@@ -0,0 +1,290 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -1065,8 +1039,6 @@ index 0000000000000000000000000000000000000000..4c55cb9856d7f653ac9170339ae5dd7e
 +                entity.moveTo(vector.x, vector.y, vector.z, entity.getYRot(), entity.getXRot());
 +            }
 +            entity.onGround = moveEntityPacket.isOnGround();
-+            entity.multipaperHasMoved = false;
-+            entity.multipaperLastServer = connection.externalServer;
 +        } else if (packet instanceof ClientboundTeleportEntityPacket teleportEntityPacket) {
 +            if (!(entity instanceof ServerPlayer) &&!((ServerLevel) entity.level).entityManager.areEntitiesLoaded(new ChunkPos(new BlockPos(teleportEntityPacket.getX(), teleportEntityPacket.getY(), teleportEntityPacket.getZ())).longKey)) {
 +                setRemovedRecursive(entity);
@@ -1076,8 +1048,6 @@ index 0000000000000000000000000000000000000000..4c55cb9856d7f653ac9170339ae5dd7e
 +            setFallDistance(entity, teleportEntityPacket.getY());
 +            entity.moveTo(teleportEntityPacket.getX(), teleportEntityPacket.getY(), teleportEntityPacket.getZ(), teleportEntityPacket.getyRot() * 360f / 256, teleportEntityPacket.getxRot() * 360f / 256);
 +            entity.onGround = teleportEntityPacket.isOnGround();
-+            entity.multipaperHasMoved = false;
-+            entity.multipaperLastServer = connection.externalServer;
 +        } else if (packet instanceof ClientboundSetEntityMotionPacket setEntityMotionPacket) {
 +            entity.setDeltaMovement(setEntityMotionPacket.getXa() / 8000.0D, setEntityMotionPacket.getYa() / 8000.0D, setEntityMotionPacket.getZa() / 8000.0D);
 +        } else if (packet instanceof ClientboundRotateHeadPacket rotateHeadPacket) {
@@ -1093,10 +1063,6 @@ index 0000000000000000000000000000000000000000..4c55cb9856d7f653ac9170339ae5dd7e
 +                        livingEntity.setHealth((Float) item.getValue());
 +                    } else {
 +                        entity.getEntityData().set(item.getAccessor(), item.getValue());
-+                        if (Entity.DATA_POSE.equals(item.getAccessor())) {
-+                            entity.multipaperHasMoved = false;
-+                            entity.multipaperLastServer = connection.externalServer;
-+                        }
 +                    }
 +                }
 +            } else {
@@ -1244,15 +1210,6 @@ index 0000000000000000000000000000000000000000..4c55cb9856d7f653ac9170339ae5dd7e
 +        if (MultiPaper.isRealPlayer(entity)) {
 +            MultiPaper.broadcastPacketToExternalServers(new EntityUpdatePacket(entity, packet));
 +            return;
-+        }
-+
-+        if (packet instanceof ClientboundMoveEntityPacket || packet instanceof ClientboundTeleportEntityPacket) {
-+            if (!entity.multipaperHasMoved && packet instanceof ClientboundMoveEntityPacket) {
-+                // Another server has moved the entity, not us
-+                return;
-+            }
-+
-+            entity.multipaperHasMoved = false;
 +        }
 +
 +        if (chunk != null) {

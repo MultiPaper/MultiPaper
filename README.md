@@ -61,30 +61,12 @@ are new servers when you wish to scale. Instead of having 1 server handling
 to keep expensive vanilla mechanics like a large render distance, mob farms,
 and massive redstone contraptions.
 
-### MultiPaper Pro
+### It can scale
 
-For those who wish to go above the typical 250 player limit imposed by
-existing server technology, and/or minimise their hardware costs,
-MultiPaper-Pro is for you. Extra time and money has been spent into
-MultiPaper-Pro to introduce various optimisations into
-both the MultiPaper engine and Minecraft itself, allowing your server to run
-more efficiently and hold insane numbers of players.
-
-Testing of MultiPaper-Pro against other popular server software gave us the
-following results:
-
-| Implementation | Tick time (lower is better) |
-| --- | ----------- |
-| Paper | 90ms |
-| Purpur | 75ms |
-| MultiPaper-Pro | 65ms |
-
-** Note: your results may vary depending on server configuration and player
-activity.
-
-Contact puregero@gmail.com if you're interested in purchasing MultiPaper-Pro.
-A $50/hour service is also available for converting plugins to become
-compatible with MultiPaper.
+Perhaps 100 players isn't enough for you. You want to push the limits of your
+Minecraft server to the extreme with upwards of 1000 players online at once.
+Well, MultiPaper is also for you. With its ability to horizontally scale,
+the hardware's the limit.
 
 ## Commands
 MultiPaper includes a few commands mainly for debug purposes:

@@ -1,0 +1,189 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 27 Jan 2022 12:31:40 +1000
+Subject: [PATCH] Use CompletableFuture-based chunk IO
+
+
+diff --git a/src/main/java/com/destroystokyo/paper/io/PaperFileIOThread.java b/src/main/java/com/destroystokyo/paper/io/PaperFileIOThread.java
+index a630a84b60b4517e3bc330d4983b914bd064efa4..b21fa9ab230bfbef7092e0174af51b44adbaa952 100644
+--- a/src/main/java/com/destroystokyo/paper/io/PaperFileIOThread.java
++++ b/src/main/java/com/destroystokyo/paper/io/PaperFileIOThread.java
+@@ -6,6 +6,7 @@ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.chunk.storage.RegionFile;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaperIO;
+ 
+ import java.io.IOException;
+ import java.util.concurrent.CompletableFuture;
+@@ -42,7 +43,7 @@ public final class PaperFileIOThread extends QueueExecutorThread {
+ 
+     public static final class Holder {
+ 
+-        public static final PaperFileIOThread INSTANCE = new PaperFileIOThread();
++        public static final MultiPaperIO INSTANCE = new MultiPaperIO(); // MultiPaper - Use completable futures instead of a worker thread
+ 
+         static {
+             INSTANCE.start();
+diff --git a/src/main/java/puregero/multipaper/ChunkKey.java b/src/main/java/puregero/multipaper/ChunkKey.java
+index d139536be7ab15293b798af115e71a8dbe4a2f3d..928fe46b5061ff6a1acbec61eec698756e8ac124 100644
+--- a/src/main/java/puregero/multipaper/ChunkKey.java
++++ b/src/main/java/puregero/multipaper/ChunkKey.java
+@@ -30,5 +30,17 @@ public class ChunkKey {
+ 
+         return name.hashCode() ^ i ^ j;
+     }
++
++    public String getWorld() {
++        return name;
++    }
++
++    public int getX() {
++        return x;
++    }
++
++    public int getZ() {
++        return z;
++    }
+ }
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaperIO.java b/src/main/java/puregero/multipaper/MultiPaperIO.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..dae7500bc99be85af261aa8ae2810d9348ac88ef
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperIO.java
+@@ -0,0 +1,134 @@
++package puregero.multipaper;
++
++import com.destroystokyo.paper.io.PaperFileIOThread;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.NbtIo;
++import net.minecraft.server.level.ServerLevel;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++
++import java.io.IOException;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.TimeoutException;
++import java.util.function.Consumer;
++
++public class MultiPaperIO extends Thread {
++    private static final Logger LOGGER = LogManager.getLogger(MultiPaperIO.class.getSimpleName());
++
++    private final ConcurrentHashMap<ChunkKey, CompletableFuture<CompoundTag>> chunkReadsInProgress = new ConcurrentHashMap<>();
++    private final ConcurrentHashMap<ChunkKey, CompletableFuture<CompoundTag>> poiReadsInProgress = new ConcurrentHashMap<>();
++
++    public void scheduleSave(ServerLevel world, int chunkX, int chunkZ, CompoundTag poiData, CompoundTag chunkData, int priority) {
++        if (poiData != null) {
++            try {
++                MultiPaper.getConnection().writeChunk(world.convertable.getLevelId(), "poi", chunkX, chunkZ, MultiPaper.nbtToBytes(poiData));
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        }
++
++        if (chunkData != null) {
++            try {
++                MultiPaper.getConnection().writeChunk(world.convertable.getLevelId(), "region", chunkX, chunkZ, MultiPaper.nbtToBytes(chunkData));
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        }
++    }
++
++    public CompletableFuture<PaperFileIOThread.ChunkData> loadChunkDataAsyncFuture(final ServerLevel world, final int chunkX, final int chunkZ,
++                                                                                   final int priority, final boolean readPoiData, final boolean readChunkData,
++                                                                                   final boolean intendingToBlock) {
++        final CompletableFuture<PaperFileIOThread.ChunkData> future = new CompletableFuture<>();
++        PaperFileIOThread.ChunkData chunkData = new PaperFileIOThread.ChunkData();
++
++        CompletableFuture.allOf(
++                readPoiData ? readPoi(world, chunkX, chunkZ).thenAccept(poi -> chunkData.poiData = poi) : CompletableFuture.completedFuture(null),
++                readChunkData ? readChunk(world, chunkX, chunkZ).thenAccept(chunk -> chunkData.chunkData = chunk) : CompletableFuture.completedFuture(null)
++        ).thenRun(() -> future.complete(chunkData));
++
++        return future;
++    }
++
++    public void loadChunkDataAsync(final ServerLevel world, final int chunkX, final int chunkZ,
++                                   final int priority, final Consumer<PaperFileIOThread.ChunkData> onComplete,
++                                   final boolean readPoiData, final boolean readChunkData,
++                                   final boolean intendingToBlock) {
++        loadChunkDataAsyncFuture(world, chunkX, chunkZ, priority, readPoiData, readChunkData, intendingToBlock).thenAccept(onComplete);
++    }
++
++    public PaperFileIOThread.ChunkData loadChunkData(final ServerLevel world, final int chunkX, final int chunkZ, final int priority,
++                                                     final boolean readPoiData, final boolean readChunkData) {
++        return this.loadChunkDataAsyncFuture(world, chunkX, chunkZ, priority, readPoiData, readChunkData, true).join();
++    }
++
++    private CompletableFuture<CompoundTag> readChunk(final ServerLevel world, final int chunkX, final int chunkZ) {
++        return chunkReadsInProgress.computeIfAbsent(new ChunkKey(world.convertable.getLevelId(), chunkX, chunkZ), key -> {
++            CompletableFuture<CompoundTag> future = readChunk(key, "region");
++            future.thenRun(() -> chunkReadsInProgress.remove(key, future));
++            return future;
++        });
++    }
++
++    private CompletableFuture<CompoundTag> readPoi(final ServerLevel world, final int chunkX, final int chunkZ) {
++        return poiReadsInProgress.computeIfAbsent(new ChunkKey(world.convertable.getLevelId(), chunkX, chunkZ), key -> {
++            CompletableFuture<CompoundTag> future = readChunk(key, "poi");
++            future.thenRun(() -> poiReadsInProgress.remove(key, future));
++            return future;
++        });
++    }
++
++    private CompletableFuture<CompoundTag> readChunk(final ChunkKey key, final String path) {
++        try {
++            CompletableFuture<CompoundTag> future = MultiPaper.getConnection()
++                    .readChunk(key.getWorld(), path, key.getX(), key.getZ())
++                    .thenApplyAsync(in -> {
++                        try {
++                            return in == null ? null : NbtIo.read(in);
++                        } catch (IOException e) {
++                            throw new RuntimeException(e);
++                        }
++                    }).exceptionally(exception -> {
++                        exception.printStackTrace();
++                        return com.destroystokyo.paper.io.PaperFileIOThread.FAILURE_VALUE;
++                    });;
++
++            future.thenApply(nbt -> false).completeOnTimeout(true, 15, TimeUnit.SECONDS).thenAccept(timedout -> {
++                if (timedout) {
++                    LOGGER.warn("Timed out reading " + key.getWorld() + "," + path + "," + key.getX() + "," + key.getZ() + ", retrying...");
++                    readChunk(key, path).thenAccept(future::complete);
++                }
++            });
++
++            return future;
++        } catch (IOException e) {
++            return CompletableFuture.failedFuture(e);
++        }
++    }
++
++    public void start() {
++        // Do nothing, this isn't a worker thread
++    }
++
++    public void queueTask(PaperFileIOThread.ChunkDataTask chunkDataTask) {
++        // Do nothing, this isn't a worker thread
++    }
++
++    public void bumpPriority(ServerLevel world, int chunkX, int chunkZ, int priority) {
++        // Do nothing, we don't have priorities
++    }
++
++    public void setPriority(ServerLevel world, int chunkX, int chunkZ, int priority) {
++        // Do nothing, we don't have priorities
++    }
++
++    public void flush() {
++        // Do nothing, we don't have a queue
++    }
++
++    public void close(boolean b, boolean b1) {
++        // Do nothing, we don't have a queue
++    }
++}

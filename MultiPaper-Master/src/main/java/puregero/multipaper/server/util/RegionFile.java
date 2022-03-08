@@ -411,7 +411,7 @@ public class RegionFile {
         file.writeInt(value);
     }
 
-    public void close() throws IOException {
+    public synchronized void close() throws IOException {
         file.close();
     }
 }

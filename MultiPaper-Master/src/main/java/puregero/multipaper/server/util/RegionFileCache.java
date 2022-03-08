@@ -33,8 +33,7 @@ public class RegionFileCache {
 
     private static final int MAX_CACHE_SIZE = 256;
 
-    private static final Map<File, Reference<RegionFile>> cache = new HashMap<>();
-    private static final Queue<File> queue = new LinkedList<>();
+    private static final LinkedHashMap<File, Reference<RegionFile>> cache = new LinkedHashMap<>(16, 0.75f, true);
 
     private RegionFileCache() {
     }
@@ -90,10 +89,6 @@ public class RegionFileCache {
             regionDir.mkdirs();
         }
 
-        if (ref == null) {
-            queue.add(file);
-        }
-
         if (cache.size() >= MAX_CACHE_SIZE) {
             clearOne();
         }
@@ -104,10 +99,10 @@ public class RegionFileCache {
     }
 
     private static synchronized void clearOne() {
-        File remove = queue.remove();
-        Reference<RegionFile> refRemove = cache.remove(remove);
+        Map.Entry<File, Reference<RegionFile>> clearEntry = cache.entrySet().iterator().next();
+        cache.remove(clearEntry.getKey());
         try {
-            RegionFile removeFile = refRemove.get();
+            RegionFile removeFile = clearEntry.getValue().get();
             if (removeFile != null) {
                 removeFile.close();
             }

@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 8 Mar 2022 21:43:27 +1000
+Subject: [PATCH] Store the known entity
+
+
+diff --git a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
+index bd7967680d7a75caff98a827895c795f2d101f99..9b97a38357c798a2e7b4c207d1915e4341d16b92 100644
+--- a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
++++ b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
+@@ -13,11 +13,7 @@ import it.unimi.dsi.fastutil.objects.ObjectIterator;
+ import java.io.IOException;
+ import java.io.UncheckedIOException;
+ import java.io.Writer;
+-import java.util.List;
+-import java.util.Objects;
+-import java.util.Queue;
+-import java.util.Set;
+-import java.util.UUID;
++import java.util.*;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.function.Consumer;
+ import java.util.stream.Collectors;
+@@ -39,7 +35,7 @@ import org.bukkit.craftbukkit.event.CraftEventFactory;
+ public class PersistentEntitySectionManager<T extends EntityAccess> implements AutoCloseable {
+ 
+     static final Logger LOGGER = LogManager.getLogger();
+-    final Set<UUID> knownUuids = Sets.newHashSet();
++    public final HashMap<UUID, T> knownUuids = new HashMap<>(); // MultiPaper - store the known entity
+     final LevelCallback<T> callbacks;
+     public final EntityPersistentStorage<T> permanentStorage;
+     private final EntityLookup<T> visibleEntityStorage = new EntityLookup<>();
+@@ -139,7 +135,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+ 
+     private boolean addEntityUuid(T entity) {
+         org.spigotmc.AsyncCatcher.catchOp("Entity add by UUID"); // Paper
+-        if (!this.knownUuids.add(entity.getUUID())) {
++        if (this.knownUuids.put(entity.getUUID(), entity) != null) {
+             // Paper start
+             T conflict = this.visibleEntityStorage.getEntity(entity.getUUID());
+             if (conflict != null && ((Entity) conflict).isRemoved()) {
+@@ -455,7 +451,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
+     }
+ 
+     public boolean isLoaded(UUID uuid) {
+-        return this.knownUuids.contains(uuid);
++        return this.knownUuids.containsKey(uuid);
+     }
+ 
+     public LevelEntityGetter<T> getEntityGetter() {

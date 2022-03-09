@@ -34,6 +34,10 @@ The same as filesToSyncOnStartup, except files are downloaded whenever they are
 modified. There is no guarantee that these files will be synced without delay.
 Warning: SQLite and H2 database files cannot be synced with this method.
 
+`filesToOnlyUploadOnServerStop`  
+Only upload these files to the MultiPaper-Master when the server stops instead
+of whenever the file is written to.
+
 `filesToNotSync`  
 Files or directories that should not be synced even if they're included in
 `filesToSync` above.

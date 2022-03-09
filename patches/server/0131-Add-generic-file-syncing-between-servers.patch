@@ -37,6 +37,27 @@ index 5fe7c7c6d3e486e3e145a5c78579fc2bc99142ed..b7081b87cd63139725400797e8e16e75
  
              Bootstrap.bootStrap();
              Bootstrap.validate();
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index 868e1f664b6f0e906b6fcc6a37d01aba892fac5d..f6bf803a340d255c0fc7cd09edb313862d4267d2 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -187,6 +187,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
+ import org.spigotmc.SlackActivityAccountant; // Spigot
+ import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperExternalBlocksHandler;
++import puregero.multipaper.MultiPaperFileSyncer;
+ import puregero.multipaper.externalserverprotocol.DifficultyUpdatePacket;
+ 
+ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements CommandSource, AutoCloseable {
+@@ -1100,6 +1101,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         // Paper start - move final shutdown items here
+         LOGGER.info("Flushing Chunk IO");
+         com.destroystokyo.paper.io.PaperFileIOThread.Holder.INSTANCE.close(true, true); // Paper
++        LOGGER.info("Closing MultiPaper File Syncer"); // MultiPaper
++        MultiPaperFileSyncer.onStop().join(); // MultiPaper
+         LOGGER.info("Closing Thread Pool");
+         Util.shutdownExecutors(); // Paper
+         LOGGER.info("Closing Server");
 diff --git a/src/main/java/puregero/multipaper/FileInfo.java b/src/main/java/puregero/multipaper/FileInfo.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..de0a85f3325c94d9c10d75a4555d6de853667d60
@@ -237,10 +258,10 @@ index 63f9ebe0a44b854084add86cf6ba083f44bc4685..008f26e47f71ff53051934a4bca2d355
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a74ac1e0b69def3e8c8572c4ac73fc8d2233f45d
+index 0000000000000000000000000000000000000000..fdbd388662726210c2aec0998bbe8e1d217bd0d8
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
-@@ -0,0 +1,193 @@
+@@ -0,0 +1,236 @@
 +package puregero.multipaper;
 +
 +import io.methvin.watcher.DirectoryWatcher;
@@ -248,10 +269,7 @@ index 0000000000000000000000000000000000000000..a74ac1e0b69def3e8c8572c4ac73fc8d
 +import java.io.File;
 +import java.io.IOException;
 +import java.nio.file.*;
-+import java.util.HashMap;
-+import java.util.HashSet;
-+import java.util.List;
-+import java.util.Locale;
++import java.util.*;
 +import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.Executor;
 +import java.util.concurrent.TimeUnit;
@@ -265,7 +283,7 @@ index 0000000000000000000000000000000000000000..a74ac1e0b69def3e8c8572c4ac73fc8d
 +        } catch (InterruptedException e) {
 +            e.printStackTrace();
 +        }
-+        new MultiPaperFileSyncer();
++        instance = new MultiPaperFileSyncer();
 +    }
 +
 +    public MultiPaperFileSyncer() {
@@ -274,9 +292,38 @@ index 0000000000000000000000000000000000000000..a74ac1e0b69def3e8c8572c4ac73fc8d
 +        start();
 +    }
 +
++    private static MultiPaperFileSyncer instance;
 +    public static final HashSet<String> pathsBeingModified = new HashSet<>();
 +    private static final Executor DELAYED_EXECUTOR = CompletableFuture.delayedExecutor(50, TimeUnit.MILLISECONDS);
 +    private final HashMap<File, CompletableFuture<Void>> queuedUploads = new HashMap<>();
++    private final HashSet<CompletableFuture<Void>> ongoingUploads = new HashSet<>();
++    private final HashSet<File> writeOnServerStop = new HashSet<>();
++
++    public static CompletableFuture<Void> onStop() {
++        if (instance != null) {
++            return instance.closeUploads();
++        }
++        return CompletableFuture.completedFuture(null);
++    }
++
++    public CompletableFuture<Void> closeUploads() {
++        synchronized (ongoingUploads) {
++            for (File file : writeOnServerStop) {
++                if (file.isFile()) {
++                    ongoingUploads.add(MultiPaper.getConnection().uploadFile(file, false));
++                }
++            }
++        }
++
++        CompletableFuture<Void> future = CompletableFuture.completedFuture(null);
++        synchronized (ongoingUploads) {
++            for (CompletableFuture<Void> ongoingUpload : ongoingUploads) {
++                future = CompletableFuture.allOf(future, ongoingUpload);
++            }
++        }
++
++        return future;
++    }
 +
 +    @Override
 +    public void run() {
@@ -334,6 +381,13 @@ index 0000000000000000000000000000000000000000..a74ac1e0b69def3e8c8572c4ac73fc8d
 +                }
 +            }
 +
++            for (String toNotSync : MultiPaperConfig.filesToOnlyUploadOnServerStop) {
++                if (file.getPath().startsWith(toNotSync)) {
++                    writeOnServerStop.add(file);
++                    return;
++                }
++            }
++
 +            CompletableFuture<Void> completableFuture = new CompletableFuture<>();
 +            queuedUploads.put(file, completableFuture);
 +            boolean finalImmediatelySyncToOtherServers = immediatelySyncToOtherServers;
@@ -343,7 +397,17 @@ index 0000000000000000000000000000000000000000..a74ac1e0b69def3e8c8572c4ac73fc8d
 +
 +    private void uploadFile(CompletableFuture<Void> future, File file, boolean immediatelySyncToOtherServers) {
 +        if (queuedUploads.remove(file, future) && file.isFile()) {
-+            MultiPaper.getConnection().uploadFile(file, immediatelySyncToOtherServers);
++            CompletableFuture<Void> uploadFuture = MultiPaper.getConnection().uploadFile(file, immediatelySyncToOtherServers);
++
++            synchronized (ongoingUploads) {
++                ongoingUploads.add(uploadFuture);
++            }
++
++            uploadFuture.thenRun(() -> {
++                synchronized (ongoingUploads) {
++                    ongoingUploads.remove(uploadFuture);
++                }
++            });
 +        }
 +    }
 +

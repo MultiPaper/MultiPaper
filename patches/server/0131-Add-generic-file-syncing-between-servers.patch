@@ -259,10 +259,10 @@ index 63f9ebe0a44b854084add86cf6ba083f44bc4685..008f26e47f71ff53051934a4bca2d355
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..fdbd388662726210c2aec0998bbe8e1d217bd0d8
+index 0000000000000000000000000000000000000000..643238e28fe89fda1d96fa491f046139de83dc13
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
-@@ -0,0 +1,236 @@
+@@ -0,0 +1,240 @@
 +package puregero.multipaper;
 +
 +import io.methvin.watcher.DirectoryWatcher;
@@ -349,7 +349,7 @@ index 0000000000000000000000000000000000000000..fdbd388662726210c2aec0998bbe8e1d
 +
 +    private synchronized void queueFileUpload(Path path) {
 +        File file = new File(getPathWithoutDotSlash(path.toFile()));
-+        if (file.getName().toLowerCase(Locale.ROOT).endsWith(".tmp") || file.getName().toLowerCase(Locale.ROOT).startsWith(".")) {
++        if (!syncFile(file)) {
 +            return;
 +        }
 +
@@ -486,7 +486,7 @@ index 0000000000000000000000000000000000000000..fdbd388662726210c2aec0998bbe8e1d
 +            for (File child : file.listFiles()) {
 +                future = uploadFileIfNeededRecursively(child, future, paths, immediatelySyncToOtherServers);
 +            }
-+        } else if (file.isFile() && !paths.contains(getPathWithoutDotSlash(file)) && !file.getName().toLowerCase(Locale.ROOT).endsWith(".tmp") && !file.getName().toLowerCase(Locale.ROOT).startsWith(".")) {
++        } else if (syncFile(file) && !paths.contains(getPathWithoutDotSlash(file)) ) {
 +            for (String toNotSync : MultiPaperConfig.filesToNotSync) {
 +                if (getPathWithoutDotSlash(file).startsWith(toNotSync)) {
 +                    return future;
@@ -497,5 +497,9 @@ index 0000000000000000000000000000000000000000..fdbd388662726210c2aec0998bbe8e1d
 +            return CompletableFuture.allOf(future, MultiPaper.getConnection().uploadFile(new File(getPathWithoutDotSlash(file)), immediatelySyncToOtherServers));
 +        }
 +        return future;
++    }
++
++    private static boolean syncFile(File file) {
++        return file.isFile() && !file.getName().toLowerCase(Locale.ROOT).endsWith(".tmp") && !file.getName().toLowerCase(Locale.ROOT).endsWith(".hprof") && !file.getName().toLowerCase(Locale.ROOT).startsWith(".");
 +    }
 +}

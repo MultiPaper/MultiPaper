@@ -92,7 +92,7 @@ server as shown as grey.
 
 ## Setting up MultiPaper
   * Download MultiPaper and MultiPaper-Master from
-    [multipaper.io](https://multipaper.io)
+    [multipaper.io](https://multipaper.io/download.html)
   * Place your worlds inside the directory being used for MultiPaper-Master
   * Start the MultiPaper-Master by either:
     * Standalone: `java -jar multipaper-master.jar <port> [optionalProxyPort]`

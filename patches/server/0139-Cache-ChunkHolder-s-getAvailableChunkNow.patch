@@ -1,0 +1,95 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 12 Jan 2022 21:41:32 +1000
+Subject: [PATCH] Cache ChunkHolder's getAvailableChunkNow
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+index 9f8c73d3ad985160f82fb58bd28b37d4613ef07a..5121d1b4c5f1c463666a44a3b2290468a49a4025 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
++++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+@@ -73,6 +73,7 @@ public class ChunkHolder {
+     private boolean wasAccessibleSinceLastSave;
+     private boolean resendLight;
+     private CompletableFuture<Void> pendingFullStateConfirmation;
++    @Nullable private ChunkAccess cachedAvailableChunkNow; // MultiPaper
+ 
+     public ServerLevel getWorld() { return chunkMap.level; } // Paper
+     boolean isUpdateQueued = false; // Paper
+@@ -144,16 +145,17 @@ public class ChunkHolder {
+ 
+     // Paper start
+     public ChunkAccess getAvailableChunkNow() {
+-        // TODO can we just getStatusFuture(EMPTY)?
+-        for (ChunkStatus curr = ChunkStatus.FULL, next = curr.getParent(); curr != next; curr = next, next = next.getParent()) {
+-            CompletableFuture<Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>> future = this.getFutureIfPresentUnchecked(curr);
+-            Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure> either = future.getNow(null);
+-            if (either == null || !either.left().isPresent()) {
+-                continue;
++        // MultiPaper start
++        return cachedAvailableChunkNow;
++    }
++
++    public void setAvailableChunkNow(Either<? extends ChunkAccess, ChunkLoadingFailure> either) {
++        either.ifLeft(chunkAccess -> {
++            if (cachedAvailableChunkNow == null || chunkAccess.getStatus().isOrAfter(cachedAvailableChunkNow.getStatus())) {
++                cachedAvailableChunkNow = chunkAccess;
+             }
+-            return either.left().get();
+-        }
+-        return null;
++        });
++        // MultiPaper end
+     }
+     // Paper end
+ 
+@@ -377,6 +379,7 @@ public class ChunkHolder {
+ 
+             this.updateChunkToSave(completablefuture1, "schedule " + targetStatus);
+             this.futures.set(i, completablefuture1);
++            completablefuture1.thenAccept(this::setAvailableChunkNow);
+             return completablefuture1;
+         } else {
+             return completablefuture == null ? ChunkHolder.UNLOADED_CHUNK_FUTURE : completablefuture;
+@@ -569,6 +572,7 @@ public class ChunkHolder {
+                     this.chunkMap.distanceManager.clearPriorityTickets(pos);
+                 }
+             });
++            this.fullChunkFuture.thenAccept(this::setAvailableChunkNow); // MultiPaper
+             this.updateChunkToSave(this.fullChunkFuture, "full");
+         }
+ 
+@@ -597,6 +601,7 @@ public class ChunkHolder {
+                 });
+             });
+             // Paper end
++            this.tickingChunkFuture.thenAccept(this::setAvailableChunkNow); // MultiPaper
+             this.updateChunkToSave(this.tickingChunkFuture, "ticking");
+         }
+ 
+@@ -632,6 +637,7 @@ public class ChunkHolder {
+                 });
+             });
+             // Paper end
++            this.entityTickingChunkFuture.thenAccept(this::setAvailableChunkNow); // MultiPaper
+             this.updateChunkToSave(this.entityTickingChunkFuture, "entity ticking");
+         }
+ 
+@@ -758,6 +764,8 @@ public class ChunkHolder {
+         }
+ 
+         this.updateChunkToSave(CompletableFuture.completedFuture(Either.left(chunk.getWrapped())), "replaceProto");
++
++        cachedAvailableChunkNow = chunk; // MultiPaper
+     }
+ 
+     // MultiPaper start
+@@ -777,6 +785,8 @@ public class ChunkHolder {
+         }
+ 
+         this.updateChunkToSave(CompletableFuture.completedFuture(Either.left(protoChunk)), "replaceProtoWithProto");
++
++        cachedAvailableChunkNow = protoChunk;
+     }
+ 
+     public CompletableFuture<Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>> getLastAvailableChunkFuture() {

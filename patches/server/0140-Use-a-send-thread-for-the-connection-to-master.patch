@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 12 Jan 2022 22:07:34 +1000
+Subject: [PATCH] Use a send thread for the connection to master
+
+
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 008f26e47f71ff53051934a4bca2d355e8d40b21..02ca419978ac9569d41c8e03d5cc58ffddb06e91 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -62,6 +62,13 @@ public class MultiPaperConnection extends Thread {
+     }
+ 
+     public void send(byte[] bytes, int id, @Nullable Consumer<DataInputStream> callback) {
++        // MultiPaper-Pro start
++        sendThread.execute(() -> send0(bytes, id, callback));
++    }
++
++    private final MultiPaperExecutor sendThread = new MultiPaperExecutor();
++    private void send0(byte[] bytes, int id, @Nullable Consumer<DataInputStream> callback) {
++        // MultiPaper-Pro end
+         while (socket == null || socket.isClosed()) {
+             // Wait for socket to connect
+             try {

@@ -446,10 +446,10 @@ index 776487d18d3a4268fcc3464b49572f9ff1bd91d1..e1bdc46a6a1765d22f4e693845439954
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..522dc510a964420818f1f30ef41d28adbe6f1b98
+index 0000000000000000000000000000000000000000..6de42f793bad91d0538ef5539b733864801e1ce1
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-@@ -0,0 +1,286 @@
+@@ -0,0 +1,355 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -458,11 +458,11 @@ index 0000000000000000000000000000000000000000..522dc510a964420818f1f30ef41d28ad
 +import net.minecraft.network.protocol.game.*;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
-+import net.minecraft.world.item.BucketItem;
-+import net.minecraft.world.item.EnderEyeItem;
-+import net.minecraft.world.item.FishingRodItem;
-+import net.minecraft.world.item.ItemStack;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.item.ItemEntity;
++import net.minecraft.world.item.*;
 +import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.phys.AABB;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
@@ -587,7 +587,7 @@ index 0000000000000000000000000000000000000000..522dc510a964420818f1f30ef41d28ad
 +                            item.setCount(countDiff);
 +                            addItem(item, player);
 +                        } else {
-+                            LOGGER.warn(player.getScoreboard() + ": An external server tried to remove " + countDiff + " items from " + replacingItem + ", but that item is now a " + currentItem);
++                            LOGGER.warn(player.getScoreboardName() + ": An external server tried to remove " + countDiff + " items from " + replacingItem + ", but that item is now a " + currentItem);
 +                        }
 +                    } else if (replacingItem.getDamageValue() != item.getDamageValue()) {
 +                        int damageDiff = item.getDamageValue() - replacingItem.getDamageValue();
@@ -595,14 +595,31 @@ index 0000000000000000000000000000000000000000..522dc510a964420818f1f30ef41d28ad
 +                            currentItem.setDamageValue(currentItem.getDamageValue() + damageDiff);
 +                        }
 +                    } else {
-+                        LOGGER.warn(player.getScoreboard() + ": Trying to merge the same item same tags, but neither the count nor the durability is different. " + item + " and " + replacingItem);
++                        LOGGER.warn(player.getScoreboardName() + ": Trying to merge the same item same tags, but neither the count nor the durability is different. " + item + " and " + replacingItem + " and " + currentItem);
 +                    }
 +                } else {
 +                    addItem(item, player);
++                    if (!replacingItem.isEmpty()) {
++                        // The item has probably duplicated, try to find one of the copies and remove it
++                        LOGGER.info(player.getScoreboardName() + ": An external server tried to replace " + replacingItem + " with a " + item + ", but that item is now a " + currentItem + ". Searching for duped items to remove...");
++                        int count = replacingItem.getCount();
++                        int removeCount = removeItem(replacingItem, player, count);
++
++                        if (count != removeCount) {
++                            LOGGER.info(player.getScoreboardName() + ": Removed " + (count - removeCount) + " duped items from the player's inventory");
++                        }
++
++                        if (removeCount > 0) {
++                            int removedEntityCount = removeItemEntity(replacingItem, player, removeCount);
++                            if (removeCount != removedEntityCount) {
++                                LOGGER.info(player.getScoreboardName() + ": Removed " + (removeCount - removedEntityCount) + " duped items from items on the ground");
++                            }
++                        }
++                    }
 +                }
 +            } else {
 +                component.set(slot, item);
-+                component.lastItems.set(slot, item.copy()); // We don't need to do this if it's out player
++                component.lastItems.set(slot, item.copy()); // We don't need to do this if it's our player
 +            }
 +        }
 +
@@ -615,17 +632,69 @@ index 0000000000000000000000000000000000000000..522dc510a964420818f1f30ef41d28ad
 +        }
 +    }
 +
++    private static int removeItem(ItemStack replacingItem, ServerPlayer player, int count) {
++        for (List<ItemStack> compartment : player.getInventory().compartments) {
++            for (int slot = 0; slot < compartment.size(); slot++) {
++                ItemStack item = compartment.get(slot);
++                if (isSameItemSameTag(item, replacingItem)) {
++                    if (item.getCount() < count) {
++                        count -= item.getCount();
++                        item.setCount(0);
++                        compartment.set(slot, ItemStack.EMPTY);
++                    } else {
++                        item.setCount(item.getCount() - count);
++                        return 0;
++                    }
++                }
++            }
++        }
++
++        return count;
++    }
++
++    private static int removeItemEntity(ItemStack replacingItem, ServerPlayer player, int count) {
++        for (ItemEntity entity : player.level.getEntitiesOfClass(ItemEntity.class, AABB.ofSize(player.position(), 16, 16, 16))) {
++            ItemStack item = entity.getItem();
++            if (isSameItemSameTag(item, replacingItem)) {
++                if (item.getCount() < count) {
++                    count -= item.getCount();
++                    item.setCount(0);
++                    entity.remove(Entity.RemovalReason.DISCARDED);
++                } else {
++                    item.setCount(item.getCount() - count);
++                    entity.remove(Entity.RemovalReason.DISCARDED);
++                    entity.spawnAtLocation(item, 0);
++                    return 0;
++                }
++            }
++        }
++
++        return count;
++    }
++
++    private static boolean isSameItemSameTag(ItemStack left, ItemStack right) {
++       return left.is(right.getItem()) && ItemStack.tagMatches(left, right);
++    }
++
 +    private static boolean isSameItemSameTagIgnoringDurability(ItemStack left, ItemStack right) {
++        boolean hasLeftDurability = false;
++        boolean hasRightDurability = false;
 +        int leftDurability = left.getDamageValue();
 +        int rightDurability = right.getDamageValue();
 +
-+        if (left.getTag() != null) left.getTag().remove("Damage");
-+        if (right.getTag() != null) right.getTag().remove("Damage");
++        if (left.getTag() != null && left.getTag().contains("Damage")) {
++            hasLeftDurability = true;
++            left.getTag().remove("Damage");
++        }
++        if (right.getTag() != null) {
++            hasRightDurability = true;
++            right.getTag().remove("Damage");
++        }
 +
 +        boolean result = left.is(right.getItem()) && ItemStack.tagMatches(left, right);
 +
-+        if (leftDurability > 0) left.getTag().putInt("Damage", leftDurability);
-+        if (rightDurability > 0) right.getTag().putInt("Damage", rightDurability);
++        if (hasLeftDurability) left.getTag().putInt("Damage", leftDurability);
++        if (hasRightDurability) right.getTag().putInt("Damage", rightDurability);
 +
 +        return result;
 +    }

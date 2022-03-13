@@ -148,7 +148,7 @@ index 887556052a8dd36453aef8b92cf2e1c81932876b..6032128a4eb2ea88000e5288261599e5
          this.entity.startSeenByPlayer(player);
      }
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 0cae2500e905086999e9394191a31ec20f45e412..2c66ec1be2a955cf0cf5fa9e849c4deb9aff6fd5 100644
+index 0cae2500e905086999e9394191a31ec20f45e412..97aafeaef9e4f860bbe6e4858e4767b4135930f6 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -90,8 +90,11 @@ import net.minecraft.world.entity.animal.WaterAnimal;
@@ -171,7 +171,7 @@ index 0cae2500e905086999e9394191a31ec20f45e412..2c66ec1be2a955cf0cf5fa9e849c4deb
  import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
  
  public class ServerLevel extends Level implements WorldGenLevel {
-@@ -652,6 +656,30 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -652,6 +656,39 @@ public class ServerLevel extends Level implements WorldGenLevel {
              org.spigotmc.ActivationRange.activateEntities(this); // Spigot
              timings.entityTick.startTiming(); // Spigot
              this.entityTickList.forEach((entity) -> {
@@ -195,6 +195,15 @@ index 0cae2500e905086999e9394191a31ec20f45e412..2c66ec1be2a955cf0cf5fa9e849c4deb
 +                        armorStand.canTick = temp;
 +                    }
 +
++                    if (entity instanceof LivingEntity livingEntity) {
++                        if (MultiPaper.isChunkExternal(chunk)) {
++                            livingEntity.setNoActionTime(0);
++                        } else {
++                            livingEntity.setNoActionTime(livingEntity.getNoActionTime() + 1);
++                            livingEntity.checkDespawn();
++                        }
++                    }
++
 +                    return;
 +                }
 +                // MultiPaper end
@@ -202,7 +211,7 @@ index 0cae2500e905086999e9394191a31ec20f45e412..2c66ec1be2a955cf0cf5fa9e849c4deb
                  if (!entity.isRemoved()) {
                      if (false && this.shouldDiscardEntity(entity)) { // CraftBukkit - We prevent spawning in general, so this butchering is not needed
                          entity.discard();
-@@ -1428,6 +1456,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1428,6 +1465,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
              }
              // CraftBukkit end
  

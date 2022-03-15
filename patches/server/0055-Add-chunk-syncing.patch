@@ -477,7 +477,7 @@ index 5aeaaae6f15050a2da271fe196d0a234ecafc8a1..e44120e0aaf3513f2b0f72658b8919f8
      protected final ChunkPos chunkPos; public final long coordinateKey; public final int locX; public final int locZ; // Paper - cache coordinate key
      private long inhabitedTime;
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..a1cb320b82d63c22380b725096078fb104dfebbb 100644
+index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..f6c7e95be0b80f42ed8af858767bdb0db1155216 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -7,9 +7,10 @@ import com.google.common.collect.UnmodifiableIterator;
@@ -530,7 +530,20 @@ index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..a1cb320b82d63c22380b725096078fb1
      // Paper start - track last save time
      public long lastSaveTime;
      public void setLastSaved(long ticks) {
-@@ -813,6 +821,7 @@ public class LevelChunk extends ChunkAccess {
+@@ -735,6 +743,12 @@ public class LevelChunk extends ChunkAccess {
+ 
+     @Override
+     public void removeBlockEntity(BlockPos pos) {
++        // MultiPaper start - allow removing a block entity on unloaded block entities
++        if (blockEntitiesToLoad != null) {
++            blockEntitiesToLoad.removeIf(tag -> pos.equals(BlockEntity.getPosFromTag((CompoundTag) tag)));
++        }
++        // MultiPaper end
++
+         if (this.isInLevel()) {
+             BlockEntity tileentity = (BlockEntity) this.blockEntities.remove(pos);
+ 
+@@ -813,6 +827,7 @@ public class LevelChunk extends ChunkAccess {
          // Paper end - neighbour cache
          org.bukkit.Server server = this.level.getCraftServer();
          this.level.getChunkSource().addLoadedChunk(this); // Paper
@@ -538,7 +551,7 @@ index 1a6fa27a966fbc8d7f458a0121c9e2f80c0316fd..a1cb320b82d63c22380b725096078fb1
          if (server != null) {
              /*
               * If it's a new world, the first few chunks are generated inside
-@@ -874,7 +883,7 @@ public class LevelChunk extends ChunkAccess {
+@@ -874,7 +889,7 @@ public class LevelChunk extends ChunkAccess {
  
      @Override
      public boolean isUnsaved() {
@@ -563,7 +576,7 @@ index 9e293afe94e85ecbc2a236b1b34df1a4926b83cb..01cb4af9aee74db890c3a9005743d233
      public ProtoChunk(ChunkPos pos, UpgradeData upgradeData, LevelHeightAccessor world, Registry<Biome> biomeRegistry, @Nullable BlendingData blendingData) {
          this(pos, upgradeData, (LevelChunkSection[])null, new ProtoChunkTicks<>(), new ProtoChunkTicks<>(), world, biomeRegistry, blendingData);
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
-index 8246204ce5d8f825c7796f87006e658d7a019876..9cc574749f1e601a1c9ebee1b49a1a22ac0b15b7 100644
+index 8246204ce5d8f825c7796f87006e658d7a019876..cff61a0b89706ff2d67347128ee133d3ae1ef26b 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
 @@ -277,6 +277,10 @@ public class ChunkSerializer {
@@ -586,14 +599,23 @@ index 8246204ce5d8f825c7796f87006e658d7a019876..9cc574749f1e601a1c9ebee1b49a1a22
          if (blendingdata != null) {
              dataresult = BlendingData.CODEC.encodeStart(NbtOps.INSTANCE, blendingdata);
              logger = ChunkSerializer.LOGGER;
-@@ -745,6 +751,10 @@ public class ChunkSerializer {
-                 }
-             }
+@@ -723,6 +729,11 @@ public class ChunkSerializer {
+         ListTag nbttaglist1 = ChunkSerializer.getListOfCompoundsOrNull(nbt, "block_entities");
  
+         return nbttaglist == null && nbttaglist1 == null ? null : (chunk) -> {
 +            // MultiPaper start - Keep copy of entities and block entities until they're loaded
 +            chunk.entitiesToLoad = null;
 +            chunk.blockEntitiesToLoad = null;
 +            // MultiPaper end
++
+             if (nbttaglist != null) {
+                 world.addLegacyChunkEntities(EntityType.loadEntitiesRecursive(nbttaglist, world));
+             }
+@@ -744,7 +755,6 @@ public class ChunkSerializer {
+                     }
+                 }
+             }
+-
          };
      }
  
@@ -1077,10 +1099,10 @@ index 182d24272acb889088e1a5b36e708ff09c3c6f52..fc91f4135947cc5af28448ca1ea79a12
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d7de0028dd28552f4c952bd8262c2d69717a3074
+index 0000000000000000000000000000000000000000..891e5cc7c7cb8ceaafa8599b900c818c65e96244
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,265 @@
+@@ -0,0 +1,266 @@
 +package puregero.multipaper;
 +
 +import ca.spottedleaf.starlight.common.light.SWMRNibbleArray;
@@ -1277,11 +1299,12 @@ index 0000000000000000000000000000000000000000..d7de0028dd28552f4c952bd8262c2d69
 +                    setBlockInUnloadedChunk(blockUpdateChunk, pos, state);
 +                });
 +            } else if (packet instanceof ClientboundBlockEntityDataPacket update) {
-+                BlockEntity entity = blockUpdateChunk.getBlockEntity(update.getPos());
-+                if (entity != null) {
-+                    entity.load(update.getTag());
++                blockUpdateChunk.removeBlockEntity(update.getPos());
++                if (blockUpdateChunk instanceof LevelChunk levelChunk && levelChunk.blockEntitiesToLoad != null) {
++                    levelChunk.blockEntitiesToLoad.add(update.getTag());
 +                } else {
 +                    blockUpdateChunk.setBlockEntityNbt(update.getTag());
++                    blockUpdateChunk.getBlockEntity(update.getPos());
 +                }
 +            } else if (packet instanceof ClientboundLightUpdatePacket update) {
 +                handleLightUpdatePacket(level, blockUpdateChunk, update);

@@ -46,6 +46,19 @@ index e2e2ff7bcebe35f1ef66b66ba445aff7ed5317e2..d10da9e1e8c6fa07234eacb05431f769
              com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> oldTrackerCandidates = this.lastTrackerCandidates;
              this.lastTrackerCandidates = newTrackerCandidates;
  
+diff --git a/src/main/java/net/minecraft/server/level/ServerEntity.java b/src/main/java/net/minecraft/server/level/ServerEntity.java
+index 9bb1d8353a3333c948c34d658b891429585a6e50..11759f534e570b3a5bd3973963ed9d29ad5fe98f 100644
+--- a/src/main/java/net/minecraft/server/level/ServerEntity.java
++++ b/src/main/java/net/minecraft/server/level/ServerEntity.java
+@@ -133,7 +133,7 @@ public class ServerEntity {
+             this.sendDirtyEntityData();
+         }
+ 
+-        if (this.tickCount % this.updateInterval == 0 || this.entity.hasImpulse || this.entity.getEntityData().isDirty()) {
++        if (this.tickCount % this.updateInterval == 0 || this.entity.hasImpulse || this.entity.getEntityData().isDirty() || this.entity.sendChangesThisTick) { // MultiPaper
+             int i;
+             int j;
+ 
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
 index 51fe8a5dc7fea8580151668ed4a9c8cef87216c2..56bed09f8c6e2e561d32998ff188da945f2bcd95 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
@@ -103,7 +116,7 @@ index b8b33cf95e3540c10bf36cb772345aaa57ceda62..070fcb691616d549508f8d01cd6c07d7
              if (!(entity instanceof ServerPlayer) && !((ServerLevel) entity.level).entityManager.areEntitiesLoaded(new ChunkPos(new BlockPos(vector)).longKey)) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInactiveTracker.java b/src/main/java/puregero/multipaper/MultiPaperInactiveTracker.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..bef961598691f3510854de44a185c129b95a3cec
+index 0000000000000000000000000000000000000000..b662b0dfc69746a4bad91e6607d42a0fc1441a78
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInactiveTracker.java
 @@ -0,0 +1,44 @@
@@ -135,11 +148,11 @@ index 0000000000000000000000000000000000000000..bef961598691f3510854de44a185c129
 +            level.timings.trackerInactive.startTiming();
 +            try {
 +                for (Entity entity : entitiesToSendChangesThisTick) {
-+                    entity.sendChangesThisTick = false;
 +                    if (entity.tracker != null) {
 +                        entity.tracker.updatePlayers(entity.getPlayersInTrackRange());
 +                        entity.tracker.serverEntity.sendChanges();
 +                    }
++                    entity.sendChangesThisTick = false;
 +                }
 +                entitiesToSendChangesThisTick.clear();
 +            } finally {

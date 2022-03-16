@@ -1,0 +1,153 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 16 Mar 2022 20:12:39 +1000
+Subject: [PATCH] Add option to reduce tracking of inactive entities
+
+
+diff --git a/src/main/java/co/aikar/timings/WorldTimingsHandler.java b/src/main/java/co/aikar/timings/WorldTimingsHandler.java
+index fe79c0add4f7cb18d487c5bb9415c40c5b551ea2..9b3c2e5b41e0475b3790d2029b427c93b86130f2 100644
+--- a/src/main/java/co/aikar/timings/WorldTimingsHandler.java
++++ b/src/main/java/co/aikar/timings/WorldTimingsHandler.java
+@@ -35,6 +35,7 @@ public class WorldTimingsHandler {
+     public final Timing tileEntityPending;
+     public final Timing tracker1;
+     public final Timing tracker2;
++    public final Timing trackerInactive; // MultiPaper
+     public final Timing doTick;
+     public final Timing tickEntities;
+     public final Timing chunks;
+@@ -109,6 +110,7 @@ public class WorldTimingsHandler {
+ 
+         tracker1 = Timings.ofSafe(name + "tracker stage 1");
+         tracker2 = Timings.ofSafe(name + "tracker stage 2");
++        trackerInactive = Timings.ofSafe(name + "tracker multipaper inactive stage"); // MultiPaper
+         doTick = Timings.ofSafe(name + "doTick");
+         tickEntities = Timings.ofSafe(name + "tickEntities");
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index e2e2ff7bcebe35f1ef66b66ba445aff7ed5317e2..d10da9e1e8c6fa07234eacb05431f769716792a1 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -2065,6 +2065,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+ 
+     // Paper start - optimised tracker
+     private final void processTrackQueue() {
++        if (this.level.inactiveTracker.tick()) return; // MultiPaper - inactive tracker
++
+         this.level.timings.tracker1.startTiming();
+         try {
+             for (TrackedEntity tracker : this.entityMap.values()) {
+@@ -2272,7 +2274,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         // Paper start - use distance map to optimise tracker
+         com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> lastTrackerCandidates;
+ 
+-        final void updatePlayers(com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> newTrackerCandidates) {
++        public final void updatePlayers(com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> newTrackerCandidates) { // MultiPaper
+             com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> oldTrackerCandidates = this.lastTrackerCandidates;
+             this.lastTrackerCandidates = newTrackerCandidates;
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index 51fe8a5dc7fea8580151668ed4a9c8cef87216c2..56bed09f8c6e2e561d32998ff188da945f2bcd95 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -167,6 +167,7 @@ import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
+ import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperChunkHandler;
+ import puregero.multipaper.MultiPaperEntitiesHandler;
++import puregero.multipaper.MultiPaperInactiveTracker;
+ import puregero.multipaper.externalserverprotocol.SpawnUpdatePacket;
+ import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
+ 
+@@ -202,6 +203,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+     private final ObjectLinkedOpenHashSet<BlockEventData> blockEvents;
+     private final List<BlockEventData> blockEventsToReschedule;
+     private boolean handlingTick;
++    public final MultiPaperInactiveTracker inactiveTracker = new MultiPaperInactiveTracker(this); // MultiPaper
+     private final List<CustomSpawner> customSpawners;
+     @Nullable
+     private final EndDragonFight dragonFight;
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index c1b39117f8719936704a41539059cc5c71e36712..b5d09cd7417fe5519196884d9f619f1aaea12f6d 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -254,6 +254,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+     public float maxUpStep;
+     public boolean noPhysics;
+     protected final Random random;
++    public boolean sendChangesThisTick = false; // MultiPaper
+     public int tickCount;
+     public int remainingFireTicks;
+     public boolean wasTouchingWater;
+@@ -745,6 +746,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+ 
+     public void baseTick() {
+         this.level.getProfiler().push("entityBaseTick");
++        if (this.level instanceof ServerLevel serverLevel) serverLevel.inactiveTracker.track(this); // MultiPaper
+         this.feetBlockState = null;
+         if (this.isPassenger() && this.getVehicle().isRemoved()) {
+             this.stopRiding();
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+index b8b33cf95e3540c10bf36cb772345aaa57ceda62..070fcb691616d549508f8d01cd6c07d73a50aa92 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+@@ -110,6 +110,10 @@ public class MultiPaperEntitiesHandler {
+     }
+ 
+     public static void handleEntityUpdate(ExternalServerConnection connection, Entity entity, Packet<?> packet) {
++        if (entity.level instanceof ServerLevel serverLevel) {
++            serverLevel.inactiveTracker.track(entity);
++        }
++
+         if (packet instanceof ClientboundMoveEntityPacket moveEntityPacket) {
+             Vec3 vector = moveEntityPacket.updateEntityPosition(entity.position());
+             if (!(entity instanceof ServerPlayer) && !((ServerLevel) entity.level).entityManager.areEntitiesLoaded(new ChunkPos(new BlockPos(vector)).longKey)) {
+diff --git a/src/main/java/puregero/multipaper/MultiPaperInactiveTracker.java b/src/main/java/puregero/multipaper/MultiPaperInactiveTracker.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..bef961598691f3510854de44a185c129b95a3cec
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperInactiveTracker.java
+@@ -0,0 +1,44 @@
++package puregero.multipaper;
++
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++
++import java.util.ArrayList;
++import java.util.List;
++
++public class MultiPaperInactiveTracker {
++    private final ServerLevel level;
++    private final List<Entity> entitiesToSendChangesThisTick = new ArrayList<>();
++
++    public MultiPaperInactiveTracker(ServerLevel level) {
++        this.level = level;
++    }
++
++    public void track(Entity entity) {
++        if (MultiPaperConfig.ticksPerInactiveEntityTracking > 1 && !entity.sendChangesThisTick && entity.tracker != null) {
++            entity.sendChangesThisTick = true;
++            entitiesToSendChangesThisTick.add(entity);
++        }
++    }
++
++    public boolean tick() {
++        if (MultiPaperConfig.ticksPerInactiveEntityTracking > 1 && level.getServer().getTickCount() % MultiPaperConfig.ticksPerInactiveEntityTracking != 0) {
++            level.timings.trackerInactive.startTiming();
++            try {
++                for (Entity entity : entitiesToSendChangesThisTick) {
++                    entity.sendChangesThisTick = false;
++                    if (entity.tracker != null) {
++                        entity.tracker.updatePlayers(entity.getPlayersInTrackRange());
++                        entity.tracker.serverEntity.sendChanges();
++                    }
++                }
++                entitiesToSendChangesThisTick.clear();
++            } finally {
++                level.timings.trackerInactive.stopTiming();
++            }
++            return true;
++        }
++
++        return false;
++    }
++}

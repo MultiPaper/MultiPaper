@@ -42,3 +42,9 @@ of whenever the file is written to.
 Files or directories that should not be synced even if they're included in
 `filesToSync` above.
 
+`ticksPerInactiveEntityTracking`  
+Ticks per tracking of inactive entities. The default value is 1, meaning
+inactive entities will be tracked every tick (this is vanilla behaviour).
+Increasing this value will reduce the cpu consumed by entities that are
+outside the simulation distance, and have been deemed inactive.
+

@@ -1,9 +1,9 @@
 # multipaper.yml
 
-`bungeeCordName`  
+`bungeecordName`  
 The name of this server on your bungeecord or velocity proxy. If you aren't
 using a proxy, just set this to some arbitrary unique name for each server.
-This can also be set using `java -DbungeeCordName=server1 -jar multipaper.jar`.
+This can also be set using `java -DbungeecordName=server1 -jar multipaper.jar`.
 
 `multipaperMasterAddress`  
 The address for the Master server in the form `127.0.0.1:35353`. Note that all

@@ -30,7 +30,8 @@ public class ServerConnection extends Thread {
      */
     private static final Map<String, ServerConnection> connectionMap = new ConcurrentHashMap<>();
 
-    private static final List<ServerConnection> connections = new ArrayList<>();
+    private static final Object connectionsLock = new Object();
+    private static List<ServerConnection> connections = new ArrayList<>();
 
     public static void shutdown() {
         try {
@@ -145,8 +146,10 @@ public class ServerConnection extends Thread {
             name = in.readUTF();
             host = ((InetSocketAddress) getAddress()).getAddress().getHostAddress();
 
-            synchronized (connections) {
-                connections.add(this);
+            synchronized (connectionsLock) {
+                ArrayList<ServerConnection> connectionsCopy = new ArrayList<>(connections);
+                connectionsCopy.add(this);
+                connections = connectionsCopy;
                 connectionMap.put(name, this);
             }
 
@@ -188,8 +191,10 @@ public class ServerConnection extends Thread {
         EntitiesSubscriptionManager.unsubscribeAll(this);
         ChunkSubscriptionManager.unsubscribeAndUnlockAll(this);
 
-        synchronized (connections) {
-            connections.remove(this);
+        synchronized (connectionsLock) {
+            ArrayList<ServerConnection> connectionsCopy = new ArrayList<>(connections);
+            connectionsCopy.remove(this);
+            connections = connectionsCopy;
         }
 
         System.out.println(socket.getRemoteSocketAddress() + " (" + name + ") closed");

@@ -21,6 +21,7 @@ public class PlayerConnectHandler implements Handler {
                     out.writeUTF("playerJoin");
                     out.writeBoolean(false);
                     out.send();
+                    return;
                 }
             }
 

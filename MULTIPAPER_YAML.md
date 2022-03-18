@@ -22,6 +22,9 @@ Whether to let players join this server using the Master's built-in proxy.
 `syncScoreboards`  
 Whether to sync scoreboard and team data between servers.
 
+`logFileSyncing`
+Whether or not to log files being synced with the master server.
+
 `filesToSyncOnStartup`  
 Files or directories that should be synced onto the MultiPaper-Master.
 Directories will be synced recursively. If two servers write to the same file

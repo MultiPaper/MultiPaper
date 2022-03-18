@@ -91,7 +91,7 @@ index d2e5b26de45535972c69e1a7ac7259344fed0da0..3a35c423ce90173fad1b93bbc04d927d
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9881b9eebce7aed795c2771382abce881c924a0d
+index 0000000000000000000000000000000000000000..ab0346d1fb9f828211918f2633efb659dde14f4a
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
 @@ -0,0 +1,121 @@
@@ -117,23 +117,23 @@ index 0000000000000000000000000000000000000000..9881b9eebce7aed795c2771382abce88
 +
 +    private static final Logger LOGGER = LogManager.getLogger(MultiPaperEntityInteractHandler.class.getSimpleName());
 +
-+    public static boolean handleEntityInteract(ServerPlayer player, Entity entity, ServerboundInteractPacket packet) {
++    public static ExternalServerConnection getOwner(Entity entity) {
 +        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
 +        if (MultiPaper.isExternalPlayer(entity)) {
-+            ((ExternalPlayer) entity).externalServerConnection.send(new PlayerActionOnEntityPacket(player, entity, packet));
-+            return true;
++            return ((ExternalPlayer) entity).externalServerConnection;
 +        } else if (MultiPaper.isExternalPlayer(entity.getControllingPassenger())) {
-+            ((ExternalPlayer) entity.getControllingPassenger()).externalServerConnection.send(new PlayerActionOnEntityPacket(player, entity, packet));
-+            return true;
-+        } else if (MultiPaper.isRealPlayer(entity) || MultiPaper.isRealPlayer(entity.getControllingPassenger())) {
-+            return false;
-+        } else if (MultiPaper.isChunkExternal(chunk)) {
-+            if (MultiPaper.isExternalPlayer(player)) {
-+                LOGGER.warn("External player " + player.getScoreboardName() + " is interacting with an external entity " + entity + ". Forwarding to " + chunk.externalOwner.getName());
-+            }
++            return ((ExternalPlayer) entity.getControllingPassenger()).externalServerConnection;
++        } else if (MultiPaper.isChunkExternal(chunk) && !MultiPaper.isRealPlayer(entity)) {
++            return chunk.externalOwner.getConnection();
++        }
 +
-+            chunk.externalOwner.getConnection().send(new PlayerActionOnEntityPacket(player, entity, packet));
++        return null;
++    }
 +
++    public static boolean handleEntityInteract(ServerPlayer player, Entity entity, ServerboundInteractPacket packet) {
++        ExternalServerConnection owner = getOwner(entity);
++        if (owner != null) {
++            owner.send(new PlayerActionOnEntityPacket(player, entity, packet));
 +            return true;
 +        }
 +

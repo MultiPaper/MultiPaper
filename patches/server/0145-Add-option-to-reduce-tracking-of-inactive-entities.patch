@@ -60,7 +60,7 @@ index 9bb1d8353a3333c948c34d658b891429585a6e50..11759f534e570b3a5bd3973963ed9d29
              int j;
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 51fe8a5dc7fea8580151668ed4a9c8cef87216c2..56bed09f8c6e2e561d32998ff188da945f2bcd95 100644
+index 51fe8a5dc7fea8580151668ed4a9c8cef87216c2..6bfa542ad0856ccb4d09e2e8555d8b9fa8fa5845 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -167,6 +167,7 @@ import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
@@ -79,8 +79,24 @@ index 51fe8a5dc7fea8580151668ed4a9c8cef87216c2..56bed09f8c6e2e561d32998ff188da94
      private final List<CustomSpawner> customSpawners;
      @Nullable
      private final EndDragonFight dragonFight;
+@@ -1182,6 +1184,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+         gameprofilerfiller.incrementCounter("tickNonPassenger");
+         if (isActive) { // Paper - EAR 2
+             TimingHistory.activatedEntityTicks++;
++        inactiveTracker.track(entity); // MultiPaper
+         entity.tick();
+         entity.postTick(); // CraftBukkit
+         } else { entity.inactiveTick(); } // Paper - EAR 2
+@@ -1222,6 +1225,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+                 gameprofilerfiller.incrementCounter("tickPassenger");
+                 // Paper start - EAR 2
+                 if (isActive) {
++                inactiveTracker.track(passenger); // MultiPaper
+                 passenger.rideTick();
+                 passenger.postTick(); // CraftBukkit
+                 } else {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index c1b39117f8719936704a41539059cc5c71e36712..b5d09cd7417fe5519196884d9f619f1aaea12f6d 100644
+index c1b39117f8719936704a41539059cc5c71e36712..441c282defa38af009cfefad487f2fdbdf04bb1e 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -254,6 +254,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
@@ -91,14 +107,6 @@ index c1b39117f8719936704a41539059cc5c71e36712..b5d09cd7417fe5519196884d9f619f1a
      public int tickCount;
      public int remainingFireTicks;
      public boolean wasTouchingWater;
-@@ -745,6 +746,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
- 
-     public void baseTick() {
-         this.level.getProfiler().push("entityBaseTick");
-+        if (this.level instanceof ServerLevel serverLevel) serverLevel.inactiveTracker.track(this); // MultiPaper
-         this.feetBlockState = null;
-         if (this.isPassenger() && this.getVehicle().isRemoved()) {
-             this.stopRiding();
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 index b8b33cf95e3540c10bf36cb772345aaa57ceda62..070fcb691616d549508f8d01cd6c07d73a50aa92 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java

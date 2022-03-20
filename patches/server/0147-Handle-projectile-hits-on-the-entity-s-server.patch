@@ -5,7 +5,7 @@ Subject: [PATCH] Handle projectile hits on the entity's server
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/projectile/Projectile.java b/src/main/java/net/minecraft/world/entity/projectile/Projectile.java
-index d259c66cbb83834e97640e62924b69414481a47e..99e8ad699aa5186e9b1113088dfa66b237f208c0 100644
+index d259c66cbb83834e97640e62924b69414481a47e..92d5d7f69674cfc48d2802a4e4c7e87622db7f8c 100644
 --- a/src/main/java/net/minecraft/world/entity/projectile/Projectile.java
 +++ b/src/main/java/net/minecraft/world/entity/projectile/Projectile.java
 @@ -23,6 +23,9 @@ import net.minecraft.world.phys.HitResult;
@@ -18,7 +18,15 @@ index d259c66cbb83834e97640e62924b69414481a47e..99e8ad699aa5186e9b1113088dfa66b2
  // CraftBukkit end
  
  public abstract class Projectile extends Entity {
-@@ -205,10 +208,19 @@ public abstract class Projectile extends Entity {
+@@ -33,6 +36,7 @@ public abstract class Projectile extends Entity {
+     public Entity cachedOwner;
+     private boolean leftOwner;
+     private boolean hasBeenShot;
++    private boolean hasHitEntity; // MultiPaper
+ 
+     // CraftBukkit start
+     private boolean hitCancelled = false;
+@@ -205,10 +209,22 @@ public abstract class Projectile extends Entity {
      }
      // CraftBukkit end
  
@@ -28,10 +36,13 @@ index d259c66cbb83834e97640e62924b69414481a47e..99e8ad699aa5186e9b1113088dfa66b2
  
          if (movingobjectposition_enummovingobjecttype == HitResult.Type.ENTITY) {
 +            // MultiPaper start - handle entity hits on their server
++            if (hasHitEntity) {
++                return; // Prevent infinite hits of the entity if an external server ignores the projectile hit packet
++            }
++            hasHitEntity = true;
 +            ExternalServerConnection entityOwner = MultiPaperEntityInteractHandler.getOwner(((EntityHitResult) hitResult).getEntity());
 +            if (entityOwner != null) {
 +                entityOwner.send(new ProjectileHitEntityPacket(this, ((EntityHitResult) hitResult).getEntity(), hitResult.getLocation()));
-+                this.discard();
 +                return;
 +            }
 +            // MultiPaper end

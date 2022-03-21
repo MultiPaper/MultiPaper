@@ -1,0 +1,249 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 21 Mar 2022 12:51:25 +1000
+Subject: [PATCH] Add getAllOnlinePlayers and getLocalOnlinePlayers
+
+
+diff --git a/src/main/java/com/destroystokyo/paper/Title.java b/src/main/java/com/destroystokyo/paper/Title.java
+index 9e90c3df567a65b48a0b9341f784eb902cb35d8c..a860efd3010bcc5ab8ae616c9ca4980754633670 100644
+--- a/src/main/java/com/destroystokyo/paper/Title.java
++++ b/src/main/java/com/destroystokyo/paper/Title.java
+@@ -268,7 +268,7 @@ public final class Title {
+      * Sends the title directly to all online players
+      */
+     public void broadcast() {
+-        send(Bukkit.getOnlinePlayers());
++        send(Bukkit.getAllOnlinePlayers()); // MultiPaper
+     }
+ 
+     @NotNull
+diff --git a/src/main/java/com/destroystokyo/paper/event/server/PaperServerListPingEvent.java b/src/main/java/com/destroystokyo/paper/event/server/PaperServerListPingEvent.java
+index baac2e4f090a490372ef4aed92c8a5771955e921..efc89071e2053a10edc702eecb9aefc264653a43 100644
+--- a/src/main/java/com/destroystokyo/paper/event/server/PaperServerListPingEvent.java
++++ b/src/main/java/com/destroystokyo/paper/event/server/PaperServerListPingEvent.java
+@@ -272,7 +272,7 @@ public class PaperServerListPingEvent extends ServerListPingEvent implements Can
+ 
+     @NotNull
+     protected Object[] getOnlinePlayers() {
+-        return Bukkit.getOnlinePlayers().toArray();
++        return Bukkit.getAllOnlinePlayers().toArray(); // MultiPaper
+     }
+ 
+     @NotNull
+diff --git a/src/main/java/org/bukkit/Bukkit.java b/src/main/java/org/bukkit/Bukkit.java
+index bd0da4d8e1f491e0eaf5f85434fcf4a8cc7570a2..925967eebe92f6d1831c0313d4e7ddf6362f1987 100644
+--- a/src/main/java/org/bukkit/Bukkit.java
++++ b/src/main/java/org/bukkit/Bukkit.java
+@@ -166,8 +166,11 @@ public final class Bukkit {
+     }
+     // Paper end
+ 
++    // MultiPaper start
+     /**
+-     * Gets a view of all currently logged in players. This {@linkplain
++     * Gets a view of all currently logged in players on your local
++     * Multipaper instance. This method may return the logged in players
++     * across all instances when tab-completing a command. This {@linkplain
+      * Collections#unmodifiableCollection(Collection) view} is a reused
+      * object, making some operations like {@link Collection#size()}
+      * zero-allocation.
+@@ -198,6 +201,73 @@ public final class Bukkit {
+         return server.getOnlinePlayers();
+     }
+ 
++    /**
++     * Gets a view of all currently logged in players on your local
++     * Multipaper instance. This {@linkplain
++     * Collections#unmodifiableCollection(Collection) view} is a reused
++     * object, making some operations like {@link Collection#size()}
++     * zero-allocation.
++     * <p>
++     * The collection is a view backed by the internal representation, such
++     * that, changes to the internal state of the server will be reflected
++     * immediately. However, the reuse of the returned collection (identity)
++     * is not strictly guaranteed for future or all implementations. Casting
++     * the collection, or relying on interface implementations (like {@link
++     * Serializable} or {@link List}), is deprecated.
++     * <p>
++     * Iteration behavior is undefined outside of self-contained main-thread
++     * uses. Normal and immediate iterator use without consequences that
++     * affect the collection are fully supported. The effects following
++     * (non-exhaustive) {@link Entity#teleport(Location) teleportation},
++     * {@link Player#setHealth(double) death}, and {@link Player#kickPlayer(
++     * String) kicking} are undefined. Any use of this collection from
++     * asynchronous threads is unsafe.
++     * <p>
++     * For safe consequential iteration or mimicking the old array behavior,
++     * using {@link Collection#toArray(Object[])} is recommended. For making
++     * snapshots, {@link ImmutableList#copyOf(Collection)} is recommended.
++     *
++     * @return a view of currently online players.
++     */
++    @NotNull
++    public static Collection<? extends Player> getLocalOnlinePlayers() {
++        return server.getLocalOnlinePlayers();
++    }
++
++    /**
++     * Gets a view of all currently logged in players across all
++     * MultiPaper instances. This {@linkplain
++     * Collections#unmodifiableCollection(Collection) view} is a reused
++     * object, making some operations like {@link Collection#size()}
++     * zero-allocation.
++     * <p>
++     * The collection is a view backed by the internal representation, such
++     * that, changes to the internal state of the server will be reflected
++     * immediately. However, the reuse of the returned collection (identity)
++     * is not strictly guaranteed for future or all implementations. Casting
++     * the collection, or relying on interface implementations (like {@link
++     * Serializable} or {@link List}), is deprecated.
++     * <p>
++     * Iteration behavior is undefined outside of self-contained main-thread
++     * uses. Normal and immediate iterator use without consequences that
++     * affect the collection are fully supported. The effects following
++     * (non-exhaustive) {@link Entity#teleport(Location) teleportation},
++     * {@link Player#setHealth(double) death}, and {@link Player#kickPlayer(
++     * String) kicking} are undefined. Any use of this collection from
++     * asynchronous threads is unsafe.
++     * <p>
++     * For safe consequential iteration or mimicking the old array behavior,
++     * using {@link Collection#toArray(Object[])} is recommended. For making
++     * snapshots, {@link ImmutableList#copyOf(Collection)} is recommended.
++     *
++     * @return a view of currently online players.
++     */
++    @NotNull
++    public static Collection<? extends Player> getAllOnlinePlayers() {
++        return server.getAllOnlinePlayers();
++    }
++    // MultiPaper end
++
+     /**
+      * Get the maximum amount of players which can login to this server.
+      *
+diff --git a/src/main/java/org/bukkit/Server.java b/src/main/java/org/bukkit/Server.java
+index 9656db9e278954d85b5846ecaad658123838f854..1e9e1782bc52da8af689674c5b805e31cf1ffd6d 100644
+--- a/src/main/java/org/bukkit/Server.java
++++ b/src/main/java/org/bukkit/Server.java
+@@ -122,8 +122,11 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
+     String getMinecraftVersion();
+     // Paper end
+ 
++    // MultiPaper start
+     /**
+-     * Gets a view of all currently logged in players. This {@linkplain
++     * Gets a view of all currently logged in players on your local
++     * Multipaper instance. This method may return the logged in players
++     * across all instances when tab-completing a command. This {@linkplain
+      * Collections#unmodifiableCollection(Collection) view} is a reused
+      * object, making some operations like {@link Collection#size()}
+      * zero-allocation.
+@@ -152,6 +155,69 @@ public interface Server extends PluginMessageRecipient, net.kyori.adventure.audi
+     @NotNull
+     public Collection<? extends Player> getOnlinePlayers();
+ 
++    /**
++     * Gets a view of all currently logged in players on your local
++     * Multipaper instance. This {@linkplain
++     * Collections#unmodifiableCollection(Collection) view} is a reused
++     * object, making some operations like {@link Collection#size()}
++     * zero-allocation.
++     * <p>
++     * The collection is a view backed by the internal representation, such
++     * that, changes to the internal state of the server will be reflected
++     * immediately. However, the reuse of the returned collection (identity)
++     * is not strictly guaranteed for future or all implementations. Casting
++     * the collection, or relying on interface implementations (like {@link
++     * Serializable} or {@link List}), is deprecated.
++     * <p>
++     * Iteration behavior is undefined outside of self-contained main-thread
++     * uses. Normal and immediate iterator use without consequences that
++     * affect the collection are fully supported. The effects following
++     * (non-exhaustive) {@link Entity#teleport(Location) teleportation},
++     * {@link Player#setHealth(double) death}, and {@link Player#kickPlayer(
++     * String) kicking} are undefined. Any use of this collection from
++     * asynchronous threads is unsafe.
++     * <p>
++     * For safe consequential iteration or mimicking the old array behavior,
++     * using {@link Collection#toArray(Object[])} is recommended. For making
++     * snapshots, {@link ImmutableList#copyOf(Collection)} is recommended.
++     *
++     * @return a view of currently online players.
++     */
++    @NotNull
++    public Collection<? extends Player> getLocalOnlinePlayers();
++
++    /**
++     * Gets a view of all currently logged in players across all
++     * MultiPaper instances. This {@linkplain
++     * Collections#unmodifiableCollection(Collection) view} is a reused
++     * object, making some operations like {@link Collection#size()}
++     * zero-allocation.
++     * <p>
++     * The collection is a view backed by the internal representation, such
++     * that, changes to the internal state of the server will be reflected
++     * immediately. However, the reuse of the returned collection (identity)
++     * is not strictly guaranteed for future or all implementations. Casting
++     * the collection, or relying on interface implementations (like {@link
++     * Serializable} or {@link List}), is deprecated.
++     * <p>
++     * Iteration behavior is undefined outside of self-contained main-thread
++     * uses. Normal and immediate iterator use without consequences that
++     * affect the collection are fully supported. The effects following
++     * (non-exhaustive) {@link Entity#teleport(Location) teleportation},
++     * {@link Player#setHealth(double) death}, and {@link Player#kickPlayer(
++     * String) kicking} are undefined. Any use of this collection from
++     * asynchronous threads is unsafe.
++     * <p>
++     * For safe consequential iteration or mimicking the old array behavior,
++     * using {@link Collection#toArray(Object[])} is recommended. For making
++     * snapshots, {@link ImmutableList#copyOf(Collection)} is recommended.
++     *
++     * @return a view of currently online players.
++     */
++    @NotNull
++    public Collection<? extends Player> getAllOnlinePlayers();
++    // MultiPaper end
++
+     /**
+      * Get the maximum amount of players which can login to this server.
+      *
+diff --git a/src/main/java/org/bukkit/command/Command.java b/src/main/java/org/bukkit/command/Command.java
+index 95847fcb1ac2e430ee192f4f7ac94e981151c5db..dd8f03379a83ca06c52047d6d984a153f697af47 100644
+--- a/src/main/java/org/bukkit/command/Command.java
++++ b/src/main/java/org/bukkit/command/Command.java
+@@ -108,7 +108,7 @@ public abstract class Command {
+         Player senderPlayer = sender instanceof Player ? (Player) sender : null;
+ 
+         ArrayList<String> matchedPlayers = new ArrayList<String>();
+-        for (Player player : sender.getServer().getOnlinePlayers()) {
++        for (Player player : sender.getServer().getAllOnlinePlayers()) { // MultiPaper
+             String name = player.getName();
+             if ((senderPlayer == null || senderPlayer.canSee(player)) && StringUtil.startsWithIgnoreCase(name, lastWord)) {
+                 matchedPlayers.add(name);
+diff --git a/src/main/java/org/bukkit/event/player/PlayerChatEvent.java b/src/main/java/org/bukkit/event/player/PlayerChatEvent.java
+index 213837794c603cb9f152f917941b912326a08030..7539e1ff249871a61daf0f668efadd09228075e6 100644
+--- a/src/main/java/org/bukkit/event/player/PlayerChatEvent.java
++++ b/src/main/java/org/bukkit/event/player/PlayerChatEvent.java
+@@ -33,7 +33,7 @@ public class PlayerChatEvent extends PlayerEvent implements Cancellable {
+         super(player);
+         this.message = message;
+         this.format = "<%1$s> %2$s";
+-        this.recipients = new HashSet<Player>(player.getServer().getOnlinePlayers());
++        this.recipients = new HashSet<Player>(player.getServer().getAllOnlinePlayers()); // MultiPaper
+     }
+ 
+     public PlayerChatEvent(@NotNull final Player player, @NotNull final String message, @NotNull final String format, @NotNull final Set<Player> recipients) {
+diff --git a/src/main/java/org/bukkit/event/player/PlayerCommandPreprocessEvent.java b/src/main/java/org/bukkit/event/player/PlayerCommandPreprocessEvent.java
+index 35614db42322d03c167e374ff79bec064975e54d..ca4e54ce9324bab3e83307661eb4c061d11bb23d 100644
+--- a/src/main/java/org/bukkit/event/player/PlayerCommandPreprocessEvent.java
++++ b/src/main/java/org/bukkit/event/player/PlayerCommandPreprocessEvent.java
+@@ -53,7 +53,7 @@ public class PlayerCommandPreprocessEvent extends PlayerEvent implements Cancell
+ 
+     public PlayerCommandPreprocessEvent(@NotNull final Player player, @NotNull final String message) {
+         super(player);
+-        this.recipients = new HashSet<Player>(player.getServer().getOnlinePlayers());
++        this.recipients = new HashSet<Player>(player.getServer().getAllOnlinePlayers()); // MultiPaper
+         this.message = message;
+     }
+ 

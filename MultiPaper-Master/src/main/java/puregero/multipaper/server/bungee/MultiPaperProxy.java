@@ -15,6 +15,7 @@ import puregero.multipaper.server.ServerConnection;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -56,7 +57,7 @@ public class MultiPaperProxy extends Plugin implements Listener {
             balanceNodes = configuration.getBoolean("balanceNodes", true);
 
             try {
-                new MultiPaperServer(configuration.getInt("port")).start();
+                new MultiPaperServer(InetAddress.getByName("0.0.0.0"), configuration.getInt("port")).start();
             } catch (IOException e) {
                 e.printStackTrace();
             }

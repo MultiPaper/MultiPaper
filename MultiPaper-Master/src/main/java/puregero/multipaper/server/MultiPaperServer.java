@@ -5,6 +5,7 @@ import puregero.multipaper.server.proxy.ProxyServer;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -22,13 +23,20 @@ public class MultiPaperServer extends Thread {
     public static final String SECRET = UUID.randomUUID().toString();
 
     public static void main(String[] args) throws IOException {
+        InetAddress address = InetAddress.getByName("0.0.0.0");
         int port = DEFAULT_PORT;
 
         if (args.length > 0) {
             try {
-                port = Integer.parseInt(args[0]);
+                if (args[0].contains(":")) {
+                    String[] split = args[0].split(":", 2);
+                    address = InetAddress.getByName(split[0]);
+                    port = Integer.parseInt(split[1]);
+                } else {
+                    port = Integer.parseInt(args[0]);
+                }
             } catch (NumberFormatException e) {
-                System.err.println("Usage: java -jar MultiPaperServer.jar <port> [proxy port]");
+                System.err.println("Usage: java -jar MultiPaperServer.jar <address>:<port> [proxy port]");
                 System.exit(1);
             }
         }
@@ -37,20 +45,20 @@ public class MultiPaperServer extends Thread {
             try {
                 ProxyServer.openServer(Integer.parseInt(args[1]));
             } catch (NumberFormatException e) {
-                System.err.println("Usage: java -jar MultiPaperServer.jar <port> [proxy port]");
+                System.err.println("Usage: java -jar MultiPaperServer.jar <address>:<port> [proxy port]");
                 System.exit(1);
             }
         }
 
-        new MultiPaperServer(port).start();
+        new MultiPaperServer(address, port).start();
 
         new CommandLineInput().run();
     }
 
     private final ServerSocket serverSocket;
 
-    public MultiPaperServer(int port) throws IOException {
-        serverSocket = new ServerSocket(port);
+    public MultiPaperServer(InetAddress address, int port) throws IOException {
+        serverSocket = new ServerSocket(port, 0, address);
 
         System.out.println("[MultiPaperMaster] Listening on " + serverSocket.getLocalSocketAddress());
     }

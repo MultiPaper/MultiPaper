@@ -195,7 +195,7 @@ Requirements:
 
 Build instructions:
 1. Patch paper with: `./gradlew applyPatches`
-2. Build the multipaper jars with: `./gradlew jar createReobfPaperclipJar`
+2. Build the multipaper jars with: `./gradlew shadowjar createReobfPaperclipJar`
 3. Get the multipaper jar from `build/libs`
 4. Get the multipaper-master jar from `MultiPaper-Master/build/libs`
 

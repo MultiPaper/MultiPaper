@@ -203,10 +203,10 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..090b67de14e01b8185ec62ac294dca65c51a060e
+index 0000000000000000000000000000000000000000..98bea71549935cb0bd3c7fe45d7a61adfa1d799a
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,104 @@
 +package puregero.multipaper;
 +
 +import io.netty.channel.Channel;
@@ -221,6 +221,8 @@ index 0000000000000000000000000000000000000000..090b67de14e01b8185ec62ac294dca65
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.externalserverprotocol.*;
 +import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
++import puregero.multipaper.mastermessagingprotocol.MessageLengthDecoder;
++import puregero.multipaper.mastermessagingprotocol.MessageLengthEncoder;
 +
 +import java.io.Closeable;
 +import java.io.IOException;
@@ -251,7 +253,7 @@ index 0000000000000000000000000000000000000000..090b67de14e01b8185ec62ac294dca65
 +
 +    public void sendMinecraftHandshake(String address, String secret, int port) {
 +        channel.pipeline()
-+                .addLast("prepender", new Varint21LengthFieldPrepender())
++                .addLast("prepender", new MessageLengthEncoder())
 +                .addLast("encoder", new PacketEncoder(PacketFlow.SERVERBOUND));
 +        channel.attr(Connection.ATTRIBUTE_PROTOCOL).set(ConnectionProtocol.HANDSHAKING);
 +        channel.writeAndFlush(new ClientIntentionPacket(address + "\00" + secret, port, ConnectionProtocol.STATUS))
@@ -274,9 +276,9 @@ index 0000000000000000000000000000000000000000..090b67de14e01b8185ec62ac294dca65
 +        if (!Boolean.getBoolean("Paper.disableFlushConsolidate")) channel.pipeline().addFirst(new io.netty.handler.flush.FlushConsolidationHandler());
 +
 +        channel.pipeline()
-+                .addLast("splitter", new Varint21FrameDecoder())
++                .addLast("splitter", new MessageLengthDecoder())
 +                .addLast("decoder", new ExternalServerPacketDecoder())
-+                .addLast("prepender", new Varint21LengthFieldPrepender())
++                .addLast("prepender", new MessageLengthEncoder())
 +                .addLast("encoder", new ExternalServerPacketEncoder())
 +                .addLast("packet_handler", new ExternalServerPacketHandler(this));
 +

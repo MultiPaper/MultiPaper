@@ -76,7 +76,7 @@ index 86517c755f3762cf5f86d57894d6930a3cd3f872..7e8ba7c388644a3892fd518a8742e429
      }
  
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index 5aa054d0770d58b91dfcafe6d05f092e81bd5905..216f0bc01f482ac59e01d77e858f87e2dfd6bd6c 100644
+index 06307c138974a12eb73db1f84e23c6a890f6fe39..fe2bb61318115df66147886d62363266521eeac1 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -564,7 +564,13 @@ public class LevelChunk extends ChunkAccess {
@@ -94,10 +94,10 @@ index 5aa054d0770d58b91dfcafe6d05f092e81bd5905..216f0bc01f482ac59e01d77e858f87e2
                      this.removeBlockEntity(blockposition);
                  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 2bc6d92b3e4df9a133afcdd1f62fbc3481a6955b..2a147eba18e75aba758e80b952eab8e15262a0f8 100644
+index 10d18185eb090659326622f918fed1a09075856d..dd8c9758d16a411bbaff46b6fadde1d48c1e8d62 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -143,6 +143,8 @@ public class MultiPaper {
+@@ -153,6 +153,8 @@ public class MultiPaper {
                  broadcastPacketToExternalServers(new TimeUpdatePacket(level));
              }
          }
@@ -108,10 +108,10 @@ index 2bc6d92b3e4df9a133afcdd1f62fbc3481a6955b..2a147eba18e75aba758e80b952eab8e1
      public static void sendTickTime(long time, double tps) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java b/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4db560ccf326a74014d76a62b12dcfb13fb07060
+index 0000000000000000000000000000000000000000..318c034efe0c388b974ef772843657fd830e359c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java
-@@ -0,0 +1,153 @@
+@@ -0,0 +1,142 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.core.BlockPos;
@@ -122,8 +122,10 @@ index 0000000000000000000000000000000000000000..4db560ccf326a74014d76a62b12dcfb1
 +import net.minecraft.world.level.material.Fluid;
 +import net.minecraft.world.ticks.LevelChunkTicks;
 +import puregero.multipaper.externalserverprotocol.SendTickListPacket;
++import puregero.multipaper.mastermessagingprotocol.ChunkKey;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.RequestChunkOwnershipMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
 +
-+import java.io.IOException;
 +import java.util.ArrayList;
 +import java.util.HashSet;
 +import java.util.Iterator;
@@ -221,33 +223,20 @@ index 0000000000000000000000000000000000000000..4db560ccf326a74014d76a62b12dcfb1
 +
 +    private static CompletableFutureWithKey<HashSet<LevelChunk>, Boolean> requestChunkOwnership(HashSet<LevelChunk> neighbours) {
 +        CompletableFutureWithKey<HashSet<LevelChunk>, Boolean> future = new CompletableFutureWithKey<>(neighbours);
-+        boolean writtenWorld = false;
 +
-+        try {
-+            DataOutputSender out = new DataOutputSender(MultiPaper.getConnection());
-+            out.writeUTF("requestChunkOwnership");
-+            out.writeInt(neighbours.size());
++        String world = null;
++        ChunkKey[] chunkKeys = new ChunkKey[neighbours.size()];
++        int i = 0;
 +
-+            for (LevelChunk chunk : neighbours) {
-+                if (!writtenWorld) {
-+                    out.writeUTF(chunk.level.getWorld().getName());
-+                    writtenWorld = true;
-+                }
-+
-+                out.writeInt(chunk.locX);
-+                out.writeInt(chunk.locZ);
++        for (LevelChunk chunk : neighbours) {
++            if (world == null) {
++                world = chunk.level.getWorld().getName();
 +            }
 +
-+            out.send(in -> {
-+                try {
-+                    future.complete(in.readBoolean());
-+                } catch (IOException e) {
-+                    e.printStackTrace();
-+                }
-+            });
-+        } catch (IOException e) {
-+            e.printStackTrace();
++            chunkKeys[i++] = new ChunkKey(chunk.level.getWorld().getName(), chunk.locX, chunk.locZ);
 +        }
++
++        MultiPaper.getConnection().sendAndAwaitReply(new RequestChunkOwnershipMessage(world, chunkKeys), BooleanMessageReply.class).thenAccept(message -> future.complete(message.result));
 +
 +        return future;
 +    }

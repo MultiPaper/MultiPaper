@@ -1,8 +1,12 @@
 package puregero.multipaper.server;
 
-import java.io.IOException;
+import puregero.multipaper.mastermessagingprotocol.ChunkKey;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.AddChunkSubscriberMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ChunkSubscribersSyncMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.RemoveChunkSubscriberMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.SetChunkOwnerMessage;
+
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ChunkSubscriptionManager {
@@ -75,7 +79,7 @@ public class ChunkSubscriptionManager {
                 if (serverConnections.size() == 1 || force) {
                     synchronized (chunkSubscribers) {
                         if (chunkSubscribers.get(key) != null) {
-                            updateOwner(serverConnections.get(0), chunkSubscribers.get(key), key.name, key.x, key.z);
+                            updateOwner(serverConnections.get(0), chunkSubscribers.get(key), key.world, key.x, key.z);
                         }
                     }
                 }
@@ -101,9 +105,9 @@ public class ChunkSubscriptionManager {
                             synchronized (chunkSubscribers) {
                                 if (chunkSubscribers.get(key) != null) {
                                     if (serverConnections.isEmpty()) {
-                                        updateOwner(null, chunkSubscribers.get(key), key.name, key.x, key.z);
+                                        updateOwner(null, chunkSubscribers.get(key), key.world, key.x, key.z);
                                     } else {
-                                        updateOwner(serverConnections.get(0), chunkSubscribers.get(key), key.name, key.x, key.z);
+                                        updateOwner(serverConnections.get(0), chunkSubscribers.get(key), key.world, key.x, key.z);
                                     }
                                 }
                             }
@@ -128,19 +132,7 @@ public class ChunkSubscriptionManager {
     private static void updateOwner(ServerConnection ownerConnection, List<ServerConnection> serverConnections, String world, int cx, int cz) {
         String owner = ownerConnection == null ? "" : ownerConnection.getBungeeCordName();
         for (ServerConnection connection : serverConnections) {
-            CompletableFuture.runAsync(() -> {
-                try {
-                    DataOutputSender out = connection.buffer();
-                    out.writeUTF("chunkOwner");
-                    out.writeUTF(world);
-                    out.writeInt(cx);
-                    out.writeInt(cz);
-                    out.writeUTF(owner);
-                    out.send();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
+            connection.send(new SetChunkOwnerMessage(world, cx, cz, owner));
         }
     }
 
@@ -174,7 +166,7 @@ public class ChunkSubscriptionManager {
             }
 
             if (chunkLocks.get(key) != null && !chunkLocks.get(key).isEmpty()) {
-                updateOwner(chunkLocks.get(key).get(0), Collections.singletonList(serverConnection), key.name, key.x, key.z);
+                updateOwner(chunkLocks.get(key).get(0), Collections.singletonList(serverConnection), key.world, key.x, key.z);
             }
         }
     }
@@ -188,7 +180,7 @@ public class ChunkSubscriptionManager {
             List<ServerConnection> serverConnections = chunkSubscribers.get(key);
             if (serverConnections != null) {
                 if (serverConnections.remove(serverConnection)) {
-                    updateSubscriberRemoved(serverConnections, serverConnection, key.name, key.x, key.z);
+                    updateSubscriberRemoved(serverConnections, serverConnection, key.world, key.x, key.z);
                 }
                 if (serverConnections.isEmpty()) {
                     chunkSubscribers.remove(key);
@@ -209,19 +201,7 @@ public class ChunkSubscriptionManager {
         String subscriber = serverConnection.getBungeeCordName();
         for (ServerConnection connection : serverConnections) {
             if (connection != serverConnection) {
-                CompletableFuture.runAsync(() -> {
-                    try {
-                        DataOutputSender out = connection.buffer();
-                        out.writeUTF("chunkSubscribe");
-                        out.writeUTF(world);
-                        out.writeInt(cx);
-                        out.writeInt(cz);
-                        out.writeUTF(subscriber);
-                        out.send();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                });
+                connection.send(new AddChunkSubscriberMessage(world, cx, cz, subscriber));
             }
         }
     }
@@ -229,19 +209,7 @@ public class ChunkSubscriptionManager {
     private static void updateSubscriberRemoved(List<ServerConnection> serverConnections, ServerConnection serverConnection, String world, int cx, int cz) {
         String unsubscriber = serverConnection.getBungeeCordName();
         for (ServerConnection connection : serverConnections) {
-            CompletableFuture.runAsync(() -> {
-                try {
-                    DataOutputSender out = connection.buffer();
-                    out.writeUTF("chunkUnsubscribe");
-                    out.writeUTF(world);
-                    out.writeInt(cx);
-                    out.writeInt(cz);
-                    out.writeUTF(unsubscriber);
-                    out.send();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
+            connection.send(new RemoveChunkSubscriberMessage(world, cx, cz, unsubscriber));
         }
     }
 
@@ -252,25 +220,9 @@ public class ChunkSubscriptionManager {
                 subscribe(serverConnection, world, cx, cz);
             }
 
-            ServerConnection[] subscribers = chunkSubscribers.get(key).stream().filter(subscriber -> subscriber != serverConnection).toArray(ServerConnection[]::new);
+            String[] subscribers = chunkSubscribers.get(key).stream().filter(subscriber -> subscriber != serverConnection).map(ServerConnection::getBungeeCordName).toArray(String[]::new);
 
-            CompletableFuture.runAsync(() -> {
-                try {
-                    DataOutputSender out = serverConnection.buffer();
-                    out.writeUTF("chunkSubscribeSync");
-                    out.writeUTF(world);
-                    out.writeInt(cx);
-                    out.writeInt(cz);
-                    out.writeUTF(chunkLocks.get(key) != null && !chunkLocks.get(key).isEmpty() ? chunkLocks.get(key).get(0).getBungeeCordName() : "");
-                    out.writeInt(subscribers.length);
-                    for (ServerConnection subscriber : subscribers) {
-                        out.writeUTF(subscriber.getBungeeCordName());
-                    }
-                    out.send();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
+            serverConnection.send(new ChunkSubscribersSyncMessage(world, cx, cz, chunkLocks.get(key) != null && !chunkLocks.get(key).isEmpty() ? chunkLocks.get(key).get(0).getBungeeCordName() : "", subscribers));
         }
     }
 

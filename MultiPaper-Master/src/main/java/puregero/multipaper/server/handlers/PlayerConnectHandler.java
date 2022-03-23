@@ -1,35 +1,25 @@
 package puregero.multipaper.server.handlers;
 
-import puregero.multipaper.server.DataOutputSender;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.PlayerConnectMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
 import puregero.multipaper.server.ServerConnection;
 
-import java.io.DataInputStream;
-import java.io.IOException;
 import java.util.List;
-import java.util.UUID;
 
-public class PlayerConnectHandler implements Handler {
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        UUID uuid = UUID.fromString(in.readUTF());
-
+public class PlayerConnectHandler {
+    public static void handle(ServerConnection connection, PlayerConnectMessage message) {
         List<ServerConnection> connections = ServerConnection.getConnections();
 
         synchronized (connections) {
             for (ServerConnection otherConnection : connections) {
-                if (otherConnection != connection && otherConnection.hasPlayer(uuid)) {
-                    out.writeUTF("playerJoin");
-                    out.writeBoolean(false);
-                    out.send();
-                    return;
+                if (otherConnection != connection && otherConnection.hasPlayer(message.uuid)) {
+                    connection.sendReply(new BooleanMessageReply(false), message);
                 }
             }
 
-            connection.addPlayer(uuid);
+            connection.addPlayer(message.uuid);
         }
 
-        out.writeUTF("playerConnect");
-        out.writeBoolean(true);
-        out.send();
+        connection.sendReply(new BooleanMessageReply(true), message);
     }
 }

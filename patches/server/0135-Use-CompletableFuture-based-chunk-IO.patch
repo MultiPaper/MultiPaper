@@ -49,10 +49,10 @@ index d139536be7ab15293b798af115e71a8dbe4a2f3d..928fe46b5061ff6a1acbec61eec69875
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaperIO.java b/src/main/java/puregero/multipaper/MultiPaperIO.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..dae7500bc99be85af261aa8ae2810d9348ac88ef
+index 0000000000000000000000000000000000000000..14c349e062571b62d28035096c36fbe7dc833f8d
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperIO.java
-@@ -0,0 +1,134 @@
+@@ -0,0 +1,128 @@
 +package puregero.multipaper;
 +
 +import com.destroystokyo.paper.io.PaperFileIOThread;
@@ -66,7 +66,6 @@ index 0000000000000000000000000000000000000000..dae7500bc99be85af261aa8ae2810d93
 +import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.ConcurrentHashMap;
 +import java.util.concurrent.TimeUnit;
-+import java.util.concurrent.TimeoutException;
 +import java.util.function.Consumer;
 +
 +public class MultiPaperIO extends Thread {
@@ -78,7 +77,7 @@ index 0000000000000000000000000000000000000000..dae7500bc99be85af261aa8ae2810d93
 +    public void scheduleSave(ServerLevel world, int chunkX, int chunkZ, CompoundTag poiData, CompoundTag chunkData, int priority) {
 +        if (poiData != null) {
 +            try {
-+                MultiPaper.getConnection().writeChunk(world.convertable.getLevelId(), "poi", chunkX, chunkZ, MultiPaper.nbtToBytes(poiData));
++                MultiPaper.writeRegionFileNBT(world.convertable.getLevelId(), "poi", chunkX, chunkZ, poiData);
 +            } catch (IOException e) {
 +                e.printStackTrace();
 +            }
@@ -86,7 +85,7 @@ index 0000000000000000000000000000000000000000..dae7500bc99be85af261aa8ae2810d93
 +
 +        if (chunkData != null) {
 +            try {
-+                MultiPaper.getConnection().writeChunk(world.convertable.getLevelId(), "region", chunkX, chunkZ, MultiPaper.nbtToBytes(chunkData));
++                MultiPaper.writeRegionFileNBT(world.convertable.getLevelId(), "region", chunkX, chunkZ, chunkData);
 +            } catch (IOException e) {
 +                e.printStackTrace();
 +            }
@@ -136,31 +135,26 @@ index 0000000000000000000000000000000000000000..dae7500bc99be85af261aa8ae2810d93
 +    }
 +
 +    private CompletableFuture<CompoundTag> readChunk(final ChunkKey key, final String path) {
-+        try {
-+            CompletableFuture<CompoundTag> future = MultiPaper.getConnection()
-+                    .readChunk(key.getWorld(), path, key.getX(), key.getZ())
-+                    .thenApplyAsync(in -> {
-+                        try {
-+                            return in == null ? null : NbtIo.read(in);
-+                        } catch (IOException e) {
-+                            throw new RuntimeException(e);
-+                        }
-+                    }).exceptionally(exception -> {
-+                        exception.printStackTrace();
-+                        return com.destroystokyo.paper.io.PaperFileIOThread.FAILURE_VALUE;
-+                    });;
++        CompletableFuture<CompoundTag> future = MultiPaper.readRegionFileAsync(key.getWorld(), path, key.getX(), key.getZ())
++                .thenApplyAsync(in -> {
++                    try {
++                        return in == null ? null : NbtIo.read(in);
++                    } catch (IOException e) {
++                        throw new RuntimeException(e);
++                    }
++                }).exceptionally(exception -> {
++                    exception.printStackTrace();
++                    return PaperFileIOThread.FAILURE_VALUE;
++                });
 +
-+            future.thenApply(nbt -> false).completeOnTimeout(true, 15, TimeUnit.SECONDS).thenAccept(timedout -> {
-+                if (timedout) {
-+                    LOGGER.warn("Timed out reading " + key.getWorld() + "," + path + "," + key.getX() + "," + key.getZ() + ", retrying...");
-+                    readChunk(key, path).thenAccept(future::complete);
-+                }
-+            });
++        future.thenApply(nbt -> false).completeOnTimeout(true, 15, TimeUnit.SECONDS).thenAccept(timedout -> {
++            if (timedout) {
++                LOGGER.warn("Timed out reading " + key.getWorld() + "," + path + "," + key.getX() + "," + key.getZ() + ", retrying...");
++                readChunk(key, path).thenAccept(future::complete);
++            }
++        });
 +
-+            return future;
-+        } catch (IOException e) {
-+            return CompletableFuture.failedFuture(e);
-+        }
++        return future;
 +    }
 +
 +    public void start() {

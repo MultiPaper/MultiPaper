@@ -55,11 +55,7 @@ public class MultiPaperProxy extends Plugin implements Listener {
 
             balanceNodes = configuration.getBoolean("balanceNodes", true);
 
-            try {
-                new MultiPaperServer(configuration.getInt("port")).start();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            new MultiPaperServer(configuration.getInt("port"));
         } catch (IOException e) {
             e.printStackTrace();
         }

@@ -1,12 +1,12 @@
-package puregero.multipaper.server;
+package puregero.multipaper.mastermessagingprotocol;
 
 public class ChunkKey {
-    public final String name;
+    public final String world;
     public final int x;
     public final int z;
 
-    public ChunkKey(String name, int x, int z) {
-        this.name = name;
+    public ChunkKey(String world, int x, int z) {
+        this.world = world;
         this.x = x;
         this.z = z;
     }
@@ -14,7 +14,7 @@ public class ChunkKey {
     @Override
     public boolean equals(Object other) {
         if (other instanceof ChunkKey) {
-            return ((ChunkKey) other).name.equals(name)
+            return ((ChunkKey) other).world.equals(world)
                     && ((ChunkKey) other).x == x
                     && ((ChunkKey) other).z == z;
         }
@@ -28,11 +28,11 @@ public class ChunkKey {
         int i = 1664525 * this.x + 1013904223;
         int j = 1664525 * (this.z ^ -559038737) + 1013904223;
 
-        return name.hashCode() ^ i ^ j;
+        return world.hashCode() ^ i ^ j;
     }
 
     @Override
     public String toString() {
-        return name + "," + x + "," + z;
+        return world + "," + x + "," + z;
     }
 }

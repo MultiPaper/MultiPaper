@@ -76,7 +76,7 @@ index 1d5b614c7157f08a49571f9dd338e2ba712ece98..b666bad16ba0028ec2f145acb650f1eb
  
                  NbtIo.writeCompressed(nbttagcompound2, file1);
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index fc91f4135947cc5af28448ca1ea79a129fdc903d..029cf1c6732ca3278ede51a0d01574745d1d4f0c 100644
+index 804108000a11449700ec6d76f5bb7cbd3386a7c4..71f75ce02ad133216e3a39393d1320a56805f8be 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -16,6 +16,8 @@ import net.minecraft.world.level.chunk.ChunkAccess;
@@ -87,8 +87,8 @@ index fc91f4135947cc5af28448ca1ea79a129fdc903d..029cf1c6732ca3278ede51a0d0157474
 +import org.apache.logging.log4j.Logger;
  import org.bukkit.Bukkit;
  import org.bukkit.Chunk;
- import org.bukkit.craftbukkit.CraftChunk;
-@@ -44,11 +46,14 @@ import java.util.zip.InflaterInputStream;
+ import org.bukkit.World;
+@@ -53,11 +55,14 @@ import java.util.zip.InflaterInputStream;
  
  public class MultiPaper {
  
@@ -103,7 +103,7 @@ index fc91f4135947cc5af28448ca1ea79a129fdc903d..029cf1c6732ca3278ede51a0d0157474
  
      public static MultiPaperConnection getConnection() {
          if (multiPaperConnection == null) {
-@@ -95,6 +100,14 @@ public class MultiPaper {
+@@ -104,6 +109,14 @@ public class MultiPaper {
                  break;
              }
          }
@@ -118,62 +118,22 @@ index fc91f4135947cc5af28448ca1ea79a129fdc903d..029cf1c6732ca3278ede51a0d0157474
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -274,6 +287,18 @@ public class MultiPaper {
+@@ -319,6 +332,18 @@ public class MultiPaper {
          writeRegionFile(world, path, cx, cz, nbtToBytes(compoundTag));
      }
  
 +    public static CompoundTag readLevel(String world) throws IOException {
-+        DataInput in = getConnection().readLevel(world).join();
++        byte[] data = getConnection().sendAndAwaitReply(new ReadLevelMessage(world), DataMessageReply.class).thenApply(message -> message.data).join();
 +
-+        return in == null ? null : NbtIo.readCompressed((InputStream) in);
++        return data.length == 0 ? null : NbtIo.readCompressed(new ByteArrayInputStream(data));
 +    }
 +
 +    public static void writeLevel(String world, CompoundTag compoundTag) throws IOException {
 +        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 +        NbtIo.writeCompressed(compoundTag, buffer);
-+        getConnection().writeLevel(world, buffer.toByteArray());
++        getConnection().send(new WriteLevelMessage(world, buffer.toByteArray()), message -> { /* do nothing */ });
 +    }
 +
      private static String getWorld(File path) {
          do {
              path = path.getParentFile();
-diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index ac3ee1ae7239f7efacf0e8d5e8d2996bb91b176b..50302dfb5378ee177c088cd8df44bab45577d7fe 100644
---- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
-+++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -459,6 +459,35 @@ public class MultiPaperConnection extends Thread {
-         out.write(baos.toByteArray());
-         out.send(in -> { /* Do nothing */ });
-     }
-+    
-+    public CompletableFuture<DataInputStream> readLevel(String world) throws IOException {
-+        CompletableFuture<DataInputStream> future = new CompletableFuture<>();
-+
-+        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("readLevel");
-+        out.writeUTF(world);
-+        out.send(in -> {
-+            try {
-+                byte[] data = new byte[in.readInt()];
-+                in.readFully(data);
-+
-+                future.complete(data.length == 0 ? null : new DataInputStream(new ByteArrayInputStream(data)));
-+            } catch (IOException e) {
-+                e.printStackTrace();
-+            }
-+        });
-+
-+        return future;
-+    }
-+
-+    public void writeLevel(String world, byte[] data) throws IOException {
-+        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("writeLevel");
-+        out.writeUTF(world);
-+        out.writeInt(data.length);
-+        out.write(data);
-+        out.send(in -> { /* Do nothing */ });
-+    }
- 
-     public void lockChunk(String world, int cx, int cz) throws IOException {
-         DataOutputSender out = new DataOutputSender(this);

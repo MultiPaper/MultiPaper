@@ -1,20 +1,11 @@
 package puregero.multipaper.server.handlers;
 
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WillSaveChunkLaterMessage;
 import puregero.multipaper.server.ChunkLockManager;
-import puregero.multipaper.server.ChunkSubscriptionManager;
-import puregero.multipaper.server.DataOutputSender;
 import puregero.multipaper.server.ServerConnection;
 
-import java.io.DataInputStream;
-import java.io.IOException;
-
-public class WillSaveChunkHandler implements Handler {
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        String world = in.readUTF();
-        int cx = in.readInt();
-        int cz = in.readInt();
-
-        ChunkLockManager.lockUntilWrite(world, cx, cz);
+public class WillSaveChunkHandler {
+    public static void handle(ServerConnection connection, WillSaveChunkLaterMessage message) {
+        ChunkLockManager.lockUntilWrite(message.world, message.cx, message.cz);
     }
 }

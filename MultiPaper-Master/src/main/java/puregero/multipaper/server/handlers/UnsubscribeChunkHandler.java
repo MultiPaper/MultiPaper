@@ -1,29 +1,14 @@
 package puregero.multipaper.server.handlers;
 
-import puregero.multipaper.server.DataOutputSender;
-import puregero.multipaper.server.ServerConnection;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.UnsubscribeChunkMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
 import puregero.multipaper.server.ChunkSubscriptionManager;
+import puregero.multipaper.server.ServerConnection;
 
-import java.io.DataInputStream;
-import java.io.IOException;
+public class UnsubscribeChunkHandler {
+    public static void handle(ServerConnection connection, UnsubscribeChunkMessage message) {
+        ChunkSubscriptionManager.unsubscribe(connection, message.world, message.cx, message.cz);
 
-public class UnsubscribeChunkHandler implements Handler {
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        String world = in.readUTF();
-        int cx = in.readInt();
-        int cz = in.readInt();
-
-        ChunkSubscriptionManager.unsubscribe(connection, world, cx, cz);
-
-        try {
-            out.writeUTF("unsubscribeChunk");
-            out.writeUTF(world);
-            out.writeInt(cx);
-            out.writeInt(cz);
-            out.send();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        connection.sendReply(new BooleanMessageReply(true), message);
     }
 }

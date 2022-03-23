@@ -1,40 +1,31 @@
 package puregero.multipaper.server.handlers;
 
-import puregero.multipaper.server.DataOutputSender;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteDataMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.DataUpdateMessage;
 import puregero.multipaper.server.FileLocker;
 import puregero.multipaper.server.ServerConnection;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
-public class WriteDataHandler implements Handler {
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        String path = in.readUTF();
-        byte[] data = new byte[in.readInt()];
-        in.readFully(data);
+public class WriteDataHandler {
+    public static void handle(ServerConnection connection, WriteDataMessage message) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                FileLocker.writeBytes(new File(message.path), message.data);
+                connection.sendReply(new BooleanMessageReply(true), message);
 
-        try {
-            FileLocker.writeBytes(new File(path), data);
-            out.writeUTF("dataWritten");
-            out.send();
+                if (message.path.contains("scoreboard")) {
+                    // Scoreboards are synced with other methods
+                    return;
+                }
 
-            if (path.contains("scoreboard")) {
-                // Scoreboards are synced with other methods
-                return;
+                connection.broadcastOthers(new DataUpdateMessage(message.path, message.data));
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-
-            DataOutputStream broadcast = connection.broadcastOthers();
-            broadcast.writeInt(-1);
-            broadcast.writeUTF("clearData");
-            broadcast.writeUTF(path);
-            broadcast.writeInt(data.length);
-            broadcast.write(data);
-            broadcast.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        });
     }
 }

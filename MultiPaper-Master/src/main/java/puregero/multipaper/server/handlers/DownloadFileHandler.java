@@ -1,28 +1,21 @@
 package puregero.multipaper.server.handlers;
 
-import puregero.multipaper.server.DataOutputSender;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.DownloadFileMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.FileContentMessage;
 import puregero.multipaper.server.FileLocker;
 import puregero.multipaper.server.ServerConnection;
 
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
-public class DownloadFileHandler implements Handler {
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        String path = in.readUTF();
-
+public class DownloadFileHandler {
+    public static void handle(ServerConnection connection, DownloadFileMessage message) {
         CompletableFuture.runAsync(() -> {
             try {
-                File file = new File("synced-server-files", path);
+                File file = new File("synced-server-files", message.path);
                 byte[] b = FileLocker.readBytes(file);
-                out.writeUTF("downloadFile");
-                out.writeLong(file.lastModified());
-                out.writeLong(b.length);
-                out.write(b);
-                out.send();
+                connection.sendReply(new FileContentMessage(message.path, file.lastModified(), b), message);
             } catch (IOException e) {
                 e.printStackTrace();
             }

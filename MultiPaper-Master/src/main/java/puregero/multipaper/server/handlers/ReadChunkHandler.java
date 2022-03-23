@@ -1,56 +1,46 @@
 package puregero.multipaper.server.handlers;
 
-import puregero.multipaper.server.*;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.ReadChunkMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ChunkLoadedOnAnotherServerMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.DataMessageReply;
+import puregero.multipaper.server.ChunkLockManager;
+import puregero.multipaper.server.ChunkSubscriptionManager;
+import puregero.multipaper.server.EntitiesSubscriptionManager;
+import puregero.multipaper.server.ServerConnection;
 import puregero.multipaper.server.util.RegionFileCache;
 
-import java.io.DataInputStream;
 import java.io.File;
-import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
-public class ReadChunkHandler implements Handler {
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        String world = in.readUTF();
-        String path = in.readUTF();
-        int cx = in.readInt();
-        int cz = in.readInt();
-
-        if (checkIfLoadedOnAnotherServer(connection, world, path, cx, cz, out)) {
+public class ReadChunkHandler {
+    public static void handle(ServerConnection connection, ReadChunkMessage message) {
+        if (checkIfLoadedOnAnotherServer(connection, message.world, message.path, message.cx, message.cz, message)) {
             return;
         }
 
         Runnable callback = () -> {
-            try {
-                byte[] b = RegionFileCache.getChunkDeflatedData(getWorldDir(world, path), cx, cz);
+            CompletableFuture.runAsync(() -> {
+                byte[] b = RegionFileCache.getChunkDeflatedData(getWorldDir(message.world, message.path), message.cx, message.cz);
                 if (b == null) {
                     b = new byte[0];
                 }
-                out.writeUTF("chunkData");
-                out.writeUTF("");
-                out.writeInt(b.length);
-                out.write(b);
-                out.send();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+                connection.sendReply(new DataMessageReply(b), message);
+            });
         };
 
-        if (path.equals("region")) {
-            ChunkLockManager.waitForLock(world, cx, cz, callback);
+        if (message.path.equals("region")) {
+            ChunkLockManager.waitForLock(message.world, message.cx, message.cz, callback);
         } else {
             callback.run();
         }
     }
 
-    private boolean checkIfLoadedOnAnotherServer(ServerConnection connection, String world, String path, int cx, int cz, DataOutputSender out) throws IOException {
+    private static boolean checkIfLoadedOnAnotherServer(ServerConnection connection, String world, String path, int cx, int cz, ReadChunkMessage message) {
         if (path.equals("region")) {
             ServerConnection alreadyLoadedChunk = ChunkSubscriptionManager.getOwnerOrSubscriber(world, cx, cz);
             ChunkSubscriptionManager.subscribe(connection, world, cx, cz);
             if (alreadyLoadedChunk != null && alreadyLoadedChunk != connection) {
-                out.writeUTF("chunkData");
-                out.writeUTF(alreadyLoadedChunk.getBungeeCordName());
-                out.writeInt(0);
-                out.send();
+                connection.sendReply(new ChunkLoadedOnAnotherServerMessage(alreadyLoadedChunk.getBungeeCordName()), message);
                 return true;
             }
         }
@@ -59,10 +49,7 @@ public class ReadChunkHandler implements Handler {
             ServerConnection alreadyLoadedEntities = EntitiesSubscriptionManager.getSubscriber(world, cx, cz);
             EntitiesSubscriptionManager.subscribe(connection, world, cx, cz);
             if (alreadyLoadedEntities != null && alreadyLoadedEntities != connection) {
-                out.writeUTF("chunkData");
-                out.writeUTF(alreadyLoadedEntities.getBungeeCordName());
-                out.writeInt(0);
-                out.send();
+                connection.sendReply(new ChunkLoadedOnAnotherServerMessage(alreadyLoadedEntities.getBungeeCordName()), message);
                 return true;
             }
         }

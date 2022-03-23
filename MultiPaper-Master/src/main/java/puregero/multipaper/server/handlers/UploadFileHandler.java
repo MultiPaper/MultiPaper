@@ -1,49 +1,31 @@
 package puregero.multipaper.server.handlers;
 
-import puregero.multipaper.server.DataOutputSender;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.UploadFileMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.FileContentMessage;
 import puregero.multipaper.server.FileLocker;
 import puregero.multipaper.server.ServerConnection;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
-public class UploadFileHandler implements Handler {
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        boolean immediatelySyncToOtherServers = in.readBoolean();
-        String path = in.readUTF();
-        long lastModified = in.readLong();
-        long length = in.readLong();
+public class UploadFileHandler {
+    public static void handle(ServerConnection connection, UploadFileMessage message) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                File file = new File("synced-server-files", message.path);
+                FileLocker.writeBytes(file, message.data);
+                file.setLastModified(message.lastModified);
 
-        if (length > Integer.MAX_VALUE) {
-            throw new IOException("File uploads are currently limited to 2GB. " + path + " exceeds this limit with " + length + " bytes");
-        }
+                connection.sendReply(new BooleanMessageReply(true), message);
 
-        byte[] data = new byte[(int) length];
-        in.readFully(data);
-
-        try {
-            File file = new File("synced-server-files", path);
-            FileLocker.writeBytes(file, data);
-            file.setLastModified(lastModified);
-
-            out.writeUTF("uploadFile");
-            out.send();
-
-            if (immediatelySyncToOtherServers) {
-                DataOutputStream broadcast = connection.broadcastOthers();
-                broadcast.writeInt(-1);
-                broadcast.writeUTF("syncFile");
-                broadcast.writeUTF(path);
-                broadcast.writeLong(lastModified);
-                broadcast.writeLong(data.length);
-                broadcast.write(data);
-                broadcast.close();
+                if (message.immediatelySyncToOtherServers) {
+                    connection.broadcastOthers(new FileContentMessage(message.path, message.lastModified, message.data));
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        });
     }
 }

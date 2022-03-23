@@ -213,24 +213,25 @@ index a6c70decad1a496595944a5dd2aeeb387757fef3..9b41635c5cfaef8305ab11936bae5e15
 +    // MultiPaper end
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 029cf1c6732ca3278ede51a0d01574745d1d4f0c..026e4a922669650cedc73620f7b1761b2c0c36c3 100644
+index 71f75ce02ad133216e3a39393d1320a56805f8be..5927825b48580fbfe184f7faff6a00039cf03d1b 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -31,6 +31,7 @@ import puregero.multipaper.externalserverprotocol.*;
+@@ -40,6 +40,8 @@ import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBo
  import java.io.*;
  import java.net.InetSocketAddress;
  import java.net.SocketAddress;
++import java.nio.charset.StandardCharsets;
 +import java.nio.file.Files;
  import java.util.ArrayList;
  import java.util.Collection;
  import java.util.HashSet;
-@@ -299,6 +300,24 @@ public class MultiPaper {
-         getConnection().writeLevel(world, buffer.toByteArray());
+@@ -344,6 +346,24 @@ public class MultiPaper {
+         getConnection().send(new WriteLevelMessage(world, buffer.toByteArray()), message -> { /* do nothing */ });
      }
  
 +    public static String readJson(String name) throws IOException {
 +        if (MultiPaperConfig.syncJsonFiles) {
-+            return getConnection().readJson(name).join();
++            return getConnection().sendAndAwaitReply(new ReadJsonMessage(name), DataMessageReply.class).thenApply(message -> new String(message.data, StandardCharsets.UTF_8)).join();
 +        } else if (new File(name).isFile()) {
 +            return Files.readString(new File(name).toPath());
 +        } else {
@@ -240,7 +241,7 @@ index 029cf1c6732ca3278ede51a0d01574745d1d4f0c..026e4a922669650cedc73620f7b1761b
 +
 +    public static void writeJson(String name, String json) throws IOException {
 +        if (MultiPaperConfig.syncJsonFiles) {
-+            getConnection().writeJson(name, json);
++            getConnection().send(new WriteJsonMessage(name, json.getBytes(StandardCharsets.UTF_8)));
 +        } else {
 +            Files.writeString(new File(name).toPath(), json);
 +        }
@@ -249,121 +250,6 @@ index 029cf1c6732ca3278ede51a0d01574745d1d4f0c..026e4a922669650cedc73620f7b1761b
      private static String getWorld(File path) {
          do {
              path = path.getParentFile();
-diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 50302dfb5378ee177c088cd8df44bab45577d7fe..d8763908ed1e4333dc6fd12169a4c6f3cf35806a 100644
---- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
-+++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -8,6 +8,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
- import net.minecraft.core.Registry;
- import net.minecraft.resources.ResourceLocation;
- import net.minecraft.server.MinecraftServer;
-+import net.minecraft.server.dedicated.DedicatedServer;
- import net.minecraft.server.level.ChunkHolder;
- import net.minecraft.server.level.ServerLevel;
- import net.minecraft.server.network.ServerConnectionListener;
-@@ -18,6 +19,8 @@ import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
- import org.bukkit.Bukkit;
- import org.bukkit.World;
-+import org.bukkit.craftbukkit.entity.CraftPlayer;
-+import org.bukkit.entity.Player;
- import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
- import puregero.multipaper.externalserverprotocol.SendTickListPacket;
- 
-@@ -25,7 +28,9 @@ import javax.annotation.Nullable;
- import java.io.*;
- import java.net.Socket;
- import java.net.SocketException;
-+import java.nio.charset.StandardCharsets;
- import java.util.HashSet;
-+import java.util.List;
- import java.util.Map;
- import java.util.concurrent.CompletableFuture;
- import java.util.concurrent.ConcurrentHashMap;
-@@ -160,6 +165,46 @@ public class MultiPaperConnection extends Thread {
-         secret = in.readUTF();
-     }
- 
-+    public void loadJson(DataInputStream in, DataOutputSender out) throws IOException {
-+        String file = in.readUTF();
-+        LOGGER.info("Reloading json " + file);
-+        CompletableFuture.runAsync(() -> {
-+            try {
-+                if (DedicatedServer.getServer() == null) {
-+                    return;
-+                }
-+
-+                switch (file) {
-+                    case "banned-players.json":
-+                        DedicatedServer.getServer().getPlayerList().getBans().load();
-+                        break;
-+                    case "banned-ips.json":
-+                        DedicatedServer.getServer().getPlayerList().getIpBans().load();
-+                        break;
-+                    case "ops.json":
-+                        List<? extends Player> ops = Bukkit.getOnlinePlayers().stream().filter(Player::isOp).toList();
-+                        DedicatedServer.getServer().getPlayerList().getOps().load();
-+                        MultiPaper.runSync(() -> {
-+                            for (Player player : Bukkit.getOnlinePlayers()) {
-+                                if ((!player.isOp() && ops.contains(player)) || (player.isOp() && !ops.contains(player))) {
-+                                    DedicatedServer.getServer().getPlayerList().sendPlayerPermissionLevel(((CraftPlayer) player).getHandle());
-+                                    player.recalculatePermissions();
-+                                }
-+                            }
-+                        });
-+                        break;
-+                    case "whitelist.json":
-+                        DedicatedServer.getServer().getPlayerList().getWhiteList().load();
-+                        break;
-+                    default:
-+                        throw new IllegalArgumentException("Invalid json file to load " + file);
-+                }
-+            } catch (IOException e) {
-+                e.printStackTrace();
-+            }
-+        });
-+    }
-+
-     public void chunkOwner(DataInputStream in, DataOutputSender out) throws IOException {
-         String world = in.readUTF();
-         int cx = in.readInt();
-@@ -489,6 +534,36 @@ public class MultiPaperConnection extends Thread {
-         out.send(in -> { /* Do nothing */ });
-     }
- 
-+    public CompletableFuture<String> readJson(String name) throws IOException {
-+        CompletableFuture<String> future = new CompletableFuture<>();
-+
-+        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("readJson");
-+        out.writeUTF(name);
-+        out.send(in -> {
-+            try {
-+                byte[] data = new byte[in.readInt()];
-+                in.readFully(data);
-+
-+                future.complete(new String(data, StandardCharsets.UTF_8));
-+            } catch (IOException e) {
-+                e.printStackTrace();
-+            }
-+        });
-+
-+        return future;
-+    }
-+
-+    public void writeJson(String name, String json) throws IOException {
-+        byte[] data = json.getBytes(StandardCharsets.UTF_8);
-+        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("writeJson");
-+        out.writeUTF(name);
-+        out.writeInt(data.length);
-+        out.write(data);
-+        out.send(in -> { /* Do nothing */ });
-+    }
-+
-     public void lockChunk(String world, int cx, int cz) throws IOException {
-         DataOutputSender out = new DataOutputSender(this);
-         out.writeUTF("lockChunk");
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/BanIpPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/BanIpPacket.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..96e8562f1bf996cc1e6c8a7656d97b4a2cbc9447

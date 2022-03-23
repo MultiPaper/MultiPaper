@@ -1,33 +1,22 @@
 package puregero.multipaper.server.handlers;
 
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteChunkMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
 import puregero.multipaper.server.ChunkLockManager;
-import puregero.multipaper.server.DataOutputSender;
 import puregero.multipaper.server.ServerConnection;
 import puregero.multipaper.server.util.RegionFileCache;
 
-import java.io.DataInputStream;
-import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
-public class WriteChunkHandler implements Handler {
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        String world = in.readUTF();
-        String path = in.readUTF();
-        int cx = in.readInt();
-        int cz = in.readInt();
-        byte[] data = new byte[in.readInt()];
-        in.readFully(data);
-
-        if (path.equals("region")) {
-            ChunkLockManager.writtenChunk(world, cx, cz);
+public class WriteChunkHandler {
+    public static void handle(ServerConnection connection, WriteChunkMessage message) {
+        if (message.path.equals("region")) {
+            ChunkLockManager.writtenChunk(message.world, message.cx, message.cz);
         }
 
-        try {
-            RegionFileCache.putChunkDeflatedData(ReadChunkHandler.getWorldDir(world, path), cx, cz, data);
-            out.writeUTF("chunkWritten");
-            out.send();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        CompletableFuture.runAsync(() -> {
+            RegionFileCache.putChunkDeflatedData(ReadChunkHandler.getWorldDir(message.world, message.path), message.cx, message.cz, message.data);
+            connection.sendReply(new BooleanMessageReply(true), message);
+        });
     }
 }

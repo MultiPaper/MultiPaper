@@ -1,42 +1,38 @@
 package puregero.multipaper.server.handlers;
 
-import puregero.multipaper.server.DataOutputSender;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteJsonMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
 import puregero.multipaper.server.ServerConnection;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.HashMap;
+import java.util.concurrent.CompletableFuture;
 
-public class WriteJsonHandler implements Handler {
+public class WriteJsonHandler {
     public static final HashMap<String, byte[]> writesInProgress = new HashMap<>();
     private static final Object writingLock = new Object();
 
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        String file = in.readUTF();
-        byte[] data = new byte[in.readInt()];
-        in.readFully(data);
+    public static void handle(ServerConnection connection, WriteJsonMessage message) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                synchronized (writingLock) {
+                    synchronized (writesInProgress) {
+                        writesInProgress.put(message.file, message.data);
+                    }
 
-        try {
-            synchronized (writingLock) {
-                synchronized (writesInProgress) {
-                    writesInProgress.put(file, data);
+                    Files.write(new File(message.file).toPath(), message.data);
+
+                    synchronized (writesInProgress) {
+                        writesInProgress.remove(message.file);
+                    }
                 }
 
-                Files.write(new File(file).toPath(), data);
-
-                synchronized (writesInProgress) {
-                    writesInProgress.remove(file);
-                }
+                connection.sendReply(new BooleanMessageReply(true), message);
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-
-            out.writeUTF("jsonWritten");
-            out.send();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        });
     }
 }

@@ -1,5 +1,7 @@
 package puregero.multipaper.server;
 
+import puregero.multipaper.mastermessagingprotocol.ChunkKey;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;

@@ -17,39 +17,17 @@ index e25a587fbc70bd585bd25daedb14e28ab6c35b5d..04e0e21a9426a69fc7f7087c64d580ce
              asyncSaveData, chunk);
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 0456b7cda6deb072f1401aeda476a3712ab8109d..740cf2a4f7eed6b6c82ce93bf8edc73738e96d22 100644
+index ee535cea1a2b74cbd5bd90698baa91ed72206393..ccb2163daa957fca10375600fa225f807e48195e 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -470,6 +470,10 @@ public class MultiPaper {
-         }
+@@ -511,6 +511,10 @@ public class MultiPaper {
+         chunk.hasExternalLockRequest = false;
      }
  
 +    public static void willSaveChunk(ServerLevel level, ChunkAccess chunk) {
-+        getConnection().willSaveChunk(level.getWorld().getName(), chunk.locX, chunk.locZ);
++        getConnection().send(new WillSaveChunkLaterMessage(level.getWorld().getName(), chunk.locX, chunk.locZ));
 +    }
 +
      public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
          if (compoundTag == null) {
              return new byte[0];
-diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index ecac5450d412eb1878983a67edfc448488d78333..63f9ebe0a44b854084add86cf6ba083f44bc4685 100644
---- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
-+++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -966,4 +966,17 @@ public class MultiPaperConnection extends Thread {
-             e.printStackTrace();
-         }
-     }
-+
-+    public void willSaveChunk(String world, int cx, int cz) {
-+        try {
-+            DataOutputSender out = new DataOutputSender(this);
-+            out.writeUTF("willSaveChunk");
-+            out.writeUTF(world);
-+            out.writeInt(cx);
-+            out.writeInt(cz);
-+            out.send(null);
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
-+    }
- }

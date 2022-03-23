@@ -1,34 +1,32 @@
 package puregero.multipaper.server;
 
-import org.json.JSONObject;
+import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundProtocol;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundProtocol;
 import puregero.multipaper.server.proxy.ProxyServer;
 
-import java.io.File;
 import java.io.IOException;
-import java.net.ServerSocket;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.file.Files;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 
-public class MultiPaperServer extends Thread {
+public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, ServerBoundMessage> {
     public static final int DEFAULT_PORT = 35353;
     public static final String SECRET = UUID.randomUUID().toString();
 
     public static void main(String[] args) throws IOException {
+        String address = null;
         int port = DEFAULT_PORT;
 
         if (args.length > 0) {
+            if (args[0].contains(":")) {
+                address = args[0].substring(0, args[0].indexOf(':'));
+                args[0] = args[0].substring(args[0].indexOf(':') + 1);
+            }
             try {
                 port = Integer.parseInt(args[0]);
             } catch (NumberFormatException e) {
-                System.err.println("Usage: java -jar MultiPaperServer.jar <port> [proxy port]");
+                System.err.println("Usage: java -jar MultiPaperServer.jar <[address:]port> [proxy port]");
                 System.exit(1);
             }
         }
@@ -37,39 +35,27 @@ public class MultiPaperServer extends Thread {
             try {
                 ProxyServer.openServer(Integer.parseInt(args[1]));
             } catch (NumberFormatException e) {
-                System.err.println("Usage: java -jar MultiPaperServer.jar <port> [proxy port]");
+                System.err.println("Usage: java -jar MultiPaperServer.jar <[address:]port> [proxy port]");
                 System.exit(1);
             }
         }
 
-        new MultiPaperServer(port).start();
+        new MultiPaperServer(address, port);
 
         new CommandLineInput().run();
     }
 
-    private final ServerSocket serverSocket;
-
-    public MultiPaperServer(int port) throws IOException {
-        serverSocket = new ServerSocket(port);
-
-        System.out.println("[MultiPaperMaster] Listening on " + serverSocket.getLocalSocketAddress());
+    public MultiPaperServer(int port) {
+        this(null, port);
     }
 
-    public void run() {
-        try {
-            while (!serverSocket.isClosed()) {
-                new ServerConnection(serverSocket.accept());
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
+    public MultiPaperServer(String address, int port) {
+        super(new MasterBoundProtocol(), new ServerBoundProtocol(), channel -> channel.pipeline().addLast(new ServerConnection(channel)));
 
-    public void close() {
-        try {
-            serverSocket.close();
-        } catch (Exception e) {
-            e.printStackTrace();
+        if (address == null) {
+            this.listenOn(port, Throwable::printStackTrace);
+        } else {
+            this.listenOn(address, port, Throwable::printStackTrace);
         }
     }
 }

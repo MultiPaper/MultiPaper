@@ -1,29 +1,23 @@
 package puregero.multipaper.server.handlers;
 
-import puregero.multipaper.server.*;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.ReadAdvancementMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.DataMessageReply;
+import puregero.multipaper.server.FileLocker;
+import puregero.multipaper.server.ServerConnection;
 
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
-public class ReadAdvancementsHandler implements Handler {
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        String world = in.readUTF();
-        String uuid = in.readUTF();
-
-        readAndSendAdvancementsData(world, uuid, out);
-    }
-
-    private void readAndSendAdvancementsData(String world, String uuid, DataOutputSender out) {
-        try {
-            byte[] b = FileLocker.readBytes(new File(new File(world, "advancements"), uuid + ".json"));
-            out.writeUTF("advancementsData");
-            out.writeInt(b.length);
-            out.write(b);
-            out.send();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+public class ReadAdvancementsHandler {
+    public static void handle(ServerConnection connection, ReadAdvancementMessage message) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                byte[] b = FileLocker.readBytes(new File(new File(message.world, "advancements"), message.uuid + ".json"));
+                connection.sendReply(new DataMessageReply(b), message);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
 }

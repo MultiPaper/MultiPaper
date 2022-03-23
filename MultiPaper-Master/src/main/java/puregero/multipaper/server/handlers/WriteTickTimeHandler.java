@@ -1,43 +1,27 @@
 package puregero.multipaper.server.handlers;
 
-import puregero.multipaper.server.DataOutputSender;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteTickTimeMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerInfoUpdateMessage;
 import puregero.multipaper.server.ServerConnection;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class WriteTickTimeHandler implements Handler {
-    private Map<String, Long> lastUpdates = new ConcurrentHashMap<>();
+public class WriteTickTimeHandler {
+    private static final Map<String, Long> lastUpdates = new ConcurrentHashMap<>();
 
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        long tickTime = in.readLong();
-        float tps = in.readFloat();
-
-        connection.getTimer().append(tickTime);
-        connection.setTps(tps);
+    public static void handle(ServerConnection connection, WriteTickTimeMessage message) {
+        connection.getTimer().append(message.tickTime);
+        connection.setTps(message.tps);
         
-        if (tickTime == -1) {
+        if (message.tickTime == -1) {
             connection.setTps(-1);
         }
 
-        try {
-            if (lastUpdates.getOrDefault(connection.getBungeeCordName(), 0L) < System.currentTimeMillis() - 1000 || connection.getTps() == -1) {
-                lastUpdates.put(connection.getBungeeCordName(), System.currentTimeMillis());
+        if (lastUpdates.getOrDefault(connection.getBungeeCordName(), 0L) < System.currentTimeMillis() - 1000 || connection.getTps() == -1) {
+            lastUpdates.put(connection.getBungeeCordName(), System.currentTimeMillis());
 
-                DataOutputStream broadcast = connection.broadcastAll();
-                broadcast.writeInt(-1);
-                broadcast.writeUTF("serverInfo");
-                broadcast.writeUTF(connection.getBungeeCordName());
-                broadcast.writeInt((int) connection.getTimer().averageInMillis());
-                broadcast.writeFloat((float) connection.getTps());
-                broadcast.close();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+            ServerConnection.broadcastAll(new ServerInfoUpdateMessage(connection.getBungeeCordName(), (int) connection.getTimer().averageInMillis(), (float) connection.getTps()));
         }
     }
 }

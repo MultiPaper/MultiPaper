@@ -1,8 +1,11 @@
 package puregero.multipaper.server;
 
-import java.io.IOException;
+import puregero.multipaper.mastermessagingprotocol.ChunkKey;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.AddEntitySubscriberMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.RemoveEntitySubscriberMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.EntitySubscribersSyncMessage;
+
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class EntitiesSubscriptionManager {
@@ -62,7 +65,7 @@ public class EntitiesSubscriptionManager {
             List<ServerConnection> serverConnections = chunkSubscribers.get(key);
             if (serverConnections != null) {
                 if (serverConnections.remove(serverConnection)) {
-                    updateSubscriberRemoved(serverConnections, serverConnection, key.name, key.x, key.z);
+                    updateSubscriberRemoved(serverConnections, serverConnection, key.world, key.x, key.z);
                 }
                 if (serverConnections.isEmpty()) {
                     chunkSubscribers.remove(key);
@@ -83,19 +86,7 @@ public class EntitiesSubscriptionManager {
         String subscriber = serverConnection.getBungeeCordName();
         for (ServerConnection connection : serverConnections) {
             if (connection != serverConnection) {
-                CompletableFuture.runAsync(() -> {
-                    try {
-                        DataOutputSender out = connection.buffer();
-                        out.writeUTF("entitiesSubscribe");
-                        out.writeUTF(world);
-                        out.writeInt(cx);
-                        out.writeInt(cz);
-                        out.writeUTF(subscriber);
-                        out.send();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                });
+                connection.send(new AddEntitySubscriberMessage(world, cx, cz, subscriber));
             }
         }
     }
@@ -103,19 +94,7 @@ public class EntitiesSubscriptionManager {
     private static void updateSubscriberRemoved(List<ServerConnection> serverConnections, ServerConnection serverConnection, String world, int cx, int cz) {
         String unsubscriber = serverConnection.getBungeeCordName();
         for (ServerConnection connection : serverConnections) {
-            CompletableFuture.runAsync(() -> {
-                try {
-                    DataOutputSender out = connection.buffer();
-                    out.writeUTF("entitiesUnsubscribe");
-                    out.writeUTF(world);
-                    out.writeInt(cx);
-                    out.writeInt(cz);
-                    out.writeUTF(unsubscriber);
-                    out.send();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
+            connection.send(new RemoveEntitySubscriberMessage(world, cx, cz, unsubscriber));
         }
     }
 
@@ -126,24 +105,9 @@ public class EntitiesSubscriptionManager {
                 subscribe(serverConnection, world, cx, cz);
             }
 
-            ServerConnection[] subscribers = chunkSubscribers.get(key).stream().filter(subscriber -> subscriber != serverConnection).toArray(ServerConnection[]::new);
+            String[] subscribers = chunkSubscribers.get(key).stream().filter(subscriber -> subscriber != serverConnection).map(ServerConnection::getBungeeCordName).toArray(String[]::new);
 
-            CompletableFuture.runAsync(() -> {
-                try {
-                    DataOutputSender out = serverConnection.buffer();
-                    out.writeUTF("entitiesSubscribeSync");
-                    out.writeUTF(world);
-                    out.writeInt(cx);
-                    out.writeInt(cz);
-                    out.writeInt(subscribers.length);
-                    for (ServerConnection subscriber : subscribers) {
-                        out.writeUTF(subscriber.getBungeeCordName());
-                    }
-                    out.send();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
+            serverConnection.send(new EntitySubscribersSyncMessage(world, cx, cz, subscribers));
         }
     }
 

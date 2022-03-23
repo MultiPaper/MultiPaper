@@ -1,8 +1,9 @@
-version = "2.6.4"
+version = "2.7.0"
 
 plugins {
     `java`
     `maven-publish`
+    id("com.github.johnrengelman.shadow")
 }
 
 repositories {
@@ -11,14 +12,12 @@ repositories {
     }
 }
 
-val masterDependency = configurations.create("masterDependency")
-configurations.compileClasspath.extendsFrom(masterDependency)
-
 dependencies {
+    implementation(project(":MultiPaper-MasterMessagingProtocol"))
     implementation("org.jetbrains:annotations:22.0.0")
-    implementation("net.md-5:bungeecord-api:1.16-R0.4")
-
-    masterDependency("org.json:json:20211205")
+    implementation("org.json:json:20211205")
+    implementation("io.netty:netty-all:4.1.75.Final")
+    compileOnly("net.md-5:bungeecord-api:1.16-R0.4")
 }
 
 tasks.jar {
@@ -27,7 +26,8 @@ tasks.jar {
                 "Main-Class" to "puregero.multipaper.server.MultiPaperServer"
         )
     }
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    val dependencies = masterDependency.map(::zipTree)
-    from(dependencies)
+}
+
+tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
+    relocate("io.netty", "puregero.multipaper.server.libs.netty")
 }

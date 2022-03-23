@@ -1,28 +1,25 @@
 package puregero.multipaper.server.handlers;
 
-import puregero.multipaper.server.DataOutputSender;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteUidMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
 import puregero.multipaper.server.ServerConnection;
 
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.concurrent.CompletableFuture;
 
-public class WriteUidHandler implements Handler {
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        String world = in.readUTF();
-        byte[] data = new byte[in.readInt()];
-        in.readFully(data);
-
-        try {
-            File worldDir = new File(world);
-            if (!worldDir.exists()) worldDir.mkdirs();
-            Files.write(new File(worldDir, "uid.dat").toPath(), data);
-            out.writeUTF("uidWritten");
-            out.send();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+public class WriteUidHandler {
+    public static void handle(ServerConnection connection, WriteUidMessage message) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                File worldDir = new File(message.world);
+                if (!worldDir.exists()) worldDir.mkdirs();
+                Files.write(new File(worldDir, "uid.dat").toPath(), message.data);
+                connection.sendReply(new BooleanMessageReply(true), message);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
 }

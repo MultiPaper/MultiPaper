@@ -17,59 +17,53 @@ index a187e36aca089ec6b024b19760c935f7c9fa6cd4..835003a72c506bf3bf97dbf051cb5e8c
          // Paper end
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 7794c8f6c65253131d876b74bda00c2433894197..0456b7cda6deb072f1401aeda476a3712ab8109d 100644
+index 99f86d3a39bfa523364798686236ecb63786ab91..ee535cea1a2b74cbd5bd90698baa91ed72206393 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -547,4 +547,8 @@ public class MultiPaper {
+@@ -584,4 +584,8 @@ public class MultiPaper {
      public static void broadcastPlayerAction(ServerPlayer player, ServerboundSetCarriedItemPacket packet) {
          broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
      }
 +
 +    public static void setPort(int port) {
-+        getConnection().sendPort(port);
++        getConnection().setPort(port);
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 76962b91f5a4f01b0ad66a66781eb60c1482f3af..a8b17ef1951e325a0d5866b66e22c45403462056 100644
+index 47ba4fcaa315e4353ee3a5596a6d356425edb71c..66bd62588a8b3a1aeb680e49d9b9473ba8fabc87 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -53,6 +53,7 @@ public class MultiPaperConnection extends Thread {
-     private String myName = null;
+@@ -53,6 +53,7 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+     private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
      public String secret;
      public Map<String, byte[]> dataCache = Maps.newHashMap();
-+    private int port = -1;
++    public int port = -1;
  
      public MultiPaperConnection() {
-         super("MultiPaperConnection Thread");
-@@ -130,6 +131,10 @@ public class MultiPaperConnection extends Thread {
-                     }
-                 }
+         System.setProperty("multipaper.netty.threads", System.getProperty("multipaper.netty.threads", Integer.toString(Math.min(Runtime.getRuntime().availableProcessors(), 3))));
+@@ -83,6 +84,10 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+         LOGGER.info("Connected to " + channel.remoteAddress());
+         channel.write(new HelloMessage(myName));
  
-+                if (port >= 0) {
-+                    sendPort(port);
-+                }
++        if (port >= 0) {
++            channel.write(new SetPortMessage(port));
++        }
 +
-                 DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-                 while (!socket.isClosed()) {
-                     int id = in.readInt();
-@@ -941,4 +946,20 @@ public class MultiPaperConnection extends Thread {
-             e.printStackTrace();
+         for (MasterBoundMessage unhandledRequest : unhandledRequests) {
+             channel.write(unhandledRequest);
          }
+@@ -155,6 +160,14 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+         return serversMap;
      }
-+
-+    public void sendPort(int port) {
-+        if (!MultiPaperConfig.advertiseToBuiltInProxy) {
+ 
++    public void setPort(int port) {
++        if(!MultiPaperConfig.advertiseToBuiltInProxy) {
 +            return;
 +        }
-+
 +        this.port = port;
-+        try {
-+            DataOutputSender out = new DataOutputSender(this);
-+            out.writeUTF("setPort");
-+            out.writeInt(port);
-+            out.send(null);
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
++        send(new SetPortMessage(port));
 +    }
- }
++
+     @Override
+     public void handle(ServerInfoUpdateMessage message) {
+         ExternalServer server = serversMap.computeIfAbsent(message.name, key -> new ExternalServer(key, key.equals(myName)));

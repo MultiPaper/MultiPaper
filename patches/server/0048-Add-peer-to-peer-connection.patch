@@ -113,20 +113,54 @@ index 150050fb343ef6119204b7d5220207765a6937bc..63df2d1ca7208b436798e7ad21afc7bd
              case LOGIN:
                  this.connection.setProtocol(ConnectionProtocol.LOGIN);
 diff --git a/src/main/java/net/minecraft/world/ticks/ScheduledTick.java b/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
-index 58f8d0bac3fa3832da25a458c2b42bdaf50f0973..f694b0b13ed3ee877d0c8026babdc982a95798c6 100644
---- a/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..f694b0b13ed3ee877d0c8026babdc982a95798c6
+--- /dev/null
 +++ b/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
-@@ -41,14 +41,16 @@ public record ScheduledTick<T>(T type, BlockPos pos, long triggerTick, TickPrior
-         this(type, pos, triggerTick, TickPriority.NORMAL, subTickOrder);
-     }
- 
--    public ScheduledTick(T object, BlockPos blockPos, long l, TickPriority tickPriority, long m) {
--        blockPos = blockPos.immutable();
--        this.type = object;
--        this.pos = blockPos;
--        this.triggerTick = l;
--        this.priority = tickPriority;
--        this.subTickOrder = m;
+@@ -0,0 +1,58 @@
++package net.minecraft.world.ticks;
++
++import it.unimi.dsi.fastutil.Hash.Strategy;
++import java.util.Comparator;
++import javax.annotation.Nullable;
++import net.minecraft.core.BlockPos;
++
++public record ScheduledTick<T>(T type, BlockPos pos, long triggerTick, TickPriority priority, long subTickOrder) {
++    public static final Comparator<ScheduledTick<?>> DRAIN_ORDER = (first, second) -> {
++        int i = Long.compare(first.triggerTick, second.triggerTick);
++        if (i != 0) {
++            return i;
++        } else {
++            i = first.priority.compareTo(second.priority);
++            return i != 0 ? i : Long.compare(first.subTickOrder, second.subTickOrder);
++        }
++    };
++    public static final Comparator<ScheduledTick<?>> INTRA_TICK_DRAIN_ORDER = (first, second) -> {
++        int i = first.priority.compareTo(second.priority);
++        return i != 0 ? i : Long.compare(first.subTickOrder, second.subTickOrder);
++    };
++    public static final Strategy<ScheduledTick<?>> UNIQUE_TICK_HASH = new Strategy<ScheduledTick<?>>() {
++        @Override
++        public int hashCode(ScheduledTick<?> scheduledTick) {
++            return 31 * scheduledTick.pos().hashCode() + scheduledTick.type().hashCode();
++        }
++
++        @Override
++        public boolean equals(@Nullable ScheduledTick<?> scheduledTick, @Nullable ScheduledTick<?> scheduledTick2) {
++            if (scheduledTick == scheduledTick2) {
++                return true;
++            } else if (scheduledTick != null && scheduledTick2 != null) {
++                return scheduledTick.type() == scheduledTick2.type() && scheduledTick.pos().equals(scheduledTick2.pos());
++            } else {
++                return false;
++            }
++        }
++    };
++
++    public ScheduledTick(T type, BlockPos pos, long triggerTick, long subTickOrder) {
++        this(type, pos, triggerTick, TickPriority.NORMAL, subTickOrder);
++    }
++
 +    // MultiPaper start - Fix compilation issues
 +    public ScheduledTick(T type, BlockPos pos, long triggerTick, TickPriority priority, long subTickOrder) {
 +        pos = pos.immutable();
@@ -135,11 +169,13 @@ index 58f8d0bac3fa3832da25a458c2b42bdaf50f0973..f694b0b13ed3ee877d0c8026babdc982
 +        this.triggerTick = triggerTick;
 +        this.priority = priority;
 +        this.subTickOrder = subTickOrder;
-     }
++    }
 +    // MultiPaper end
- 
-     public static <T> ScheduledTick<T> probe(T type, BlockPos pos) {
-         return new ScheduledTick<>(type, pos, 0L, TickPriority.NORMAL, 0L);
++
++    public static <T> ScheduledTick<T> probe(T type, BlockPos pos) {
++        return new ScheduledTick<>(type, pos, 0L, TickPriority.NORMAL, 0L);
++    }
++}
 diff --git a/src/main/java/puregero/multipaper/ExternalServer.java b/src/main/java/puregero/multipaper/ExternalServer.java
 index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354304819b1 100644
 --- a/src/main/java/puregero/multipaper/ExternalServer.java
@@ -167,28 +203,24 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c3b0556728e70b55966683334a9cddabe9c481e0
+index 0000000000000000000000000000000000000000..090b67de14e01b8185ec62ac294dca65c51a060e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,102 @@
 +package puregero.multipaper;
 +
-+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 +import io.netty.channel.Channel;
 +import io.netty.channel.ChannelFutureListener;
 +import io.netty.channel.ChannelInitializer;
-+import io.netty.channel.epoll.EpollEventLoopGroup;
-+import io.netty.channel.epoll.EpollSocketChannel;
-+import io.netty.channel.nio.NioEventLoopGroup;
 +import io.netty.channel.socket.SocketChannel;
 +import io.netty.util.internal.SystemPropertyUtil;
 +import net.minecraft.network.*;
 +import net.minecraft.network.protocol.PacketFlow;
 +import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
-+import net.minecraft.util.LazyLoadedValue;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.externalserverprotocol.*;
++import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
 +
 +import java.io.Closeable;
 +import java.io.IOException;
@@ -196,9 +228,6 @@ index 0000000000000000000000000000000000000000..c3b0556728e70b55966683334a9cddab
 +public class ExternalServerConnection extends ChannelInitializer<SocketChannel> implements Closeable {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(ExternalServerConnection.class.getSimpleName());
-+    private static final int EVENT_LOOP_THREADS = Math.max(1, Math.min(SystemPropertyUtil.getInt("multipaper.netty.eventLoopThreads", 2), SystemPropertyUtil.getInt("io.netty.eventLoopThreads", 2)));
-+    public static final LazyLoadedValue<NioEventLoopGroup> SERVER_EVENT_GROUP = new LazyLoadedValue<>(() -> new NioEventLoopGroup(EVENT_LOOP_THREADS, (new ThreadFactoryBuilder()).setNameFormat("Netty MultiPaper IO #%d").setDaemon(true).setUncaughtExceptionHandler(new net.minecraft.DefaultUncaughtExceptionHandlerWithName(LOGGER)).build()));
-+    public static final LazyLoadedValue<EpollEventLoopGroup> SERVER_EPOLL_EVENT_GROUP = new LazyLoadedValue<>(() -> new EpollEventLoopGroup(EVENT_LOOP_THREADS, (new ThreadFactoryBuilder()).setNameFormat("Netty Epoll MultiPaper IO #%d").setDaemon(true).setUncaughtExceptionHandler(new net.minecraft.DefaultUncaughtExceptionHandlerWithName(LOGGER)).build()));
 +
 +    private Channel channel;
 +    public long nanoTime = 0;
@@ -254,11 +283,7 @@ index 0000000000000000000000000000000000000000..c3b0556728e70b55966683334a9cddab
 +        // And put it onto our own event loop
 +        if (SystemPropertyUtil.getBoolean("multipaper.netty.useOwnEventLoop", true)) {
 +            channel.deregister().addListener((ChannelFutureListener) future -> {
-+                if (future.channel() instanceof EpollSocketChannel) {
-+                    SERVER_EPOLL_EVENT_GROUP.get().register(future.channel()).sync();
-+                } else {
-+                    SERVER_EVENT_GROUP.get().register(future.channel()).sync();
-+                }
++                MessageBootstrap.getEventLoopGroup().register(future.channel()).sync();
 +            });
 +        } else {
 +            LOGGER.info("Using Minecraft's event loop");
@@ -285,16 +310,17 @@ index 0000000000000000000000000000000000000000..c3b0556728e70b55966683334a9cddab
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 619feec83eebe8f6e6ec16a4a6b51665dabefe2d..a20f3ef14f3e28b32e747c52fe9655a057586ca6 100644
+index 19948c5a87dd5f0da3aef064dbb6448d306395b6..63f573a93c8f46f2bc41cd6d81ae9d1e3fdc4e64 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,6 +1,16 @@
+@@ -1,7 +1,18 @@
  package puregero.multipaper;
  
 +import net.minecraft.server.MinecraftServer;
 +import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
-+
- import java.io.IOException;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.StartMessage;
+ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteTickTimeMessage;
+ 
 +import java.net.InetSocketAddress;
 +import java.net.SocketAddress;
 +import java.util.Collection;
@@ -302,20 +328,20 @@ index 619feec83eebe8f6e6ec16a4a6b51665dabefe2d..a20f3ef14f3e28b32e747c52fe9655a0
 +import java.util.concurrent.TimeUnit;
 +import java.util.function.Consumer;
 +import java.util.function.Supplier;
- 
++
  public class MultiPaper {
      private static MultiPaperConnection multiPaperConnection = null;
-@@ -20,4 +30,45 @@ public class MultiPaper {
-             e.printStackTrace();
-         }
+ 
+@@ -16,4 +27,44 @@ public class MultiPaper {
+     public static void sendTickTime(long time, double tps) {
+         getConnection().send(new WriteTickTimeMessage(time, (float) tps));
      }
 +
 +    public static void onStart(SocketAddress bindAddress) {
-+        try {
-+            getConnection().sendStart(((InetSocketAddress) bindAddress).getAddress().getHostAddress(), ((InetSocketAddress) bindAddress).getPort());
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
++        getConnection().send(new StartMessage(
++                System.getProperty("server.address", ((InetSocketAddress) bindAddress).getAddress().getHostAddress()),
++                ((InetSocketAddress) bindAddress).getPort()
++        ));
 +    }
 +    
 +    public static void runSync(Runnable runnable) {
@@ -352,32 +378,45 @@ index 619feec83eebe8f6e6ec16a4a6b51665dabefe2d..a20f3ef14f3e28b32e747c52fe9655a0
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 304c9b0f448063ddfd4ada88793d5fc0f016126c..62cd5b0dd59f4ff414737ff49c3c829c70a4065b 100644
+index 4652ddc058edb4b34b4570e5e8c5990e6f13fa01..28aefb4f663ddf0685cb37b6c6ebfd6971b62820 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -1,5 +1,12 @@
+@@ -1,18 +1,21 @@
  package puregero.multipaper;
  
 +import io.netty.bootstrap.Bootstrap;
+ import io.netty.channel.ChannelHandler;
+ import io.netty.channel.ChannelHandlerContext;
 +import io.netty.channel.ChannelOption;
-+import io.netty.channel.epoll.Epoll;
++import io.netty.channel.epoll.EpollEventLoopGroup;
 +import io.netty.channel.epoll.EpollSocketChannel;
+ import io.netty.channel.socket.SocketChannel;
 +import io.netty.channel.socket.nio.NioSocketChannel;
 +import net.minecraft.server.MinecraftServer;
-+import net.minecraft.server.network.ServerConnectionListener;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
+ import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
+ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.HelloMessage;
+ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundMessage;
+ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundProtocol;
+-import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
+-import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessageHandler;
+-import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundProtocol;
+-import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerInfoUpdateMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.*;
  
-@@ -19,6 +26,7 @@ public class MultiPaperConnection extends Thread {
-     private final Map<Integer, Request> callbacks = new ConcurrentHashMap<>();
+ import java.util.Map;
+ import java.util.Set;
+@@ -32,6 +35,7 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+     private boolean channelActive = false;
+     private final Set<MasterBoundMessage> unhandledRequests = ConcurrentHashMap.newKeySet();
      private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
-     private String myName = null;
 +    public String secret;
  
      public MultiPaperConnection() {
-         super("MultiPaperConnection Thread");
-@@ -52,6 +60,14 @@ public class MultiPaperConnection extends Thread {
-         return new DataOutputSender(this, id);
+         System.setProperty("multipaper.netty.threads", System.getProperty("multipaper.netty.threads", Integer.toString(Math.min(Runtime.getRuntime().availableProcessors(), 3))));
+@@ -48,6 +52,14 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+                 CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS).execute(this::connect));
      }
  
 +    public ExternalServer getOrCreateServer(String name) {
@@ -389,70 +428,46 @@ index 304c9b0f448063ddfd4ada88793d5fc0f016126c..62cd5b0dd59f4ff414737ff49c3c829c
 +    }
 +
      @Override
-     public void run() {
-         while (true) {
-@@ -108,12 +124,49 @@ public class MultiPaperConnection extends Thread {
-     }
- 
-     public void serverInfo(DataInputStream in, DataOutputSender out) throws IOException {
--        ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
-+        ExternalServer server = getOrCreateServer(in.readUTF());
-         server.setAverageTickTime(in.readInt());
-         server.setTps(in.readFloat());
+     public void channelActive(ChannelHandlerContext ctx) {
+         channel = (SocketChannel) ctx.channel();
+@@ -105,4 +117,39 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+         server.setTps(message.tps);
          server.setLastAlive(System.currentTimeMillis());
      }
- 
-+    public void secret(DataInputStream in, DataOutputSender out) throws IOException {
-+        secret = in.readUTF();
++
++    @Override
++    public void handle(SetSecretMessage message) {
++        secret = message.secret;
 +    }
 +
-+    public void start(DataInputStream in, DataOutputSender out) throws IOException {
-+        String address = in.readUTF();
-+        int port = in.readInt();
-+
++    @Override
++    public void handle(ServerStartedMessage message) {
 +        if (MinecraftServer.getServer() == null) {
 +            return;
 +        }
 +
-+        LOGGER.info("Connecting to external server " + address + ":" + port + "...");
++        LOGGER.info("Connecting to external server " + message.host + ":" + message.port + "...");
 +
 +        ExternalServerConnection externalServerConnection = new ExternalServerConnection();
 +
 +        Bootstrap bootstrap = new Bootstrap();
 +        bootstrap.option(ChannelOption.SO_KEEPALIVE, true);
 +        bootstrap.handler(externalServerConnection);
++        bootstrap.group(MessageBootstrap.getEventLoopGroup());
 +
-+        if (Epoll.isAvailable() && MinecraftServer.getServer().isEpollEnabled()) {
-+            bootstrap.group(ServerConnectionListener.SERVER_EPOLL_EVENT_GROUP.get());
++        if (MessageBootstrap.getEventLoopGroup() instanceof EpollEventLoopGroup) {
 +            bootstrap.channel(EpollSocketChannel.class);
 +        } else {
-+            bootstrap.group(ServerConnectionListener.SERVER_EVENT_GROUP.get());
 +            bootstrap.channel(NioSocketChannel.class);
 +        }
 +
-+        bootstrap.connect(address, port).addListener(future -> {
++        bootstrap.connect(message.host, message.port).addListener(future -> {
 +            if (future.isSuccess()) {
-+                externalServerConnection.sendMinecraftHandshake(address, secret, port);
++                externalServerConnection.sendMinecraftHandshake(message.host, secret, message.port);
 +            } else if (future.cause() != null) {
 +                future.cause().printStackTrace();
 +            }
 +        });
-+    }
-+
-     public void writeTickTime(long time, double tps) throws IOException {
-         DataOutputSender out = new DataOutputSender(this);
-         out.writeUTF("writeTickTime");
-@@ -121,4 +174,12 @@ public class MultiPaperConnection extends Thread {
-         out.writeFloat((float) tps);
-         out.send(null);
-     }
-+
-+    public void sendStart(String address, int port) throws IOException {
-+        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("start");
-+        out.writeUTF(System.getProperty("server.address", address));
-+        out.writeInt(port);
-+        out.send(null);
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacket.java

@@ -365,19 +365,19 @@ index 0000000000000000000000000000000000000000..d89fe348e38d98197c97f09264a3417c
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index a58b1ac90b12a2fc25ab41240d5f2ee79f5199a0..f35c43e2032c8c07976355b580f6de4c1c0ff1a6 100644
+index 8b12cd1f6ef1905249648ce4f8fcb36b93d84f66..1c0f315980f2ab1afee37ec07ee2d16d27f0afa6 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -12,6 +12,8 @@ import io.netty.util.internal.SystemPropertyUtil;
+@@ -8,6 +8,8 @@ import io.netty.util.internal.SystemPropertyUtil;
  import net.minecraft.network.*;
  import net.minecraft.network.protocol.PacketFlow;
  import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
 +import net.minecraft.server.dedicated.DedicatedServer;
 +import net.minecraft.server.level.ServerPlayer;
- import net.minecraft.util.LazyLoadedValue;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
-@@ -92,6 +94,17 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+ import puregero.multipaper.externalserverprotocol.*;
+@@ -81,6 +83,17 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
          } else {
              LOGGER.info("Using Minecraft's event loop");
          }
@@ -396,10 +396,10 @@ index a58b1ac90b12a2fc25ab41240d5f2ee79f5199a0..f35c43e2032c8c07976355b580f6de4c
  
      @Override
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 4476f9bf0e80543f1abb4e41f27b17bacbdf3ae5..00b85d67202a2e5b840414fc44873309f5a57b2d 100644
+index 7cd6e0c934944b92852f650736bfaf718f78c499..ec428940001c25503faea06a80fc5e681e29f590 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -2,7 +2,11 @@ package puregero.multipaper;
+@@ -2,9 +2,16 @@ package puregero.multipaper;
  
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.level.ServerPlayer;
@@ -408,10 +408,15 @@ index 4476f9bf0e80543f1abb4e41f27b17bacbdf3ae5..00b85d67202a2e5b840414fc44873309
  import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
 +import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
 +import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.PlayerConnectMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.PlayerDisconnectMessage;
+ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.StartMessage;
+ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteTickTimeMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
  
- import java.io.IOException;
  import java.net.InetSocketAddress;
-@@ -14,6 +18,7 @@ import java.util.function.Consumer;
+ import java.net.SocketAddress;
+@@ -15,6 +22,7 @@ import java.util.function.Consumer;
  import java.util.function.Supplier;
  
  public class MultiPaper {
@@ -419,7 +424,7 @@ index 4476f9bf0e80543f1abb4e41f27b17bacbdf3ae5..00b85d67202a2e5b840414fc44873309
      private static MultiPaperConnection multiPaperConnection = null;
  
      public static MultiPaperConnection getConnection() {
-@@ -24,6 +29,19 @@ public class MultiPaper {
+@@ -25,10 +33,35 @@ public class MultiPaper {
          return multiPaperConnection;
      }
  
@@ -437,33 +442,25 @@ index 4476f9bf0e80543f1abb4e41f27b17bacbdf3ae5..00b85d67202a2e5b840414fc44873309
 +    }
 +
      public static void sendTickTime(long time, double tps) {
-         try {
-             getConnection().writeTickTime(time, tps);
-@@ -32,6 +50,23 @@ public class MultiPaper {
-         }
+         getConnection().send(new WriteTickTimeMessage(time, (float) tps));
      }
  
 +    public static CompletableFuture<Boolean> sendPlayerConnect(ServerPlayer player) {
-+        try {
-+            return getConnection().writePlayerConnect(player.getUUID().toString());
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+            return CompletableFuture.completedFuture(false);
-+        }
++        CompletableFuture<Boolean> future = new CompletableFuture<>();
++        getConnection().send(new PlayerConnectMessage(player.getUUID()), message -> {
++            future.complete(((BooleanMessageReply) message).result);
++        });
++        return future;
 +    }
 +
 +    public static void sendPlayerDisconnect(ServerPlayer player) {
-+        try {
-+            getConnection().writePlayerDisconnect(player.getUUID().toString());
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
++        getConnection().send(new PlayerDisconnectMessage(player.getUUID()));
 +    }
 +
      public static void onStart(SocketAddress bindAddress) {
-         try {
-             getConnection().sendStart(((InetSocketAddress) bindAddress).getAddress().getHostAddress(), ((InetSocketAddress) bindAddress).getPort());
-@@ -84,4 +119,38 @@ public class MultiPaper {
+         getConnection().send(new StartMessage(
+                 System.getProperty("server.address", ((InetSocketAddress) bindAddress).getAddress().getHostAddress()),
+@@ -80,4 +113,38 @@ public class MultiPaper {
      public static void broadcastPacketToExternalServers(ServerPlayer player, ExternalServerPacket packet) {
          broadcastPacketToExternalServers(player.getLevel().getWorld().getName(), packet);
      }
@@ -500,47 +497,6 @@ index 4476f9bf0e80543f1abb4e41f27b17bacbdf3ae5..00b85d67202a2e5b840414fc44873309
 +
 +    public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
 +        return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
-+    }
- }
-diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 62cd5b0dd59f4ff414737ff49c3c829c70a4065b..c0e8fb6c208d1b032185bdb7ff63cf261a4ecae5 100644
---- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
-+++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -15,6 +15,7 @@ import java.io.*;
- import java.net.Socket;
- import java.net.SocketException;
- import java.util.Map;
-+import java.util.concurrent.CompletableFuture;
- import java.util.concurrent.ConcurrentHashMap;
- import java.util.function.Consumer;
- 
-@@ -182,4 +183,28 @@ public class MultiPaperConnection extends Thread {
-         out.writeInt(port);
-         out.send(null);
-     }
-+
-+    public CompletableFuture<Boolean> writePlayerConnect(String uuid) throws IOException {
-+        CompletableFuture<Boolean> future = new CompletableFuture<>();
-+
-+        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("playerConnect");
-+        out.writeUTF(uuid);
-+        out.send(in -> {
-+            try {
-+                future.complete(in.readBoolean());
-+            } catch (IOException e) {
-+                e.printStackTrace();
-+            }
-+        });
-+
-+        return future;
-+    }
-+
-+    public void writePlayerDisconnect(String uuid) throws IOException {
-+        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("playerDisconnect");
-+        out.writeUTF(uuid);
-+        out.send(null);
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java

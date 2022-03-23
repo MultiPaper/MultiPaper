@@ -1,28 +1,23 @@
 package puregero.multipaper.server.handlers;
 
-import puregero.multipaper.server.DataOutputSender;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteStatsMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
 import puregero.multipaper.server.FileLocker;
 import puregero.multipaper.server.ServerConnection;
 
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
-public class WriteStatsHandler implements Handler {
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        String world = in.readUTF();
-        String uuid = in.readUTF();
-        byte[] data = new byte[in.readInt()];
-        in.readFully(data);
-
-        try {
-            FileLocker.writeBytes(new File(new File(world, "stats"), uuid + ".json"), data);
-
-            out.writeUTF("statsWritten");
-            out.send();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+public class WriteStatsHandler {
+    public static void handle(ServerConnection connection, WriteStatsMessage message) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                FileLocker.writeBytes(new File(new File(message.world, "stats"), message.uuid + ".json"), message.data);
+                connection.sendReply(new BooleanMessageReply(true), message);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
 }

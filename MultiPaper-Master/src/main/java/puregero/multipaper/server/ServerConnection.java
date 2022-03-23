@@ -1,23 +1,26 @@
 package puregero.multipaper.server;
 
-import puregero.multipaper.server.handlers.Handler;
-import puregero.multipaper.server.handlers.Handlers;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.socket.SocketChannel;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.*;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.SetSecretMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ShutdownMessage;
+import puregero.multipaper.server.handlers.*;
 
-import java.io.*;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.net.SocketAddress;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
-public class ServerConnection extends Thread {
-    private final Socket socket;
+public class ServerConnection extends MasterBoundMessageHandler {
+    private final SocketChannel channel;
 
     private String name;
     private long lastPing = System.currentTimeMillis();
     private final CircularTimer timer = new CircularTimer();
-    private final Map<Integer, Consumer<DataInputStream>> callbacks = new ConcurrentHashMap<>();
     private final HashSet<UUID> playerUUIDs = new HashSet<>();
     private final List<Player> players = new ArrayList<>();
     private double tps;
@@ -29,19 +32,10 @@ public class ServerConnection extends Thread {
      * with `connections` before trying to send any data!
      */
     private static final Map<String, ServerConnection> connectionMap = new ConcurrentHashMap<>();
-
-    private static final Object connectionsLock = new Object();
-    private static List<ServerConnection> connections = new ArrayList<>();
+    private static final List<ServerConnection> connections = new CopyOnWriteArrayList<>();
 
     public static void shutdown() {
-        try {
-            DataOutputStream broadcast = broadcastAll();
-            broadcast.writeInt(-1);
-            broadcast.writeUTF("shutdown");
-            broadcast.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        broadcastAll(new ShutdownMessage());
     }
 
     public static void shutdownAndWait() {
@@ -56,11 +50,8 @@ public class ServerConnection extends Thread {
         }
     }
 
-    public ServerConnection(Socket socket) {
-        this.socket = socket;
-        setName("ServerConnection-" + socket.getRemoteSocketAddress());
-
-        start();
+    public ServerConnection(SocketChannel channel) {
+        this.channel = channel;
     }
 
     public static boolean isAlive(String bungeecordName) {
@@ -75,61 +66,27 @@ public class ServerConnection extends Thread {
         return connections;
     }
 
-    public void send(byte[] bytes) throws IOException {
-        if (!socket.isClosed()) {
-            synchronized (socket) {
-                socket.getOutputStream().write(bytes);
-                socket.getOutputStream().flush();
-            }
-        }
+    public void send(ServerBoundMessage message) {
+       channel.writeAndFlush(message);
     }
 
-    public void send(byte[] bytes, int id, Consumer<DataInputStream> callback) throws IOException {
-        if (!socket.isClosed()) {
-            synchronized (socket) {
-                socket.getOutputStream().write(bytes);
-                socket.getOutputStream().flush();
-            }
-        }
-        callbacks.put(id, callback);
+    public void send(ServerBoundMessage message, Consumer<MasterBoundMessage> callback) {
+        send(setCallback(message, callback));
     }
 
-    public DataOutputSender buffer() throws IOException {
-        return new DataOutputSender(this);
+    public void sendReply(ServerBoundMessage message, MasterBoundMessage inReplyTo) {
+        message.setTransactionId(inReplyTo.getTransactionId());
+        send(message);
     }
 
-    public DataOutputSender buffer(int id) throws IOException {
-        return new DataOutputSender(this, id);
+    public static void broadcastAll(ServerBoundMessage message) {
+        connections.forEach(connection -> connection.send(message));
     }
 
-    public static DataOutputStream broadcastAll() {
-        return new DataOutputStream(new ByteArrayOutputStream() {
-            @Override
-            public void close() {
-                connections.forEach(connection -> {
-                    try {
-                        connection.send(toByteArray());
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                });
-            }
-        });
-    }
-
-    public DataOutputStream broadcastOthers() {
-        return new DataOutputStream(new ByteArrayOutputStream() {
-            @Override
-            public void close() {
-                connections.forEach(connection -> {
-                    if (connection != ServerConnection.this) {
-                        try {
-                            connection.send(toByteArray());
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                });
+    public void broadcastOthers(ServerBoundMessage message) {
+        connections.forEach(connection -> {
+            if (connection != ServerConnection.this) {
+                connection.send(message);
             }
         });
     }
@@ -139,76 +96,36 @@ public class ServerConnection extends Thread {
     }
 
     @Override
-    public void run() {
-        try {
-            DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+    public void handle(HelloMessage message) {
+        name = message.name;
+        host = ((InetSocketAddress) getAddress()).getAddress().getHostAddress();
 
-            name = in.readUTF();
-            host = ((InetSocketAddress) getAddress()).getAddress().getHostAddress();
-
-            synchronized (connectionsLock) {
-                ArrayList<ServerConnection> connectionsCopy = new ArrayList<>(connections);
-                connectionsCopy.add(this);
-                connections = connectionsCopy;
-                connectionMap.put(name, this);
-            }
-
-            System.out.println("Connection from " + socket.getRemoteSocketAddress() + " (" + name + ")");
-
-            sendSecret();
-            
-            while (!socket.isClosed()) {
-                int id = in.readInt();
-                String command = in.readUTF();
-
-                lastPing = System.currentTimeMillis();
-
-                Consumer<DataInputStream> callback = callbacks.remove(id);
-
-                if (callback != null) {
-                    callback.accept(in);
-                    continue;
-                }
-
-                Handler handler = Handlers.get(command);
-
-                if (handler == null) {
-                    System.err.println(command + " has no Handler in Handlers!");
-                }
-
-                handler.handle(this, in, buffer(id));
-            }
-        } catch (EOFException e) {
-            // Ignored
-        } catch (Exception e) {
-            e.printStackTrace();
+        synchronized (connections) {
+            connections.add(this);
+            connectionMap.put(name, this);
         }
 
-        try {
-            socket.close();
-        } catch (Exception ignored) {}
+        System.out.println("Connection from " + getAddress() + " (" + name + ")");
 
+        send(new SetSecretMessage(MultiPaperServer.SECRET));
+    }
+
+    @Override
+    public boolean onMessage(MasterBoundMessage message) {
+        lastPing = System.currentTimeMillis();
+        return false;
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) {
         EntitiesSubscriptionManager.unsubscribeAll(this);
         ChunkSubscriptionManager.unsubscribeAndUnlockAll(this);
 
-        synchronized (connectionsLock) {
-            ArrayList<ServerConnection> connectionsCopy = new ArrayList<>(connections);
-            connectionsCopy.remove(this);
-            connections = connectionsCopy;
+        synchronized (connections) {
+            connections.remove(this);
         }
 
-        System.out.println(socket.getRemoteSocketAddress() + " (" + name + ") closed");
-    }
-
-    private void sendSecret() {
-        try {
-            DataOutputSender out = buffer();
-            out.writeUTF("secret");
-            out.writeUTF(MultiPaperServer.SECRET);
-            out.send();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        System.out.println(ctx.channel().remoteAddress() + " (" + name + ") closed");
     }
 
     public String getBungeeCordName() {
@@ -249,12 +166,12 @@ public class ServerConnection extends Thread {
         if (this.tps == -1) {
             throw new IllegalStateException("Trying to set " + getBungeeCordName() + "'s tps to " + tps + " when it is marked as offline (" + this.tps + " tps)");
         }
-        
+
         this.tps = tps;
     }
 
     public SocketAddress getAddress() {
-        return socket.getRemoteSocketAddress();
+        return channel.remoteAddress();
     }
 
     public int getPort() {
@@ -271,5 +188,190 @@ public class ServerConnection extends Thread {
 
     public void setHost(String host) {
         this.host = host;
+    }
+
+    @Override
+    public void handle(ChunkChangedStatusMessage message) {
+        ChunkChangedStatusHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(DownloadFileMessage message) {
+        DownloadFileHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(ForceReadChunkMessage message) {
+        ForceReadChunkHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(LockChunkMessage message) {
+        LockChunkHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(PlayerConnectMessage message) {
+        PlayerConnectHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(PlayerDisconnectMessage message) {
+        PlayerDisconnectHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(ReadAdvancementMessage message) {
+        ReadAdvancementsHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(ReadChunkMessage message) {
+        ReadChunkHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(ReadDataMessage message) {
+        ReadDataHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(ReadJsonMessage message) {
+        ReadJsonHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(ReadLevelMessage message) {
+        ReadLevelHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(ReadPlayerMessage message) {
+        ReadPlayerHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(ReadStatsMessage message) {
+        ReadStatsHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(ReadUidMessage message) {
+        ReadUidHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(RequestChunkOwnershipMessage message) {
+        RequestChunkOwnershipHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(RequestFilesToSyncMessage message) {
+        RequestFilesToSyncHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(SetPortMessage message) {
+        SetPortHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(StartMessage message) {
+        StartHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(SubscribeChunkMessage message) {
+        SubscribeChunkHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(SubscribeEntitiesMessage message) {
+        SubscribeEntitiesHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(SyncChunkOwnerToAllMessage message) {
+        SyncChunkOwnerToAllHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(SyncChunkSubscribersMessage message) {
+        SyncChunkSubscribersHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(SyncEntitiesSubscribersMessage message) {
+        SyncEntitiesSubscribersHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(UnlockChunkMessage message) {
+        UnlockChunkHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(UnsubscribeChunkMessage message) {
+        UnsubscribeChunkHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(UnsubscribeEntitiesMessage message) {
+        UnsubscribeEntitiesHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(UploadFileMessage message) {
+        UploadFileHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(WillSaveChunkLaterMessage message) {
+        WillSaveChunkHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(WriteAdvancementsMessage message) {
+        WriteAdvancementsHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(WriteChunkMessage message) {
+        WriteChunkHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(WriteDataMessage message) {
+        WriteDataHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(WriteJsonMessage message) {
+        WriteJsonHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(WriteLevelMessage message) {
+        WriteLevelHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(WritePlayerMessage message) {
+        WritePlayerHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(WriteStatsMessage message) {
+        WriteStatsHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(WriteTickTimeMessage message) {
+        WriteTickTimeHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(WriteUidMessage message) {
+        WriteUidHandler.handle(this, message);
     }
 }

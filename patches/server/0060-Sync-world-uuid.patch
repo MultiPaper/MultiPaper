@@ -67,61 +67,21 @@ index 738100ffa60647790f0921cf31d5bbc2714e27dd..6632c54a8373d6c328400591af15b1aa
          if (file1.exists()) {
              DataInputStream dis = null;
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 19e00c404bccfb6220ee5b573100ff00c782869e..00c53ffd73db26303d37a8bd298c0e379731a021 100644
+index 1c547164600c373ca6f2e97ec9bf319a069c0c23..9edea27fc90097bd98b4d7e8893835e0a1ed53f8 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -346,6 +346,14 @@ public class MultiPaper {
-         getConnection().writeStats(world, uuid, json);
+@@ -392,6 +392,14 @@ public class MultiPaper {
+         getConnection().send(new WriteStatsMessage(world, uuid, json.getBytes(StandardCharsets.UTF_8)), message -> { /* do nothing */ });
      }
  
 +    public static DataInputStream readUid(String world) throws IOException {
-+        return getConnection().readUid(world).join();
++        return getConnection().sendAndAwaitReply(new ReadUidMessage(world), DataMessageReply.class).thenApply(message -> new DataInputStream(new ByteArrayInputStream(message.data))).join();
 +    }
 +
 +    public static void writeUid(String world, byte[] data) throws IOException {
-+        getConnection().writeUid(world, data);
++        getConnection().send(new WriteUidMessage(world, data), message -> { /* do nothing */ });
 +    }
 +
      private static String getWorld(File path) {
          do {
              path = path.getParentFile();
-diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 41891ace443bc09fe24fef92c6caf752d8bfe532..9430fc22be8406611f20e44ba72f268b3b1cab3a 100644
---- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
-+++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -659,6 +659,35 @@ public class MultiPaperConnection extends Thread {
-         out.send(in -> { /* Do nothing */ });
-     }
- 
-+    public CompletableFuture<DataInputStream> readUid(String world) throws IOException {
-+        CompletableFuture<DataInputStream> future = new CompletableFuture<>();
-+
-+        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("readUid");
-+        out.writeUTF(world);
-+        out.send(in -> {
-+            try {
-+                byte[] data = new byte[in.readInt()];
-+                in.readFully(data);
-+
-+                future.complete(data.length == 0 ? null : new DataInputStream(new ByteArrayInputStream(data)));
-+            } catch (IOException e) {
-+                e.printStackTrace();
-+            }
-+        });
-+
-+        return future;
-+    }
-+
-+    public void writeUid(String world, byte[] data) throws IOException {
-+        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("writeUid");
-+        out.writeUTF(world);
-+        out.writeInt(data.length);
-+        out.write(data);
-+        out.send(in -> { /* Do nothing */ });
-+    }
-+
-     public void lockChunk(String world, int cx, int cz) throws IOException {
-         DataOutputSender out = new DataOutputSender(this);
-         out.writeUTF("lockChunk");

@@ -1,26 +1,23 @@
 package puregero.multipaper.server.handlers;
 
-import puregero.multipaper.server.DataOutputSender;
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.ReadDataMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.DataMessageReply;
 import puregero.multipaper.server.FileLocker;
 import puregero.multipaper.server.ServerConnection;
 
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
-public class ReadDataHandler implements Handler {
-    @Override
-    public void handle(ServerConnection connection, DataInputStream in, DataOutputSender out) throws IOException {
-        String path = in.readUTF();
-
-        try {
-            byte[] b = FileLocker.readBytes(new File(path));
-            out.writeUTF("dataData");
-            out.writeInt(b.length);
-            out.write(b);
-            out.send();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+public class ReadDataHandler {
+    public static void handle(ServerConnection connection, ReadDataMessage message) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                byte[] b = FileLocker.readBytes(new File(message.path));
+                connection.sendReply(new DataMessageReply(b), message);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
     }
 }

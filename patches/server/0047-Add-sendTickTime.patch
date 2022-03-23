@@ -17,62 +17,23 @@ index 9d52d896303d9c5de390a31f65cd851756e999e6..34697742e26c083d16eb234555b1954a
          this.profiler.pop();
          org.spigotmc.WatchdogThread.tick(); // Spigot
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index d9fa811b2a0b5f8402ae0e811b09ddbd8509e8ad..619feec83eebe8f6e6ec16a4a6b51665dabefe2d 100644
+index d9fa811b2a0b5f8402ae0e811b09ddbd8509e8ad..19948c5a87dd5f0da3aef064dbb6448d306395b6 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,5 +1,7 @@
  package puregero.multipaper;
  
-+import java.io.IOException;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteTickTimeMessage;
 +
  public class MultiPaper {
      private static MultiPaperConnection multiPaperConnection = null;
  
-@@ -10,4 +12,12 @@ public class MultiPaper {
+@@ -10,4 +12,8 @@ public class MultiPaper {
  
          return multiPaperConnection;
      }
 +
 +    public static void sendTickTime(long time, double tps) {
-+        try {
-+            getConnection().writeTickTime(time, tps);
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
-+    }
- }
-diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 5c6003e2bed706d3c586239e9f71ae7f1b41843a..304c9b0f448063ddfd4ada88793d5fc0f016126c 100644
---- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
-+++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -26,6 +26,14 @@ public class MultiPaperConnection extends Thread {
-     }
- 
-     public void send(byte[] bytes, int id, @Nullable Consumer<DataInputStream> callback) {
-+        while (socket == null || socket.isClosed()) {
-+            // Wait for socket to connect
-+            try {
-+                Thread.sleep(10);
-+            } catch (InterruptedException e) {
-+                e.printStackTrace();
-+            }
-+        }
-         Request request = new Request(bytes, callback);
-         if (callback != null) {
-             callbacks.put(id, request);
-@@ -102,6 +110,15 @@ public class MultiPaperConnection extends Thread {
-     public void serverInfo(DataInputStream in, DataOutputSender out) throws IOException {
-         ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
-         server.setAverageTickTime(in.readInt());
-+        server.setTps(in.readFloat());
-         server.setLastAlive(System.currentTimeMillis());
-     }
-+
-+    public void writeTickTime(long time, double tps) throws IOException {
-+        DataOutputSender out = new DataOutputSender(this);
-+        out.writeUTF("writeTickTime");
-+        out.writeLong(time);
-+        out.writeFloat((float) tps);
-+        out.send(null);
++        getConnection().send(new WriteTickTimeMessage(time, (float) tps));
 +    }
  }

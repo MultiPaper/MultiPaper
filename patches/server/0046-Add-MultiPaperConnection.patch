@@ -4,6 +4,304 @@ Date: Mon, 15 Nov 2021 13:01:36 +1000
 Subject: [PATCH] Add MultiPaperConnection
 
 
+diff --git a/build.gradle.kts b/build.gradle.kts
+index b0dcfdc9c1cd374d1cbb3a49f4dd029e61a0489b..01eaa7ae1c5e726403d1b8707d0a22f8c8fdb3af 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -18,6 +18,7 @@ repositories {
+ }
+ 
+ dependencies {
++    implementation(project(":MultiPaper-MasterMessagingProtocol")) // MultiPaper
+     implementation(project(":MultiPaper-API")) // MultiPaper // Airplane // Paper
+     implementation("io.papermc.paper:paper-mojangapi:1.18-R0.1-SNAPSHOT") // Airplane
+     // Paper start
+diff --git a/src/main/java/net/minecraft/commands/synchronization/ArgumentTypes.java b/src/main/java/net/minecraft/commands/synchronization/ArgumentTypes.java
+deleted file mode 100644
+index 97ff2d8a5ac9ab76701447947ada1ad17a9cb78b..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/commands/synchronization/ArgumentTypes.java
++++ /dev/null
+@@ -1,260 +0,0 @@
+-package net.minecraft.commands.synchronization;
+-
+-import com.google.common.collect.Maps;
+-import com.google.common.collect.Sets;
+-import com.google.gson.JsonArray;
+-import com.google.gson.JsonObject;
+-import com.mojang.brigadier.CommandDispatcher;
+-import com.mojang.brigadier.arguments.ArgumentType;
+-import com.mojang.brigadier.tree.ArgumentCommandNode;
+-import com.mojang.brigadier.tree.CommandNode;
+-import com.mojang.brigadier.tree.LiteralCommandNode;
+-import com.mojang.brigadier.tree.RootCommandNode;
+-import java.util.Collection;
+-import java.util.Map;
+-import java.util.Set;
+-import javax.annotation.Nullable;
+-import net.minecraft.SharedConstants;
+-import net.minecraft.commands.arguments.AngleArgument;
+-import net.minecraft.commands.arguments.ColorArgument;
+-import net.minecraft.commands.arguments.ComponentArgument;
+-import net.minecraft.commands.arguments.CompoundTagArgument;
+-import net.minecraft.commands.arguments.DimensionArgument;
+-import net.minecraft.commands.arguments.EntityAnchorArgument;
+-import net.minecraft.commands.arguments.EntityArgument;
+-import net.minecraft.commands.arguments.EntitySummonArgument;
+-import net.minecraft.commands.arguments.GameProfileArgument;
+-import net.minecraft.commands.arguments.ItemEnchantmentArgument;
+-import net.minecraft.commands.arguments.MessageArgument;
+-import net.minecraft.commands.arguments.MobEffectArgument;
+-import net.minecraft.commands.arguments.NbtPathArgument;
+-import net.minecraft.commands.arguments.NbtTagArgument;
+-import net.minecraft.commands.arguments.ObjectiveArgument;
+-import net.minecraft.commands.arguments.ObjectiveCriteriaArgument;
+-import net.minecraft.commands.arguments.OperationArgument;
+-import net.minecraft.commands.arguments.ParticleArgument;
+-import net.minecraft.commands.arguments.RangeArgument;
+-import net.minecraft.commands.arguments.ResourceLocationArgument;
+-import net.minecraft.commands.arguments.ScoreHolderArgument;
+-import net.minecraft.commands.arguments.ScoreboardSlotArgument;
+-import net.minecraft.commands.arguments.SlotArgument;
+-import net.minecraft.commands.arguments.TeamArgument;
+-import net.minecraft.commands.arguments.TimeArgument;
+-import net.minecraft.commands.arguments.UuidArgument;
+-import net.minecraft.commands.arguments.blocks.BlockPredicateArgument;
+-import net.minecraft.commands.arguments.blocks.BlockStateArgument;
+-import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+-import net.minecraft.commands.arguments.coordinates.ColumnPosArgument;
+-import net.minecraft.commands.arguments.coordinates.RotationArgument;
+-import net.minecraft.commands.arguments.coordinates.SwizzleArgument;
+-import net.minecraft.commands.arguments.coordinates.Vec2Argument;
+-import net.minecraft.commands.arguments.coordinates.Vec3Argument;
+-import net.minecraft.commands.arguments.item.FunctionArgument;
+-import net.minecraft.commands.arguments.item.ItemArgument;
+-import net.minecraft.commands.arguments.item.ItemPredicateArgument;
+-import net.minecraft.commands.synchronization.brigadier.BrigadierArgumentSerializers;
+-import net.minecraft.gametest.framework.TestClassNameArgument;
+-import net.minecraft.gametest.framework.TestFunctionArgument;
+-import net.minecraft.network.FriendlyByteBuf;
+-import net.minecraft.resources.ResourceLocation;
+-import org.apache.logging.log4j.LogManager;
+-import org.apache.logging.log4j.Logger;
+-
+-public class ArgumentTypes {
+-    private static final Logger LOGGER = LogManager.getLogger();
+-    private static final Map<Class<?>, ArgumentTypes.Entry<?>> BY_CLASS = Maps.newHashMap();
+-    private static final Map<ResourceLocation, ArgumentTypes.Entry<?>> BY_NAME = Maps.newHashMap();
+-
+-    public static <T extends ArgumentType<?>> void register(String id, Class<T> argClass, ArgumentSerializer<T> serializer) {
+-        ResourceLocation resourceLocation = new ResourceLocation(id);
+-        if (BY_CLASS.containsKey(argClass)) {
+-            throw new IllegalArgumentException("Class " + argClass.getName() + " already has a serializer!");
+-        } else if (BY_NAME.containsKey(resourceLocation)) {
+-            throw new IllegalArgumentException("'" + resourceLocation + "' is already a registered serializer!");
+-        } else {
+-            ArgumentTypes.Entry<T> entry = new ArgumentTypes.Entry<>(argClass, serializer, resourceLocation);
+-            BY_CLASS.put(argClass, entry);
+-            BY_NAME.put(resourceLocation, entry);
+-        }
+-    }
+-
+-    public static void bootStrap() {
+-        BrigadierArgumentSerializers.bootstrap();
+-        register("entity", EntityArgument.class, new EntityArgument.Serializer());
+-        register("game_profile", GameProfileArgument.class, new EmptyArgumentSerializer<>(GameProfileArgument::gameProfile));
+-        register("block_pos", BlockPosArgument.class, new EmptyArgumentSerializer<>(BlockPosArgument::blockPos));
+-        register("column_pos", ColumnPosArgument.class, new EmptyArgumentSerializer<>(ColumnPosArgument::columnPos));
+-        register("vec3", Vec3Argument.class, new EmptyArgumentSerializer<>(Vec3Argument::vec3));
+-        register("vec2", Vec2Argument.class, new EmptyArgumentSerializer<>(Vec2Argument::vec2));
+-        register("block_state", BlockStateArgument.class, new EmptyArgumentSerializer<>(BlockStateArgument::block));
+-        register("block_predicate", BlockPredicateArgument.class, new EmptyArgumentSerializer<>(BlockPredicateArgument::blockPredicate));
+-        register("item_stack", ItemArgument.class, new EmptyArgumentSerializer<>(ItemArgument::item));
+-        register("item_predicate", ItemPredicateArgument.class, new EmptyArgumentSerializer<>(ItemPredicateArgument::itemPredicate));
+-        register("color", ColorArgument.class, new EmptyArgumentSerializer<>(ColorArgument::color));
+-        register("component", ComponentArgument.class, new EmptyArgumentSerializer<>(ComponentArgument::textComponent));
+-        register("message", MessageArgument.class, new EmptyArgumentSerializer<>(MessageArgument::message));
+-        register("nbt_compound_tag", CompoundTagArgument.class, new EmptyArgumentSerializer<>(CompoundTagArgument::compoundTag));
+-        register("nbt_tag", NbtTagArgument.class, new EmptyArgumentSerializer<>(NbtTagArgument::nbtTag));
+-        register("nbt_path", NbtPathArgument.class, new EmptyArgumentSerializer<>(NbtPathArgument::nbtPath));
+-        register("objective", ObjectiveArgument.class, new EmptyArgumentSerializer<>(ObjectiveArgument::objective));
+-        register("objective_criteria", ObjectiveCriteriaArgument.class, new EmptyArgumentSerializer<>(ObjectiveCriteriaArgument::criteria));
+-        register("operation", OperationArgument.class, new EmptyArgumentSerializer<>(OperationArgument::operation));
+-        register("particle", ParticleArgument.class, new EmptyArgumentSerializer<>(ParticleArgument::particle));
+-        register("angle", AngleArgument.class, new EmptyArgumentSerializer<>(AngleArgument::angle));
+-        register("rotation", RotationArgument.class, new EmptyArgumentSerializer<>(RotationArgument::rotation));
+-        register("scoreboard_slot", ScoreboardSlotArgument.class, new EmptyArgumentSerializer<>(ScoreboardSlotArgument::displaySlot));
+-        register("score_holder", ScoreHolderArgument.class, new ScoreHolderArgument.Serializer());
+-        register("swizzle", SwizzleArgument.class, new EmptyArgumentSerializer<>(SwizzleArgument::swizzle));
+-        register("team", TeamArgument.class, new EmptyArgumentSerializer<>(TeamArgument::team));
+-        register("item_slot", SlotArgument.class, new EmptyArgumentSerializer<>(SlotArgument::slot));
+-        register("resource_location", ResourceLocationArgument.class, new EmptyArgumentSerializer<>(ResourceLocationArgument::id));
+-        register("mob_effect", MobEffectArgument.class, new EmptyArgumentSerializer<>(MobEffectArgument::effect));
+-        register("function", FunctionArgument.class, new EmptyArgumentSerializer<>(FunctionArgument::functions));
+-        register("entity_anchor", EntityAnchorArgument.class, new EmptyArgumentSerializer<>(EntityAnchorArgument::anchor));
+-        register("int_range", RangeArgument.Ints.class, new EmptyArgumentSerializer<>(RangeArgument::intRange));
+-        register("float_range", RangeArgument.Floats.class, new EmptyArgumentSerializer<>(RangeArgument::floatRange));
+-        register("item_enchantment", ItemEnchantmentArgument.class, new EmptyArgumentSerializer<>(ItemEnchantmentArgument::enchantment));
+-        register("entity_summon", EntitySummonArgument.class, new EmptyArgumentSerializer<>(EntitySummonArgument::id));
+-        register("dimension", DimensionArgument.class, new EmptyArgumentSerializer<>(DimensionArgument::dimension));
+-        register("time", TimeArgument.class, new EmptyArgumentSerializer<>(TimeArgument::time));
+-        register("uuid", UuidArgument.class, new EmptyArgumentSerializer<>(UuidArgument::uuid));
+-        if (SharedConstants.IS_RUNNING_IN_IDE) {
+-            register("test_argument", TestFunctionArgument.class, new EmptyArgumentSerializer<>(TestFunctionArgument::testFunctionArgument));
+-            register("test_class", TestClassNameArgument.class, new EmptyArgumentSerializer<>(TestClassNameArgument::testClassName));
+-        }
+-
+-    }
+-
+-    @Nullable
+-    private static ArgumentTypes.Entry<?> get(ResourceLocation id) {
+-        return BY_NAME.get(id);
+-    }
+-
+-    @Nullable
+-    private static ArgumentTypes.Entry<?> get(ArgumentType<?> type) {
+-        return BY_CLASS.get(type.getClass());
+-    }
+-
+-    public static <T extends ArgumentType<?>> void serialize(FriendlyByteBuf buf, T type) {
+-        ArgumentTypes.Entry<T> entry = get(type);
+-        if (entry == null) {
+-            LOGGER.error("Could not serialize {} ({}) - will not be sent to client!", type, type.getClass());
+-            buf.writeResourceLocation(new ResourceLocation(""));
+-        } else {
+-            buf.writeResourceLocation(entry.name);
+-            entry.serializer.serializeToNetwork(type, buf);
+-        }
+-    }
+-
+-    @Nullable
+-    public static ArgumentType<?> deserialize(FriendlyByteBuf buf) {
+-        ResourceLocation resourceLocation = buf.readResourceLocation();
+-        ArgumentTypes.Entry<?> entry = get(resourceLocation);
+-        if (entry == null) {
+-            LOGGER.error("Could not deserialize {}", (Object)resourceLocation);
+-            return null;
+-        } else {
+-            return entry.serializer.deserializeFromNetwork(buf);
+-        }
+-    }
+-
+-    private static <T extends ArgumentType<?>> void serializeToJson(JsonObject json, T type) {
+-        ArgumentTypes.Entry<T> entry = get(type);
+-        if (entry == null) {
+-            LOGGER.error("Could not serialize argument {} ({})!", type, type.getClass());
+-            json.addProperty("type", "unknown");
+-        } else {
+-            json.addProperty("type", "argument");
+-            json.addProperty("parser", entry.name.toString());
+-            JsonObject jsonObject = new JsonObject();
+-            entry.serializer.serializeToJson(type, jsonObject);
+-            if (jsonObject.size() > 0) {
+-                json.add("properties", jsonObject);
+-            }
+-        }
+-
+-    }
+-
+-    public static <S> JsonObject serializeNodeToJson(CommandDispatcher<S> dispatcher, CommandNode<S> commandNode) {
+-        JsonObject jsonObject = new JsonObject();
+-        if (commandNode instanceof RootCommandNode) {
+-            jsonObject.addProperty("type", "root");
+-        } else if (commandNode instanceof LiteralCommandNode) {
+-            jsonObject.addProperty("type", "literal");
+-        } else if (commandNode instanceof ArgumentCommandNode) {
+-            serializeToJson(jsonObject, ((ArgumentCommandNode)commandNode).getType());
+-        } else {
+-            LOGGER.error("Could not serialize node {} ({})!", commandNode, commandNode.getClass());
+-            jsonObject.addProperty("type", "unknown");
+-        }
+-
+-        JsonObject jsonObject2 = new JsonObject();
+-
+-        for(CommandNode<S> commandNode2 : commandNode.getChildren()) {
+-            jsonObject2.add(commandNode2.getName(), serializeNodeToJson(dispatcher, commandNode2));
+-        }
+-
+-        if (jsonObject2.size() > 0) {
+-            jsonObject.add("children", jsonObject2);
+-        }
+-
+-        if (commandNode.getCommand() != null) {
+-            jsonObject.addProperty("executable", true);
+-        }
+-
+-        if (commandNode.getRedirect() != null) {
+-            Collection<String> collection = dispatcher.getPath(commandNode.getRedirect());
+-            if (!collection.isEmpty()) {
+-                JsonArray jsonArray = new JsonArray();
+-
+-                for(String string : collection) {
+-                    jsonArray.add(string);
+-                }
+-
+-                jsonObject.add("redirect", jsonArray);
+-            }
+-        }
+-
+-        return jsonObject;
+-    }
+-
+-    public static boolean isTypeRegistered(ArgumentType<?> type) {
+-        return get(type) != null;
+-    }
+-
+-    public static <T> Set<ArgumentType<?>> findUsedArgumentTypes(CommandNode<T> node) {
+-        Set<CommandNode<T>> set = Sets.newIdentityHashSet();
+-        Set<ArgumentType<?>> set2 = Sets.newHashSet();
+-        findUsedArgumentTypes(node, set2, set);
+-        return set2;
+-    }
+-
+-    private static <T> void findUsedArgumentTypes(CommandNode<T> node, Set<ArgumentType<?>> argumentTypes, Set<CommandNode<T>> ignoredNodes) {
+-        if (ignoredNodes.add(node)) {
+-            if (node instanceof ArgumentCommandNode) {
+-                argumentTypes.add(((ArgumentCommandNode)node).getType());
+-            }
+-
+-            node.getChildren().forEach((nodex) -> {
+-                findUsedArgumentTypes(nodex, argumentTypes, ignoredNodes);
+-            });
+-            CommandNode<T> commandNode = node.getRedirect();
+-            if (commandNode != null) {
+-                findUsedArgumentTypes(commandNode, argumentTypes, ignoredNodes);
+-            }
+-
+-        }
+-    }
+-
+-    static class Entry<T extends ArgumentType<?>> {
+-        public final Class<T> clazz;
+-        public final ArgumentSerializer<T> serializer;
+-        public final ResourceLocation name;
+-
+-        Entry(Class<T> argClass, ArgumentSerializer<T> serializer, ResourceLocation id) {
+-            this.clazz = argClass;
+-            this.serializer = serializer;
+-            this.name = id;
+-        }
+-    }
+-}
+diff --git a/src/main/java/net/minecraft/server/Main.java b/src/main/java/net/minecraft/server/Main.java
+index a3686c816dee7181e2f82ceeba1f02f97b88ece4..0e0f48c196a6c819071e1a65cf32dc020b51394f 100644
+--- a/src/main/java/net/minecraft/server/Main.java
++++ b/src/main/java/net/minecraft/server/Main.java
+@@ -55,6 +55,7 @@ import org.apache.logging.log4j.Logger;
+ 
+ // CraftBukkit start
+ import net.minecraft.SharedConstants;
++import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperConfig;
+ 
+ public class Main {
+@@ -102,6 +103,7 @@ public class Main {
+ 
+             MultiPaperConfig.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper
+             System.setProperty("bungeecordName", MultiPaperConfig.bungeeCordName); // MultiPaper - remember this property even after config reloads
++            MultiPaper.getConnection(); // MultiPaper - start connection
+ 
+             Bootstrap.bootStrap();
+             Bootstrap.validate();
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
 index 1bfac00194abdf0631f8452f30f6e37df33f0f7c..9d52d896303d9c5de390a31f65cd851756e999e6 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
@@ -16,45 +314,68 @@ index 1bfac00194abdf0631f8452f30f6e37df33f0f7c..9d52d896303d9c5de390a31f65cd8517
  
  public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements CommandSource, AutoCloseable {
  
-diff --git a/src/main/java/puregero/multipaper/DataOutputSender.java b/src/main/java/puregero/multipaper/DataOutputSender.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..bd22d1ab1e3fcf07f8d97c82473ba3bcbbf28cd3
---- /dev/null
-+++ b/src/main/java/puregero/multipaper/DataOutputSender.java
-@@ -0,0 +1,33 @@
-+package puregero.multipaper;
-+
-+import javax.annotation.Nullable;
-+import java.io.*;
-+import java.util.concurrent.atomic.AtomicInteger;
-+import java.util.function.Consumer;
-+
-+public class DataOutputSender extends DataOutputStream {
-+    private static final AtomicInteger idIncremement = new AtomicInteger(1);
-+
-+    private final MultiPaperConnection connection;
-+    private final int id;
-+
-+    public DataOutputSender(MultiPaperConnection connection) throws IOException {
-+        this(connection, idIncremement.incrementAndGet());
-+    }
-+
-+    public DataOutputSender(MultiPaperConnection connection, int id) throws IOException {
-+        super(new ByteArrayOutputStream());
-+        this.connection = connection;
-+        this.id = id;
-+
-+        writeInt(id);
-+    }
-+
-+    public void send(@Nullable Consumer<DataInputStream> callback) throws IOException {
-+        connection.send(((ByteArrayOutputStream) out).toByteArray(), id, callback);
-+    }
-+
-+    public int getId() {
-+        return id;
-+    }
-+}
+diff --git a/src/main/java/net/minecraft/world/ticks/ScheduledTick.java b/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
+deleted file mode 100644
+index 58f8d0bac3fa3832da25a458c2b42bdaf50f0973..0000000000000000000000000000000000000000
+--- a/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
++++ /dev/null
+@@ -1,56 +0,0 @@
+-package net.minecraft.world.ticks;
+-
+-import it.unimi.dsi.fastutil.Hash.Strategy;
+-import java.util.Comparator;
+-import javax.annotation.Nullable;
+-import net.minecraft.core.BlockPos;
+-
+-public record ScheduledTick<T>(T type, BlockPos pos, long triggerTick, TickPriority priority, long subTickOrder) {
+-    public static final Comparator<ScheduledTick<?>> DRAIN_ORDER = (first, second) -> {
+-        int i = Long.compare(first.triggerTick, second.triggerTick);
+-        if (i != 0) {
+-            return i;
+-        } else {
+-            i = first.priority.compareTo(second.priority);
+-            return i != 0 ? i : Long.compare(first.subTickOrder, second.subTickOrder);
+-        }
+-    };
+-    public static final Comparator<ScheduledTick<?>> INTRA_TICK_DRAIN_ORDER = (first, second) -> {
+-        int i = first.priority.compareTo(second.priority);
+-        return i != 0 ? i : Long.compare(first.subTickOrder, second.subTickOrder);
+-    };
+-    public static final Strategy<ScheduledTick<?>> UNIQUE_TICK_HASH = new Strategy<ScheduledTick<?>>() {
+-        @Override
+-        public int hashCode(ScheduledTick<?> scheduledTick) {
+-            return 31 * scheduledTick.pos().hashCode() + scheduledTick.type().hashCode();
+-        }
+-
+-        @Override
+-        public boolean equals(@Nullable ScheduledTick<?> scheduledTick, @Nullable ScheduledTick<?> scheduledTick2) {
+-            if (scheduledTick == scheduledTick2) {
+-                return true;
+-            } else if (scheduledTick != null && scheduledTick2 != null) {
+-                return scheduledTick.type() == scheduledTick2.type() && scheduledTick.pos().equals(scheduledTick2.pos());
+-            } else {
+-                return false;
+-            }
+-        }
+-    };
+-
+-    public ScheduledTick(T type, BlockPos pos, long triggerTick, long subTickOrder) {
+-        this(type, pos, triggerTick, TickPriority.NORMAL, subTickOrder);
+-    }
+-
+-    public ScheduledTick(T object, BlockPos blockPos, long l, TickPriority tickPriority, long m) {
+-        blockPos = blockPos.immutable();
+-        this.type = object;
+-        this.pos = blockPos;
+-        this.triggerTick = l;
+-        this.priority = tickPriority;
+-        this.subTickOrder = m;
+-    }
+-
+-    public static <T> ScheduledTick<T> probe(T type, BlockPos pos) {
+-        return new ScheduledTick<>(type, pos, 0L, TickPriority.NORMAL, 0L);
+-    }
+-}
 diff --git a/src/main/java/puregero/multipaper/ExternalServer.java b/src/main/java/puregero/multipaper/ExternalServer.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..35b8352a2c798c70cfebeddd2a95dc8edf1d21d9
@@ -132,162 +453,115 @@ index 0000000000000000000000000000000000000000..d9fa811b2a0b5f8402ae0e811b09ddbd
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..5c6003e2bed706d3c586239e9f71ae7f1b41843a
+index 0000000000000000000000000000000000000000..4652ddc058edb4b34b4570e5e8c5990e6f13fa01
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,108 @@
 +package puregero.multipaper;
 +
++import io.netty.channel.ChannelHandler;
++import io.netty.channel.ChannelHandlerContext;
++import io.netty.channel.socket.SocketChannel;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
++import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.HelloMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundProtocol;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessageHandler;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundProtocol;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerInfoUpdateMessage;
 +
-+import javax.annotation.Nullable;
-+import java.io.*;
-+import java.net.Socket;
-+import java.net.SocketException;
 +import java.util.Map;
++import java.util.Set;
++import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.TimeUnit;
 +import java.util.function.Consumer;
 +
-+public class MultiPaperConnection extends Thread {
++@ChannelHandler.Sharable
++public class MultiPaperConnection extends ServerBoundMessageHandler {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(MultiPaperConnection.class.getSimpleName());
 +
-+    private Socket socket;
-+    private final Map<Integer, Request> callbacks = new ConcurrentHashMap<>();
++    private final String myName;
++    private final MessageBootstrap<ServerBoundMessage, MasterBoundMessage> bootstrap;
++    private SocketChannel channel;
++    private boolean channelActive = false;
++    private final Set<MasterBoundMessage> unhandledRequests = ConcurrentHashMap.newKeySet();
 +    private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
-+    private String myName = null;
 +
 +    public MultiPaperConnection() {
-+        super("MultiPaperConnection Thread");
-+        start();
++        System.setProperty("multipaper.netty.threads", System.getProperty("multipaper.netty.threads", Integer.toString(Math.min(Runtime.getRuntime().availableProcessors(), 3))));
++        myName = MultiPaperConfig.bungeeCordName;
++        bootstrap = new MessageBootstrap<>(new ServerBoundProtocol(), new MasterBoundProtocol(), channel -> channel.pipeline().addLast(this));
++        connect();
 +    }
 +
-+    public void send(byte[] bytes, int id, @Nullable Consumer<DataInputStream> callback) {
-+        Request request = new Request(bytes, callback);
-+        if (callback != null) {
-+            callbacks.put(id, request);
-+        }
-+        synchronized (socket) {
-+            try {
-+                socket.getOutputStream().write(bytes);
-+                socket.getOutputStream().flush();
-+            } catch (IOException e) {
-+                e.printStackTrace();
-+            }
-+        }
-+    }
-+
-+    public DataOutputSender buffer(int id) throws IOException {
-+        return new DataOutputSender(this, id);
++    public void connect() {
++        String server = MultiPaperConfig.multipaperMasterAddress;
++        LOGGER.info("Connecting to " + server + "...");
++        String[] serverParts = server.split(":");
++        bootstrap.connectTo(serverParts[0], Integer.parseInt(serverParts[1]), throwable ->
++                CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS).execute(this::connect));
 +    }
 +
 +    @Override
-+    public void run() {
-+        while (true) {
-+            String server = MultiPaperConfig.multipaperMasterAddress;
-+            LOGGER.info("Connecting to " + server + "...");
-+            String[] serverParts = server.split(":");
-+            try (Socket socket = new Socket(serverParts[0], Integer.parseInt(serverParts[1]))) {
-+                DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-+                out.writeUTF(myName = MultiPaperConfig.bungeeCordName);
++    public void channelActive(ChannelHandlerContext ctx) {
++        channel = (SocketChannel) ctx.channel();
++        LOGGER.info("Connected to " + channel.remoteAddress());
++        channel.write(new HelloMessage(myName));
 +
-+                this.socket = socket;
-+                LOGGER.info("Connected to " + server);
++        for (MasterBoundMessage unhandledRequest : unhandledRequests) {
++            channel.write(unhandledRequest);
++        }
 +
-+                synchronized (socket) {
-+                    // Resend requests on this new socket
-+                    for (Request request : callbacks.values()) {
-+                        if (request.setLastSocket(socket)) {
-+                            socket.getOutputStream().write(request.getData());
-+                        }
-+                    }
-+                }
++        channelActive = true;
++        channel.flush();
++    }
 +
-+                DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-+                while (!socket.isClosed()) {
-+                    int id = in.readInt();
-+                    String command = in.readUTF();
++    @Override
++    public void channelInactive(ChannelHandlerContext ctx) {
++        channelActive = false;
++        LOGGER.info("Lost connection to " + ((SocketChannel) ctx.channel()).remoteAddress());
++        connect();
++    }
 +
-+                    Request request = callbacks.remove(id);
-+
-+                    if (request != null) {
-+                        request.getCallback().accept(in);
-+                        continue;
-+                    }
-+
-+                    // Run command(DataInputStream in);
-+                    this.getClass().getMethod(command, DataInputStream.class, DataOutputSender.class).invoke(this, in, buffer(id));
-+                }
-+            } catch (EOFException | SocketException e) {
-+                // Ignored
-+            } catch (Exception e) {
-+                e.printStackTrace();
-+            }
++    private void waitForActiveChannel() {
++        while (channel == null || !channel.isActive() || !channelActive) {
++            // Wait for channel to become active
 +            try {
-+                Thread.sleep(1000);
++                Thread.sleep(50);
 +            } catch (InterruptedException e) {
 +                e.printStackTrace();
-+                return;
 +            }
 +        }
++    }
++
++    public void send(MasterBoundMessage message) {
++        waitForActiveChannel();
++        channel.writeAndFlush(message);
++    }
++
++    public void send(MasterBoundMessage message, Consumer<ServerBoundMessage> callback) {
++        waitForActiveChannel();
++        unhandledRequests.add(message);
++        send(setCallback(message, reply -> {
++            unhandledRequests.remove(message);
++            callback.accept(reply);
++        }));
 +    }
 +
 +    public Map<String, ExternalServer> getServersMap() {
 +        return serversMap;
 +    }
 +
-+    public void serverInfo(DataInputStream in, DataOutputSender out) throws IOException {
-+        ExternalServer server = serversMap.computeIfAbsent(in.readUTF(), key -> new ExternalServer(key, key.equals(myName)));
-+        server.setAverageTickTime(in.readInt());
++    @Override
++    public void handle(ServerInfoUpdateMessage message) {
++        ExternalServer server = serversMap.computeIfAbsent(message.name, key -> new ExternalServer(key, key.equals(myName)));
++        server.setAverageTickTime(message.averageTickTime);
++        server.setTps(message.tps);
 +        server.setLastAlive(System.currentTimeMillis());
-+    }
-+}
-diff --git a/src/main/java/puregero/multipaper/Request.java b/src/main/java/puregero/multipaper/Request.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..d4df56fe94bfffbf6c8b8134640da308d49edd0d
---- /dev/null
-+++ b/src/main/java/puregero/multipaper/Request.java
-@@ -0,0 +1,42 @@
-+package puregero.multipaper;
-+
-+import java.io.DataInputStream;
-+import java.net.Socket;
-+import java.util.function.Consumer;
-+
-+public class Request {
-+    private Socket lastSocket;
-+    private final byte[] data;
-+    private final Consumer<DataInputStream> callback;
-+    private final long time = System.currentTimeMillis();
-+
-+    public Request(byte[] data, Consumer<DataInputStream> callback) {
-+        this.data = data;
-+        this.callback = callback;
-+    }
-+
-+    public byte[] getData() {
-+        return data;
-+    }
-+
-+    public Consumer<DataInputStream> getCallback() {
-+        return callback;
-+    }
-+
-+    public long getTime() {
-+        return time;
-+    }
-+
-+    /**
-+     * @return True if the socket is not the same as the last socket, false
-+     * otherwise
-+     */
-+    public synchronized boolean setLastSocket(Socket socket) {
-+        if (socket == lastSocket) {
-+            return false;
-+        }
-+
-+        lastSocket = socket;
-+        return true;
 +    }
 +}

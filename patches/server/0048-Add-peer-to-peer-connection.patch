@@ -203,10 +203,10 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..98bea71549935cb0bd3c7fe45d7a61adfa1d799a
+index 0000000000000000000000000000000000000000..d0530d101675ec01060c6798da27334deb7f0302
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,106 @@
 +package puregero.multipaper;
 +
 +import io.netty.channel.Channel;
@@ -283,12 +283,14 @@ index 0000000000000000000000000000000000000000..98bea71549935cb0bd3c7fe45d7a61ad
 +                .addLast("packet_handler", new ExternalServerPacketHandler(this));
 +
 +        // And put it onto our own event loop
-+        if (SystemPropertyUtil.getBoolean("multipaper.netty.useOwnEventLoop", true)) {
-+            channel.deregister().addListener((ChannelFutureListener) future -> {
-+                MessageBootstrap.getEventLoopGroup().register(future.channel()).sync();
-+            });
-+        } else {
-+            LOGGER.info("Using Minecraft's event loop");
++        if (MessageBootstrap.getEventLoopGroup() != channel.eventLoop().parent()) {
++            if (SystemPropertyUtil.getBoolean("multipaper.netty.useOwnEventLoop", true)) {
++                channel.deregister().addListener((ChannelFutureListener) future -> {
++                    MessageBootstrap.getEventLoopGroup().register(future.channel()).sync();
++                });
++            } else {
++                LOGGER.info("Using Minecraft's event loop");
++            }
 +        }
 +    }
 +

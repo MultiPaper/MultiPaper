@@ -44,6 +44,28 @@ index 7bab31a312463cc963d9621cdc543a281459bd32..7d49a0bdb11afd8616a97d6c7f043f9d
      public V getUpdating(final long k) {
          return this.updatingMap.get(k);
      }
+diff --git a/src/main/java/net/minecraft/network/FriendlyByteBuf.java b/src/main/java/net/minecraft/network/FriendlyByteBuf.java
+index 896a4237f871d46cf39b0721e909c2cc3b5fc728..9ce7c32e0ec53d8841fc3c7741ab910d649a73f4 100644
+--- a/src/main/java/net/minecraft/network/FriendlyByteBuf.java
++++ b/src/main/java/net/minecraft/network/FriendlyByteBuf.java
+@@ -66,6 +66,8 @@ public class FriendlyByteBuf extends ByteBuf {
+     public static final short MAX_STRING_LENGTH = 32767;
+     public static final int MAX_COMPONENT_STRING_LENGTH = 262144;
+ 
++    public long maxNbtSize = 2097152L; // MultiPaper
++
+     public FriendlyByteBuf(ByteBuf parent) {
+         this.source = parent;
+     }
+@@ -456,7 +458,7 @@ public class FriendlyByteBuf extends ByteBuf {
+ 
+     @Nullable
+     public CompoundTag readNbt() {
+-        return this.readNbt(new NbtAccounter(2097152L));
++        return this.readNbt(new NbtAccounter(maxNbtSize)); // MultiPaper
+     }
+ 
+     @Nullable
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
 index d271871563fa883efb77b35ec3b1dfbba87f0b62..9f8c73d3ad985160f82fb58bd28b37d4613ef07a 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
@@ -2034,10 +2056,10 @@ index 0000000000000000000000000000000000000000..95a3823f5d13c29628adfc73a185d43c
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7cda216bdf980eb65a002b7e1f593afda11d067a
+index 0000000000000000000000000000000000000000..cfee3af635094603a3ee14812ffea71548867bc8
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,63 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -2072,6 +2094,7 @@ index 0000000000000000000000000000000000000000..7cda216bdf980eb65a002b7e1f593afd
 +        byte[] bytes = in.readByteArray();
 +        ByteBuf buf = Unpooled.wrappedBuffer(bytes);
 +        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        friendlyByteBuf.maxNbtSize = Long.MAX_VALUE;
 +        int packetId = friendlyByteBuf.readVarInt();
 +        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
 +    }

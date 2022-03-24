@@ -453,10 +453,10 @@ index 0000000000000000000000000000000000000000..d9fa811b2a0b5f8402ae0e811b09ddbd
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4652ddc058edb4b34b4570e5e8c5990e6f13fa01
+index 0000000000000000000000000000000000000000..0c823dc4b06139241657d3e427a9bccb7106444c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,111 @@
 +package puregero.multipaper;
 +
 +import io.netty.channel.ChannelHandler;
@@ -503,8 +503,11 @@ index 0000000000000000000000000000000000000000..4652ddc058edb4b34b4570e5e8c5990e
 +        String server = MultiPaperConfig.multipaperMasterAddress;
 +        LOGGER.info("Connecting to " + server + "...");
 +        String[] serverParts = server.split(":");
-+        bootstrap.connectTo(serverParts[0], Integer.parseInt(serverParts[1]), throwable ->
-+                CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS).execute(this::connect));
++        bootstrap.connectTo(serverParts[0], Integer.parseInt(serverParts[1])).addListener(future -> {
++            if (future.cause() != null) {
++                CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS).execute(this::connect);
++            }
++        });
 +    }
 +
 +    @Override

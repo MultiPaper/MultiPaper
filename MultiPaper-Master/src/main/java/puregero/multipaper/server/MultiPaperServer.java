@@ -1,5 +1,6 @@
 package puregero.multipaper.server;
 
+import io.netty.channel.ChannelFuture;
 import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundProtocol;
@@ -52,10 +53,19 @@ public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, Serve
     public MultiPaperServer(String address, int port) {
         super(new MasterBoundProtocol(), new ServerBoundProtocol(), channel -> channel.pipeline().addLast(new ServerConnection(channel)));
 
+        ChannelFuture future;
         if (address == null) {
-            this.listenOn(port, Throwable::printStackTrace);
+            future = this.listenOn(port);
         } else {
-            this.listenOn(address, port, Throwable::printStackTrace);
+            future = this.listenOn(address, port);
         }
+
+        future.addListener(f -> {
+            if (f.cause() != null) {
+                f.cause().printStackTrace();
+            } else {
+                System.out.println("[MultiPaperMaster] Listening on " + (address == null ? "0.0.0.0" : address) + ":" + port);
+            }
+        });
     }
 }

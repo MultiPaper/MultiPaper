@@ -2,6 +2,7 @@ package puregero.multipaper.mastermessagingprotocol;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -17,6 +18,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import puregero.multipaper.mastermessagingprotocol.messages.Message;
 import puregero.multipaper.mastermessagingprotocol.messages.Protocol;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.Consumer;
 
@@ -78,32 +80,16 @@ public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extend
                 .childOption(ChannelOption.SO_KEEPALIVE, true);
     }
 
-    public void connectTo(String address, int port, Consumer<Throwable> onFailure) {
-        createBootstrap().connect(address, port).addListener(future -> {
-            if (future.cause() != null) {
-                onFailure.accept(future.cause());
-            }
-        });
+    public ChannelFuture connectTo(String address, int port) {
+        return createBootstrap().connect(address, port);
     }
 
-    public void listenOn(String address, int port, Consumer<Throwable> onFailure) {
-        createServerBootstrap().bind(address, port).addListener(future -> {
-            if (future.cause() != null) {
-                onFailure.accept(future.cause());
-            } else {
-                System.out.println("Listening on " + address + ":" + port);
-            }
-        });
+    public ChannelFuture listenOn(String address, int port) {
+        return createServerBootstrap().bind(address, port);
     }
 
-    public void listenOn(int port, Consumer<Throwable> onFailure) {
-        createServerBootstrap().bind(port).addListener(future -> {
-            if (future.cause() != null) {
-                onFailure.accept(future.cause());
-            } else {
-                System.out.println("Listening on port " + port);
-            }
-        });
+    public ChannelFuture listenOn(int port) {
+        return createServerBootstrap().bind(port);
     }
 
     @Override

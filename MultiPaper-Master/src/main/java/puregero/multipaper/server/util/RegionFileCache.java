@@ -119,7 +119,7 @@ public class RegionFileCache {
     public static DataInputStream getChunkDataInputStream(File basePath, int chunkX, int chunkZ) {
         RegionFile r = getRegionFile(basePath, chunkX, chunkZ);
         if (r != null) {
-            return r.getChunkDataInputStream(chunkX & 31, chunkZ & 31);
+            return r.getChunkDataInputStream(chunkX, chunkZ);
         } else {
             return null;
         }
@@ -127,14 +127,14 @@ public class RegionFileCache {
 
     public static DataOutputStream getChunkDataOutputStream(File basePath, int chunkX, int chunkZ) {
         RegionFile r = getRegionFile(basePath, chunkX, chunkZ);
-        return r.getChunkDataOutputStream(chunkX & 31, chunkZ & 31);
+        return r.getChunkDataOutputStream(chunkX, chunkZ);
     }
 
     public static byte[] getChunkDeflatedData(File basePath, int chunkX, int chunkZ) {
         try {
             RegionFile r = getRegionFileIfExists(basePath, chunkX, chunkZ);
             if (r != null) {
-                return r.getDeflatedBytes(chunkX & 31, chunkZ & 31);
+                return r.getDeflatedBytes(chunkX, chunkZ);
             } else {
                 return null;
             }
@@ -147,7 +147,7 @@ public class RegionFileCache {
     public static void putChunkDeflatedData(File basePath, int chunkX, int chunkZ, byte[] data) {
         try {
             RegionFile r = getRegionFile(basePath, chunkX, chunkZ);
-            r.putDeflatedBytes(chunkX & 31, chunkZ & 31, data);
+            r.putDeflatedBytes(chunkX, chunkZ, data);
         } catch (Throwable throwable) {
             System.err.println("Error when trying to write chunk " + chunkX + "," + chunkZ + " in " + basePath);
             throw throwable;

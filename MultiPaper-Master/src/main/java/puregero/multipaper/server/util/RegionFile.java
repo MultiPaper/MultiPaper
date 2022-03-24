@@ -59,13 +59,17 @@ package puregero.multipaper.server.util;
  */
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.zip.*;
 
 public class RegionFile {
 
-    private static final int VERSION_GZIP = 1;
-    private static final int VERSION_DEFLATE = 2;
+    private static final byte VERSION_GZIP = 1;
+    private static final byte VERSION_DEFLATE = 2;
+    private static final byte VERSION_DEFLATE_EXTERNAL = (byte) (128 | VERSION_DEFLATE);
 
     private static final int SECTOR_BYTES = 4096;
     private static final int SECTOR_INTS = SECTOR_BYTES / 4;
@@ -74,6 +78,7 @@ public class RegionFile {
     private static final byte emptySector[] = new byte[4096];
 
     private RandomAccessFile file;
+    private File directory;
     private final int offsets[];
     private final int chunkTimestamps[];
     private ArrayList<Boolean> sectorFree;
@@ -90,6 +95,8 @@ public class RegionFile {
             if (path.exists()) {
                 lastModified = path.lastModified();
             }
+
+            directory = path.getParentFile();
 
             file = new RandomAccessFile(path, "rw");
 
@@ -154,10 +161,6 @@ public class RegionFile {
     }
 
     public synchronized byte[] getDeflatedBytes(int x, int z) {
-        if (outOfBounds(x, z)) {
-            return null;
-        }
-
         try {
             int offset = getOffset(x, z);
             if (offset == 0) {
@@ -171,7 +174,7 @@ public class RegionFile {
                 return null;
             }
 
-            file.seek(sectorNumber * SECTOR_BYTES);
+            file.seek((long) sectorNumber * SECTOR_BYTES);
             int length = file.readInt();
 
             if (length > SECTOR_BYTES * numSectors) {
@@ -188,6 +191,8 @@ public class RegionFile {
                 byte[] data = new byte[length - 1];
                 file.read(data);
                 return data;
+            } else if (version == VERSION_DEFLATE_EXTERNAL) {
+                return readExternalFile(x, z);
             }
 
             return null;
@@ -217,10 +222,6 @@ public class RegionFile {
      * the chunk is not found or an error occurs
      */
     public synchronized DataInputStream getChunkDataInputStream(int x, int z) {
-        if (outOfBounds(x, z)) {
-            return null;
-        }
-
         try {
             int offset = getOffset(x, z);
             if (offset == 0) {
@@ -234,7 +235,7 @@ public class RegionFile {
                 return null;
             }
 
-            file.seek(sectorNumber * SECTOR_BYTES);
+            file.seek((long) sectorNumber * SECTOR_BYTES);
             int length = file.readInt();
 
             if (length > SECTOR_BYTES * numSectors) {
@@ -250,6 +251,8 @@ public class RegionFile {
                 byte[] data = new byte[length - 1];
                 file.read(data);
                 return new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data)));
+            } else if (version == VERSION_DEFLATE_EXTERNAL) {
+                return new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(readExternalFile(x, z))));
             }
 
             return null;
@@ -259,10 +262,6 @@ public class RegionFile {
     }
 
     public synchronized void clear(int x, int z) throws IOException {
-        if (outOfBounds(x, z)) {
-            return;
-        }
-        
         int offset = getOffset(x, z);
 
         if (offset != 0) {
@@ -274,11 +273,11 @@ public class RegionFile {
                 sectorFree.set(sectorNumber + i, true);
             }
         }
+
+        Files.deleteIfExists(getExternalChunkPath(x, z));
     }
 
     public DataOutputStream getChunkDataOutputStream(int x, int z) {
-        if (outOfBounds(x, z)) return null;
-
         return new DataOutputStream(new DeflaterOutputStream(new ChunkBuffer(x, z)));
     }
 
@@ -312,15 +311,17 @@ public class RegionFile {
             int sectorNumber = offset >>> 8;
             int sectorsAllocated = offset & 0xFF;
             int sectorsNeeded = (length + CHUNK_HEADER_SIZE) / SECTOR_BYTES + 1;
+            boolean externalFile = false;
 
             // maximum chunk size is 1MB
             if (sectorsNeeded >= 256) {
-                return;
+                externalFile = true;
+                sectorsNeeded = 1;
             }
 
             if (sectorNumber != 0 && sectorsAllocated == sectorsNeeded) {
                 /* we can simply overwrite the old sectors */
-                write(sectorNumber, data, length);
+                write(x, z, sectorNumber, data, length, externalFile);
             } else {
                 /* we need to allocate new sectors */
 
@@ -354,7 +355,7 @@ public class RegionFile {
                     for (int i = 0; i < sectorsNeeded; ++i) {
                         sectorFree.set(sectorNumber + i, false);
                     }
-                    write(sectorNumber, data, length);
+                    write(x, z, sectorNumber, data, length, externalFile);
                 } else {
                     /*
                      * no free space large enough found -- we need to grow the
@@ -368,7 +369,7 @@ public class RegionFile {
                     }
                     sizeDelta += SECTOR_BYTES * sectorsNeeded;
 
-                    write(sectorNumber, data, length);
+                    write(x, z, sectorNumber, data, length, externalFile);
                     setOffset(x, z, (sectorNumber << 8) | sectorsNeeded);
                 }
             }
@@ -378,21 +379,43 @@ public class RegionFile {
         }
     }
 
+    private Path getExternalChunkPath(int x, int z) {
+        String filename = "c." + x + "." + z + ".mcc";
+
+        return directory.toPath().resolve(filename);
+    }
+
+    private byte[] readExternalFile(int x, int z) throws IOException {
+        return Files.readAllBytes(getExternalChunkPath(x, z));
+    }
+
+    private void writeExternalFile(int x, int z, byte[] data) throws IOException {
+        Path temp = Files.createTempFile("c." + x + "." + z, ".mcc");
+
+        Files.write(temp, data);
+
+        Files.move(temp, getExternalChunkPath(x, z), StandardCopyOption.REPLACE_EXISTING);
+    }
+
     /* write a chunk data to the region file at specified sector number */
-    private void write(int sectorNumber, byte[] data, int length) throws IOException {
-        file.seek(sectorNumber * SECTOR_BYTES);
+    private void write(int x, int z, int sectorNumber, byte[] data, int length, boolean externalFile) throws IOException {
+        if (externalFile) {
+            writeExternalFile(x, z, data);
+            file.seek((long) sectorNumber * SECTOR_BYTES);
+            file.writeInt(1); // chunk length
+            file.writeByte(VERSION_DEFLATE_EXTERNAL); // chunk version number (external file)
+            return;
+        }
+
+        file.seek((long) sectorNumber * SECTOR_BYTES);
         file.writeInt(length + 1); // chunk length
         file.writeByte(VERSION_DEFLATE); // chunk version number
         file.write(data, 0, length); // chunk data
-    }
-
-    /* is this an invalid chunk coordinate? */
-    private boolean outOfBounds(int x, int z) {
-        return x < 0 || x >= 32 || z < 0 || z >= 32;
+        Files.deleteIfExists(getExternalChunkPath(x, z));
     }
 
     private int getOffset(int x, int z) {
-        return offsets[x + z * 32];
+        return offsets[(x & 31) + (z & 31) * 32];
     }
 
     public boolean hasChunk(int x, int z) {
@@ -400,14 +423,14 @@ public class RegionFile {
     }
 
     private void setOffset(int x, int z, int offset) throws IOException {
-        offsets[x + z * 32] = offset;
-        file.seek((x + z * 32) * 4);
+        offsets[(x & 31) + (z & 31) * 32] = offset;
+        file.seek(((x & 31) + (z & 31) * 32) * 4);
         file.writeInt(offset);
     }
 
     private void setTimestamp(int x, int z, int value) throws IOException {
-        chunkTimestamps[x + z * 32] = value;
-        file.seek(SECTOR_BYTES + (x + z * 32) * 4);
+        chunkTimestamps[(x & 31) + (z & 31) * 32] = value;
+        file.seek(SECTOR_BYTES + ((x & 31) + (z & 31) * 32) * 4);
         file.writeInt(value);
     }
 

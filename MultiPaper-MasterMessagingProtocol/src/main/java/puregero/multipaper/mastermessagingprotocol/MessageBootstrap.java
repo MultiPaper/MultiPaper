@@ -21,7 +21,7 @@ import java.util.function.Consumer;
 
 public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extends ChannelInitializer<SocketChannel> {
 
-    public static int MAX_BYTES_PER_READ = 1024 * 1024 * 1024;
+    public static int MAX_BYTES_PER_READ = Integer.getInteger("max_bytes_per_read", 256 * 1024 * 1024);
     public static boolean DAEMON = true;
     private static final ThreadFactory eventLoopThreadFactory = new ThreadFactory() {
         private int counter = 0;

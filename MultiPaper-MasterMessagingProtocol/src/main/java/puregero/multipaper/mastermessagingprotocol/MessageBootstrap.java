@@ -24,13 +24,14 @@ import java.util.function.Consumer;
 
 public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extends ChannelInitializer<SocketChannel> {
 
-    private static ThreadFactory eventLoopThreadFactory = new ThreadFactory() {
+    public static boolean DAEMON = true;
+    private static final ThreadFactory eventLoopThreadFactory = new ThreadFactory() {
         private int counter = 0;
 
         @Override
         public Thread newThread(Runnable r) {
             Thread thread = new Thread(r, "MultiPaper-Netty-" + (++counter));
-            thread.setDaemon(true);
+            thread.setDaemon(DAEMON);
             return thread;
         }
     };

@@ -2,10 +2,7 @@ package puregero.multipaper.mastermessagingprotocol;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.EventLoopGroup;
+import io.netty.channel.*;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerSocketChannel;
@@ -24,6 +21,7 @@ import java.util.function.Consumer;
 
 public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extends ChannelInitializer<SocketChannel> {
 
+    public static int MAX_BYTES_PER_READ = 1024 * 1024 * 1024;
     public static boolean DAEMON = true;
     private static final ThreadFactory eventLoopThreadFactory = new ThreadFactory() {
         private int counter = 0;
@@ -70,6 +68,7 @@ public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extend
                 .group(getEventLoopGroup())
                 .channel(socketChannelClass)
                 .handler(this)
+                .option(ChannelOption.RCVBUF_ALLOCATOR, new DefaultMaxBytesRecvByteBufAllocator(MAX_BYTES_PER_READ, MAX_BYTES_PER_READ))
                 .option(ChannelOption.SO_KEEPALIVE, true);
     }
 
@@ -78,6 +77,7 @@ public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extend
                 .group(getEventLoopGroup())
                 .channel(serverSocketChannelClass)
                 .childHandler(this)
+                .childOption(ChannelOption.RCVBUF_ALLOCATOR, new DefaultMaxBytesRecvByteBufAllocator(MAX_BYTES_PER_READ, MAX_BYTES_PER_READ))
                 .childOption(ChannelOption.SO_KEEPALIVE, true);
     }
 

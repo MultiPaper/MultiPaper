@@ -29,7 +29,7 @@ public class UploadFileHandler {
                         if (otherConnection != connection) {
                             CompletableFuture<Void> otherFuture = new CompletableFuture<>();
                             OutboundDataStream dataStream = otherConnection.getDataStreamManager().createOutboundDataStream(otherConnection.getChannel());
-                            connection.broadcastOthers(new FileContentMessage(message.path, message.lastModified, dataStream.getStreamId()));
+                            otherConnection.send(new FileContentMessage(message.path, message.lastModified, dataStream.getStreamId()));
                             dataStream.copyFromAsync(new ByteArrayInputStream(message.data)).addListener(future -> {
                                 if (future.cause() != null) {
                                     future.cause().printStackTrace();

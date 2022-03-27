@@ -12,13 +12,13 @@ import java.util.function.Consumer;
 
 public class InboundDataStream {
 
-    private final DataStreamManager manager;
+    private final DataStreamManager<?> manager;
     private final Channel channel;
     private final int streamId;
     List<Consumer<byte[]>> dataHandlers = new ArrayList<>();
     List<Runnable> closeHandlers = new ArrayList<>();
 
-    InboundDataStream(DataStreamManager manager, Channel channel, int streamId) {
+    InboundDataStream(DataStreamManager<?> manager, Channel channel, int streamId) {
         this.manager = manager;
         this.channel = channel;
         this.streamId = streamId;

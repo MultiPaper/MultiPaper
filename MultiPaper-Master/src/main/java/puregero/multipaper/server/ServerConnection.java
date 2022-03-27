@@ -21,7 +21,7 @@ public class ServerConnection extends MasterBoundMessageHandler {
     private String name;
     private long lastPing = System.currentTimeMillis();
     private final CircularTimer timer = new CircularTimer();
-    private final HashSet<UUID> playerUUIDs = new HashSet<>();
+    public final HashSet<UUID> playerUUIDs = new HashSet<>();
     private final List<Player> players = new ArrayList<>();
     private double tps;
     private int port = -1;
@@ -64,6 +64,10 @@ public class ServerConnection extends MasterBoundMessageHandler {
 
     public static List<ServerConnection> getConnections() {
         return connections;
+    }
+
+    public SocketChannel getChannel() {
+        return channel;
     }
 
     public void send(ServerBoundMessage message) {

@@ -6,27 +6,25 @@ public class FileContentMessage extends ServerBoundMessage {
 
     public final String path;
     public final long lastModified;
-    public final byte[] data;
+    public final int streamId;
 
-    public FileContentMessage(String path, long lastModified, byte[] data) {
+    public FileContentMessage(String path, long lastModified, int streamId) {
         this.path = path;
         this.lastModified = lastModified;
-        this.data = data;
+        this.streamId = streamId;
     }
 
     public FileContentMessage(ExtendedByteBuf byteBuf) {
         path = byteBuf.readString();
         lastModified = byteBuf.readLong();
-        data = new byte[byteBuf.readVarInt()];
-        byteBuf.readBytes(data);
+        streamId = byteBuf.readVarInt();
     }
 
     @Override
     public void write(ExtendedByteBuf byteBuf) {
         byteBuf.writeString(path);
         byteBuf.writeLong(lastModified);
-        byteBuf.writeVarInt(data.length);
-        byteBuf.writeBytes(data);
+        byteBuf.writeVarInt(streamId);
     }
 
     @Override

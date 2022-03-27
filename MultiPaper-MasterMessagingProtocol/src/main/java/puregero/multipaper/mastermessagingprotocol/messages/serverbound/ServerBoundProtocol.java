@@ -5,6 +5,7 @@ import puregero.multipaper.mastermessagingprotocol.messages.Protocol;
 public class ServerBoundProtocol extends Protocol<ServerBoundMessage> {
 
     public ServerBoundProtocol() {
+        addMessage(ServerBoundDataStreamMessage.class, ServerBoundDataStreamMessage::new);
         addMessage(ServerInfoUpdateMessage.class, ServerInfoUpdateMessage::new);
         addMessage(SetSecretMessage.class, SetSecretMessage::new);
         addMessage(ShutdownMessage.class, ShutdownMessage::new);
@@ -23,6 +24,7 @@ public class ServerBoundProtocol extends Protocol<ServerBoundMessage> {
         addMessage(RemoveEntitySubscriberMessage.class, RemoveEntitySubscriberMessage::new);
         addMessage(ChunkSubscribersSyncMessage.class, ChunkSubscribersSyncMessage::new);
         addMessage(EntitySubscribersSyncMessage.class, EntitySubscribersSyncMessage::new);
+        addMessage(DataStreamMessageReply.class, DataStreamMessageReply::new);
     }
 
 }

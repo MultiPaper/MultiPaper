@@ -1,8 +1,15 @@
 package puregero.multipaper.mastermessagingprotocol.messages.masterbound;
 
 import puregero.multipaper.mastermessagingprotocol.messages.MessageHandler;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundDataStreamMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
 
 public abstract class MasterBoundMessageHandler extends MessageHandler<MasterBoundMessage> {
+
+    @Override
+    public ServerBoundMessage createDataStreamMessage(int streamId, byte[] data, int offset, int length) {
+        return new ServerBoundDataStreamMessage(streamId, data, offset, length);
+    }
 
     public abstract void handle(HelloMessage message);
 

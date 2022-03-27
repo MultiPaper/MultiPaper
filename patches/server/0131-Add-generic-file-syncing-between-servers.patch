@@ -64,19 +64,24 @@ index 868e1f664b6f0e906b6fcc6a37d01aba892fac5d..f6bf803a340d255c0fc7cd09edb31386
          Util.shutdownExecutors(); // Paper
          LOGGER.info("Closing Server");
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index aa2104fb1e526f4ebd66a76ca5d4f182d4d6b4ff..2d98f6aa534d82e34b6e1b48bbc3e92f8e6cdf14 100644
+index b8fb7e282a62b4448beede1efb5cd95e25997e7c..3f770e4bf79673c19d78afa792a0fc6e56ffb9a2 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -32,6 +32,8 @@ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.*;
+@@ -29,10 +29,13 @@ import org.bukkit.World;
+ import org.bukkit.craftbukkit.CraftWorld;
+ import puregero.multipaper.externalserverprotocol.*;
+ import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
++import puregero.multipaper.mastermessagingprotocol.datastream.InboundDataStream;
+ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.*;
  import puregero.multipaper.mastermessagingprotocol.messages.serverbound.*;
  
  import java.io.File;
++import java.io.FileOutputStream;
 +import java.io.IOException;
-+import java.nio.file.Files;
  import java.util.HashSet;
  import java.util.Map;
  import java.util.Set;
-@@ -410,4 +412,38 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -415,4 +418,44 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
      public void handle(ShutdownMessage message) {
          Bukkit.shutdown();
      }
@@ -93,39 +98,46 @@ index aa2104fb1e526f4ebd66a76ca5d4f182d4d6b4ff..2d98f6aa534d82e34b6e1b48bbc3e92f
 +        }
 +
 +        try {
-+            Files.write(file.toPath(), message.data);
++            InboundDataStream dataStream = MultiPaper.getConnection().getDataStreamManager().createInboundDataStream(MultiPaper.getConnection().getChannel(), message.streamId);
++            dataStream.copyToAsync(new FileOutputStream(fileTemp)).addListener(future2 -> {
++                if (future2.cause() != null) {
++                    future2.cause().printStackTrace();
++                }
++
++                fileTemp.setLastModified(message.lastModified);
++
++                synchronized (MultiPaperFileSyncer.pathsBeingModified) {
++                    MultiPaperFileSyncer.pathsBeingModified.add(message.path);
++                }
++
++                if (!fileTemp.renameTo(file) && fileTemp.isFile()) {
++                    file.delete();
++                    if (!fileTemp.renameTo(file)) {
++                        LOGGER.warn("Failed to rename " + fileTemp.getPath() + " to " + file.getPath());
++                    }
++                }
++
++                if (MultiPaperConfig.logFileSyncing) {
++                    LOGGER.info("Downloaded synced file " + file.getPath() + " (" + file.length() / 1024 + "KB)");
++                }
++            });
 +        } catch (IOException e) {
 +            e.printStackTrace();
-+        }
-+        fileTemp.setLastModified(message.lastModified);
-+
-+        synchronized (MultiPaperFileSyncer.pathsBeingModified) {
-+            MultiPaperFileSyncer.pathsBeingModified.add(message.path);
-+        }
-+
-+        if (!fileTemp.renameTo(file) && fileTemp.isFile()) {
-+            file.delete();
-+            if (!fileTemp.renameTo(file)) {
-+                LOGGER.warn("Failed to rename " + fileTemp.getPath() + " to " + file.getPath());
-+            }
-+        }
-+
-+        if (MultiPaperConfig.logFileSyncing) {
-+            LOGGER.info("Downloaded synced file " + file.getPath() + " (" + message.data.length / 1024 + "KB)");
 +        }
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..450077468ee69ece61c466bab7f20f18fd362a1b
+index 0000000000000000000000000000000000000000..500be6f539557784b353ec12ea215c61f5cf6e65
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
-@@ -0,0 +1,287 @@
+@@ -0,0 +1,297 @@
 +package puregero.multipaper;
 +
 +import io.methvin.watcher.DirectoryWatcher;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
++import puregero.multipaper.mastermessagingprotocol.datastream.InboundDataStream;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.DownloadFileMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.RequestFilesToSyncMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.UploadFileMessage;
@@ -134,6 +146,7 @@ index 0000000000000000000000000000000000000000..450077468ee69ece61c466bab7f20f18
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.FilesToSyncMessage;
 +
 +import java.io.File;
++import java.io.FileOutputStream;
 +import java.io.IOException;
 +import java.nio.file.*;
 +import java.util.*;
@@ -359,18 +372,26 @@ index 0000000000000000000000000000000000000000..450077468ee69ece61c466bab7f20f18
 +                }
 +                future = CompletableFuture.allOf(future, MultiPaper.getConnection()
 +                        .sendAndAwaitReply(new DownloadFileMessage(file.getPath()), FileContentMessage.class)
-+                        .thenAcceptAsync(message -> {
++                        .thenCompose(message -> {
++                            CompletableFuture<Void> fileDownloadedFuture = new CompletableFuture<>();
 +                            try {
-+                                Files.write(file.toPath(), message.data);
-+                                if (!file.setLastModified(message.lastModified)) {
-+                                    LOGGER.warn("Failed to setLastModified on file " + file);
-+                                }
-+                                if (MultiPaperConfig.logFileSyncing) {
-+                                    LOGGER.info("Downloaded " + file.getPath() + " (" + message.data.length / 1024 + "KB)");
-+                                }
++                                InboundDataStream dataStream = MultiPaper.getConnection().getDataStreamManager().createInboundDataStream(MultiPaper.getConnection().getChannel(), message.streamId);
++                                dataStream.copyToAsync(new FileOutputStream(file)).addListener(future2 -> {
++                                    if (future2.cause() != null) {
++                                        future2.cause().printStackTrace();
++                                    }
++                                    if (!file.setLastModified(message.lastModified)) {
++                                        LOGGER.warn("Failed to setLastModified on file " + file);
++                                    }
++                                    if (MultiPaperConfig.logFileSyncing) {
++                                        LOGGER.info("Downloaded " + file.getPath() + " (" + file.length() / 1024 + "KB)");
++                                    }
++                                    fileDownloadedFuture.complete(null);
++                                });
 +                            } catch (IOException e) {
 +                                e.printStackTrace();
 +                            }
++                            return fileDownloadedFuture;
 +                        }));
 +            }
 +        }

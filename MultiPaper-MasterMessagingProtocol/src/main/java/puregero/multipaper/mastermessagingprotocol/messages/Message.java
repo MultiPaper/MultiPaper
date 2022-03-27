@@ -2,7 +2,7 @@ package puregero.multipaper.mastermessagingprotocol.messages;
 
 import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 
-public abstract class Message<T extends MessageHandler<?>> {
+public abstract class Message<T extends MessageHandler<? extends Message<?>>> {
 
     private int transactionId;
 
@@ -17,5 +17,4 @@ public abstract class Message<T extends MessageHandler<?>> {
     public abstract void write(ExtendedByteBuf byteBuf);
 
     public abstract void handle(T handler);
-
 }

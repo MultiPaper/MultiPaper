@@ -2,6 +2,7 @@ package puregero.multipaper.mastermessagingprotocol.messages;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import puregero.multipaper.mastermessagingprotocol.datastream.DataStreamManager;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,6 +13,15 @@ public abstract class MessageHandler<T extends Message> extends SimpleChannelInb
 
     private final Map<Integer, Consumer<T>> callbacks = new ConcurrentHashMap<>();
     private final AtomicInteger transactionId = new AtomicInteger(1);
+    private final DataStreamManager<T> dataStreamManager = new DataStreamManager<>(this);
+
+    public DataStreamManager<T> getDataStreamManager() {
+        return dataStreamManager;
+    }
+
+    public <X extends Message<?>> X createDataStreamMessage(int streamId, byte[] data, int offset, int length) {
+        throw new UnsupportedOperationException();
+    }
 
     public <X extends Message<?>> X setCallback(X message, Consumer<T> callback) {
         message.setTransactionId(transactionId.incrementAndGet());

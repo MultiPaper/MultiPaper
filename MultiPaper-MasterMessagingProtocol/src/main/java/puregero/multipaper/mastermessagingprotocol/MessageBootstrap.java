@@ -15,13 +15,11 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import puregero.multipaper.mastermessagingprotocol.messages.Message;
 import puregero.multipaper.mastermessagingprotocol.messages.Protocol;
 
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.Consumer;
 
 public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extends ChannelInitializer<SocketChannel> {
 
-    public static int MAX_BYTES_PER_READ = Integer.getInteger("max_bytes_per_read", 64 * 1024 * 1024);
     public static boolean DAEMON = true;
     private static final ThreadFactory eventLoopThreadFactory = new ThreadFactory() {
         private int counter = 0;
@@ -68,7 +66,6 @@ public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extend
                 .group(getEventLoopGroup())
                 .channel(socketChannelClass)
                 .handler(this)
-                .option(ChannelOption.RCVBUF_ALLOCATOR, new DefaultMaxBytesRecvByteBufAllocator(MAX_BYTES_PER_READ, MAX_BYTES_PER_READ))
                 .option(ChannelOption.SO_KEEPALIVE, true);
     }
 
@@ -77,7 +74,6 @@ public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extend
                 .group(getEventLoopGroup())
                 .channel(serverSocketChannelClass)
                 .childHandler(this)
-                .childOption(ChannelOption.RCVBUF_ALLOCATOR, new DefaultMaxBytesRecvByteBufAllocator(MAX_BYTES_PER_READ, MAX_BYTES_PER_READ))
                 .childOption(ChannelOption.SO_KEEPALIVE, true);
     }
 

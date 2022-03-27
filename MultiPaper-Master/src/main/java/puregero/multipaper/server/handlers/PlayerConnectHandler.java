@@ -14,6 +14,7 @@ public class PlayerConnectHandler {
             for (ServerConnection otherConnection : connections) {
                 if (otherConnection != connection && otherConnection.hasPlayer(message.uuid)) {
                     connection.sendReply(new BooleanMessageReply(false), message);
+                    return;
                 }
             }
 

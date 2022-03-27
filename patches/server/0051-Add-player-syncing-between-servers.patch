@@ -141,7 +141,7 @@ index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..f0ec99341abc0cedb67c72a6d3ff6ff3
              // Paper end
          }
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index cd08f9b16c065be8f0eacaeba51d3e72d332daf9..62bbf0c2218c3a9079053bf0f485949b7169fae6 100644
+index cd08f9b16c065be8f0eacaeba51d3e72d332daf9..aa8d34e65ac553470e672ac5b5540d193a9bda7b 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -13,14 +13,7 @@ import java.io.File;
@@ -187,7 +187,7 @@ index cd08f9b16c065be8f0eacaeba51d3e72d332daf9..62bbf0c2218c3a9079053bf0f485949b
  
 +        // MultiPaper start
 +        if (!MultiPaper.sendPlayerConnect(player).join()) {
-+            TextComponent chatmessage = new TextComponent("You are already logged in.");
++            TextComponent chatmessage = new TextComponent("You are already logged into another server.");
 +            connection.send(new ClientboundDisconnectPacket(chatmessage));
 +            connection.disconnect(chatmessage);
 +            pendingPlayers.remove(player.getUUID(), player);
@@ -204,15 +204,18 @@ index cd08f9b16c065be8f0eacaeba51d3e72d332daf9..62bbf0c2218c3a9079053bf0f485949b
          usercache.add(gameprofile);
          CompoundTag nbttagcompound = this.load(player);
          ResourceKey resourcekey;
-@@ -328,6 +344,7 @@ public abstract class PlayerList {
+@@ -326,8 +342,10 @@ public abstract class PlayerList {
+     private void postChunkLoadJoin(ServerPlayer player, ServerLevel worldserver1, Connection networkmanager, ServerGamePacketListenerImpl playerconnection, CompoundTag nbttagcompound, String s1, String s) {
+         pendingPlayers.remove(player.getUUID(), player);
          if (!networkmanager.isConnected()) {
++            MultiPaper.sendPlayerDisconnect(player); // MultiPaper
              return;
          }
 +        MultiPaper.onPlayerJoin(player); // MultiPaper
          player.didPlayerJoinEvent = true;
          // Paper end
          TranslatableComponent chatmessage;
-@@ -607,10 +624,10 @@ public abstract class PlayerList {
+@@ -607,10 +625,10 @@ public abstract class PlayerList {
          }
  
          PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(entityplayer.getBukkitEntity(), leaveMessage, entityplayer.quitReason); // Paper - quit reason
@@ -225,7 +228,7 @@ index cd08f9b16c065be8f0eacaeba51d3e72d332daf9..62bbf0c2218c3a9079053bf0f485949b
          // CraftBukkit end
  
          // Paper start - Remove from collideRule team if needed
-@@ -692,6 +709,8 @@ public abstract class PlayerList {
+@@ -692,6 +710,8 @@ public abstract class PlayerList {
          this.cserver.getScoreboardManager().removePlayer(entityplayer.getBukkitEntity());
          // CraftBukkit end
  
@@ -234,7 +237,7 @@ index cd08f9b16c065be8f0eacaeba51d3e72d332daf9..62bbf0c2218c3a9079053bf0f485949b
          return entityplayer.didPlayerJoinEvent ? playerQuitEvent.quitMessage() : null; // CraftBukkit // Paper - Adventure // Paper - don't print quit if we never printed join
      }
  
-@@ -821,6 +840,12 @@ public abstract class PlayerList {
+@@ -821,6 +841,12 @@ public abstract class PlayerList {
  
      public ServerPlayer respawn(ServerPlayer entityplayer, ServerLevel worldserver, boolean flag, Location location, boolean avoidSuffocation, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag...respawnFlags) {
          // Paper end
@@ -247,7 +250,7 @@ index cd08f9b16c065be8f0eacaeba51d3e72d332daf9..62bbf0c2218c3a9079053bf0f485949b
          entityplayer.stopRiding(); // CraftBukkit
          this.players.remove(entityplayer);
          this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot
-@@ -998,6 +1023,25 @@ public abstract class PlayerList {
+@@ -998,6 +1024,25 @@ public abstract class PlayerList {
          // Paper end
  
          // CraftBukkit end
@@ -273,7 +276,7 @@ index cd08f9b16c065be8f0eacaeba51d3e72d332daf9..62bbf0c2218c3a9079053bf0f485949b
          return entityplayer1;
      }
  
-@@ -1008,6 +1052,20 @@ public abstract class PlayerList {
+@@ -1008,6 +1053,20 @@ public abstract class PlayerList {
          this.sendPlayerPermissionLevel(player, i);
      }
  

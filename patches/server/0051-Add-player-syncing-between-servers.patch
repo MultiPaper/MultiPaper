@@ -120,18 +120,52 @@ index 7b23535a680d2a8534dcb8dd87770f66fb982c13..099fc9ee2f7c69014752cb7a7a8fafb2
              this.updateEffectVisibility();
              return event; // Paper
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..f0ec99341abc0cedb67c72a6d3ff6ff3cbc284d7 100644
+index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..720419dbf6878bbbc0576da2aba25ea2c79eb8c4 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -213,6 +213,7 @@ import org.bukkit.inventory.EquipmentSlot;
+@@ -142,7 +142,6 @@ import net.minecraft.world.level.block.entity.CommandBlockEntity;
+ import net.minecraft.world.level.block.entity.JigsawBlockEntity;
+ import net.minecraft.world.level.block.entity.SignBlockEntity;
+ import net.minecraft.world.level.block.entity.StructureBlockEntity;
+-import net.minecraft.world.level.block.state.BlockBehaviour;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.BlockHitResult;
+@@ -177,7 +176,6 @@ import org.bukkit.Location;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
+ import org.bukkit.craftbukkit.event.CraftEventFactory;
+ import org.bukkit.craftbukkit.inventory.CraftItemStack;
+-import org.bukkit.craftbukkit.util.CraftChatMessage;
+ import org.bukkit.craftbukkit.util.CraftMagicNumbers;
+ import org.bukkit.craftbukkit.util.LazyPlayerSet;
+ import org.bukkit.craftbukkit.util.Waitable;
+@@ -194,7 +192,6 @@ import org.bukkit.event.inventory.InventoryCreativeEvent;
+ import org.bukkit.event.inventory.InventoryType.SlotType;
+ import org.bukkit.event.inventory.SmithItemEvent;
+ import org.bukkit.event.player.AsyncPlayerChatEvent;
+-import org.bukkit.event.player.PlayerAnimationEvent;
+ import org.bukkit.event.player.PlayerChatEvent;
+ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+ import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+@@ -213,6 +210,8 @@ import org.bukkit.inventory.EquipmentSlot;
  import org.bukkit.inventory.InventoryView;
  import org.bukkit.inventory.SmithingInventory;
  import co.aikar.timings.MinecraftTimings; // Paper
 +import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
  // CraftBukkit end
  
  public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
-@@ -1991,7 +1992,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -439,7 +438,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+ 
+         PlayerKickEvent event = new PlayerKickEvent(this.player.getBukkitEntity(), reason, leaveMessage, cause); // Paper - Adventure & kick event reason
+ 
+-        if (this.cserver.getServer().isRunning()) {
++        if (this.cserver.getServer().isRunning() && reason != PlayerRemovePacket.EXTERNAL_DISCONNECT_COMPONENT) { // MutliPaper - don't run kick event for external disconnects
+             this.cserver.getPluginManager().callEvent(event);
+         }
+ 
+@@ -1991,7 +1990,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
          this.player.disconnect();
          // Paper start - Adventure
          quitMessage = quitMessage == null ? this.server.getPlayerList().remove(this.player) : this.server.getPlayerList().remove(this.player, quitMessage); // Paper - pass in quitMessage to fix kick message not being used
@@ -777,17 +811,19 @@ index 0000000000000000000000000000000000000000..029c3b4624530c5ac0b996e470e479dc
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d01a2ca89a83f6878faf9215cfd1d5123e9fed0e
+index 0000000000000000000000000000000000000000..cef255ecbde927568bfd2c2723f8eb87ae1bf2b4
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,48 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import net.kyori.adventure.text.Component;
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
++import org.bukkit.event.player.PlayerKickEvent;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
@@ -795,6 +831,7 @@ index 0000000000000000000000000000000000000000..d01a2ca89a83f6878faf9215cfd1d512
 +
 +public class PlayerRemovePacket extends ExternalServerPacket {
 +
++    public static Component EXTERNAL_DISCONNECT_COMPONENT = Component.text("Disconnected from external server");
 +    private static final Logger LOGGER = LogManager.getLogger(PlayerRemovePacket.class.getSimpleName());
 +
 +    private final UUID uuid;
@@ -822,7 +859,7 @@ index 0000000000000000000000000000000000000000..d01a2ca89a83f6878faf9215cfd1d512
 +                return;
 +            }
 +
-+            player.connection.disconnect("Disconnected from external server");
++            player.connection.disconnect(EXTERNAL_DISCONNECT_COMPONENT, PlayerKickEvent.Cause.TIMEOUT);
 +        });
 +    }
 +}

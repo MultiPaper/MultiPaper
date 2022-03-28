@@ -342,7 +342,7 @@ index 97febb6ac9c7f6a068ac636992a9e4091071cb0c..d2f0839f96bdb76ad2978b434a34d855
                      PlayerCreatePacket.sendPlayer(externalServer.getConnection(), entityplayer1);
                  } else if (subscribedToSoruce) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index ba12ef52932c003930b760595468a733bb49a515..a321782a76b1656e0f1d201032ca9d3def0210da 100644
+index ba12ef52932c003930b760595468a733bb49a515..f64da9aa7450df74042dc62e33652f9473a175fc 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -139,7 +139,10 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -396,7 +396,7 @@ index ba12ef52932c003930b760595468a733bb49a515..a321782a76b1656e0f1d201032ca9d3d
      @Override
      public void setRemoved(Entity.RemovalReason reason) {
 +        MultiPaperEntitiesHandler.onEntityRemove(this, reason); // MultiPaper
-+        EntityRemovePacket.setEntityRemoved(this.getUUID()); // MultiPaper
++        EntityRemovePacket.setEntityRemoved(this.getUUID(), reason); // MultiPaper
 +
          if (this.removalReason == null) {
              this.removalReason = reason;
@@ -1171,7 +1171,7 @@ index 0000000000000000000000000000000000000000..a69c0ab8a07a32020946489acf97b9bd
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0c55f9d874acf911c3ecd5f96b684b2a7ea269f7
+index 0000000000000000000000000000000000000000..219d4f75fb195fe936b5fa647829e753e9ef1363
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 @@ -0,0 +1,69 @@
@@ -1188,12 +1188,12 @@ index 0000000000000000000000000000000000000000..0c55f9d874acf911c3ecd5f96b684b2a
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
 +
-+import java.util.HashSet;
++import java.util.HashMap;
 +import java.util.UUID;
 +
 +public class EntityRemovePacket extends ExternalServerPacket {
 +
-+    public static final HashSet<UUID> removedEntities = new HashSet<>();
++    public static final HashMap<UUID, Entity.RemovalReason> removedEntities = new HashMap<>();
 +
 +    private final String world;
 +    private final UUID uuid;
@@ -1228,28 +1228,28 @@ index 0000000000000000000000000000000000000000..0c55f9d874acf911c3ecd5f96b684b2a
 +                entity.setRemoved(entity instanceof Player ? Entity.RemovalReason.KILLED : Entity.RemovalReason.DISCARDED);
 +                MultiPaperEntitiesHandler.removingEntity = false;
 +            } else {
-+                setEntityRemoved(uuid);
++                setEntityRemoved(uuid, Entity.RemovalReason.DISCARDED);
 +            }
 +        });
 +    }
 +
-+    public static void setEntityRemoved(UUID uuid) {
-+        setEntityRemoved(uuid, 300);
++    public static void setEntityRemoved(UUID uuid, Entity.RemovalReason reason) {
++        setEntityRemoved(uuid, reason, 300);
 +    }
 +
-+    public static void setEntityRemoved(UUID uuid, int durationInTicks) {
-+        removedEntities.add(uuid);
++    public static void setEntityRemoved(UUID uuid, Entity.RemovalReason reason, int durationInTicks) {
++        removedEntities.put(uuid, reason);
 +        ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
-+            removedEntities.remove(uuid);
++            removedEntities.remove(uuid, reason);
 +        }, durationInTicks, "EntityRemovePacket-removeEntryFromRemovedEntities");
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7f74e5a689b6972857b883a73210b06995fc4f25
+index 0000000000000000000000000000000000000000..9e411127484733e2022f3f8b1cd7ed24400df0e8
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,125 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1331,7 +1331,8 @@ index 0000000000000000000000000000000000000000..7f74e5a689b6972857b883a73210b069
 +    }
 +
 +    public Entity loadEntity(ServerLevel level, CompoundTag tag, UUID uuid) {
-+        if (EntityRemovePacket.removedEntities.contains(uuid)) {
++        Entity.RemovalReason removalReason = EntityRemovePacket.removedEntities.get(uuid);
++        if (removalReason != null && removalReason.shouldDestroy()) {
 +            // We've already removed this entity. This is likely a race condition, so don't recreate the entity.
 +            return null;
 +        }
@@ -1345,7 +1346,7 @@ index 0000000000000000000000000000000000000000..7f74e5a689b6972857b883a73210b069
 +                    if (entity2 instanceof Mob mob) mob.restoreLeashFromSave();
 +                    return entity2;
 +                } else {
-+                    EntityRemovePacket.setEntityRemoved(uuid, 20);
++                    EntityRemovePacket.setEntityRemoved(uuid, Entity.RemovalReason.UNLOADED_TO_CHUNK, 20);
 +                    LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk aren't loaded: " + entity2);
 +                    return null;
 +                }
@@ -1376,7 +1377,7 @@ index 0000000000000000000000000000000000000000..7f74e5a689b6972857b883a73210b069
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2f62e4345e646067b8583037b98d4f14d868550d
+index 0000000000000000000000000000000000000000..9a07413a402b05b5600d2671f6d94661be76c22e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 @@ -0,0 +1,95 @@
@@ -1453,7 +1454,7 @@ index 0000000000000000000000000000000000000000..2f62e4345e646067b8583037b98d4f14
 +            Entity entity = level.entityManager.knownUuids.get(uuid);
 +
 +            if (entity == null) {
-+                if (EntityRemovePacket.removedEntities.contains(uuid)) {
++                if (EntityRemovePacket.removedEntities.containsKey(uuid)) {
 +                    return;
 +                }
 +
@@ -1477,7 +1478,7 @@ index 0000000000000000000000000000000000000000..2f62e4345e646067b8583037b98d4f14
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..be4edb7519f6de4b00c4f6f57601c611c554d611
+index 0000000000000000000000000000000000000000..c96cba44012a7bf840270096514d975e35ed55aa
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 @@ -0,0 +1,133 @@
@@ -1569,7 +1570,7 @@ index 0000000000000000000000000000000000000000..be4edb7519f6de4b00c4f6f57601c611
 +            Entity entity = level.entityManager.knownUuids.get(uuid);
 +
 +            if (entity == null) {
-+                if (EntityRemovePacket.removedEntities.contains(uuid)) {
++                if (EntityRemovePacket.removedEntities.containsKey(uuid)) {
 +                    return;
 +                }
 +
@@ -1593,7 +1594,7 @@ index 0000000000000000000000000000000000000000..be4edb7519f6de4b00c4f6f57601c611
 +                entities[i] = level.entityManager.knownUuids.get(uuids[i]);
 +
 +                if (entities[i] == null) {
-+                    if (EntityRemovePacket.removedEntities.contains(uuids[i])) {
++                    if (EntityRemovePacket.removedEntities.containsKey(uuids[i])) {
 +                        return;
 +                    }
 +

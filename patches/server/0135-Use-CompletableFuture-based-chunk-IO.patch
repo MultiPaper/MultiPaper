@@ -49,10 +49,10 @@ index d139536be7ab15293b798af115e71a8dbe4a2f3d..928fe46b5061ff6a1acbec61eec69875
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaperIO.java b/src/main/java/puregero/multipaper/MultiPaperIO.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..14c349e062571b62d28035096c36fbe7dc833f8d
+index 0000000000000000000000000000000000000000..739e275eeee9d4ef45c2e004cd0ab55400e6da6b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperIO.java
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,126 @@
 +package puregero.multipaper;
 +
 +import com.destroystokyo.paper.io.PaperFileIOThread;
@@ -119,19 +119,17 @@ index 0000000000000000000000000000000000000000..14c349e062571b62d28035096c36fbe7
 +    }
 +
 +    private CompletableFuture<CompoundTag> readChunk(final ServerLevel world, final int chunkX, final int chunkZ) {
-+        return chunkReadsInProgress.computeIfAbsent(new ChunkKey(world.convertable.getLevelId(), chunkX, chunkZ), key -> {
-+            CompletableFuture<CompoundTag> future = readChunk(key, "region");
-+            future.thenRun(() -> chunkReadsInProgress.remove(key, future));
-+            return future;
-+        });
++        ChunkKey key = new ChunkKey(world.convertable.getLevelId(), chunkX, chunkZ);
++        CompletableFuture<CompoundTag> future = chunkReadsInProgress.computeIfAbsent(key, key2 -> readChunk(key2, "region"));
++        future.thenRun(() -> chunkReadsInProgress.remove(key, future));
++        return future;
 +    }
 +
 +    private CompletableFuture<CompoundTag> readPoi(final ServerLevel world, final int chunkX, final int chunkZ) {
-+        return poiReadsInProgress.computeIfAbsent(new ChunkKey(world.convertable.getLevelId(), chunkX, chunkZ), key -> {
-+            CompletableFuture<CompoundTag> future = readChunk(key, "poi");
-+            future.thenRun(() -> poiReadsInProgress.remove(key, future));
-+            return future;
-+        });
++        ChunkKey key = new ChunkKey(world.convertable.getLevelId(), chunkX, chunkZ);
++        CompletableFuture<CompoundTag> future = poiReadsInProgress.computeIfAbsent(key, key2 -> readChunk(key2, "poi"));
++        future.thenRun(() -> poiReadsInProgress.remove(key, future));
++        return future;
 +    }
 +
 +    private CompletableFuture<CompoundTag> readChunk(final ChunkKey key, final String path) {

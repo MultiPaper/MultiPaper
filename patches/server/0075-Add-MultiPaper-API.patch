@@ -436,7 +436,7 @@ index 63f305ff70c67653eab5b5cc4ec2b8f14df991a3..e313e57e9e9caa33e90d774e322ec386
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index 6aa3822821c2add735a789098828ab9b78a8fb02..caa5f19d32a422fee6a220112b9981508d3ec877 100644
+index 300cfa7c83330c98ff0c88ba71b0875784c9d63f..985f04f79d93705e869f7d3bfd3abb32de49a0fb 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 @@ -17,7 +17,11 @@ import puregero.multipaper.*;
@@ -451,28 +451,28 @@ index 6aa3822821c2add735a789098828ab9b78a8fb02..caa5f19d32a422fee6a220112b998150
  
  public class PlayerCreatePacket extends ExternalServerPacket {
  
-@@ -34,6 +38,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-     private final GameType gamemode;
-     private final byte[] ip;
+@@ -36,6 +40,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
      private final short port;
+     private final String advancements;
+     private final String stats;
 +    private final ConcurrentHashMap<String, String> data;
 +    private final ConcurrentHashMap<String, String> persistentData;
  
      private PlayerCreatePacket(ServerPlayer player) {
          this.name = player.getScoreboardName();
-@@ -47,6 +53,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         this.gamemode = player.gameMode.getGameModeForPlayer();
-         this.ip = ((InetSocketAddress) player.connection.connection.address).getAddress().getAddress();
+@@ -51,6 +57,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          this.port = (short) ((InetSocketAddress) player.connection.connection.address).getPort();
+         this.advancements = player.getAdvancements().generateJson().toString();
+         this.stats = player.getStats().toJson();
 +        this.data = player.getBukkitEntity().data;
 +        this.persistentData = player.getBukkitEntity().persistentData;
      }
  
      public PlayerCreatePacket(FriendlyByteBuf in) {
-@@ -61,6 +69,18 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         gamemode = GameType.byId(in.readByte());
-         ip = in.readByteArray();
+@@ -67,6 +75,18 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          port = in.readShort();
+         advancements = in.readUtf();
+         stats = in.readUtf();
 +
 +        data = new ConcurrentHashMap<>();
 +        int dataLength = in.readInt();
@@ -488,10 +488,10 @@ index 6aa3822821c2add735a789098828ab9b78a8fb02..caa5f19d32a422fee6a220112b998150
      }
  
      @Override
-@@ -76,6 +96,20 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         out.writeByte(gamemode.getId());
-         out.writeByteArray(ip);
+@@ -84,6 +104,20 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          out.writeShort(port);
+         out.writeUtf(advancements);
+         out.writeUtf(stats);
 +
 +        Collection<Map.Entry<String, String>> dataEntries = new ArrayList<>(data.entrySet());
 +        out.writeInt(dataEntries.size());
@@ -509,12 +509,12 @@ index 6aa3822821c2add735a789098828ab9b78a8fb02..caa5f19d32a422fee6a220112b998150
      }
  
      @Override
-@@ -95,7 +129,9 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -103,7 +137,9 @@ public class PlayerCreatePacket extends ExternalServerPacket {
                  e.printStackTrace();
              }
  
--            ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address);
-+            ExternalPlayer player = ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address);
+-            ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address, advancements, stats);
++            ExternalPlayer player = ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address, advancements, stats);
 +            player.getBukkitEntity().data = data;
 +            player.getBukkitEntity().persistentData = persistentData;
          });

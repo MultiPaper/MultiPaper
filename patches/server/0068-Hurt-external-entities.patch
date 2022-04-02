@@ -5,24 +5,28 @@ Subject: [PATCH] Hurt external entities
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index 68f43793e75235b027fd4289818069ae5aff2466..30b3b5fc1dc4b8c1b0b5cb697271ad0fbc6ac4ae 100644
+index 68f43793e75235b027fd4289818069ae5aff2466..01287b9aa12f8e08065214e501b53f443cc0d8de 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-@@ -138,6 +138,7 @@ import org.bukkit.event.entity.EntityResurrectEvent;
+@@ -137,7 +137,10 @@ import org.bukkit.event.entity.EntityRegainHealthEvent;
+ import org.bukkit.event.entity.EntityResurrectEvent;
  import org.bukkit.event.entity.EntityTeleportEvent;
  import org.bukkit.event.player.PlayerItemConsumeEvent;
++import puregero.multipaper.ExternalServerConnection;
  import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperEntityInteractHandler;
 +import puregero.multipaper.externalserverprotocol.HurtEntityPacket;
  // CraftBukkit end
  
  
-@@ -1297,6 +1298,14 @@ public abstract class LivingEntity extends Entity {
+@@ -1297,6 +1300,15 @@ public abstract class LivingEntity extends Entity {
  
      @Override
      public boolean hurt(DamageSource source, float amount) {
 +        // MultiPaper start
-+        if (!(this instanceof ServerPlayer) && MultiPaper.isChunkExternal(level.getChunkIfLoaded(blockPosition()))) {
-+            level.getChunkIfLoaded(blockPosition()).externalOwner.getConnection().send(new HurtEntityPacket(this, source, amount, CraftEventFactory.entityDamage, CraftEventFactory.blockDamage));
++        ExternalServerConnection owner = MultiPaperEntityInteractHandler.getOwner(this);
++        if (owner != null) {
++            owner.send(new HurtEntityPacket(this, source, amount, CraftEventFactory.entityDamage, CraftEventFactory.blockDamage));
 +            CraftEventFactory.entityDamage = null;
 +            CraftEventFactory.blockDamage = null;
 +            return false;

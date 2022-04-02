@@ -36,7 +36,7 @@ index 2e2bfccfc6cec6582a5b595e0343c27be5267b7a..c686026fe455fbc2c4ba692fbd7f2ca8
          /*
          this.lock.readLock().lock();
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index c55a727d09d95ae0a640e77f77961af74beb397f..e8e85b96c087caf30382e61b00a1fe513936eff1 100644
+index c55a727d09d95ae0a640e77f77961af74beb397f..5f0a66413fc515bd65b352670b3a2502f390e395 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -61,11 +61,7 @@ import net.minecraft.core.Registry;
@@ -60,16 +60,15 @@ index c55a727d09d95ae0a640e77f77961af74beb397f..e8e85b96c087caf30382e61b00a1fe51
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -2309,10 +2306,23 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -2309,10 +2306,22 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          public void broadcast(Packet<?> packet) {
              Iterator iterator = this.seenBy.iterator();
  
 +            // MultiPaper start - Are we ticking this entity?
 +            LevelChunk chunk = level.getChunkIfLoaded(entity.blockPosition());
-+            boolean isMovePacket = packet instanceof ClientboundMoveEntityPacket || packet instanceof ClientboundTeleportEntityPacket;
-+            if (!(MultiPaper.isExternalPlayer(entity.getControllingPassenger()) && isMovePacket) &&
++            if (!MultiPaper.isExternalPlayer(MultiPaperEntitiesHandler.getControllingPassenger(entity)) &&
 +                    (MultiPaper.isRealPlayer(entity) ||
-+                    MultiPaper.isRealPlayer(entity.getControllingPassenger()) ||
++                    MultiPaper.isRealPlayer(MultiPaperEntitiesHandler.getControllingPassenger(entity)) ||
 +                    (!MultiPaper.isExternalPlayer(entity) && MultiPaper.isChunkLocal(chunk)))) {
 +                MultiPaperEntitiesHandler.onEntityUpdate(entity, packet); // MultiPaper
 +            }
@@ -148,7 +147,7 @@ index 887556052a8dd36453aef8b92cf2e1c81932876b..6032128a4eb2ea88000e5288261599e5
          this.entity.startSeenByPlayer(player);
      }
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 0cae2500e905086999e9394191a31ec20f45e412..97aafeaef9e4f860bbe6e4858e4767b4135930f6 100644
+index 0cae2500e905086999e9394191a31ec20f45e412..86d96ea5e250ea61ceaf8b3c8e90e1d127467e4b 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -90,8 +90,11 @@ import net.minecraft.world.entity.animal.WaterAnimal;
@@ -171,47 +170,16 @@ index 0cae2500e905086999e9394191a31ec20f45e412..97aafeaef9e4f860bbe6e4858e4767b4
  import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
  
  public class ServerLevel extends Level implements WorldGenLevel {
-@@ -652,6 +656,39 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -652,6 +656,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
              org.spigotmc.ActivationRange.activateEntities(this); // Spigot
              timings.entityTick.startTiming(); // Spigot
              this.entityTickList.forEach((entity) -> {
-+                // MultiPaper start - Are we ticking this entity?
-+                LevelChunk chunk = getChunkIfLoaded(entity.blockPosition());
-+                if (entity instanceof FireworkRocketEntity fireworkRocket
-+                        && fireworkRocket.attachedToEntity instanceof ServerPlayer
-+                        && !MultiPaper.isRealPlayer(fireworkRocket.attachedToEntity)
-+                        && fireworkRocket.attachedToEntity.level == fireworkRocket.level
-+                        && fireworkRocket.position().distanceToSqr(fireworkRocket.attachedToEntity.position()) < 32 * 32) {
-+                    // Let the server that owns the player with the fireworkRocket tick it (as long as they probably have this chunk loaded)
-+                    return;
-+                } else if (!MultiPaper.isRealPlayer(entity)
-+                        && !MultiPaper.isChunkLocal(chunk)
-+                        && !(entity instanceof FishingHook)
-+                        && !(entity instanceof FireworkRocketEntity fireworkRocket && MultiPaper.isRealPlayer(fireworkRocket.attachedToEntity))) {
-+                    if (entity instanceof ArmorStand armorStand) {
-+                        boolean temp = armorStand.canTick;
-+                        armorStand.canTick = false;
-+                        armorStand.tick();
-+                        armorStand.canTick = temp;
-+                    }
-+
-+                    if (entity instanceof LivingEntity livingEntity) {
-+                        if (MultiPaper.isChunkExternal(chunk)) {
-+                            livingEntity.setNoActionTime(0);
-+                        } else {
-+                            livingEntity.setNoActionTime(livingEntity.getNoActionTime() + 1);
-+                            livingEntity.checkDespawn();
-+                        }
-+                    }
-+
-+                    return;
-+                }
-+                // MultiPaper end
++                if (!MultiPaperEntitiesHandler.tickEntity(entity)) return; // MultiPaper - should we tick this entity?
 +
                  if (!entity.isRemoved()) {
                      if (false && this.shouldDiscardEntity(entity)) { // CraftBukkit - We prevent spawning in general, so this butchering is not needed
                          entity.discard();
-@@ -1428,6 +1465,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1428,6 +1434,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
              }
              // CraftBukkit end
  
@@ -851,10 +819,10 @@ index 5609212b27d075ce920e8f3f4eeb3115f98ab7e6..a7c46c1cddba0c1f067f099e1d5f6a7d
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2c6ec3288dc9e750eea97f0fd2c16a04f7881e1b
+index 0000000000000000000000000000000000000000..ac38e05564f07db8c20ca7a7ca6e80a93df59c72
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,287 @@
+@@ -0,0 +1,347 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -868,8 +836,12 @@ index 0000000000000000000000000000000000000000..2c6ec3288dc9e750eea97f0fd2c16a04
 +import net.minecraft.world.entity.*;
 +import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 +import net.minecraft.world.entity.ai.attributes.AttributeModifier;
++import net.minecraft.world.entity.decoration.ArmorStand;
 +import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
 +import net.minecraft.world.entity.player.Player;
++import net.minecraft.world.entity.projectile.FireworkRocketEntity;
++import net.minecraft.world.entity.projectile.FishingHook;
++import net.minecraft.world.entity.vehicle.AbstractMinecart;
 +import net.minecraft.world.item.ItemStack;
 +import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.chunk.ChunkAccess;
@@ -881,7 +853,6 @@ index 0000000000000000000000000000000000000000..2c6ec3288dc9e750eea97f0fd2c16a04
 +import puregero.multipaper.externalserverprotocol.*;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.UnsubscribeEntitiesMessage;
 +
-+import java.io.IOException;
 +import java.util.ArrayList;
 +import java.util.List;
 +
@@ -890,6 +861,60 @@ index 0000000000000000000000000000000000000000..2c6ec3288dc9e750eea97f0fd2c16a04
 +    private static final Logger LOGGER = LogManager.getLogger(MultiPaperEntitiesHandler.class.getSimpleName());
 +    public static boolean removingEntity = false;
 +    public static boolean takingItem = false;
++
++    public static Entity getControllingPassenger(Entity entity) {
++        if (entity instanceof AbstractMinecart) {
++            // Because Minecarts are special and the passenger doesn't 'technically' control them
++            return entity.getFirstPassenger();
++        }
++        return entity.getControllingPassenger();
++    }
++
++    /**
++     * @return true if this entity should be ticked, false if it will be ticked
++     *         by another server.
++     */
++    public static boolean tickEntity(Entity entity) {
++        if (MultiPaper.isRealPlayer(entity) || MultiPaper.isRealPlayer(getControllingPassenger(entity))) {
++            return true;
++        }
++
++        if (MultiPaper.isExternalPlayer(entity) || MultiPaper.isExternalPlayer(getControllingPassenger(entity))) {
++            return false;
++        }
++
++        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
++        if (entity instanceof FireworkRocketEntity fireworkRocket
++                && fireworkRocket.attachedToEntity instanceof ServerPlayer
++                && !MultiPaper.isRealPlayer(fireworkRocket.attachedToEntity)
++                && fireworkRocket.attachedToEntity.level == fireworkRocket.level
++                && fireworkRocket.position().distanceToSqr(fireworkRocket.attachedToEntity.position()) < 32 * 32) {
++            // Let the server that owns the player with the fireworkRocket tick it (as long as they probably have this chunk loaded)
++            return false;
++        } else if (!MultiPaper.isChunkLocal(chunk)
++                && !(entity instanceof FishingHook)
++                && !(entity instanceof FireworkRocketEntity fireworkRocket && MultiPaper.isRealPlayer(fireworkRocket.attachedToEntity))) {
++            if (entity instanceof ArmorStand armorStand) {
++                boolean temp = armorStand.canTick;
++                armorStand.canTick = false;
++                armorStand.tick();
++                armorStand.canTick = temp;
++            }
++
++            if (entity instanceof LivingEntity livingEntity) {
++                if (MultiPaper.isChunkExternal(chunk)) {
++                    livingEntity.setNoActionTime(0);
++                } else {
++                    livingEntity.setNoActionTime(livingEntity.getNoActionTime() + 1);
++                    livingEntity.checkDespawn();
++                }
++            }
++
++            return false;
++        }
++
++        return true;
++    }
 +
 +    public static void onEntitiesUnload(ServerLevel level, ChunkPos pos) {
 +        MultiPaper.getConnection().send(new UnsubscribeEntitiesMessage(level.convertable.getLevelId(), pos.x, pos.z));
@@ -1021,6 +1046,9 @@ index 0000000000000000000000000000000000000000..2c6ec3288dc9e750eea97f0fd2c16a04
 +            for (Pair<EquipmentSlot, ItemStack> pair : setEquipmentPacket.getSlots()) {
 +                entity.setItemSlot(pair.getFirst(), pair.getSecond());
 +            }
++            if (entity instanceof LivingEntity livingEntity) {
++                livingEntity.detectEquipmentUpdates();
++            }
 +        } else {
 +            LOGGER.warn("Unhandled packet " + packet);
 +        }
@@ -1086,7 +1114,7 @@ index 0000000000000000000000000000000000000000..2c6ec3288dc9e750eea97f0fd2c16a04
 +    }
 +
 +    public static void onEntityRemove(Entity entity, Entity.RemovalReason reason) {
-+        if (!shouldSyncEntity(entity) && !(entity instanceof Player && reason == Entity.RemovalReason.KILLED)) return;
++        if (!shouldSyncEntity(entity) && MultiPaperEntitiesHandler.getControllingPassenger(entity) == null && !(entity instanceof Player && reason == Entity.RemovalReason.KILLED)) return;
 +        if (removingEntity) return;
 +        if (reason == Entity.RemovalReason.UNLOADED_TO_CHUNK || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER) return;
 +

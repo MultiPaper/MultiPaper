@@ -5,18 +5,10 @@ Subject: [PATCH] Sync enderchests
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index cddc89dbf4595e78ce27e343e2417ba35f4a6e16..e6255d06af05e007e7ca78d9b43a66ad83f2e673 100644
+index 3624b64af8d102978f980822963dca9e13132c66..c603e1f19f01984bee5d67df27ce0285bddb3c32 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-@@ -166,6 +166,7 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
- import org.bukkit.inventory.MainHand;
- import puregero.multipaper.ExternalServer;
- import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperEnderChestHandler;
- import puregero.multipaper.externalserverprotocol.PlayerChangeDimensionPacket;
- import puregero.multipaper.externalserverprotocol.PlayerChangeGamemodePacket;
- import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
-@@ -339,6 +340,7 @@ public class ServerPlayer extends Player {
+@@ -332,6 +332,7 @@ public class ServerPlayer extends Player {
          this.bukkitPickUpLoot = true;
          this.maxHealthCache = this.getMaxHealth();
          this.cachedSingleMobDistanceMap = new com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<>(this); // Paper
@@ -26,10 +18,10 @@ index cddc89dbf4595e78ce27e343e2417ba35f4a6e16..e6255d06af05e007e7ca78d9b43a66ad
      public BlockPos getPointInFront(double inFront) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEnderChestHandler.java b/src/main/java/puregero/multipaper/MultiPaperEnderChestHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..977eb7fa3df228fd602652ea64b4cb42e3e21ba4
+index 0000000000000000000000000000000000000000..b0a93b48a37951dcc2759373a34a3bba6f7ef2b1
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEnderChestHandler.java
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,80 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -87,7 +79,7 @@ index 0000000000000000000000000000000000000000..977eb7fa3df228fd602652ea64b4cb42
 +        }
 +    }
 +
-+    public static void sendFullEnderChestUpdate(ExternalServerConnection connection, ServerPlayer player) {
++    public static void sendFullEnderChestUpdate(ServerPlayer player, ExternalServerConnection... connections) {
 +        CompoundTag itemsRoot = new CompoundTag();
 +        ListTag items = new ListTag();
 +        for (int i = 0; i < player.getEnderChestInventory().getContainerSize(); i++) {
@@ -99,7 +91,9 @@ index 0000000000000000000000000000000000000000..977eb7fa3df228fd602652ea64b4cb42
 +        }
 +
 +        itemsRoot.put("items", items);
-+        connection.send(new PlayerInventoryUpdatePacket(player, "enderchest", itemsRoot));
++        for (ExternalServerConnection connection : connections) {
++            connection.send(new PlayerInventoryUpdatePacket(player, "enderchest", itemsRoot));
++        }
 +    }
 +
 +    public static void updateInventory(ServerPlayer player, int slot, ItemStack item) {
@@ -109,7 +103,7 @@ index 0000000000000000000000000000000000000000..977eb7fa3df228fd602652ea64b4cb42
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-index 6de42f793bad91d0538ef5539b733864801e1ce1..b41126eafba70c4637012bac6cbbb8b3a35fb9b9 100644
+index ef6e20112fe125e07e3f56729a09da8679633c91..90365f835c93bb3b7745d77755317227e74879bc 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 @@ -111,6 +111,7 @@ public class MultiPaperInventoryHandler {
@@ -121,7 +115,7 @@ index 6de42f793bad91d0538ef5539b733864801e1ce1..b41126eafba70c4637012bac6cbbb8b3
          }
  
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index bef1825f3b42bb8ca1957d4196ec844dbf096e4f..60347698c728ca652219030b9bc47b19ee93b262 100644
+index 1cee7ec47d79129777c119eb055cbc98ed7f8ae3..a03b58073ea40b086a594617e456a82ae1fcfd5b 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 @@ -7,10 +7,7 @@ import net.minecraft.server.level.ServerPlayer;
@@ -136,10 +130,10 @@ index bef1825f3b42bb8ca1957d4196ec844dbf096e4f..60347698c728ca652219030b9bc47b19
  
  import java.net.InetAddress;
  import java.net.InetSocketAddress;
-@@ -115,5 +112,6 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         connection.send(new PlayerActionPacket(player, new ServerboundSetCarriedItemPacket(player.getInventory().selected)));
+@@ -122,5 +119,6 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+         send(new PlayerActionPacket(player, new ServerboundSetCarriedItemPacket(player.getInventory().selected)), connections);
  
-         MultiPaperInventoryHandler.sendFullInventoryUpdate(connection, player);
-+        MultiPaperEnderChestHandler.sendFullEnderChestUpdate(connection, player);
+         MultiPaperInventoryHandler.sendFullInventoryUpdate(player, connections);
++        MultiPaperEnderChestHandler.sendFullEnderChestUpdate(player, connections);
      }
  }

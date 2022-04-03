@@ -436,7 +436,7 @@ index 63f305ff70c67653eab5b5cc4ec2b8f14df991a3..e313e57e9e9caa33e90d774e322ec386
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index 2136d2d02f9e3ba99a1a62a23ff68bdc845239bb..c3ae831cea105055b7f65ab9bef8a3cd6cf01b06 100644
+index 7db63c899b7a7d9f0aae443c7f509df40052e101..571fe7aa1bd87b89a1d0d6526d28a353aa35ef21 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 @@ -17,8 +17,8 @@ import puregero.multipaper.*;
@@ -470,8 +470,8 @@ index 2136d2d02f9e3ba99a1a62a23ff68bdc845239bb..c3ae831cea105055b7f65ab9bef8a3cd
      public PlayerCreatePacket(FriendlyByteBuf in) {
 @@ -68,6 +72,18 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          port = in.readShort();
-         advancements = in.readUtf();
-         stats = in.readUtf();
+         advancements = in.readUtf(Integer.MAX_VALUE / 6); // divide by 6 cause mojang's code doesn't allow for a full 2^31-1 max length
+         stats = in.readUtf(Integer.MAX_VALUE / 6);
 +
 +        data = new ConcurrentHashMap<>();
 +        int dataLength = in.readInt();
@@ -489,8 +489,8 @@ index 2136d2d02f9e3ba99a1a62a23ff68bdc845239bb..c3ae831cea105055b7f65ab9bef8a3cd
      @Override
 @@ -85,6 +101,20 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          out.writeShort(port);
-         out.writeUtf(advancements);
-         out.writeUtf(stats);
+         out.writeUtf(advancements, Integer.MAX_VALUE / 6); // divide by 6 cause mojang's code doesn't allow for a full 2^31-1 max length
+         out.writeUtf(stats, Integer.MAX_VALUE / 6);
 +
 +        Collection<Map.Entry<String, String>> dataEntries = new ArrayList<>(data.entrySet());
 +        out.writeInt(dataEntries.size());

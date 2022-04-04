@@ -140,7 +140,7 @@ index 7b23535a680d2a8534dcb8dd87770f66fb982c13..0c823c49a9a93c2cc0b51e2189271678
              this.updateEffectVisibility();
              return event; // Paper
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..720419dbf6878bbbc0576da2aba25ea2c79eb8c4 100644
+index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..8bba683c03337a606c315832a3c6ccd87d71a9e7 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -142,7 +142,6 @@ import net.minecraft.world.level.block.entity.CommandBlockEntity;
@@ -167,25 +167,35 @@ index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..720419dbf6878bbbc0576da2aba25ea2
  import org.bukkit.event.player.PlayerChatEvent;
  import org.bukkit.event.player.PlayerCommandPreprocessEvent;
  import org.bukkit.event.player.PlayerInteractAtEntityEvent;
-@@ -213,6 +210,8 @@ import org.bukkit.inventory.EquipmentSlot;
+@@ -213,6 +210,9 @@ import org.bukkit.inventory.EquipmentSlot;
  import org.bukkit.inventory.InventoryView;
  import org.bukkit.inventory.SmithingInventory;
  import co.aikar.timings.MinecraftTimings; // Paper
++import puregero.multipaper.ExternalPlayer;
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
  // CraftBukkit end
  
  public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
-@@ -439,7 +438,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -439,7 +439,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
  
          PlayerKickEvent event = new PlayerKickEvent(this.player.getBukkitEntity(), reason, leaveMessage, cause); // Paper - Adventure & kick event reason
  
 -        if (this.cserver.getServer().isRunning()) {
-+        if (this.cserver.getServer().isRunning() && reason != PlayerRemovePacket.EXTERNAL_DISCONNECT_COMPONENT) { // MutliPaper - don't run kick event for external disconnects
++        boolean shouldKick = reason != PlayerRemovePacket.EXTERNAL_DISCONNECT_COMPONENT && !(reason == PlayerRemovePacket.LOGGED_IN_FROM_ANOTHER_LOCATION && this.player instanceof ExternalPlayer); // MultiPaper - don't run kick event for external disconnects
++        if (this.cserver.getServer().isRunning() && shouldKick) { // MultiPaper
              this.cserver.getPluginManager().callEvent(event);
          }
  
-@@ -1991,7 +1990,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -452,6 +453,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+         // CraftBukkit end
+ 
+         this.player.quitReason = org.bukkit.event.player.PlayerQuitEvent.QuitReason.KICKED; // Paper
++        if (shouldKick) // MultiPaper
+         this.connection.send(new ClientboundDisconnectPacket(ichatbasecomponent), (future) -> {
+             this.connection.disconnect(ichatbasecomponent);
+         });
+@@ -1991,7 +1993,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
          this.player.disconnect();
          // Paper start - Adventure
          quitMessage = quitMessage == null ? this.server.getPlayerList().remove(this.player) : this.server.getPlayerList().remove(this.player, quitMessage); // Paper - pass in quitMessage to fix kick message not being used
@@ -723,10 +733,10 @@ index 0000000000000000000000000000000000000000..a9814bbe4fc9eff864f30b389e88cb13
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..cf1391bce5ed0fead7279f93251928cac4cd0976
+index 0000000000000000000000000000000000000000..5f2333aaf85360846cc6e8c0f7cfb83f114ed94f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,114 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
@@ -735,6 +745,7 @@ index 0000000000000000000000000000000000000000..cf1391bce5ed0fead7279f93251928ca
 +import net.minecraft.world.level.GameType;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
++import org.bukkit.event.player.PlayerKickEvent;
 +import puregero.multipaper.ExternalPlayer;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
@@ -810,7 +821,7 @@ index 0000000000000000000000000000000000000000..cf1391bce5ed0fead7279f93251928ca
 +            ServerPlayer existingPlayer = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
 +            if (existingPlayer != null) {
 +                LOGGER.warn("Trying to add external player " + name + " (" + uuid + "), but they're already online as a " + existingPlayer.getClass().getSimpleName() + ", kicking them");
-+                existingPlayer.connection.disconnect("Logged in from another location");
++                existingPlayer.connection.disconnect(PlayerRemovePacket.LOGGED_IN_FROM_ANOTHER_LOCATION, PlayerKickEvent.Cause.DUPLICATE_LOGIN);
 +            }
 +
 +            InetSocketAddress address = null;
@@ -842,10 +853,10 @@ index 0000000000000000000000000000000000000000..cf1391bce5ed0fead7279f93251928ca
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..cef255ecbde927568bfd2c2723f8eb87ae1bf2b4
+index 0000000000000000000000000000000000000000..d5853995ed4774799475e5f1c156d5814e524c9d
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,49 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.kyori.adventure.text.Component;
@@ -863,6 +874,7 @@ index 0000000000000000000000000000000000000000..cef255ecbde927568bfd2c2723f8eb87
 +public class PlayerRemovePacket extends ExternalServerPacket {
 +
 +    public static Component EXTERNAL_DISCONNECT_COMPONENT = Component.text("Disconnected from external server");
++    public static Component LOGGED_IN_FROM_ANOTHER_LOCATION = Component.text("Logged in from another location");
 +    private static final Logger LOGGER = LogManager.getLogger(PlayerRemovePacket.class.getSimpleName());
 +
 +    private final UUID uuid;

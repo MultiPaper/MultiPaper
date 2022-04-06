@@ -4,8 +4,30 @@ Date: Thu, 2 Dec 2021 09:17:26 +1000
 Subject: [PATCH] Dont load or send chunk for external players
 
 
+diff --git a/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java b/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java
+index 9ad84dc6f0463dbbbdd53723edcc2a3ebc63de24..f68d0613230cb3a0c7c7d40a5bdf5d3bc701aa97 100644
+--- a/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java
++++ b/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java
+@@ -22,6 +22,8 @@ import net.minecraft.world.level.chunk.LevelChunk;
+ import org.apache.commons.lang3.mutable.MutableObject;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
+ import org.bukkit.entity.Player;
++import puregero.multipaper.MultiPaper;
++
+ import java.util.ArrayDeque;
+ import java.util.ArrayList;
+ import java.util.List;
+@@ -455,7 +457,7 @@ public final class PlayerChunkLoader {
+ 
+     public void addPlayer(final ServerPlayer player) {
+         TickThread.ensureTickThread("Cannot add player async");
+-        if (!player.isRealPlayer) {
++        if (MultiPaper.isExternalPlayer(player) || !player.isRealPlayer) {
+             return;
+         }
+         final PlayerLoaderData data = new PlayerLoaderData(player, this);
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index b4f6eb70efbceba934b3c9974084164bbab2f71d..83836acbef396958ff21ae6cffb4b247f1eec770 100644
+index 3f23587adae3cda868343e8aa7205ee56cea6fa8..fe35fd78bdb8fc0d4ebacb08bf6384e06ecf55d9 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -109,6 +109,7 @@ import org.apache.logging.log4j.Logger;
@@ -16,7 +38,7 @@ index b4f6eb70efbceba934b3c9974084164bbab2f71d..83836acbef396958ff21ae6cffb4b247
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
-@@ -1819,7 +1820,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -1812,7 +1813,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
      }
  
      private boolean skipPlayer(ServerPlayer player) {
@@ -25,34 +47,7 @@ index b4f6eb70efbceba934b3c9974084164bbab2f71d..83836acbef396958ff21ae6cffb4b247
      }
  
      void updatePlayerStatus(ServerPlayer player, boolean added) {
-@@ -1845,6 +1846,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
-             this.removePlayerFromDistanceMaps(player); // Paper - distance maps
-         }
- 
-+        if (MultiPaper.isExternalPlayer(player)) return; // MultiPaper - don't send chunks to external players
-+
-         for (int k = i - this.viewDistance - 1; k <= i + this.viewDistance + 1; ++k) {
-             for (int l = j - this.viewDistance - 1; l <= j + this.viewDistance + 1; ++l) {
-                 if (ChunkMap.isChunkInRange(k, l, i, j, this.viewDistance)) {
-@@ -1906,6 +1909,8 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
-         int k1;
-         int l1;
- 
-+
-+        if (!MultiPaper.isExternalPlayer(player)) // MultiPaper - don't send chunks to external players
-         if (Math.abs(i1 - i) <= this.viewDistance * 2 && Math.abs(j1 - j) <= this.viewDistance * 2) {
-             k1 = Math.min(i, i1) - this.viewDistance - 1;
-             l1 = Math.min(j, j1) - this.viewDistance - 1;
-@@ -1959,7 +1964,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
-             ServerPlayer entityplayer = (ServerPlayer) iterator.next();
-             SectionPos sectionposition = entityplayer.getLastSectionPos();
- 
--            if (onlyOnWatchDistanceEdge && ChunkMap.isChunkOnRangeBorder(chunkPos.x, chunkPos.z, sectionposition.x(), sectionposition.z(), this.viewDistance) || !onlyOnWatchDistanceEdge && ChunkMap.isChunkInRange(chunkPos.x, chunkPos.z, sectionposition.x(), sectionposition.z(), this.viewDistance)) {
-+            if (MultiPaper.isRealPlayer(entityplayer) && (onlyOnWatchDistanceEdge && ChunkMap.isChunkOnRangeBorder(chunkPos.x, chunkPos.z, sectionposition.x(), sectionposition.z(), this.viewDistance) || !onlyOnWatchDistanceEdge && ChunkMap.isChunkInRange(chunkPos.x, chunkPos.z, sectionposition.x(), sectionposition.z(), this.viewDistance))) { // MultiPaper - only send chunks to real players
-                 builder.add(entityplayer);
-             }
-         }
-@@ -2327,7 +2332,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+@@ -2287,7 +2288,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
  
          public void updatePlayer(ServerPlayer player) {
              org.spigotmc.AsyncCatcher.catchOp("player tracker update"); // Spigot

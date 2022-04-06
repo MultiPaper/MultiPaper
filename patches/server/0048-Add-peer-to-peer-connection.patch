@@ -203,10 +203,10 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d0530d101675ec01060c6798da27334deb7f0302
+index 0000000000000000000000000000000000000000..7fe2c94fab36ffce778416a95fbdfbba9fd8e621
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,112 @@
 +package puregero.multipaper;
 +
 +import io.netty.channel.Channel;
@@ -275,10 +275,16 @@ index 0000000000000000000000000000000000000000..d0530d101675ec01060c6798da27334d
 +        // And add our own
 +        if (!Boolean.getBoolean("Paper.disableFlushConsolidate")) channel.pipeline().addFirst(new io.netty.handler.flush.FlushConsolidationHandler());
 +
++        com.velocitypowered.natives.compression.VelocityCompressor compressor = com.velocitypowered.natives.util.Natives.compress.get().create(-1);
 +        channel.pipeline()
 +                .addLast("splitter", new MessageLengthDecoder())
++                .addLast("decompresser", new PacketCompressionDecoder(compressor))
++                .addLast("packetsplitter", new MessageLengthDecoder())
 +                .addLast("decoder", new ExternalServerPacketDecoder())
 +                .addLast("prepender", new MessageLengthEncoder())
++                .addLast("compresser", new PacketCompressionEncoder(compressor))
++                .addLast("consolidator", new PacketConsolidationHandler())
++                .addLast("packetprepender", new MessageLengthEncoder())
 +                .addLast("encoder", new ExternalServerPacketEncoder())
 +                .addLast("packet_handler", new ExternalServerPacketHandler(this));
 +
@@ -705,6 +711,233 @@ index 0000000000000000000000000000000000000000..10e00060e6f72a1b69d9066a9866553a
 +        if (connection.nanoTime != nanoTime) {
 +            connection.nanoTime = nanoTime;
 +            connection.send(new HelloPacket(MultiPaperConfig.bungeeCordName, nanoTime));
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PacketCompressionDecoder.java b/src/main/java/puregero/multipaper/externalserverprotocol/PacketCompressionDecoder.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..2597640de6475351cc77e064cd5dd87c1d72ffc0
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PacketCompressionDecoder.java
+@@ -0,0 +1,66 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import io.netty.channel.ChannelHandlerContext;
++import io.netty.handler.codec.ByteToMessageDecoder;
++import net.minecraft.network.FriendlyByteBuf;
++
++import java.util.List;
++import java.util.zip.Inflater;
++
++public class PacketCompressionDecoder extends ByteToMessageDecoder {
++    private final Inflater inflater;
++    private final com.velocitypowered.natives.compression.VelocityCompressor compressor;
++
++    public PacketCompressionDecoder() {
++        this(null);
++    }
++
++    public PacketCompressionDecoder(com.velocitypowered.natives.compression.VelocityCompressor compressor) {
++        this.inflater = compressor == null ? new Inflater() : null;
++        this.compressor = compressor;
++    }
++
++    @Override
++    protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, List<Object> list) throws Exception {
++        if (byteBuf.readableBytes() != 0) {
++            FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(byteBuf);
++            int length = friendlyByteBuf.readVarInt();
++            if (length == 0) {
++                list.add(byteBuf.readBytes(byteBuf.readableBytes()));
++            } else {
++                if (this.inflater != null) {
++                    byte[] bs = new byte[friendlyByteBuf.readableBytes()];
++                    friendlyByteBuf.readBytes(bs);
++                    this.inflater.setInput(bs);
++                    byte[] cs = new byte[length];
++                    this.inflater.inflate(cs);
++                    list.add(Unpooled.wrappedBuffer(cs));
++                    this.inflater.reset();
++                    return;
++                }
++
++                ByteBuf compatibleIn = com.velocitypowered.natives.util.MoreByteBufUtils.ensureCompatible(channelHandlerContext.alloc(), this.compressor, byteBuf);
++                ByteBuf uncompressed = com.velocitypowered.natives.util.MoreByteBufUtils.preferredBuffer(channelHandlerContext.alloc(), this.compressor, length);
++                try {
++                    this.compressor.inflate(compatibleIn, uncompressed, length);
++                    list.add(uncompressed);
++                    byteBuf.clear();
++                } catch (Exception e) {
++                    uncompressed.release();
++                    throw e;
++                } finally {
++                    compatibleIn.release();
++                }
++            }
++        }
++    }
++
++    @Override
++    public void handlerRemoved0(ChannelHandlerContext ctx) {
++        if (this.compressor != null) {
++            this.compressor.close();
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PacketCompressionEncoder.java b/src/main/java/puregero/multipaper/externalserverprotocol/PacketCompressionEncoder.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c2fda0f2637b31791f1eb8ad8b92922aa5ef1c47
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PacketCompressionEncoder.java
+@@ -0,0 +1,92 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.channel.ChannelHandlerContext;
++import io.netty.handler.codec.MessageToByteEncoder;
++import net.minecraft.network.FriendlyByteBuf;
++import puregero.multipaper.MultiPaperConfig;
++
++import java.util.zip.Deflater;
++
++public class PacketCompressionEncoder extends MessageToByteEncoder<ByteBuf> {
++    private final byte[] encodeBuf;
++    private final Deflater deflater;
++    private final com.velocitypowered.natives.compression.VelocityCompressor compressor;
++
++    public PacketCompressionEncoder() {
++        this(null);
++    }
++
++    public PacketCompressionEncoder(com.velocitypowered.natives.compression.VelocityCompressor compressor) {
++        if (compressor == null) {
++            this.encodeBuf = new byte[8192];
++            this.deflater = new Deflater();
++        } else {
++            this.encodeBuf = null;
++            this.deflater = null;
++        }
++        this.compressor = compressor;
++    }
++
++    @Override
++    protected void encode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, ByteBuf byteBufDest) throws Exception {
++        int i = byteBuf.readableBytes();
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(byteBufDest);
++        if (i < MultiPaperConfig.interServerCompressionThreshold) {
++            friendlyByteBuf.writeVarInt(0);
++            friendlyByteBuf.writeBytes(byteBuf);
++        } else {
++            // Paper start
++            if (this.deflater != null) {
++                byte[] bs = new byte[i];
++                byteBuf.readBytes(bs);
++                friendlyByteBuf.writeVarInt(bs.length);
++                this.deflater.setInput(bs, 0, i);
++                this.deflater.finish();
++
++                while(!this.deflater.finished()) {
++                    int j = this.deflater.deflate(this.encodeBuf);
++                    friendlyByteBuf.writeBytes(this.encodeBuf, 0, j);
++                }
++
++                this.deflater.reset();
++                return;
++            }
++
++            friendlyByteBuf.writeVarInt(i);
++            ByteBuf compatibleIn = com.velocitypowered.natives.util.MoreByteBufUtils.ensureCompatible(channelHandlerContext.alloc(), this.compressor, byteBuf);
++            try {
++                this.compressor.deflate(compatibleIn, byteBufDest);
++            } finally {
++                compatibleIn.release();
++            }
++            // Paper end
++        }
++
++    }
++
++    @Override
++    protected ByteBuf allocateBuffer(ChannelHandlerContext ctx, ByteBuf msg, boolean preferDirect) throws Exception {
++        if (this.compressor != null) {
++            // We allocate bytes to be compressed plus 1 byte. This covers two cases:
++            //
++            // - Compression
++            //    According to https://github.com/ebiggers/libdeflate/blob/master/libdeflate.h#L103,
++            //    if the data compresses well (and we do not have some pathological case) then the maximum
++            //    size the compressed size will ever be is the input size minus one.
++            // - Uncompressed
++            //    This is fairly obvious - we will then have one more than the uncompressed size.
++            int initialBufferSize = msg.readableBytes() + 1;
++            return com.velocitypowered.natives.util.MoreByteBufUtils.preferredBuffer(ctx.alloc(), this.compressor, initialBufferSize);
++        }
++
++        return super.allocateBuffer(ctx, msg, preferDirect);
++    }
++
++    @Override
++    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
++        if (this.compressor != null) {
++            this.compressor.close();
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PacketConsolidationHandler.java b/src/main/java/puregero/multipaper/externalserverprotocol/PacketConsolidationHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..ac3d0579d986538b6764faff480b3f8d58c75902
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PacketConsolidationHandler.java
+@@ -0,0 +1,51 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.channel.ChannelDuplexHandler;
++import io.netty.channel.ChannelHandlerContext;
++import io.netty.channel.ChannelPromise;
++import io.netty.channel.DefaultChannelPromise;
++import puregero.multipaper.MultiPaperConfig;
++
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.Executor;
++import java.util.concurrent.TimeUnit;
++
++public class PacketConsolidationHandler extends ChannelDuplexHandler {
++    private final Executor consolidationDelay = CompletableFuture.delayedExecutor(MultiPaperConfig.interServerConsolidationDelay, TimeUnit.MILLISECONDS);
++    private CompletableFuture<Void> consolidationFuture;
++    private ChannelPromise bufferPromise;
++    private ByteBuf buffer;
++
++    @Override
++    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
++        if (buffer == null) {
++            buffer = ctx.alloc().buffer();
++            bufferPromise = new DefaultChannelPromise(ctx.channel());
++        }
++        buffer.writeBytes((ByteBuf) msg);
++        bufferPromise.addListener(p -> {
++            if (p.isSuccess()) {
++                promise.setSuccess();
++            } else if (p.cause() != null) {
++                promise.setFailure(p.cause());
++            }
++        });
++    }
++
++    @Override
++    public void flush(ChannelHandlerContext ctx) throws Exception {
++        if (consolidationFuture == null || consolidationFuture.isDone()) {
++            consolidationFuture = new CompletableFuture<>();
++            consolidationDelay.execute(() -> {
++                ctx.channel().eventLoop().execute(() -> {
++                    ctx.write(buffer, bufferPromise);
++                    ctx.flush();
++                    buffer = null;
++                    bufferPromise = null;
++                    consolidationFuture.complete(null);
++                });
++            });
 +        }
 +    }
 +}

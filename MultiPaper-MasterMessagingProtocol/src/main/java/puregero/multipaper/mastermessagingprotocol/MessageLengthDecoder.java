@@ -10,18 +10,31 @@ public class MessageLengthDecoder extends ByteToMessageDecoder {
 
     @Override
     protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, List<Object> list) {
-        int i = byteBuf.readableBytes();
-        if (i >= 4) {
-            byteBuf.markReaderIndex();
+        int length = 0;
+        int j = 0;
 
-            int length = byteBuf.readInt();
+        byte b0;
 
-            if (byteBuf.readableBytes() < length) {
+        byteBuf.markReaderIndex();
+
+        do {
+            if (byteBuf.readableBytes() < 1) {
                 byteBuf.resetReaderIndex();
                 return;
             }
 
-            list.add(byteBuf.readBytes(length));
+            b0 = byteBuf.readByte();
+            length |= (b0 & 127) << j++ * 7;
+            if (j > 5) {
+                throw new RuntimeException("VarInt too big");
+            }
+        } while ((b0 & 128) == 128);
+
+        if (byteBuf.readableBytes() < length) {
+            byteBuf.resetReaderIndex();
+            return;
         }
+
+        list.add(byteBuf.readBytes(length));
     }
 }

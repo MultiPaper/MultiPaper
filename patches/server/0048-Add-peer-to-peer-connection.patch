@@ -756,10 +756,10 @@ index 0000000000000000000000000000000000000000..90252a471a4036c2223ab01fe83420c3
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PacketConsolidationHandler.java b/src/main/java/puregero/multipaper/externalserverprotocol/PacketConsolidationHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ac3d0579d986538b6764faff480b3f8d58c75902
+index 0000000000000000000000000000000000000000..fcf2325fc8ca07ffdabcdc83d8655fe6916b8090
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PacketConsolidationHandler.java
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,65 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -774,6 +774,7 @@ index 0000000000000000000000000000000000000000..ac3d0579d986538b6764faff480b3f8d
 +import java.util.concurrent.TimeUnit;
 +
 +public class PacketConsolidationHandler extends ChannelDuplexHandler {
++    private final int MAX_BUFFER_SIZE = 2 * 1024 * 1024;
 +    private final Executor consolidationDelay = CompletableFuture.delayedExecutor(MultiPaperConfig.interServerConsolidationDelay, TimeUnit.MILLISECONDS);
 +    private CompletableFuture<Void> consolidationFuture;
 +    private ChannelPromise bufferPromise;
@@ -781,10 +782,21 @@ index 0000000000000000000000000000000000000000..ac3d0579d986538b6764faff480b3f8d
 +
 +    @Override
 +    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
++        if (buffer != null && (buffer.readableBytes() > MAX_BUFFER_SIZE || buffer.readableBytes() + ((ByteBuf) msg).readableBytes() > MAX_BUFFER_SIZE)) {
++            ctx.writeAndFlush(buffer, bufferPromise);
++            buffer = null;
++        }
++
++        if (((ByteBuf) msg).readableBytes() > MAX_BUFFER_SIZE) {
++            ctx.writeAndFlush(msg, promise);
++            return;
++        }
++
 +        if (buffer == null) {
 +            buffer = ctx.alloc().buffer();
 +            bufferPromise = new DefaultChannelPromise(ctx.channel());
 +        }
++
 +        buffer.writeBytes((ByteBuf) msg);
 +        bufferPromise.addListener(p -> {
 +            if (p.isSuccess()) {
@@ -801,8 +813,10 @@ index 0000000000000000000000000000000000000000..ac3d0579d986538b6764faff480b3f8d
 +            consolidationFuture = new CompletableFuture<>();
 +            consolidationDelay.execute(() -> {
 +                ctx.channel().eventLoop().execute(() -> {
-+                    ctx.write(buffer, bufferPromise);
-+                    ctx.flush();
++                    if (buffer != null) {
++                        ctx.write(buffer, bufferPromise);
++                        ctx.flush();
++                    }
 +                    buffer = null;
 +                    bufferPromise = null;
 +                    consolidationFuture.complete(null);

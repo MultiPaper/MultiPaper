@@ -1,0 +1,173 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 8 Apr 2022 15:41:28 +1000
+Subject: [PATCH] Add zstd compression
+
+
+diff --git a/build.gradle.kts b/build.gradle.kts
+index bb09670d9d7438f6b6e7e2abf801812068c35d82..065ea984f5e862d168994b0f32cd07f4b47364b8 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -44,6 +44,7 @@ dependencies {
+     runtimeOnly("org.apache.maven:maven-resolver-provider:3.8.4")
+     runtimeOnly("org.apache.maven.resolver:maven-resolver-connector-basic:1.7.2")
+     runtimeOnly("org.apache.maven.resolver:maven-resolver-transport-http:1.7.2")
++    implementation("com.github.luben:zstd-jni:1.5.2-2") // MultiPaper
+ 
+     implementation("net.fabricmc:mapping-io:0.3.0") // Paper - needed to read mappings for stacktrace deobfuscation
+     // Paper start - Use Velocity cipher
+diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+index 3a5faf3c427a26179cb816a3e8a46ed164428569..f7c086c83edd7205d05b6413935fad4b7495c571 100644
+--- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
++++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+@@ -4,6 +4,7 @@ import io.netty.channel.Channel;
+ import io.netty.channel.ChannelFutureListener;
+ import io.netty.channel.ChannelInitializer;
+ import io.netty.channel.socket.SocketChannel;
++import io.netty.handler.codec.compression.Zstd;
+ import io.netty.util.internal.SystemPropertyUtil;
+ import net.minecraft.network.*;
+ import net.minecraft.network.protocol.PacketFlow;
+@@ -39,6 +40,9 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+ 
+     public int getSupportedCompressionFlags() {
+         int supportedCompressionFlags = SetCompressionPacket.ZLIB_COMPRESSION;
++        if (Zstd.isAvailable()) {
++            supportedCompressionFlags |= SetCompressionPacket.ZSTD_COMPRESSION;
++        }
+         return supportedCompressionFlags;
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+index 27f7bea5368b4cfc24e6704cca25c889ba7b78a7..6f62ec4c923f8e52462126a011536e6e6a65a824 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
+@@ -1,6 +1,7 @@
+ package puregero.multipaper.externalserverprotocol;
+ 
+ import io.netty.channel.ChannelOutboundHandlerAdapter;
++import io.netty.handler.codec.compression.Zstd;
+ import net.minecraft.network.FriendlyByteBuf;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+@@ -69,7 +70,10 @@ public class HelloPacket extends ExternalServerPacket {
+         ChannelOutboundHandlerAdapter compressionHandler = null;
+ 
+         if (MultiPaperConfig.interServerCompressionThreshold > 0) {
+-            if ((supportedCompressionFlags & SetCompressionPacket.ZLIB_COMPRESSION) == SetCompressionPacket.ZLIB_COMPRESSION) {
++            if ((supportedCompressionFlags & SetCompressionPacket.ZSTD_COMPRESSION) == SetCompressionPacket.ZSTD_COMPRESSION && Zstd.isAvailable()) {
++                compressionType = SetCompressionPacket.ZSTD_COMPRESSION;
++                compressionHandler = SetCompressionPacket.createZstdCompressionEncoder();
++            } else if ((supportedCompressionFlags & SetCompressionPacket.ZLIB_COMPRESSION) == SetCompressionPacket.ZLIB_COMPRESSION) {
+                 compressionType = SetCompressionPacket.ZLIB_COMPRESSION;
+                 compressionHandler = SetCompressionPacket.createZlibCompressionEncoder();
+             }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SetCompressionPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SetCompressionPacket.java
+index 049dad6e8590f894095654c1acc3776e3e033f33..3adaa389815ae4a172cdea4e477316801f954391 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/SetCompressionPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SetCompressionPacket.java
+@@ -7,6 +7,7 @@ import puregero.multipaper.mastermessagingprotocol.MessageLengthDecoder;
+ public class SetCompressionPacket extends ExternalServerPacket {
+ 
+     public static final int ZLIB_COMPRESSION = 1;
++    public static final int ZSTD_COMPRESSION = 2;
+ 
+     private final int compressionType;
+ 
+@@ -28,6 +29,7 @@ public class SetCompressionPacket extends ExternalServerPacket {
+         connection.getChannel().pipeline()
+                 .addFirst("decompresser", switch (compressionType) {
+                     case ZLIB_COMPRESSION -> createZlibCompressionDecoder();
++                    case ZSTD_COMPRESSION -> createZstdCompressionDecoder();
+                     default -> throw new IllegalArgumentException("Unknown compression type of " + compressionType);
+                 })
+                 .addFirst("splitter", new MessageLengthDecoder());
+@@ -40,4 +42,12 @@ public class SetCompressionPacket extends ExternalServerPacket {
+     public static ZlibCompressionEncoder createZlibCompressionEncoder() {
+         return new ZlibCompressionEncoder(com.velocitypowered.natives.util.Natives.compress.get().create(-1));
+     }
++
++    public static ZstdCompressionDecoder createZstdCompressionDecoder() {
++        return new ZstdCompressionDecoder();
++    }
++
++    public static ZstdCompressionEncoder createZstdCompressionEncoder() {
++        return new ZstdCompressionEncoder();
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ZstdCompressionDecoder.java b/src/main/java/puregero/multipaper/externalserverprotocol/ZstdCompressionDecoder.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..059c862e6b521f42b979f5297d9970dbca8e21a3
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ZstdCompressionDecoder.java
+@@ -0,0 +1,32 @@
++package puregero.multipaper.externalserverprotocol;
++
++import com.github.luben.zstd.Zstd;
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import io.netty.channel.ChannelHandlerContext;
++import io.netty.handler.codec.ByteToMessageDecoder;
++import net.minecraft.network.FriendlyByteBuf;
++
++import java.nio.ByteBuffer;
++import java.util.List;
++
++public class ZstdCompressionDecoder extends ByteToMessageDecoder {
++
++    @Override
++    protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, List<Object> list) throws Exception {
++        if (byteBuf.readableBytes() != 0) {
++            FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(byteBuf);
++            int length = friendlyByteBuf.readVarInt();
++            if (length == 0) {
++                list.add(byteBuf.readBytes(byteBuf.readableBytes()));
++            } else {
++                ByteBuffer buffer = Zstd.decompress(
++                        byteBuf.nioBuffer(),
++                        length
++                );
++                byteBuf.readerIndex(byteBuf.readerIndex() + byteBuf.readableBytes());
++                list.add(Unpooled.wrappedBuffer(buffer));
++            }
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ZstdCompressionEncoder.java b/src/main/java/puregero/multipaper/externalserverprotocol/ZstdCompressionEncoder.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..443b2854b0234e4a233d0935ea9d276e60c52ef7
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ZstdCompressionEncoder.java
+@@ -0,0 +1,32 @@
++package puregero.multipaper.externalserverprotocol;
++
++import com.github.luben.zstd.Zstd;
++import io.netty.buffer.ByteBuf;
++import io.netty.channel.ChannelHandlerContext;
++import io.netty.handler.codec.MessageToByteEncoder;
++import net.minecraft.network.FriendlyByteBuf;
++import puregero.multipaper.MultiPaperConfig;
++
++import java.nio.ByteBuffer;
++
++public class ZstdCompressionEncoder extends MessageToByteEncoder<ByteBuf> {
++    public static final int COMPRESSION_LEVEL = 3;
++
++    @Override
++    protected void encode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, ByteBuf byteBufDest) throws Exception {
++        int i = byteBuf.readableBytes();
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(byteBufDest);
++        if (i < MultiPaperConfig.interServerCompressionThreshold) {
++            friendlyByteBuf.writeVarInt(0);
++            friendlyByteBuf.writeBytes(byteBuf);
++        } else {
++            friendlyByteBuf.writeVarInt(i);
++            ByteBuffer buffer = Zstd.compress(
++                    byteBuf.internalNioBuffer(byteBuf.readerIndex(), byteBuf.readableBytes()),
++                    COMPRESSION_LEVEL
++            );
++            byteBufDest.writeBytes(buffer);
++        }
++
++    }
++}

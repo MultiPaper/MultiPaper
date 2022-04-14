@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 14 Apr 2022 23:24:51 +1000
+Subject: [PATCH] Check if player is still connected after
+ PlayerSpawnLocationEvent
+
+
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index a371a7faee63652f86bcb76d63476c6fb1aaa520..09ae1bffb553d5a668195f91873de22250a0d4fc 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -259,11 +259,21 @@ public abstract class PlayerList {
+         }
+         // Paper end
+ 
++        ServerGamePacketListenerImpl playerconnection = new ServerGamePacketListenerImpl(this.server, connection, player); // MultiPaper
++
+         // Spigot start - spawn location event
+         Player spawnPlayer = player.getBukkitEntity();
+         org.spigotmc.event.player.PlayerSpawnLocationEvent ev = new com.destroystokyo.paper.event.player.PlayerInitialSpawnEvent(spawnPlayer, spawnPlayer.getLocation()); // Paper use our duplicate event
+         this.cserver.getPluginManager().callEvent(ev);
+ 
++        // MultiPaper start
++        if (!connection.isConnected() || player.quitReason != null) {
++            MultiPaper.sendPlayerDisconnect(player);
++            pendingPlayers.remove(player.getUUID(), player);
++            return;
++        }
++        // MultiPaper end
++
+         Location loc = ev.getSpawnLocation();
+         worldserver1 = ((CraftWorld) loc.getWorld()).getHandle();
+ 
+@@ -280,7 +290,7 @@ public abstract class PlayerList {
+         LevelData worlddata = worldserver1.getLevelData();
+ 
+         player.loadGameTypes(nbttagcompound);
+-        ServerGamePacketListenerImpl playerconnection = new ServerGamePacketListenerImpl(this.server, connection, player);
++        // ServerGamePacketListenerImpl playerconnection = new ServerGamePacketListenerImpl(this.server, connection, player); // MultiPaper - move up
+         GameRules gamerules = worldserver1.getGameRules();
+         boolean flag = gamerules.getBoolean(GameRules.RULE_DO_IMMEDIATE_RESPAWN);
+         boolean flag1 = gamerules.getBoolean(GameRules.RULE_REDUCEDDEBUGINFO);

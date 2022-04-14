@@ -140,10 +140,19 @@ index 470dbed47830e2f580c090bc762a7be5cf389ce5..9e763cf4ff154f7ddd6837a14fb20b15
              this.updateEffectVisibility();
              return event; // Paper
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..8bba683c03337a606c315832a3c6ccd87d71a9e7 100644
+index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..4b2d87fc09d6319c4e5f912b80422d451895ad29 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -142,7 +142,6 @@ import net.minecraft.world.level.block.entity.CommandBlockEntity;
+@@ -23,6 +23,8 @@ import java.util.function.UnaryOperator;
+ import java.util.stream.Collectors;
+ import java.util.stream.Stream;
+ import javax.annotation.Nullable;
++
++import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+ import net.minecraft.ChatFormatting;
+ import net.minecraft.CrashReport;
+ import net.minecraft.CrashReportCategory;
+@@ -142,7 +144,6 @@ import net.minecraft.world.level.block.entity.CommandBlockEntity;
  import net.minecraft.world.level.block.entity.JigsawBlockEntity;
  import net.minecraft.world.level.block.entity.SignBlockEntity;
  import net.minecraft.world.level.block.entity.StructureBlockEntity;
@@ -151,7 +160,7 @@ index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..8bba683c03337a606c315832a3c6ccd8
  import net.minecraft.world.level.block.state.BlockState;
  import net.minecraft.world.phys.AABB;
  import net.minecraft.world.phys.BlockHitResult;
-@@ -177,7 +176,6 @@ import org.bukkit.Location;
+@@ -177,7 +178,6 @@ import org.bukkit.Location;
  import org.bukkit.craftbukkit.entity.CraftPlayer;
  import org.bukkit.craftbukkit.event.CraftEventFactory;
  import org.bukkit.craftbukkit.inventory.CraftItemStack;
@@ -159,7 +168,7 @@ index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..8bba683c03337a606c315832a3c6ccd8
  import org.bukkit.craftbukkit.util.CraftMagicNumbers;
  import org.bukkit.craftbukkit.util.LazyPlayerSet;
  import org.bukkit.craftbukkit.util.Waitable;
-@@ -194,7 +192,6 @@ import org.bukkit.event.inventory.InventoryCreativeEvent;
+@@ -194,7 +194,6 @@ import org.bukkit.event.inventory.InventoryCreativeEvent;
  import org.bukkit.event.inventory.InventoryType.SlotType;
  import org.bukkit.event.inventory.SmithItemEvent;
  import org.bukkit.event.player.AsyncPlayerChatEvent;
@@ -167,7 +176,7 @@ index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..8bba683c03337a606c315832a3c6ccd8
  import org.bukkit.event.player.PlayerChatEvent;
  import org.bukkit.event.player.PlayerCommandPreprocessEvent;
  import org.bukkit.event.player.PlayerInteractAtEntityEvent;
-@@ -213,6 +210,9 @@ import org.bukkit.inventory.EquipmentSlot;
+@@ -213,6 +212,9 @@ import org.bukkit.inventory.EquipmentSlot;
  import org.bukkit.inventory.InventoryView;
  import org.bukkit.inventory.SmithingInventory;
  import co.aikar.timings.MinecraftTimings; // Paper
@@ -177,17 +186,17 @@ index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..8bba683c03337a606c315832a3c6ccd8
  // CraftBukkit end
  
  public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
-@@ -439,7 +439,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -439,7 +441,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
  
          PlayerKickEvent event = new PlayerKickEvent(this.player.getBukkitEntity(), reason, leaveMessage, cause); // Paper - Adventure & kick event reason
  
 -        if (this.cserver.getServer().isRunning()) {
-+        boolean shouldKick = reason != PlayerRemovePacket.EXTERNAL_DISCONNECT_COMPONENT && !(reason == PlayerRemovePacket.LOGGED_IN_FROM_ANOTHER_LOCATION && this.player instanceof ExternalPlayer); // MultiPaper - don't run kick event for external disconnects
++        boolean shouldKick = reason != PlayerRemovePacket.EXTERNAL_DISCONNECT_COMPONENT && !(reason == PlayerRemovePacket.LOGGED_IN_FROM_ANOTHER_LOCATION && this.player instanceof ExternalPlayer) && !PlainTextComponentSerializer.plainText().serialize(reason).startsWith("sendto:"); // MultiPaper - don't run kick event for external disconnects
 +        if (this.cserver.getServer().isRunning() && shouldKick) { // MultiPaper
              this.cserver.getPluginManager().callEvent(event);
          }
  
-@@ -452,6 +453,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -452,6 +455,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
          // CraftBukkit end
  
          this.player.quitReason = org.bukkit.event.player.PlayerQuitEvent.QuitReason.KICKED; // Paper
@@ -195,7 +204,7 @@ index b9f2f6713bd9e3431ddbf2a41f16cbda5739ef57..8bba683c03337a606c315832a3c6ccd8
          this.connection.send(new ClientboundDisconnectPacket(ichatbasecomponent), (future) -> {
              this.connection.disconnect(ichatbasecomponent);
          });
-@@ -1991,7 +1993,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -1991,7 +1995,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
          this.player.disconnect();
          // Paper start - Adventure
          quitMessage = quitMessage == null ? this.server.getPlayerList().remove(this.player) : this.server.getPlayerList().remove(this.player, quitMessage); // Paper - pass in quitMessage to fix kick message not being used

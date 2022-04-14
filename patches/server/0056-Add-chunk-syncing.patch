@@ -1718,10 +1718,10 @@ index 361232ab565973d262cfb6ecc54fd823e28d799e..191294b08434bd4ea0a7ea29d040b782
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b823c3021e94d6fc974c2bf1247f4f6bc9bac4f7
+index 0000000000000000000000000000000000000000..8330d34128d4049898be244fa140a1da7d059a4f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,137 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import com.mojang.datafixers.util.Either;
@@ -1737,6 +1737,7 @@ index 0000000000000000000000000000000000000000..b823c3021e94d6fc974c2bf1247f4f6b
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
++import org.bukkit.World;
 +import org.bukkit.craftbukkit.CraftWorld;
 +import puregero.multipaper.ExternalServer;
 +import puregero.multipaper.ExternalServerConnection;
@@ -1777,7 +1778,15 @@ index 0000000000000000000000000000000000000000..b823c3021e94d6fc974c2bf1247f4f6b
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++        World bukkitWorld = Bukkit.getWorld(world);
++
++        if (!(bukkitWorld instanceof CraftWorld craftWorld)) {
++            LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we don't have the world " + world + " loaded.");
++            connection.send(new SendChunkPacket(world, cx, cz, null));
++            return;
++        }
++
++        ServerLevel level = craftWorld.getHandle();
 +        ChunkHolder holder = MultiPaper.getChunkHolder(world, cx, cz);
 +
 +        if (holder == null) {

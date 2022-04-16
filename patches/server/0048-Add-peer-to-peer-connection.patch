@@ -26,10 +26,10 @@ index 6299c769c56bd6c2b2f3a26c1f5766e17b6fb660..17ebc0ac3d4c91d6818c79e8821681b6
                  metrics.addCustomChart(new Metrics.DrilldownPie("java_version", () -> {
                      Map<String, Map<String, Integer>> map = new HashMap<>();
 diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
-index 7b8f9cf06833860d0fc02399822e6aea214883ed..a5445292387bedd165b5ede6a3db374a70fef181 100644
+index 9bbf990212ee55a267d0eb1e863618c50fa706da..6cfbe844ac8603ef937714370b8ea3d0e6687ef4 100644
 --- a/src/main/java/net/minecraft/network/Connection.java
 +++ b/src/main/java/net/minecraft/network/Connection.java
-@@ -542,7 +542,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -554,7 +554,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
          // Paper end
          if (this.packetListener instanceof ServerLoginPacketListenerImpl) {
              if ( ((ServerLoginPacketListenerImpl) this.packetListener).state != ServerLoginPacketListenerImpl.State.READY_TO_ACCEPT // Paper
@@ -39,10 +39,10 @@ index 7b8f9cf06833860d0fc02399822e6aea214883ed..a5445292387bedd165b5ede6a3db374a
              } // Paper
          }
 diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
-index 5ba9aca70eecb530ae363ccded5744fa50b5016e..a187e36aca089ec6b024b19760c935f7c9fa6cd4 100644
+index f79ede9deb57b8f8b596b0e9adf4c776e8c54f81..08a130941e7b1e21d2d180ea26a36d6744341991 100644
 --- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
 +++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
-@@ -67,6 +67,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
+@@ -70,6 +70,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
  import org.bukkit.event.server.ServerCommandEvent;
  import org.bukkit.craftbukkit.util.Waitable;
  import org.bukkit.event.server.RemoteServerCommandEvent;
@@ -50,7 +50,7 @@ index 5ba9aca70eecb530ae363ccded5744fa50b5016e..a187e36aca089ec6b024b19760c935f7
  // CraftBukkit end
  
  public class DedicatedServer extends MinecraftServer implements ServerInterface {
-@@ -284,6 +285,8 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+@@ -287,6 +288,8 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
              return false;
          }
  
@@ -60,7 +60,7 @@ index 5ba9aca70eecb530ae363ccded5744fa50b5016e..a187e36aca089ec6b024b19760c935f7
          // this.setPlayerList(new DedicatedPlayerList(this, this.registryHolder, this.playerDataStorage)); // Spigot - moved up
          server.loadPlugins();
 diff --git a/src/main/java/net/minecraft/server/network/ServerConnectionListener.java b/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
-index 54477f1d0d0e2f09fc2d2b1f4c57413e5a0736f9..53d0ec25fdc71e918355c1e6e5b6a7bcfacc78b4 100644
+index 058fb3696c7ece4a7b6971886b1760b26add733b..382061a1c3b4c012d95510d4f9882271662f4937 100644
 --- a/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
 +++ b/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
 @@ -62,7 +62,7 @@ public class ServerConnectionListener {
@@ -82,7 +82,7 @@ index 54477f1d0d0e2f09fc2d2b1f4c57413e5a0736f9..53d0ec25fdc71e918355c1e6e5b6a7bc
      }
  
 diff --git a/src/main/java/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
-index 150050fb343ef6119204b7d5220207765a6937bc..63df2d1ca7208b436798e7ad21afc7bd7e6a96b1 100644
+index e8a79277f3e57bc82d67ada6543c7f8665311bd3..2000498bd5da40d2440273a820f7dd8d04e9a327 100644
 --- a/src/main/java/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
 @@ -10,6 +10,8 @@ import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
@@ -112,70 +112,6 @@ index 150050fb343ef6119204b7d5220207765a6937bc..63df2d1ca7208b436798e7ad21afc7bd
          switch (packet.getIntention()) {
              case LOGIN:
                  this.connection.setProtocol(ConnectionProtocol.LOGIN);
-diff --git a/src/main/java/net/minecraft/world/ticks/ScheduledTick.java b/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..f694b0b13ed3ee877d0c8026babdc982a95798c6
---- /dev/null
-+++ b/src/main/java/net/minecraft/world/ticks/ScheduledTick.java
-@@ -0,0 +1,58 @@
-+package net.minecraft.world.ticks;
-+
-+import it.unimi.dsi.fastutil.Hash.Strategy;
-+import java.util.Comparator;
-+import javax.annotation.Nullable;
-+import net.minecraft.core.BlockPos;
-+
-+public record ScheduledTick<T>(T type, BlockPos pos, long triggerTick, TickPriority priority, long subTickOrder) {
-+    public static final Comparator<ScheduledTick<?>> DRAIN_ORDER = (first, second) -> {
-+        int i = Long.compare(first.triggerTick, second.triggerTick);
-+        if (i != 0) {
-+            return i;
-+        } else {
-+            i = first.priority.compareTo(second.priority);
-+            return i != 0 ? i : Long.compare(first.subTickOrder, second.subTickOrder);
-+        }
-+    };
-+    public static final Comparator<ScheduledTick<?>> INTRA_TICK_DRAIN_ORDER = (first, second) -> {
-+        int i = first.priority.compareTo(second.priority);
-+        return i != 0 ? i : Long.compare(first.subTickOrder, second.subTickOrder);
-+    };
-+    public static final Strategy<ScheduledTick<?>> UNIQUE_TICK_HASH = new Strategy<ScheduledTick<?>>() {
-+        @Override
-+        public int hashCode(ScheduledTick<?> scheduledTick) {
-+            return 31 * scheduledTick.pos().hashCode() + scheduledTick.type().hashCode();
-+        }
-+
-+        @Override
-+        public boolean equals(@Nullable ScheduledTick<?> scheduledTick, @Nullable ScheduledTick<?> scheduledTick2) {
-+            if (scheduledTick == scheduledTick2) {
-+                return true;
-+            } else if (scheduledTick != null && scheduledTick2 != null) {
-+                return scheduledTick.type() == scheduledTick2.type() && scheduledTick.pos().equals(scheduledTick2.pos());
-+            } else {
-+                return false;
-+            }
-+        }
-+    };
-+
-+    public ScheduledTick(T type, BlockPos pos, long triggerTick, long subTickOrder) {
-+        this(type, pos, triggerTick, TickPriority.NORMAL, subTickOrder);
-+    }
-+
-+    // MultiPaper start - Fix compilation issues
-+    public ScheduledTick(T type, BlockPos pos, long triggerTick, TickPriority priority, long subTickOrder) {
-+        pos = pos.immutable();
-+        this.type = type;
-+        this.pos = pos;
-+        this.triggerTick = triggerTick;
-+        this.priority = priority;
-+        this.subTickOrder = subTickOrder;
-+    }
-+    // MultiPaper end
-+
-+    public static <T> ScheduledTick<T> probe(T type, BlockPos pos) {
-+        return new ScheduledTick<>(type, pos, 0L, TickPriority.NORMAL, 0L);
-+    }
-+}
 diff --git a/src/main/java/puregero/multipaper/ExternalServer.java b/src/main/java/puregero/multipaper/ExternalServer.java
 index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354304819b1 100644
 --- a/src/main/java/puregero/multipaper/ExternalServer.java

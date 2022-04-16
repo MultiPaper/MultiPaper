@@ -5,13 +5,13 @@ Subject: [PATCH] Sync player files
 
 
 diff --git a/src/main/java/net/minecraft/server/PlayerAdvancements.java b/src/main/java/net/minecraft/server/PlayerAdvancements.java
-index f7959fe8d5247504dd79a18010470d98781c7cfe..013e344573d6924220a50af599bfcd2c2a51a63f 100644
+index b16287a47870978706734b928b87f2357e91e3a1..dfc40e6a5f516091913870233c1c78d57fcde681 100644
 --- a/src/main/java/net/minecraft/server/PlayerAdvancements.java
 +++ b/src/main/java/net/minecraft/server/PlayerAdvancements.java
-@@ -51,6 +51,8 @@ import net.minecraft.util.datafix.DataFixTypes;
+@@ -51,6 +51,8 @@ import net.minecraft.server.players.PlayerList;
+ import net.minecraft.util.datafix.DataFixTypes;
  import net.minecraft.world.level.GameRules;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
+ import org.slf4j.Logger;
 +import puregero.multipaper.ExternalPlayer;
 +import puregero.multipaper.MultiPaper;
  
@@ -69,10 +69,10 @@ index f7959fe8d5247504dd79a18010470d98781c7cfe..013e344573d6924220a50af599bfcd2c
  
              try {
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index c8a7fd0a30aec01cc4522918ee49b0daca2ec1c1..4a0e474678118107c56950d8455ea004c56e5295 100644
+index 83ed6a9e8696d9533fda606d460a8b9a4b5eb673..bd4edb7ac0fde47d302b1025eb5c31b235e7bfe6 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
-@@ -594,6 +594,7 @@ public abstract class PlayerList {
+@@ -601,6 +601,7 @@ public abstract class PlayerList {
          if (!player.getBukkitEntity().isPersistent()) return; // CraftBukkit
          if (!player.didPlayerJoinEvent) return; // Paper - If we never fired PJE, we disconnected during login. Data has not changed, and additionally, our saved vehicle is not loaded! If we save now, we will lose our vehicle (CraftBukkit bug)
          player.lastSave = MinecraftServer.currentTick; // Paper
@@ -81,10 +81,10 @@ index c8a7fd0a30aec01cc4522918ee49b0daca2ec1c1..4a0e474678118107c56950d8455ea004
          ServerStatsCounter serverstatisticmanager = (ServerStatsCounter) player.getStats(); // CraftBukkit
  
 diff --git a/src/main/java/net/minecraft/stats/ServerStatsCounter.java b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
-index ee5bb1a8edb812d48d5af45ea8485f574dcb2ad5..fdeecc1c0e98e2334fb287aa5091109b0f64ebcb 100644
+index c59f98ca3adfdd90cdc5999aeadbb0834efedc0f..adb8457d530397cad66ec3f05902eedd17bf5ca0 100644
 --- a/src/main/java/net/minecraft/stats/ServerStatsCounter.java
 +++ b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
-@@ -16,12 +16,9 @@ import it.unimi.dsi.fastutil.objects.ObjectIterator;
+@@ -17,12 +17,9 @@ import it.unimi.dsi.fastutil.objects.ObjectIterator;
  import java.io.File;
  import java.io.IOException;
  import java.io.StringReader;
@@ -99,10 +99,10 @@ index ee5bb1a8edb812d48d5af45ea8485f574dcb2ad5..fdeecc1c0e98e2334fb287aa5091109b
  import net.minecraft.SharedConstants;
  import net.minecraft.Util;
  import net.minecraft.core.Registry;
-@@ -36,6 +33,8 @@ import net.minecraft.world.entity.player.Player;
+@@ -36,6 +33,8 @@ import net.minecraft.util.datafix.DataFixTypes;
+ import net.minecraft.world.entity.player.Player;
  import org.apache.commons.io.FileUtils;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
+ import org.slf4j.Logger;
 +import puregero.multipaper.ExternalPlayer;
 +import puregero.multipaper.MultiPaper;
  
@@ -154,10 +154,10 @@ index ee5bb1a8edb812d48d5af45ea8485f574dcb2ad5..fdeecc1c0e98e2334fb287aa5091109b
          ObjectIterator objectiterator = this.stats.object2IntEntrySet().iterator();
  
 diff --git a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
-index 35c39aed9583275ef25d32c783715798b52bdb63..641581f2c84100b84bed7254801b41f207dcf909 100644
+index 601f8099f74e81c17600566b3c9b7a6dd39c9bcb..9dc105731c52c1783ded2c5e6825cbb6a1cd73f1 100644
 --- a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
 +++ b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
-@@ -17,15 +17,18 @@ import org.apache.logging.log4j.Logger;
+@@ -17,15 +17,18 @@ import org.slf4j.Logger;
  import java.io.FileInputStream;
  import java.io.InputStream;
  import org.bukkit.craftbukkit.entity.CraftPlayer;
@@ -166,7 +166,7 @@ index 35c39aed9583275ef25d32c783715798b52bdb63..641581f2c84100b84bed7254801b41f2
  
  public class PlayerDataStorage {
  
-     private static final Logger LOGGER = LogManager.getLogger();
+     private static final Logger LOGGER = LogUtils.getLogger();
      private final File playerDir;
 +    private final LevelStorageSource.LevelStorageAccess session; // MultiPaper
      protected final DataFixer fixerUpper;
@@ -233,7 +233,7 @@ index 35c39aed9583275ef25d32c783715798b52bdb63..641581f2c84100b84bed7254801b41f2
  
              if (file1.exists()) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index ef841a5ea1f634e87e5437faf83dc00efd590106..a98ba635a2649ca61420fcd002bac2315514bf26 100644
+index 6feeadad9aecb7d63e24d5daae115a93e39aeb3d..057a70262ed570435b3dcb0998a1aa1839cb76ee 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 @@ -144,6 +144,7 @@ import org.bukkit.scoreboard.Scoreboard;
@@ -244,7 +244,7 @@ index ef841a5ea1f634e87e5437faf83dc00efd590106..a98ba635a2649ca61420fcd002bac231
  
  @DelegateDeserialization(CraftOfflinePlayer.class)
  public class CraftPlayer extends CraftHumanEntity implements Player {
-@@ -1139,6 +1140,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1128,6 +1129,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
  
      @Override
      public void saveData() {

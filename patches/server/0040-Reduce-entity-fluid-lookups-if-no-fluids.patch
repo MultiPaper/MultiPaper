@@ -5,13 +5,13 @@ Subject: [PATCH] Reduce entity fluid lookups if no fluids
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 6737142f812e9a22f294577344d0e00315dbe0fc..409d30f0b175f9be9ac269c608337b6aa0c3e927 100644
+index 1eaa1eb845aabf19f49f9d44b4df6b3ef2e395cc..ba6a7885e5583057427ba118208cd60e8f5ecc84 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
-@@ -3897,16 +3897,18 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -3917,16 +3917,18 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
      }
  
-     public boolean updateFluidHeightAndDoFluidPushing(Tag<Fluid> tag, double speed) {
+     public boolean updateFluidHeightAndDoFluidPushing(TagKey<Fluid> tag, double speed) {
 -        if (this.touchingUnloadedChunk()) {
 +        if (false && this.touchingUnloadedChunk()) { // Airplane - cost of a lookup here is the same cost as below, so skip
              return false;
@@ -34,7 +34,7 @@ index 6737142f812e9a22f294577344d0e00315dbe0fc..409d30f0b175f9be9ac269c608337b6a
              double d1 = 0.0D;
              boolean flag = this.isPushedByFluid();
              boolean flag1 = false;
-@@ -3914,14 +3916,62 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -3934,14 +3936,62 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              int k1 = 0;
              BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
  
@@ -103,7 +103,7 @@ index 6737142f812e9a22f294577344d0e00315dbe0fc..409d30f0b175f9be9ac269c608337b6a
  
                              if (d2 >= axisalignedbb.minY) {
                                  flag1 = true;
-@@ -3943,9 +3993,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource, i
+@@ -3963,9 +4013,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                                  // CraftBukkit end
                              }
                          }
@@ -117,10 +117,10 @@ index 6737142f812e9a22f294577344d0e00315dbe0fc..409d30f0b175f9be9ac269c608337b6a
              if (vec3d.length() > 0.0D) {
                  if (k1 > 0) {
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunkSection.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunkSection.java
-index e962db693510dc261d6456706a459929369f2510..e090e0bf8182634530567b714fd5645a43d9b170 100644
+index b11ad90c0956ac1b8ee069fa3f4553a2b4ce88e9..d46202ba05e2a2d3cf5ca8b1c7c9f3d9f2225861 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunkSection.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunkSection.java
-@@ -23,6 +23,9 @@ public class LevelChunkSection {
+@@ -24,6 +24,9 @@ public class LevelChunkSection {
      short nonEmptyBlockCount; // Paper - package-private
      private short tickingBlockCount;
      private short tickingFluidCount;
@@ -128,9 +128,9 @@ index e962db693510dc261d6456706a459929369f2510..e090e0bf8182634530567b714fd5645a
 +    public short fluidStateCount;
 +    // Airplane end
      public final PalettedContainer<BlockState> states;
-     private final PalettedContainer<Biome> biomes;
+     private final PalettedContainer<Holder<Biome>> biomes;
      public final com.destroystokyo.paper.util.maplist.IBlockDataList tickingList = new com.destroystokyo.paper.util.maplist.IBlockDataList(); // Paper
-@@ -195,6 +198,7 @@ public class LevelChunkSection {
+@@ -196,6 +199,7 @@ public class LevelChunkSection {
  
          if (!fluid.isEmpty()) {
              --this.tickingFluidCount;
@@ -138,7 +138,7 @@ index e962db693510dc261d6456706a459929369f2510..e090e0bf8182634530567b714fd5645a
          }
  
          if (!state.isAir()) {
-@@ -209,6 +213,7 @@ public class LevelChunkSection {
+@@ -210,6 +214,7 @@ public class LevelChunkSection {
  
          if (!fluid1.isEmpty()) {
              ++this.tickingFluidCount;
@@ -146,9 +146,9 @@ index e962db693510dc261d6456706a459929369f2510..e090e0bf8182634530567b714fd5645a
          }
  
          this.updateKnownBlockInfo(x | (z << 4) | (y << 8), iblockdata1, state); // Paper
-@@ -260,6 +265,7 @@ public class LevelChunkSection {
+@@ -258,6 +263,7 @@ public class LevelChunkSection {
                  if (fluid.isRandomlyTicking()) {
-                     this.tickingFluidCount = (short) (this.tickingFluidCount + 1); // Paper
+                     this.tickingFluidCount = (short) (this.tickingFluidCount + 1);
                  }
 +                this.fluidStateCount++; // Airplane
              }

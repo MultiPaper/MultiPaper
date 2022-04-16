@@ -34,10 +34,10 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
-index 939a6056a61e4cfbb6a2410a8ba97066fbbecca5..09f5f73994185d6e7a23d0cb5b54eb783537297f 100644
+index f29ee33705d5708931171c5bcca2b4935437a9e8..8a86f902389b8ec4d8fa1eb1f3803ef57f38c199 100644
 --- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 +++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
-@@ -973,6 +973,7 @@ public class ServerChunkCache extends ChunkSource {
+@@ -964,6 +964,7 @@ public class ServerChunkCache extends ChunkSource {
              ProfilerFiller gameprofilerfiller = this.level.getProfiler();
  
              gameprofilerfiller.push("pollingChunks");
@@ -46,10 +46,10 @@ index 939a6056a61e4cfbb6a2410a8ba97066fbbecca5..09f5f73994185d6e7a23d0cb5b54eb78
              boolean flag1 = level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) != 0L && worlddata.getGameTime() % level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) == 0L; // CraftBukkit
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 768017ba650f1bd96e3db0aad8fda939e2ea7add..a96edf5b77c56bbf5f554fa52c938bc6b8fa1da3 100644
+index 50fd3419deb668dda64b1056f03fb66da55e6960..ce59b6dd8f5707d63f9e793fc4c161437412a833 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -735,6 +735,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -738,6 +738,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
      private final io.papermc.paper.util.math.ThreadUnsafeRandom randomTickRandom = new io.papermc.paper.util.math.ThreadUnsafeRandom();
      // Paper end
  
@@ -58,7 +58,7 @@ index 768017ba650f1bd96e3db0aad8fda939e2ea7add..a96edf5b77c56bbf5f554fa52c938bc6
      public void tickChunk(LevelChunk chunk, int randomTickSpeed) {
          ChunkPos chunkcoordintpair = chunk.getPos();
          boolean flag = this.isRaining();
-@@ -745,7 +747,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -748,7 +750,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          gameprofilerfiller.push("thunder");
          final BlockPos.MutableBlockPos blockposition = this.chunkTickMutablePosition; // Paper - use mutable to reduce allocation rate, final to force compile fail on change
  
@@ -67,17 +67,17 @@ index 768017ba650f1bd96e3db0aad8fda939e2ea7add..a96edf5b77c56bbf5f554fa52c938bc6
              blockposition.set(this.findLightningTargetAround(this.getBlockRandomPos(j, 0, k, 15))); // Paper
              if (this.isRainingAt(blockposition)) {
                  DifficultyInstance difficultydamagescaler = this.getCurrentDifficultyAt(blockposition);
-@@ -769,7 +771,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -772,7 +774,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          }
  
          gameprofilerfiller.popPush("iceandsnow");
--         if (!this.paperConfig.disableIceAndSnow && this.randomTickRandom.nextInt(16) == 0) { // Paper - Disable ice and snow // Paper - optimise random ticking
-+         if (!this.paperConfig.disableIceAndSnow && (this.currentIceAndSnowTick++ & 15) == 0) { // Paper - Disable ice and snow // Paper - optimise random ticking  // Airplane - optimize further random ticking
+-        if (!this.paperConfig.disableIceAndSnow && this.random.nextInt(16) == 0) { // Paper - Disable ice and snow
++         if (!this.paperConfig.disableIceAndSnow && (this.currentIceAndSnowTick++ & 15) == 0) { // Paper - Disable ice and snow // Airplane - optimize further random ticking
              // Paper start - optimise chunk ticking
              this.getRandomBlockPosition(j, 0, k, 15, blockposition);
              int normalY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, blockposition.getX() & 15, blockposition.getZ() & 15) + 1;
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index b47c4c9e9b82030cd82d72fe90d7c8bf558d6b28..29cff0b1e8194274fda7400da87804433f79ce08 100644
+index c8fb4b2bc86c9aa2e7c2e9ee10208cf9598b39ef..ed44234a2db2ebb24398ef0fb8f9a566b10e245f 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -94,6 +94,18 @@ public class LevelChunk extends ChunkAccess {

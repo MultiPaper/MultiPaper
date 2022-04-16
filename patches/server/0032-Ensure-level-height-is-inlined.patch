@@ -5,12 +5,12 @@ Subject: [PATCH] Ensure level height is inlined
 
 
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 73c69c88cf2d2972fce59b214cda792517751cfa..f87d0c8d183cb053ee66eca427c3611d5044e9c1 100644
+index cc0757214bad997b04bfcd9ea0efc683f0a70344..ab267a7bca7d848b359a8886b7dfb193de3f2a31 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
-@@ -305,6 +305,15 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
-     }
-     // Paper end - optimise checkDespawn
+@@ -261,6 +261,15 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+ 
+     public abstract ResourceKey<LevelStem> getTypeKey();
  
 +    // Airplane start - ensure these get inlined
 +    private final int minBuildHeight, minSection, height, maxBuildHeight, maxSection;
@@ -21,20 +21,20 @@ index 73c69c88cf2d2972fce59b214cda792517751cfa..f87d0c8d183cb053ee66eca427c3611d
 +    @Override public final int getHeight() { return this.height; }
 +    // Airplane end
 +
-     protected Level(WritableLevelData worlddatamutable, ResourceKey<Level> resourcekey, final DimensionType dimensionmanager, Supplier<ProfilerFiller> supplier, boolean flag, boolean flag1, long i, org.bukkit.generator.ChunkGenerator gen, org.bukkit.generator.BiomeProvider biomeProvider, org.bukkit.World.Environment env, java.util.concurrent.Executor executor) { // Paper - Async-Anti-Xray - Pass executor
+     protected Level(WritableLevelData worlddatamutable, ResourceKey<Level> resourcekey, Holder<DimensionType> holder, Supplier<ProfilerFiller> supplier, boolean flag, boolean flag1, long i, org.bukkit.generator.ChunkGenerator gen, org.bukkit.generator.BiomeProvider biomeProvider, org.bukkit.World.Environment env, java.util.concurrent.Executor executor) { // Paper - Async-Anti-Xray - Pass executor
          this.spigotConfig = new org.spigotmc.SpigotWorldConfig(((net.minecraft.world.level.storage.PrimaryLevelData) worlddatamutable).getLevelName()); // Spigot
          this.paperConfig = new com.destroystokyo.paper.PaperWorldConfig(((net.minecraft.world.level.storage.PrimaryLevelData) worlddatamutable).getLevelName(), this.spigotConfig); // Paper
-@@ -322,6 +331,13 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
-         this.profiler = supplier;
+@@ -279,6 +288,13 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
          this.levelData = worlddatamutable;
-         this.dimensionType = dimensionmanager;
+         this.dimensionTypeRegistration = holder;
+         this.dimensionType = (DimensionType) holder.value();
 +        // Airplane start
-+        this.minBuildHeight = dimensionmanager.minY();
++        this.minBuildHeight = dimensionType.minY();
 +        this.minSection = SectionPos.blockToSectionCoord(this.minBuildHeight);
-+        this.height = dimensionmanager.height();
++        this.height = dimensionType.height();
 +        this.maxBuildHeight = this.minBuildHeight + this.height;
 +        this.maxSection = SectionPos.blockToSectionCoord(this.maxBuildHeight - 1) + 1;
 +        // Airplane end
          this.dimension = resourcekey;
          this.isClientSide = flag;
-         if (dimensionmanager.coordinateScale() != 1.0D) {
+         if (this.dimensionType.coordinateScale() != 1.0D) {

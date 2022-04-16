@@ -5,18 +5,18 @@ Subject: [PATCH] Sync level.dat
 
 
 diff --git a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
-index 1d5b614c7157f08a49571f9dd338e2ba712ece98..b666bad16ba0028ec2f145acb650f1eb3757f76a 100644
+index 812c3ce2228a51ed4cce0d8dcc1b8aebdf8297e0..de1aac04b47c7069a308dc3f5a6b76f4119ceac0 100644
 --- a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
 +++ b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
-@@ -55,6 +55,7 @@ import net.minecraft.world.level.dimension.LevelStem;
+@@ -57,6 +57,7 @@ import net.minecraft.world.level.LevelSettings;
+ import net.minecraft.world.level.dimension.LevelStem;
  import net.minecraft.world.level.levelgen.WorldGenSettings;
- import org.apache.logging.log4j.LogManager;
- import org.apache.logging.log4j.Logger;
+ import org.slf4j.Logger;
 +import puregero.multipaper.MultiPaper;
  
  public class LevelStorageSource {
  
-@@ -172,7 +173,7 @@ public class LevelStorageSource {
+@@ -184,7 +185,7 @@ public class LevelStorageSource {
          } else {
              File file1 = new File(file, "level.dat");
  
@@ -25,18 +25,8 @@ index 1d5b614c7157f08a49571f9dd338e2ba712ece98..b666bad16ba0028ec2f145acb650f1eb
                  T t0 = levelDataParser.apply(file1, this.fixerUpper);
  
                  if (t0 != null) {
-@@ -188,7 +189,8 @@ public class LevelStorageSource {
-     @Nullable
-     private static DataPackConfig getDataPacks(File file, DataFixer dataFixer) {
-         try {
--            CompoundTag nbttagcompound = NbtIo.readCompressed(file);
-+            CompoundTag nbttagcompound = MultiPaper.readLevel(file.getParentFile().getName()); // NbtIo.readCompressed(file); // MultiPaper
-+            if (nbttagcompound == null) return null; // MultiPaper
-             CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
- 
-             nbttagcompound1.remove("Player");
-@@ -205,7 +207,14 @@ public class LevelStorageSource {
-     static BiFunction<File, DataFixer, PrimaryLevelData> getLevelData(DynamicOps<Tag> dynamicops, DataPackConfig dataPackSettings) {
+@@ -220,7 +221,14 @@ public class LevelStorageSource {
+     static BiFunction<File, DataFixer, PrimaryLevelData> getLevelData(DynamicOps<Tag> ops, DataPackConfig dataPackSettings, Lifecycle lifecycle) {
          return (file, datafixer) -> {
              try {
 -                CompoundTag nbttagcompound = NbtIo.readCompressed(file);
@@ -51,17 +41,15 @@ index 1d5b614c7157f08a49571f9dd338e2ba712ece98..b666bad16ba0028ec2f145acb650f1eb
                  CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
                  CompoundTag nbttagcompound2 = nbttagcompound1.contains("Player", 10) ? nbttagcompound1.getCompound("Player") : null;
  
-@@ -231,7 +240,8 @@ public class LevelStorageSource {
-     BiFunction<File, DataFixer, LevelSummary> levelSummaryReader(File file, boolean locked) {
-         return (file1, datafixer) -> {
-             try {
--                CompoundTag nbttagcompound = NbtIo.readCompressed(file1);
-+                CompoundTag nbttagcompound = MultiPaper.readLevel(file1.getParentFile().getName()); // NbtIo.readCompressed(file1); // MultiPaper
-+                if (nbttagcompound == null) return null; // MultiPaper
-                 CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
+@@ -279,6 +287,7 @@ public class LevelStorageSource {
  
-                 nbttagcompound1.remove("Player");
-@@ -371,6 +381,13 @@ public class LevelStorageSource {
+     @Nullable
+     private static Tag readLightweightData(File file) throws IOException {
++        if (true) return MultiPaper.readLevel(file.getParentFile().getName()); // MultiPaper
+         SkipFields skipfields = new SkipFields(new FieldSelector[]{new FieldSelector("Data", CompoundTag.TYPE, "Player"), new FieldSelector("Data", CompoundTag.TYPE, "WorldGenSettings")});
+ 
+         NbtIo.parseCompressed(file, skipfields);
+@@ -399,6 +408,13 @@ public class LevelStorageSource {
              nbttagcompound2.put("Data", nbttagcompound1);
  
              try {

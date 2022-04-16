@@ -5,10 +5,10 @@ Subject: [PATCH] Cache ChunkHolder's getAvailableChunkNow
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
-index 7cf6ac74bfb35cf7f7624d10d367451329c5fb52..d0ddbd0117e781cd6ae15632d747dc50831e3cd3 100644
+index 0b166c10b3fb9e4c2cc768393a23f241402673dd..d0f4a020bf37f01f9573c9d9a96cdc8edbda1975 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
-@@ -73,6 +73,7 @@ public class ChunkHolder {
+@@ -76,6 +76,7 @@ public class ChunkHolder {
      private boolean wasAccessibleSinceLastSave;
      private boolean resendLight;
      private CompletableFuture<Void> pendingFullStateConfirmation;
@@ -16,15 +16,15 @@ index 7cf6ac74bfb35cf7f7624d10d367451329c5fb52..d0ddbd0117e781cd6ae15632d747dc50
  
      public ServerLevel getWorld() { return chunkMap.level; } // Paper
      boolean isUpdateQueued = false; // Paper
-@@ -176,16 +177,17 @@ public class ChunkHolder {
+@@ -166,16 +167,17 @@ public class ChunkHolder {
  
      // Paper start
-     public ChunkAccess getAvailableChunkNow() {
+     public @Nullable ChunkAccess getAvailableChunkNow() {
 -        // TODO can we just getStatusFuture(EMPTY)?
 -        for (ChunkStatus curr = ChunkStatus.FULL, next = curr.getParent(); curr != next; curr = next, next = next.getParent()) {
 -            CompletableFuture<Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>> future = this.getFutureIfPresentUnchecked(curr);
 -            Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure> either = future.getNow(null);
--            if (either == null || !either.left().isPresent()) {
+-            if (either == null || either.left().isEmpty()) {
 -                continue;
 +        // MultiPaper start
 +        return cachedAvailableChunkNow;
@@ -42,8 +42,8 @@ index 7cf6ac74bfb35cf7f7624d10d367451329c5fb52..d0ddbd0117e781cd6ae15632d747dc50
 +        // MultiPaper end
      }
      // Paper end
- 
-@@ -440,6 +442,7 @@ public class ChunkHolder {
+     // CraftBukkit start
+@@ -460,6 +462,7 @@ public class ChunkHolder {
  
              this.updateChunkToSave(completablefuture1, "schedule " + targetStatus);
              this.futures.set(i, completablefuture1);
@@ -51,7 +51,7 @@ index 7cf6ac74bfb35cf7f7624d10d367451329c5fb52..d0ddbd0117e781cd6ae15632d747dc50
              return completablefuture1;
          } else {
              return completablefuture == null ? ChunkHolder.UNLOADED_CHUNK_FUTURE : completablefuture;
-@@ -632,6 +635,7 @@ public class ChunkHolder {
+@@ -652,6 +655,7 @@ public class ChunkHolder {
                      this.chunkMap.distanceManager.clearPriorityTickets(pos);
                  }
              });
@@ -59,7 +59,7 @@ index 7cf6ac74bfb35cf7f7624d10d367451329c5fb52..d0ddbd0117e781cd6ae15632d747dc50
              this.updateChunkToSave(this.fullChunkFuture, "full");
          }
  
-@@ -660,6 +664,7 @@ public class ChunkHolder {
+@@ -680,6 +684,7 @@ public class ChunkHolder {
                  });
              });
              // Paper end
@@ -67,7 +67,7 @@ index 7cf6ac74bfb35cf7f7624d10d367451329c5fb52..d0ddbd0117e781cd6ae15632d747dc50
              this.updateChunkToSave(this.tickingChunkFuture, "ticking");
          }
  
-@@ -695,6 +700,7 @@ public class ChunkHolder {
+@@ -715,6 +720,7 @@ public class ChunkHolder {
                  });
              });
              // Paper end
@@ -75,7 +75,7 @@ index 7cf6ac74bfb35cf7f7624d10d367451329c5fb52..d0ddbd0117e781cd6ae15632d747dc50
              this.updateChunkToSave(this.entityTickingChunkFuture, "entity ticking");
          }
  
-@@ -821,6 +827,8 @@ public class ChunkHolder {
+@@ -841,6 +847,8 @@ public class ChunkHolder {
          }
  
          this.updateChunkToSave(CompletableFuture.completedFuture(Either.left(chunk.getWrapped())), "replaceProto");
@@ -83,8 +83,8 @@ index 7cf6ac74bfb35cf7f7624d10d367451329c5fb52..d0ddbd0117e781cd6ae15632d747dc50
 +        cachedAvailableChunkNow = chunk; // MultiPaper
      }
  
-     // MultiPaper start
-@@ -840,6 +848,8 @@ public class ChunkHolder {
+     public List<Pair<ChunkStatus, CompletableFuture<Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>>>> getAllFutures() {
+@@ -870,6 +878,8 @@ public class ChunkHolder {
          }
  
          this.updateChunkToSave(CompletableFuture.completedFuture(Either.left(protoChunk)), "replaceProtoWithProto");

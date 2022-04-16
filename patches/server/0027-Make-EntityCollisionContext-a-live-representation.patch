@@ -11,38 +11,36 @@ saved for later, so this should be safe assuming plugins don't use it
 for some strange reason.
 
 diff --git a/src/main/java/net/minecraft/world/phys/shapes/EntityCollisionContext.java b/src/main/java/net/minecraft/world/phys/shapes/EntityCollisionContext.java
-index e387de8adc480eac27b58b6f3f0d331ffc4382f1..ccde45b08d57ef08d5698c7a53e13932ef222b0d 100644
+index b1992ed5136cc7dcf04219868b94b3c37ae36b4b..cf8b2660ab3d497fb4bb4f3f9c3f6f1b35822374 100644
 --- a/src/main/java/net/minecraft/world/phys/shapes/EntityCollisionContext.java
 +++ b/src/main/java/net/minecraft/world/phys/shapes/EntityCollisionContext.java
-@@ -21,51 +21,73 @@ public class EntityCollisionContext implements CollisionContext {
+@@ -19,51 +19,71 @@ public class EntityCollisionContext implements CollisionContext {
              return defaultValue;
          }
      };
 -    private final boolean descending;
 -    private final double entityBottom;
 -    private final ItemStack heldItem;
--    private final Predicate<Fluid> canStandOnFluid;
+-    private final Predicate<FluidState> canStandOnFluid;
 -    @Nullable
 -    private final Entity entity;
 +    // Airplane start - remove these and pray no plugin uses them
 +    //private final boolean descending;
 +    //private final double entityBottom;
 +    //private final ItemStack heldItem;
-+    //private final ItemStack footItem;
-+    //private final Predicate<Fluid> canStandOnFluid;
++    //private final Predicate<FluidState> canStandOnFluid;
 +    // Airplane end
 +    private final @org.jetbrains.annotations.Nullable Entity entity; // Airplane
  
--    protected EntityCollisionContext(boolean descending, double minY, ItemStack heldItem, Predicate<Fluid> walkOnFluidPredicate, @Nullable Entity entity) {
+-    protected EntityCollisionContext(boolean descending, double minY, ItemStack heldItem, Predicate<FluidState> walkOnFluidPredicate, @Nullable Entity entity) {
 -        this.descending = descending;
 -        this.entityBottom = minY;
 -        this.heldItem = heldItem;
 -        this.canStandOnFluid = walkOnFluidPredicate;
-+    protected EntityCollisionContext(boolean descending, double minY, ItemStack heldItem, Predicate<Fluid> walkOnFluidPrecicate, @Nullable Entity entity) {
++    protected EntityCollisionContext(boolean descending, double minY, ItemStack heldItem, Predicate<FluidState> walkOnFluidPrecicate, @Nullable Entity entity) {
 +        // Airplane start
 +        //this.descending = descending;
 +        //this.entityBottom = minY;
-+        //this.footItem = boots;
 +        //this.heldItem = heldItem;
 +        ///this.canStandOnFluid = walkOnFluidPredicate;
          this.entity = entity;
@@ -54,7 +52,7 @@ index e387de8adc480eac27b58b6f3f0d331ffc4382f1..ccde45b08d57ef08d5698c7a53e13932
      protected EntityCollisionContext(Entity entity) {
 +        // Airplane start - remove unneeded things
 +        /*
-         this(entity.isDescending(), entity.getY(), entity instanceof LivingEntity ? ((LivingEntity)entity).getMainHandItem() : ItemStack.EMPTY, entity instanceof LivingEntity ? ((LivingEntity)entity)::canStandOnFluid : (fluid) -> {
+         this(entity.isDescending(), entity.getY(), entity instanceof LivingEntity ? ((LivingEntity)entity).getMainHandItem() : ItemStack.EMPTY, entity instanceof LivingEntity ? ((LivingEntity)entity)::canStandOnFluid : (fluidState) -> {
              return false;
          }, entity);
 +         */
@@ -75,12 +73,12 @@ index e387de8adc480eac27b58b6f3f0d331ffc4382f1..ccde45b08d57ef08d5698c7a53e13932
      }
  
      @Override
-     public boolean canStandOnFluid(FluidState state, FlowingFluid fluid) {
--        return this.canStandOnFluid.test(fluid) && !state.getType().isSame(fluid);
+     public boolean canStandOnFluid(FluidState state, FluidState fluidState) {
+-        return this.canStandOnFluid.test(fluidState) && !state.getType().isSame(fluidState.getType());
 +        // Airplane start
 +        Entity entity = this.entity;
 +        if (entity instanceof LivingEntity livingEntity) {
-+            return livingEntity.canStandOnFluid(fluid) && !state.getType().isSame(fluid);
++            return livingEntity.canStandOnFluid(fluidState) && !state.getType().isSame(fluidState.getType());
 +        }
 +        return false;
 +        // Airplane end

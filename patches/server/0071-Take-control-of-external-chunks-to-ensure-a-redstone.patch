@@ -6,18 +6,18 @@ Subject: [PATCH] Take control of external chunks to ensure a redstone
 
 
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 76023ca334a121c55d28d3cc7f2a904450867c65..5a651d908a913cfdc5d2bced225575acc7ed4b40 100644
+index b79e73e0641ab7c07db8b8122a534f6744747588..e162de17d600b05dbd788b7417130bb107c92dbe 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -186,6 +186,7 @@ import org.bukkit.event.server.ServerLoadEvent;
+@@ -185,6 +185,7 @@ import org.bukkit.event.server.ServerLoadEvent;
+ 
  import co.aikar.timings.MinecraftTimings; // Paper
- import org.spigotmc.SlackActivityAccountant; // Spigot
  import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperExternalBlocksHandler;
  
  public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements CommandSource, AutoCloseable {
  
-@@ -1600,6 +1601,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1574,6 +1575,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          // Paper end
          MinecraftTimings.timeUpdateTimer.stopTiming(); // Spigot // Paper
  
@@ -27,10 +27,10 @@ index 76023ca334a121c55d28d3cc7f2a904450867c65..5a651d908a913cfdc5d2bced225575ac
              ServerLevel worldserver = (ServerLevel) iterator.next();
              worldserver.hasPhysicsEvent =  org.bukkit.event.block.BlockPhysicsEvent.getHandlerList().getRegisteredListeners().length > 0; // Paper
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 49c32f476dbbfab68ac39a1d5fab4c172bd8b556..11450d193b3e4892b6ecc8aa42335719b13bcb72 100644
+index 3b05d7bf47c5c46d1cc9f678449f8dd26a072ccd..d5bfaddc34a9c2fbced17d1fcc2152556ad886b1 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
-@@ -818,6 +818,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -775,6 +775,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
              return false;
          } else {
              FluidState fluid = this.getFluidState(pos);
@@ -76,7 +76,7 @@ index 86517c755f3762cf5f86d57894d6930a3cd3f872..7e8ba7c388644a3892fd518a8742e429
      }
  
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index 115fe6b116fe72aa796eec576ac9b78df1ee6949..deb4021a726de621935f1b627ecf27d0b37ee3fe 100644
+index 8ba3b92f45c5fa314dec432bec6a665bef6a9e59..bbbe0d1c523d2006627b781c9879a06ddb7f45e0 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -606,7 +606,13 @@ public class LevelChunk extends ChunkAccess {

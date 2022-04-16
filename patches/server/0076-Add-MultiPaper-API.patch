@@ -38,10 +38,10 @@ index 403aba29347c779da75337531c3723632120e7c9..949708166b13b1a65cdc1984953a9545
      public boolean isForceLoaded() {
          return this.getWorld().isChunkForceLoaded(this.getX(), this.getZ());
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 98fee13364c5c57d2e530d21629571f8c7aa30f7..55ff96f49e4f255d06e2a28b05fae8b40db54709 100644
+index 1a11d54f9474526e0441771b5c8eac3a8760f9a9..9db45bbbeeaedeba8def16d3dcf3d3ddb9d47a28 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -243,6 +243,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
+@@ -244,6 +244,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  import org.yaml.snakeyaml.error.MarkedYAMLException;
  
  import net.md_5.bungee.api.chat.BaseComponent; // Spigot
@@ -49,7 +49,7 @@ index 98fee13364c5c57d2e530d21629571f8c7aa30f7..55ff96f49e4f255d06e2a28b05fae8b4
  import puregero.multipaper.MultiPaper;
  import puregero.multipaper.externalserverprotocol.SubscribeToWorldPacket;
  
-@@ -272,6 +273,7 @@ public final class CraftServer implements Server {
+@@ -273,6 +274,7 @@ public final class CraftServer implements Server {
      private final PlayerMetadataStore playerMetadata = new PlayerMetadataStore();
      private final WorldMetadataStore worldMetadata = new WorldMetadataStore();
      private final Object2IntOpenHashMap<SpawnCategory> spawnCategoryLimit = new Object2IntOpenHashMap<>();
@@ -57,7 +57,7 @@ index 98fee13364c5c57d2e530d21629571f8c7aa30f7..55ff96f49e4f255d06e2a28b05fae8b4
      private File container;
      private WarningState warningState = WarningState.DEFAULT;
      public String minimumAPI;
-@@ -846,6 +848,13 @@ public final class CraftServer implements Server {
+@@ -847,6 +849,13 @@ public final class CraftServer implements Server {
          return this.servicesManager;
      }
  
@@ -163,7 +163,7 @@ index a92755211e3d42934b5efaa3f201c6c19ab7d2b4..243a1f4ac9515a7b82ddd2c3b1df36cb
      public int getFireTicks() {
          return entity.remainingFireTicks;
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 057a70262ed570435b3dcb0998a1aa1839cb76ee..ccfd421bf031c0bfad08b1c9b80f09f9deb6f39b 100644
+index a31bde39f2d979c3db09d8f7341190759a7d6027..05d4717f0e6844c57fc9d01d7d84fee9c259f0f9 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 @@ -24,6 +24,7 @@ import java.util.Optional;
@@ -174,7 +174,7 @@ index 057a70262ed570435b3dcb0998a1aa1839cb76ee..ccfd421bf031c0bfad08b1c9b80f09f9
  import java.util.logging.Level;
  import java.util.logging.Logger;
  import javax.annotation.Nullable;
-@@ -32,33 +33,12 @@ import net.minecraft.advancements.AdvancementProgress;
+@@ -32,38 +33,12 @@ import net.minecraft.advancements.AdvancementProgress;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.SectionPos; // Paper
  import net.minecraft.nbt.CompoundTag;
@@ -194,6 +194,11 @@ index 057a70262ed570435b3dcb0998a1aa1839cb76ee..ccfd421bf031c0bfad08b1c9b80f09f9
 -import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 -import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
 -import net.minecraft.network.protocol.game.ClientboundPlayerInfoPacket;
+-import net.minecraft.network.protocol.game.ClientboundSetBorderCenterPacket;
+-import net.minecraft.network.protocol.game.ClientboundSetBorderLerpSizePacket;
+-import net.minecraft.network.protocol.game.ClientboundSetBorderSizePacket;
+-import net.minecraft.network.protocol.game.ClientboundSetBorderWarningDelayPacket;
+-import net.minecraft.network.protocol.game.ClientboundSetBorderWarningDistancePacket;
 -import net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket;
 -import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
 -import net.minecraft.network.protocol.game.ClientboundSetExperiencePacket;
@@ -210,7 +215,7 @@ index 057a70262ed570435b3dcb0998a1aa1839cb76ee..ccfd421bf031c0bfad08b1c9b80f09f9
  import net.minecraft.resources.ResourceLocation;
  import net.minecraft.server.PlayerAdvancements;
  import net.minecraft.server.level.ChunkMap;
-@@ -144,13 +124,18 @@ import org.bukkit.scoreboard.Scoreboard;
+@@ -152,13 +127,18 @@ import org.bukkit.scoreboard.Scoreboard;
  import org.jetbrains.annotations.NotNull;
  
  import net.md_5.bungee.api.chat.BaseComponent; // Spigot
@@ -229,7 +234,7 @@ index 057a70262ed570435b3dcb0998a1aa1839cb76ee..ccfd421bf031c0bfad08b1c9b80f09f9
      private final ConversationTracker conversationTracker = new ConversationTracker();
      private final Set<String> channels = new HashSet<String>();
      private final Map<UUID, Set<WeakReference<Plugin>>> hiddenEntities = new HashMap<>();
-@@ -1037,6 +1022,16 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1123,6 +1103,16 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
              net.minecraft.util.Mth.floor(loc.getZ()) >> 4), 28, 3); // Load area high priority
          return super.teleportAsync(loc, cause);
      }
@@ -246,7 +251,7 @@ index 057a70262ed570435b3dcb0998a1aa1839cb76ee..ccfd421bf031c0bfad08b1c9b80f09f9
      // Paper end
  
      @Override
-@@ -1179,6 +1174,60 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1265,6 +1255,60 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
          }
      }
  
@@ -307,7 +312,7 @@ index 057a70262ed570435b3dcb0998a1aa1839cb76ee..ccfd421bf031c0bfad08b1c9b80f09f9
      @Override
      public Location getBedLocation() {
          Preconditions.checkState(isSleeping(), "Not sleeping");
-@@ -1729,6 +1778,13 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1815,6 +1859,13 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
                  handle.keepLevel = data.getBoolean("keepLevel");
              }
          }
@@ -321,7 +326,7 @@ index 057a70262ed570435b3dcb0998a1aa1839cb76ee..ccfd421bf031c0bfad08b1c9b80f09f9
      }
  
      public void setExtraData(CompoundTag nbttagcompound) {
-@@ -1758,6 +1814,12 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1844,6 +1895,12 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
          paper.putLong("LastLogin", handle.loginTime);
          paper.putLong("LastSeen", System.currentTimeMillis());
          // Paper end

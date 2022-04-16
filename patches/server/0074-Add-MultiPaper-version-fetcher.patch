@@ -19,105 +19,154 @@ index 14c3aba80bb488965e83cff0056ac8ef23d391f5..abe5ae6bdb4a2f5e2028e28f1e6b6af9
      @Override
 diff --git a/src/main/java/puregero/multipaper/MultiPaperVersionFetcher.java b/src/main/java/puregero/multipaper/MultiPaperVersionFetcher.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..fa3d2899f8c10743fb44d931a3b16b5d83bf6f57
+index 0000000000000000000000000000000000000000..4fba9fc6b4c74da40af00b5c9b2663d2262d32ff
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperVersionFetcher.java
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,157 @@
 +package puregero.multipaper;
 +
 +import com.destroystokyo.paper.VersionHistoryManager;
 +import com.destroystokyo.paper.util.VersionFetcher;
++import com.google.common.base.Charsets;
++import com.google.common.io.Resources;
 +import com.google.gson.Gson;
++import com.google.gson.JsonArray;
 +import com.google.gson.JsonObject;
++import com.google.gson.JsonSyntaxException;
 +import net.kyori.adventure.text.Component;
-+import net.kyori.adventure.text.JoinConfiguration;
++import net.kyori.adventure.text.TextComponent;
++import net.kyori.adventure.text.event.ClickEvent;
 +import net.kyori.adventure.text.format.NamedTextColor;
 +import net.kyori.adventure.text.format.TextDecoration;
-+import org.bukkit.craftbukkit.CraftServer;
-+import org.jetbrains.annotations.NotNull;
-+import org.jetbrains.annotations.Nullable;
 +
++import javax.annotation.Nonnull;
++import javax.annotation.Nullable;
++import java.io.BufferedReader;
 +import java.io.IOException;
-+import java.net.URI;
-+import java.net.http.HttpClient;
-+import java.net.http.HttpRequest;
-+import java.net.http.HttpResponse;
-+import java.nio.charset.StandardCharsets;
-+import java.util.concurrent.TimeUnit;
-+import java.util.logging.Level;
-+import java.util.logging.Logger;
-+
-+import static net.kyori.adventure.text.Component.text;
-+import static net.kyori.adventure.text.format.NamedTextColor.GREEN;
-+import static net.kyori.adventure.text.format.NamedTextColor.RED;
++import java.io.InputStreamReader;
++import java.net.HttpURLConnection;
++import java.net.URL;
++import java.util.stream.StreamSupport;
 +
 +public class MultiPaperVersionFetcher implements VersionFetcher {
-+
-+    private static final Logger LOGGER = Logger.getLogger("MultiPaperVersionFetcher");
-+    private static final HttpClient client = HttpClient.newHttpClient();
-+
-+    private static final String GITHUB_FORMAT = "https://api.github.com/repos/PureGero/MultiPaper/compare/main...%s";
-+
-+    private static final HttpResponse.BodyHandler<JsonObject> JSON_OBJECT_BODY_HANDLER = responseInfo -> HttpResponse.BodySubscribers.mapping(
-+            HttpResponse.BodySubscribers.ofString(StandardCharsets.UTF_8),
-+            string -> new Gson().fromJson(string, JsonObject.class)
-+    );
++    private static final java.util.regex.Pattern VER_PATTERN = java.util.regex.Pattern.compile("^([0-9\\.]*)\\-.*R"); // R is an anchor, will always give '-R' at end
++    private static final String GITHUB_BRANCH_NAME = "main";
++    private static final String DOWNLOAD_PAGE = "https://multipaper.io/downloads";
++    private static @javax.annotation.Nullable
++    String mcVer;
 +
 +    @Override
 +    public long getCacheTime() {
-+        return TimeUnit.MINUTES.toMillis(30);
++        return 720000;
 +    }
 +
++    @Nonnull
 +    @Override
-+    public @NotNull Component getVersionMessage(final @NotNull String serverVersion) {
-+        final String[] parts = CraftServer.class.getPackage().getImplementationVersion().split("-");
-+        @NotNull Component component;
++    public Component getVersionMessage(@Nonnull String serverVersion) {
++        String[] parts = serverVersion.split("[-\\s]");
++        final Component updateMessage = getUpdateStatusMessage("PureGero/MultiPaper", GITHUB_BRANCH_NAME, parts[2]);
++        final Component history = getHistory();
 +
-+        if (parts.length != 3) {
-+            component = text("Unknown server version.", RED);
-+        } else {
-+            final String versionString = parts[2];
-+
-+            component = this.fetchGithubVersion(versionString.substring(1, versionString.length() - 1));
-+        }
-+
-+        final @Nullable Component history = this.getHistory();
-+        return history != null ? Component.join(JoinConfiguration.noSeparators(), component, Component.newline(), this.getHistory()) : component;
++        return history != null ? Component.textOfChildren(updateMessage, Component.newline(), history) : updateMessage;
 +    }
 +
-+    // Based off code contributed by Techcable <Techcable@outlook.com> in Paper/GH-65
-+    private @NotNull Component fetchGithubVersion(final @NotNull String hash) {
-+        final URI uri = URI.create(String.format(GITHUB_FORMAT, hash));
-+        final HttpRequest request = HttpRequest.newBuilder(uri).build();
-+        try {
-+            final HttpResponse<JsonObject> response = client.send(request, JSON_OBJECT_BODY_HANDLER);
-+            if (response.statusCode() != 200) {
-+                return text("Received invalid status code (" + response.statusCode() + ") from server.", RED);
++    private static @javax.annotation.Nullable
++    String getMinecraftVersion() {
++        if (mcVer == null) {
++            java.util.regex.Matcher matcher = VER_PATTERN.matcher(org.bukkit.Bukkit.getBukkitVersion());
++            if (matcher.find()) {
++                String result = matcher.group();
++                mcVer = result.substring(0, result.length() - 2); // strip 'R' anchor and trailing '-'
++            } else {
++                org.bukkit.Bukkit.getLogger().warning("Unable to match version to pattern! Report to PaperMC!");
++                org.bukkit.Bukkit.getLogger().warning("Pattern: " + VER_PATTERN.toString());
++                org.bukkit.Bukkit.getLogger().warning("Version: " + org.bukkit.Bukkit.getBukkitVersion());
 +            }
++        }
 +
-+            final JsonObject obj = response.body();
-+            final int versionDiff = obj.get("behind_by").getAsInt();
++        return mcVer;
++    }
 +
-+            return this.getResponseMessage(versionDiff);
-+        } catch (IOException | InterruptedException e) {
-+            LOGGER.log(Level.WARNING, "Failed to look up version from GitHub", e);
-+            return text("Failed to retrieve version from server.", RED);
++    private static Component getUpdateStatusMessage(@Nonnull String repo, @Nonnull String branch, @Nonnull String versionInfo) {
++        int distance;
++        try {
++            int jenkinsBuild = Integer.parseInt(versionInfo);
++            distance = fetchDistanceFromSiteApi(jenkinsBuild, getMinecraftVersion());
++        } catch (NumberFormatException ignored) {
++            versionInfo = versionInfo.replace("\"", "");
++            distance = fetchDistanceFromGitHub(repo, branch, versionInfo);
++        }
++
++        switch (distance) {
++            case -1:
++                return Component.text("Error obtaining version information", NamedTextColor.YELLOW);
++            case 0:
++                return Component.text("You are running the latest version", NamedTextColor.GREEN);
++            case -2:
++                return Component.text("Unknown version", NamedTextColor.YELLOW);
++            default:
++                return Component.text("You are " + distance + " version(s) behind", NamedTextColor.YELLOW)
++                        .append(Component.newline())
++                        .append(Component.text("Download the new version at: ")
++                                .append(Component.text(DOWNLOAD_PAGE, NamedTextColor.GOLD)
++                                        .hoverEvent(Component.text("Click to open", NamedTextColor.WHITE))
++                                        .clickEvent(ClickEvent.openUrl(DOWNLOAD_PAGE))));
 +        }
 +    }
 +
-+    private @NotNull Component getResponseMessage(final int versionDiff) {
-+        return switch (Math.max(-1, Math.min(1, versionDiff))) {
-+            case -1 ->
-+                    text("You are running an unsupported version of Airplane.", RED);
-+            case 0 ->
-+                    text("You are on the latest version!", GREEN);
-+            default ->
-+                    text("You are running " + versionDiff + " version" + (versionDiff == 1 ? "" : "s") + " beyond. " +
-+                            "Please update your server when possible to maintain stability, security, and receive the latest optimizations.", RED);
-+        };
++    private static int fetchDistanceFromSiteApi(int jenkinsBuild, @javax.annotation.Nullable String siteApiVersion) {
++        if (siteApiVersion == null) { return -1; }
++        try {
++            try (BufferedReader reader = Resources.asCharSource(
++                    new URL("https://multipaper.io/api/v2/projects/paper/versions/" + siteApiVersion),
++                    Charsets.UTF_8
++            ).openBufferedStream()) {
++                JsonObject json = new Gson().fromJson(reader, JsonObject.class);
++                JsonArray builds = json.getAsJsonArray("builds");
++                int latest = StreamSupport.stream(builds.spliterator(), false)
++                        .mapToInt(e -> e.getAsInt())
++                        .max()
++                        .getAsInt();
++                return latest - jenkinsBuild;
++            } catch (JsonSyntaxException ex) {
++                ex.printStackTrace();
++                return -1;
++            }
++        } catch (IOException e) {
++            e.printStackTrace();
++            return -1;
++        }
 +    }
 +
-+    private @Nullable Component getHistory() {
++    // Contributed by Techcable <Techcable@outlook.com> in GH-65
++    private static int fetchDistanceFromGitHub(@Nonnull String repo, @Nonnull String branch, @Nonnull String hash) {
++        try {
++            HttpURLConnection connection = (HttpURLConnection) new URL("https://api.github.com/repos/" + repo + "/compare/" + branch + "..." + hash).openConnection();
++            connection.connect();
++            if (connection.getResponseCode() == HttpURLConnection.HTTP_NOT_FOUND) return -2; // Unknown commit
++            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), Charsets.UTF_8))) {
++                JsonObject obj = new Gson().fromJson(reader, JsonObject.class);
++                String status = obj.get("status").getAsString();
++                switch (status) {
++                    case "identical":
++                        return 0;
++                    case "behind":
++                        return obj.get("behind_by").getAsInt();
++                    default:
++                        return -1;
++                }
++            } catch (JsonSyntaxException | NumberFormatException e) {
++                e.printStackTrace();
++                return -1;
++            }
++        } catch (IOException e) {
++            e.printStackTrace();
++            return -1;
++        }
++    }
++
++    @Nullable
++    private Component getHistory() {
 +        final VersionHistoryManager.VersionData data = VersionHistoryManager.INSTANCE.getVersionData();
 +        if (data == null) {
 +            return null;

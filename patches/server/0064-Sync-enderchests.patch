@@ -18,10 +18,10 @@ index 75135368db7e27e9975469083c4694a132da79c2..8a39fed850b6213ca9380e5a01605d2b
      public BlockPos getPointInFront(double inFront) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEnderChestHandler.java b/src/main/java/puregero/multipaper/MultiPaperEnderChestHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b0a93b48a37951dcc2759373a34a3bba6f7ef2b1
+index 0000000000000000000000000000000000000000..d8074c83ab7d10c14e59f86402b724877dedfb67
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEnderChestHandler.java
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,89 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -32,6 +32,7 @@ index 0000000000000000000000000000000000000000..b0a93b48a37951dcc2759373a34a3bba
 +import net.minecraft.world.item.ItemStack;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.scheduler.CraftScheduler;
++import org.bukkit.scheduler.BukkitTask;
 +import puregero.multipaper.externalserverprotocol.PlayerInventoryUpdatePacket;
 +
 +public class MultiPaperEnderChestHandler implements ContainerListener {
@@ -40,6 +41,7 @@ index 0000000000000000000000000000000000000000..b0a93b48a37951dcc2759373a34a3bba
 +
 +    private final ServerPlayer player;
 +    private ItemStack[] sentItems = new ItemStack[0];
++    private BukkitTask isScheduled = null;
 +
 +    public MultiPaperEnderChestHandler(ServerPlayer player) {
 +        this.player = player;
@@ -51,11 +53,18 @@ index 0000000000000000000000000000000000000000..b0a93b48a37951dcc2759373a34a3bba
 +            sentItems = new ItemStack[container.getContainerSize()];
 +        }
 +
-+        if (!player.didPlayerJoinEvent && broadcastChanges) {
-+            // Wait till they join to broadcast changes
-+            ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> containerChanged(container), 1, "MultiPaperEnderChestHandler-containerChanged");
++        if (!player.didPlayerJoinEvent) {
++            if (isScheduled == null && broadcastChanges && player.server.getPlayerList().getActivePlayer(player.getUUID()) == player) {
++                // Wait till they join to broadcast changes
++                isScheduled = ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
++                    isScheduled = null;
++                    containerChanged(container);
++                }, 1, "MultiPaperEnderChestHandler-containerChanged");
++            }
 +            return;
 +        }
++
++        isScheduled = null;
 +
 +        CompoundTag itemsRoot = new CompoundTag();
 +        ListTag items = new ListTag();

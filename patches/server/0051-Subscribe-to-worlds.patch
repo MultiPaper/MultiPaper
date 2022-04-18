@@ -26,7 +26,7 @@ index 2e9a42877eddb247e862c1f54099ccdda7a0c40b..1a11d54f9474526e0441771b5c8eac3a
  
      @Override
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index f7c086c83edd7205d05b6413935fad4b7495c571..b091d54c1b599647b7db33315983594712ffb0bc 100644
+index cd8a6d7f27e03c667e5e92e30e0bf5fe476138f5..60bb4c2da01b07dee539c2a260d2c5e02c110988 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -18,6 +18,7 @@ import puregero.multipaper.mastermessagingprotocol.MessageLengthEncoder;
@@ -34,13 +34,13 @@ index f7c086c83edd7205d05b6413935fad4b7495c571..b091d54c1b599647b7db333159835947
  import java.io.Closeable;
  import java.io.IOException;
 +import java.util.HashSet;
+ import java.util.concurrent.CompletableFuture;
  
  public class ExternalServerConnection extends ChannelInitializer<SocketChannel> implements Closeable {
- 
-@@ -26,6 +27,7 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
-     private Channel channel;
+@@ -28,6 +29,7 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
      public long nanoTime = 0;
      public ExternalServer externalServer = null;
+     public final CompletableFuture<Void> onConnect = new CompletableFuture<>();
 +    public HashSet<String> subscribedWorlds = new HashSet<>();
  
      public ExternalServerConnection() {
@@ -87,7 +87,7 @@ index 8ae5d51ce27c013595462029c8237a1cffe22571..e3cf79d81b58fabeddf5f42a9351f36a
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
-index 75f5853169bfa114beb9e9d30abc3919a6c06728..7a57ad7cebafd7d582b968b566587b718c404dc5 100644
+index 5fca8ac3cec3187107c7cd03ae6d148e94ed4d37..bd00009152324952557e0ffff55754d4e80c0e13 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 @@ -5,6 +5,8 @@ import io.netty.handler.codec.compression.Zstd;
@@ -99,7 +99,7 @@ index 75f5853169bfa114beb9e9d30abc3919a6c06728..7a57ad7cebafd7d582b968b566587b71
  import puregero.multipaper.ExternalServerConnection;
  import puregero.multipaper.MultiPaper;
  import puregero.multipaper.MultiPaperConfig;
-@@ -101,5 +103,11 @@ public class HelloPacket extends ExternalServerPacket {
+@@ -105,5 +107,11 @@ public class HelloPacket extends ExternalServerPacket {
              connection.nanoTime = nanoTime;
              connection.send(new HelloPacket(MultiPaperConfig.bungeeCordName, nanoTime, connection.getSupportedCompressionFlags()));
          }

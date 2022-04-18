@@ -809,22 +809,23 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 43db6194e8de999ec2263dcda3777c11ca0e1757..36d2d0c116a3b13619ab63f1beb299cbb8d20810 100644
+index 96f62ac0e95c1db86f6e53eb0397ef79aefed914..ec325d9fee73e64a043f3e9a9d965e87b595a1b5 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -20,8 +20,11 @@ import puregero.multipaper.mastermessagingprotocol.MessageLengthDecoder;
+@@ -20,9 +20,12 @@ import puregero.multipaper.mastermessagingprotocol.MessageLengthDecoder;
  import puregero.multipaper.mastermessagingprotocol.MessageLengthEncoder;
  
  import java.io.Closeable;
 +import java.io.DataInputStream;
  import java.io.IOException;
  import java.util.*;
+ import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.ConcurrentHashMap;
 +import java.util.function.Consumer;
  
  public class ExternalServerConnection extends ChannelInitializer<SocketChannel> implements Closeable {
  
-@@ -33,6 +36,9 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+@@ -35,6 +38,9 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
      public HashSet<String> subscribedWorlds = new HashSet<>();
      private static final Queue<List<ExternalPlayer>> externalPlayerListPool = new LinkedList<>();
      private final HashMap<Packet<?>, List<ExternalPlayer>> packetsToSend = new LinkedHashMap<>();
@@ -834,18 +835,18 @@ index 43db6194e8de999ec2263dcda3777c11ca0e1757..36d2d0c116a3b13619ab63f1beb299cb
  
      public ExternalServerConnection() {
  
-@@ -130,8 +136,10 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
-         if (!channel.isOpen()) {
-             new IOException("Channel is closed for " + externalServer.getName()).printStackTrace();
-         } else if (channel.eventLoop().inEventLoop()) {
-+            lastPacketSent = System.currentTimeMillis();
-             channel.writeAndFlush(packet);
+@@ -134,8 +140,10 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
          } else {
-+            lastPacketSent = System.currentTimeMillis();
-             channel.eventLoop().execute(() -> channel.writeAndFlush(packet));
-         }
-     }
-@@ -163,4 +171,16 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+             onConnect.thenRun(() -> {
+                 if (channel.eventLoop().inEventLoop()) {
++                    lastPacketSent = System.currentTimeMillis();
+                     channel.writeAndFlush(packet);
+                 } else {
++                    lastPacketSent = System.currentTimeMillis();
+                     channel.eventLoop().execute(() -> channel.writeAndFlush(packet));
+                 }
+             });
+@@ -169,4 +177,16 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
              players.add(player);
          }
      }

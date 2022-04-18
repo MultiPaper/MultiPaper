@@ -139,10 +139,10 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3a5faf3c427a26179cb816a3e8a46ed164428569
+index 0000000000000000000000000000000000000000..e394f50beb1277f048d773de04fe669241cd70ee
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,122 @@
 +package puregero.multipaper;
 +
 +import io.netty.channel.Channel;
@@ -162,6 +162,7 @@ index 0000000000000000000000000000000000000000..3a5faf3c427a26179cb816a3e8a46ed1
 +
 +import java.io.Closeable;
 +import java.io.IOException;
++import java.util.concurrent.CompletableFuture;
 +
 +public class ExternalServerConnection extends ChannelInitializer<SocketChannel> implements Closeable {
 +
@@ -170,6 +171,7 @@ index 0000000000000000000000000000000000000000..3a5faf3c427a26179cb816a3e8a46ed1
 +    private Channel channel;
 +    public long nanoTime = 0;
 +    public ExternalServer externalServer = null;
++    public final CompletableFuture<Void> onConnect = new CompletableFuture<>();
 +
 +    public ExternalServerConnection() {
 +
@@ -179,7 +181,7 @@ index 0000000000000000000000000000000000000000..3a5faf3c427a26179cb816a3e8a46ed1
 +        this.channel = channel;
 +        setupPipeline();
 +        nanoTime = System.nanoTime();
-+        send(new HelloPacket(MultiPaperConfig.bungeeCordName, nanoTime, getSupportedCompressionFlags()));
++        this.channel.writeAndFlush(new HelloPacket(MultiPaperConfig.bungeeCordName, nanoTime, getSupportedCompressionFlags()));
 +    }
 +
 +    public int getSupportedCompressionFlags() {
@@ -252,10 +254,14 @@ index 0000000000000000000000000000000000000000..3a5faf3c427a26179cb816a3e8a46ed1
 +    public void send(ExternalServerPacket packet) {
 +        if (!channel.isOpen()) {
 +            new IOException("Channel is closed for " + externalServer.getName()).printStackTrace();
-+        } else if (channel.eventLoop().inEventLoop()) {
-+            channel.writeAndFlush(packet);
 +        } else {
-+            channel.eventLoop().execute(() -> channel.writeAndFlush(packet));
++            onConnect.thenRun(() -> {
++                if (channel.eventLoop().inEventLoop()) {
++                    channel.writeAndFlush(packet);
++                } else {
++                    channel.eventLoop().execute(() -> channel.writeAndFlush(packet));
++                }
++            });
 +        }
 +    }
 +}
@@ -585,10 +591,10 @@ index 0000000000000000000000000000000000000000..8ae5d51ce27c013595462029c8237a1c
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..90252a471a4036c2223ab01fe83420c30841dc9f
+index 0000000000000000000000000000000000000000..722d4a63b35fc109ad06f0c937adc6c65cc56371
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,105 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.channel.ChannelOutboundHandlerAdapter;
@@ -651,7 +657,7 @@ index 0000000000000000000000000000000000000000..90252a471a4036c2223ab01fe83420c3
 +                // Oh, nano time is broken, that's why
 +                throw new RuntimeException("System.nanoTime() does not work. (Returned " + helloPacket.nanoTime + ")");
 +            }
-+            connection.send(helloPacket);
++            connection.getChannel().writeAndFlush(helloPacket);
 +        } else {
 +            LOGGER.info("A new connection to external server " + bungeecordName + " failed as a previous connection had a newer nano time.");
 +        }
@@ -679,7 +685,11 @@ index 0000000000000000000000000000000000000000..90252a471a4036c2223ab01fe83420c3
 +                connection.getChannel().pipeline()
 +                        .addFirst("compresser", finalCompressionHandler)
 +                        .addFirst("prepender", new MessageLengthEncoder());
++
++                connection.onConnect.complete(null);
 +            });
++        } else {
++            connection.onConnect.complete(null);
 +        }
 +    }
 +

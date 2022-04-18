@@ -165,7 +165,7 @@ repositories {
 }
 
 dependencies {
-  compile "com.github.puregero:multipaper-api:1.18-R0.1-SNAPSHOT"
+  compile "com.github.puregero:multipaper-api:1.18.2-R0.1-SNAPSHOT"
 }
 ```
 
@@ -182,7 +182,7 @@ Or in your pom.xml:
     <dependency>
         <groupId>com.github.puregero</groupId>
         <artifactId>multipaper-api</artifactId>
-        <version>1.18-R0.1-SNAPSHOT</version>
+        <version>1.18.2-R0.1-SNAPSHOT</version>
     </dependency>
 </dependencies>
 ```

@@ -447,10 +447,10 @@ index 0000000000000000000000000000000000000000..1a11a2f97e72936cf936d058e6d2a918
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketDecoder.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketDecoder.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a3e8374a889f552dad40cf11cdcf514b0d948557
+index 0000000000000000000000000000000000000000..1732ed4a0efe0b1ab25cf54a85866697dd58da01
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketDecoder.java
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,27 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -463,22 +463,27 @@ index 0000000000000000000000000000000000000000..a3e8374a889f552dad40cf11cdcf514b
 +
 +public class ExternalServerPacketDecoder extends ByteToMessageDecoder {
 +    @Override
-+    protected void decode(ChannelHandlerContext ctx, ByteBuf byteBuf, List<Object> list) {
-+        int i = byteBuf.readableBytes();
-+        if (i != 0) {
-+            FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(byteBuf);
-+            int packetId = friendlyByteBuf.readVarInt();
-+            Function<FriendlyByteBuf, ExternalServerPacket> deserializer = ExternalServerPacketSerializer.getDeserializer(packetId);
-+            list.add(deserializer.apply(friendlyByteBuf));
++    protected void decode(ChannelHandlerContext ctx, ByteBuf byteBuf, List<Object> list) throws Exception {
++        try {
++            int i = byteBuf.readableBytes();
++            if (i != 0) {
++                FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(byteBuf);
++                int packetId = friendlyByteBuf.readVarInt();
++                Function<FriendlyByteBuf, ExternalServerPacket> deserializer = ExternalServerPacketSerializer.getDeserializer(packetId);
++                list.add(deserializer.apply(friendlyByteBuf));
++            }
++        } catch (Exception e) {
++            e.printStackTrace();
++            throw e;
 +        }
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketEncoder.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketEncoder.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c2b8eb922ea1e4c70172f974e5e53faa7e8a876e
+index 0000000000000000000000000000000000000000..e5537b79ec4b6329e4b5932279ea2bb4f1bd67ab
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketEncoder.java
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,22 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -489,11 +494,16 @@ index 0000000000000000000000000000000000000000..c2b8eb922ea1e4c70172f974e5e53faa
 +public class ExternalServerPacketEncoder extends MessageToByteEncoder<ExternalServerPacket> {
 +    @Override
 +    protected void encode(ChannelHandlerContext ctx, ExternalServerPacket msg, ByteBuf out) throws Exception {
-+        int packetId = ExternalServerPacketSerializer.getPacketId(msg);
++        try {
++            int packetId = ExternalServerPacketSerializer.getPacketId(msg);
 +
-+        FriendlyByteBuf byteBuf = new FriendlyByteBuf(out);
-+        byteBuf.writeVarInt(packetId);
-+        msg.write(byteBuf);
++            FriendlyByteBuf byteBuf = new FriendlyByteBuf(out);
++            byteBuf.writeVarInt(packetId);
++            msg.write(byteBuf);
++        } catch (Exception e) {
++            e.printStackTrace();
++            throw e;
++        }
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java
@@ -591,7 +601,7 @@ index 0000000000000000000000000000000000000000..8ae5d51ce27c013595462029c8237a1c
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..722d4a63b35fc109ad06f0c937adc6c65cc56371
+index 0000000000000000000000000000000000000000..49e807b8e91a2d70b1476a3c97d85d6fda27a6af
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 @@ -0,0 +1,105 @@
@@ -652,7 +662,7 @@ index 0000000000000000000000000000000000000000..722d4a63b35fc109ad06f0c937adc6c6
 +        } else if (previousConnection.nanoTime == nanoTime) {
 +            // How lucky do you have to be for nano time to be the same?
 +            LOGGER.info("A new connection to external server " + bungeecordName + " had the same nano time as a previous connection, resending with a new nano time...");
-+            HelloPacket helloPacket = new HelloPacket(bungeecordName, connection.getSupportedCompressionFlags());
++            HelloPacket helloPacket = new HelloPacket(MultiPaperConfig.bungeeCordName, connection.getSupportedCompressionFlags());
 +            if (helloPacket.nanoTime == nanoTime) {
 +                // Oh, nano time is broken, that's why
 +                throw new RuntimeException("System.nanoTime() does not work. (Returned " + helloPacket.nanoTime + ")");

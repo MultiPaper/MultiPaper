@@ -606,7 +606,7 @@ index 3cd5c346425c63e511324ad11b120e281df4a56a..d7d9b0929633758535a56219da0ee5ae
      public ProtoChunk(ChunkPos pos, UpgradeData upgradeData, LevelHeightAccessor world, Registry<Biome> biomeRegistry, @Nullable BlendingData blendingData) {
          this(pos, upgradeData, (LevelChunkSection[])null, new ProtoChunkTicks<>(), new ProtoChunkTicks<>(), world, biomeRegistry, blendingData);
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
-index 887b3bc6370d23d2ff38e8fdbe286d678b035cc7..7f1141dc9f0a90d49754908002a1d19250e9555b 100644
+index 887b3bc6370d23d2ff38e8fdbe286d678b035cc7..7b3e911a8aa5469b47efeff8b99bf50c1efaa99f 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
 @@ -279,6 +279,10 @@ public class ChunkSerializer {
@@ -629,18 +629,17 @@ index 887b3bc6370d23d2ff38e8fdbe286d678b035cc7..7f1141dc9f0a90d49754908002a1d192
          if (blendingdata != null) {
              dataresult = BlendingData.CODEC.encodeStart(NbtOps.INSTANCE, blendingdata);
              logger = ChunkSerializer.LOGGER;
-@@ -725,6 +731,11 @@ public class ChunkSerializer {
-         ListTag nbttaglist1 = ChunkSerializer.getListOfCompoundsOrNull(nbt, "block_entities");
+@@ -747,6 +753,10 @@ public class ChunkSerializer {
+                 }
+             }
  
-         return nbttaglist == null && nbttaglist1 == null ? null : (chunk) -> {
 +            // MultiPaper start - Keep copy of entities and block entities until they're loaded
 +            chunk.entitiesToLoad = null;
 +            chunk.blockEntitiesToLoad = null;
 +            // MultiPaper end
-+
-             if (nbttaglist != null) {
-                 world.addLegacyChunkEntities(EntityType.loadEntitiesRecursive(nbttaglist, world));
-             }
+         };
+     }
+ 
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
 index cbdd32ef0be241b16406ed8e3889d914e3e5e5d2..537ee82389f0e917836b510bb42d0791f8d4cd16 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java

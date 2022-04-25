@@ -38,18 +38,26 @@ index 403aba29347c779da75337531c3723632120e7c9..949708166b13b1a65cdc1984953a9545
      public boolean isForceLoaded() {
          return this.getWorld().isChunkForceLoaded(this.getX(), this.getZ());
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 1a11d54f9474526e0441771b5c8eac3a8760f9a9..9db45bbbeeaedeba8def16d3dcf3d3ddb9d47a28 100644
+index 9f302f1297ea8d5b33ba61ad80470a6fc9281db1..35782a48167f60bc5964e9e31f8120986434bb41 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -244,6 +244,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
+@@ -239,12 +239,15 @@ import org.bukkit.scheduler.BukkitWorker;
+ import org.bukkit.structure.StructureManager;
+ import org.bukkit.util.StringUtil;
+ import org.bukkit.util.permissions.DefaultPermissions;
++import org.jetbrains.annotations.NotNull;
+ import org.yaml.snakeyaml.Yaml;
+ import org.yaml.snakeyaml.constructor.SafeConstructor;
  import org.yaml.snakeyaml.error.MarkedYAMLException;
  
  import net.md_5.bungee.api.chat.BaseComponent; // Spigot
 +import puregero.multipaper.CraftMultiPaperNotificationManager;
  import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperConfig;
  import puregero.multipaper.externalserverprotocol.SubscribeToWorldPacket;
  
-@@ -273,6 +274,7 @@ public final class CraftServer implements Server {
+ import javax.annotation.Nullable; // Paper
+@@ -273,6 +276,7 @@ public final class CraftServer implements Server {
      private final PlayerMetadataStore playerMetadata = new PlayerMetadataStore();
      private final WorldMetadataStore worldMetadata = new WorldMetadataStore();
      private final Object2IntOpenHashMap<SpawnCategory> spawnCategoryLimit = new Object2IntOpenHashMap<>();
@@ -57,7 +65,7 @@ index 1a11d54f9474526e0441771b5c8eac3a8760f9a9..9db45bbbeeaedeba8def16d3dcf3d3dd
      private File container;
      private WarningState warningState = WarningState.DEFAULT;
      public String minimumAPI;
-@@ -847,6 +849,13 @@ public final class CraftServer implements Server {
+@@ -847,6 +851,18 @@ public final class CraftServer implements Server {
          return this.servicesManager;
      }
  
@@ -66,13 +74,18 @@ index 1a11d54f9474526e0441771b5c8eac3a8760f9a9..9db45bbbeeaedeba8def16d3dcf3d3dd
 +    public CraftMultiPaperNotificationManager getMultiPaperNotificationManager() {
 +        return this.multipaperNotificationManager;
 +    }
++
++    @Override
++    public @NotNull String getLocalServerName() {
++        return MultiPaperConfig.bungeeCordName;
++    }
 +    // MultiPaper end
 +
      @Override
      public List<World> getWorlds() {
          return new ArrayList<World>(this.worlds.values());
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index 2374b614324d5288769907d101ccc74a6b1c5f2e..9fb76d1da7e174b165e2b033446b1f5ddac6b460 100644
+index e0e89e3ba2fb77fda152c8a0ba12978238d6185d..1157f42d132be220979be3977facab89d6f95e0c 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 @@ -528,6 +528,20 @@ public class CraftWorld extends CraftRegionAccessor implements World {

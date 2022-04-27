@@ -53,12 +53,13 @@ outside the simulation distance, and have been deemed inactive.
 
 `interServerCompressionThreshold`  
 The number of bytes before data being sent between peered servers is compressed
-(default is 1024 bytes). Note that this number of bytes may count multiple
-packets, not just one, depending on your interServerConsolidationDelay. Set
-this value to 0 to disable compression.
+(recommended is 1024 bytes when using compression). Note that this number of
+bytes may count multiple packets, not just one, depending on your
+interServerConsolidationDelay. Set this value to 0 to disable compression.
 
 `interServerConsolidationDelay`  
 The delay between packets being written between peered servers, and them
-actually being sent (default is 2ms). This allows for packets to be grouped
-together for compression. Set this value to 0 to disable the delay.
+actually being sent (recommended is 2ms when using compression). This allows
+for packets to be grouped together for compression. Set this value to 0 to
+disable the delay.
 

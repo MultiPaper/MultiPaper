@@ -63,3 +63,8 @@ actually being sent (recommended is 2ms when using compression). This allows
 for packets to be grouped together for compression. Set this value to 0 to
 disable the delay.
 
+`useLocalPlayerCountForServerIsFullKick`  
+Kick connecting players whether the player count summed across all servers
+exceeds the max-players value (false, default), or whether the player count on
+just the local server exceeds the max-players value (true).
+

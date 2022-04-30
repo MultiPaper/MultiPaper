@@ -1,0 +1,110 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: pesto <pestonotpasta@gmail.com>
+Date: Sat, 30 Apr 2022 15:27:14 +0200
+Subject: [PATCH] Adds embedded hazelcast client
+
+
+diff --git a/build.gradle.kts b/build.gradle.kts
+index 111dd14607314ff33935db2892ec3a2b22229c87..84d69ebf510aa84b92aef7dd06a1da107faa550f 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -11,6 +11,7 @@ plugins {
+ dependencies {
+     implementation(project(":MultiPaper-MasterMessagingProtocol")) // MultiPaper
+     implementation(project(":MultiPaper-API")) // MultiPaper // Airplane // Paper
++    implementation("com.hazelcast:hazelcast:5.0.3") // MultiPaper
+     implementation("io.papermc.paper:paper-mojangapi:1.18-R0.1-SNAPSHOT") // Airplane
+     // Paper start
+     implementation("org.jline:jline-terminal-jansi:3.21.0")
+@@ -107,6 +108,7 @@ relocation {
+     relocate("org.bukkit.craftbukkit" to "org.bukkit.craftbukkit.v$packageVersion") {
+         exclude("org.bukkit.craftbukkit.Main*")
+     }
++    relocate("com.hazelcast" to "puregero.multipaper.libs.hazelcast")
+ }
+ 
+ val generateReobfMappings = rootProject.tasks.named<io.papermc.paperweight.tasks.GenerateReobfMappings>("generateReobfMappings")
+@@ -136,6 +138,7 @@ tasks.shadowJar {
+             }
+         }
+     }
++    mergeServiceFiles() // MultiPaper
+ }
+ 
+ // Paper start - include reobf mappings in jar for stacktrace deobfuscation
+diff --git a/src/main/java/puregero/multipaper/MultiPaperCache.java b/src/main/java/puregero/multipaper/MultiPaperCache.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..8b75123a6b5a7ff339405ad8c3658bee4960ce82
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperCache.java
+@@ -0,0 +1,67 @@
++package puregero.multipaper;
++
++import com.hazelcast.client.HazelcastClient;
++import com.hazelcast.client.config.ClientConfig;
++import com.hazelcast.client.config.YamlClientConfigBuilder;
++import com.hazelcast.core.HazelcastInstance;
++
++
++import java.io.File;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.util.logging.Handler;
++import java.util.logging.Level;
++import java.util.logging.LogManager;
++import java.util.logging.Logger;
++
++public class MultiPaperCache {
++    private static HazelcastInstance hazelcast = null;
++    private static boolean isShutdown = false;
++    private static final File file = new File("configurations/hazelcast-client.yml");
++
++    public static void initialize() {
++        if (hazelcast != null)
++            return;
++
++        try {
++            if (!file.exists()) {
++                try (InputStream is = MultiPaperCache.class.getClassLoader().getResourceAsStream(file.getName())) {
++                    file.createNewFile();
++                    is.transferTo(new FileOutputStream(file, false));
++                } catch (IOException e) {
++                    e.printStackTrace();
++                }
++            }
++
++            ClientConfig cfg = new YamlClientConfigBuilder(file.getName()).build();
++            hazelcast = HazelcastClient.newHazelcastClient(cfg);
++            isShutdown = false;
++
++            // Configure logging level of JDK's logger
++            if (hazelcast.getConfig().getProperty("hazelcast.logging.type").equals("jdk")) {
++                Logger logger = LogManager.getLogManager().getLogger("");
++                logger.setLevel(Level.FINE);
++                for (Handler h : logger.getHandlers())
++                    h.setLevel(Level.FINE);
++            }
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++        System.out.println("Started Hazelcast instance...");
++    }
++
++
++    public static void shutdown() {
++        isShutdown = true;
++        hazelcast.shutdown();
++    }
++
++    public static HazelcastInstance getHazelcast() {
++        if (!isShutdown) {
++            initialize();
++            return hazelcast;
++        }
++        return null;
++    }
++}
+diff --git a/src/main/resources/configurations/hazelcast-client.yml b/src/main/resources/configurations/hazelcast-client.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391

@@ -39,7 +39,7 @@ index 9bbf990212ee55a267d0eb1e863618c50fa706da..6cfbe844ac8603ef937714370b8ea3d0
              } // Paper
          }
 diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
-index f79ede9deb57b8f8b596b0e9adf4c776e8c54f81..08a130941e7b1e21d2d180ea26a36d6744341991 100644
+index b0950922c5912b1a94bc88731a9463338ad22eaf..0288020e74c02443729c5213b7535377b1d3490c 100644
 --- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
 +++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
 @@ -70,6 +70,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
@@ -601,10 +601,10 @@ index 0000000000000000000000000000000000000000..8ae5d51ce27c013595462029c8237a1c
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..49e807b8e91a2d70b1476a3c97d85d6fda27a6af
+index 0000000000000000000000000000000000000000..873e8de738302aa2b0d834ac2d7d5833a3e890cf
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,108 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.channel.ChannelOutboundHandlerAdapter;
@@ -617,6 +617,8 @@ index 0000000000000000000000000000000000000000..49e807b8e91a2d70b1476a3c97d85d6f
 +import puregero.multipaper.mastermessagingprotocol.MessageLengthEncoder;
 +
 +import java.net.InetSocketAddress;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.TimeUnit;
 +
 +public class HelloPacket extends ExternalServerPacket {
 +
@@ -696,7 +698,8 @@ index 0000000000000000000000000000000000000000..49e807b8e91a2d70b1476a3c97d85d6f
 +                        .addFirst("compresser", finalCompressionHandler)
 +                        .addFirst("prepender", new MessageLengthEncoder());
 +
-+                connection.onConnect.complete(null);
++                // Wait for the other side to initiate the compression
++                CompletableFuture.delayedExecutor(100, TimeUnit.MILLISECONDS).execute(() -> connection.onConnect.complete(null));
 +            });
 +        } else {
 +            connection.onConnect.complete(null);

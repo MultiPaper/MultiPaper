@@ -6,6 +6,7 @@ public class MasterBoundProtocol extends Protocol<MasterBoundMessage> {
 
     public MasterBoundProtocol() {
         addMessage(MasterBoundDataStreamMessage.class, MasterBoundDataStreamMessage::new);
+        addMessage(CallDataStorageMessage.class, CallDataStorageMessage::new);
         addMessage(ChunkChangedStatusMessage.class, ChunkChangedStatusMessage::new);
         addMessage(DownloadFileMessage.class, DownloadFileMessage::new);
         addMessage(ForceReadChunkMessage.class, ForceReadChunkMessage::new);

@@ -195,6 +195,11 @@ public class ServerConnection extends MasterBoundMessageHandler {
     }
 
     @Override
+    public void handle(CallDataStorageMessage message) {
+        CallDataStorageHandler.handle(this, message);
+    }
+
+    @Override
     public void handle(ChunkChangedStatusMessage message) {
         ChunkChangedStatusHandler.handle(this, message);
     }

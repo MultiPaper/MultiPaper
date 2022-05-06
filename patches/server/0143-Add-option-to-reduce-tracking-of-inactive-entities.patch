@@ -47,10 +47,27 @@ index 02e8bd3c8e8379ad882245cc2d79d2ed8e64eabb..f51471b76b7778437eb049a88740bfbc
              this.lastTrackerCandidates = newTrackerCandidates;
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerEntity.java b/src/main/java/net/minecraft/server/level/ServerEntity.java
-index 5da6ddd76b0df6132fbc73e9358182310404d7ac..8fd5f2573db487415bd1566ae9d55c286ce36e5d 100644
+index 5da6ddd76b0df6132fbc73e9358182310404d7ac..19ca2c38ec1267975940944fd77818908baf960c 100644
 --- a/src/main/java/net/minecraft/server/level/ServerEntity.java
 +++ b/src/main/java/net/minecraft/server/level/ServerEntity.java
-@@ -133,7 +133,7 @@ public class ServerEntity {
+@@ -53,7 +53,7 @@ public class ServerEntity {
+     private static final int TOLERANCE_LEVEL_ROTATION = 1;
+     private final ServerLevel level;
+     private final Entity entity;
+-    private final int updateInterval;
++    public final int updateInterval; // MultiPaper
+     private final boolean trackDelta;
+     private final Consumer<Packet<?>> broadcast;
+     private long xp;
+@@ -68,6 +68,7 @@ public class ServerEntity {
+     private List<Entity> lastPassengers;
+     private boolean wasRiding;
+     private boolean wasOnGround;
++    public int lastChangesSent; // MultiPaper
+     // CraftBukkit start
+     final Set<ServerPlayerConnection> trackedPlayers; // Paper - private -> package
+ 
+@@ -133,7 +134,7 @@ public class ServerEntity {
              this.sendDirtyEntityData();
          }
  
@@ -124,21 +141,22 @@ index 1a110022cf5a62b40993851f607999d6789882ee..71c7e0719b1412153162b396cd5d6823
              if (!(entity instanceof ServerPlayer) && !((ServerLevel) entity.level).entityManager.areEntitiesLoaded(new ChunkPos(new BlockPos(vector)).longKey)) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInactiveTracker.java b/src/main/java/puregero/multipaper/MultiPaperInactiveTracker.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b662b0dfc69746a4bad91e6607d42a0fc1441a78
+index 0000000000000000000000000000000000000000..783dae99ccbf2090986177f9140b815684cab90f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInactiveTracker.java
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,56 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
 +
-+import java.util.ArrayList;
-+import java.util.List;
++import java.util.Iterator;
++import java.util.LinkedList;
++import java.util.Queue;
 +
 +public class MultiPaperInactiveTracker {
 +    private final ServerLevel level;
-+    private final List<Entity> entitiesToSendChangesThisTick = new ArrayList<>();
++    private final Queue<Entity> entitiesToSendChangesThisTick = new LinkedList<>();
 +
 +    public MultiPaperInactiveTracker(ServerLevel level) {
 +        this.level = level;
@@ -152,17 +170,28 @@ index 0000000000000000000000000000000000000000..b662b0dfc69746a4bad91e6607d42a0f
 +    }
 +
 +    public boolean tick() {
-+        if (MultiPaperConfig.ticksPerInactiveEntityTracking > 1 && level.getServer().getTickCount() % MultiPaperConfig.ticksPerInactiveEntityTracking != 0) {
++        int tickCount = level.getServer().getTickCount();
++        if (MultiPaperConfig.ticksPerInactiveEntityTracking > 1 && tickCount % MultiPaperConfig.ticksPerInactiveEntityTracking != 0) {
 +            level.timings.trackerInactive.startTiming();
 +            try {
-+                for (Entity entity : entitiesToSendChangesThisTick) {
-+                    if (entity.tracker != null) {
++                Iterator<Entity> iterator = entitiesToSendChangesThisTick.iterator();
++                while (iterator.hasNext()) {
++                    Entity entity = iterator.next();
++
++                    if (entity.tracker == null) {
++                        entity.sendChangesThisTick = false;
++                        iterator.remove();
++                        continue;
++                    }
++
++                    if (tickCount - entity.tracker.serverEntity.lastChangesSent >= entity.tracker.serverEntity.updateInterval) {
++                        entity.tracker.serverEntity.lastChangesSent = tickCount;
 +                        entity.tracker.updatePlayers(entity.getPlayersInTrackRange());
 +                        entity.tracker.serverEntity.sendChanges();
++                        entity.sendChangesThisTick = false;
++                        iterator.remove();
 +                    }
-+                    entity.sendChangesThisTick = false;
 +                }
-+                entitiesToSendChangesThisTick.clear();
 +            } finally {
 +                level.timings.trackerInactive.stopTiming();
 +            }

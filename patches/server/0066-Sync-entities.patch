@@ -147,7 +147,7 @@ index 598fd4bc7788360bea45ff0014f4052150ad1182..cd68c422b1021e8d58e219e410156a7d
          this.entity.startSeenByPlayer(player);
      }
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 8ff56085cd362e333e9dcc28f8e810b3e91ff402..34e05f6432df208d0ee5f71e1ee7c84a3cf72efe 100644
+index a7c5022496793c875e481b32ffce9b3bb4aa05c5..59e2c462afe9ec26295c1223735d6e67a9c815cb 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -93,8 +93,11 @@ import net.minecraft.world.entity.animal.WaterAnimal;
@@ -170,7 +170,7 @@ index 8ff56085cd362e333e9dcc28f8e810b3e91ff402..34e05f6432df208d0ee5f71e1ee7c84a
  import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
  
  public class ServerLevel extends Level implements WorldGenLevel {
-@@ -655,6 +659,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -656,6 +660,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
              org.spigotmc.ActivationRange.activateEntities(this); // Spigot
              timings.entityTick.startTiming(); // Spigot
              this.entityTickList.forEach((entity) -> {
@@ -179,7 +179,7 @@ index 8ff56085cd362e333e9dcc28f8e810b3e91ff402..34e05f6432df208d0ee5f71e1ee7c84a
                  if (!entity.isRemoved()) {
                      if (false && this.shouldDiscardEntity(entity)) { // CraftBukkit - We prevent spawning in general, so this butchering is not needed
                          entity.discard();
-@@ -1443,6 +1449,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -1444,6 +1450,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
              }
              // CraftBukkit end
  
@@ -189,7 +189,7 @@ index 8ff56085cd362e333e9dcc28f8e810b3e91ff402..34e05f6432df208d0ee5f71e1ee7c84a
          }
      }
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 83d736e51a65b07bfcd0347e82eeac99b3018f34..31dff41243025d6ea8f05a9b0a9c7a7491c6042d 100644
+index 1b575938207ccb82a12b1e239ed949b0fdcb2e8a..79042c5ea477dccaa9d649837f24fd285c8b3e41 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -1291,7 +1291,7 @@ public class ServerPlayer extends Player {
@@ -230,7 +230,7 @@ index 83d736e51a65b07bfcd0347e82eeac99b3018f34..31dff41243025d6ea8f05a9b0a9c7a74
          this.clientViewDistance = packet.viewDistance;
          // CraftBukkit end
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 9c544b03fbbf63b4aabb515c3557c429b3c9c6a1..4e2de5ee5ea3345bff90f714894d6d1e7ef471f2 100644
+index 11b95320b0301e17c7aaae8ff76a667c84ebe3db..e52c9a3191a85fb8c292c506a04e86a41e62ec73 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -215,6 +215,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
@@ -249,16 +249,16 @@ index 9c544b03fbbf63b4aabb515c3557c429b3c9c6a1..4e2de5ee5ea3345bff90f714894d6d1e
          // CraftBukkit start
          if (this.player.getAbilities().mayfly && this.player.getAbilities().flying != packet.isFlying()) {
              PlayerToggleFlightEvent event = new PlayerToggleFlightEvent(this.player.getBukkitEntity(), packet.isFlying());
-@@ -3190,6 +3192,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
-     @Override
-     public void handleClientInformation(ServerboundClientInformationPacket packet) {
-         PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
-+        MultiPaperPlayerHandler.handleClientInformation(this.player, packet);
+@@ -3197,6 +3199,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+             return;
+         }
+         // Paper end - do not accept invalid information
++        MultiPaperPlayerHandler.handleClientInformation(this.player, packet); // MultiPaper
          this.player.updateOptions(packet);
      }
  
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index c3db10249af74016c55f3c372eaca68c7fc60fd4..7af9f0d60688dfeeb22f5d2dafd2a125b53f8f29 100644
+index 49667a47161caf1797870082c54c179aa93af8e4..8ea464f57eab0309b3e2a263f16dadb7d1d3b445 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -115,10 +115,7 @@ import org.bukkit.event.player.PlayerRespawnEvent;
@@ -299,7 +299,7 @@ index c3db10249af74016c55f3c372eaca68c7fc60fd4..7af9f0d60688dfeeb22f5d2dafd2a125
                      serversToCreatePlayerOn.add(externalServer.getConnection());
                  } else if (subscribedToSoruce) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index d7b091d572446c0a311de94cb701fa9e9925f6bc..32c8bce38d2ee090844b696d2476137f59c6224d 100644
+index fc14288b7981b128413057ba6b8b7508897e3529..3652071d2bbd477efb4c82f0204f2da894ef6f51 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -142,7 +142,10 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -338,7 +338,7 @@ index d7b091d572446c0a311de94cb701fa9e9925f6bc..32c8bce38d2ee090844b696d2476137f
      }
  
      protected abstract void readAdditionalSaveData(CompoundTag nbt);
-@@ -4219,6 +4224,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4220,6 +4225,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              int j = Mth.floor(y);
              int k = Mth.floor(z);
  
@@ -349,7 +349,7 @@ index d7b091d572446c0a311de94cb701fa9e9925f6bc..32c8bce38d2ee090844b696d2476137f
              if (i != this.blockPosition.getX() || j != this.blockPosition.getY() || k != this.blockPosition.getZ()) {
                  this.blockPosition = new BlockPos(i, j, k);
                  this.feetBlockState = null;
-@@ -4315,6 +4324,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4316,6 +4325,9 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      @Override
      public final void setRemoved(Entity.RemovalReason reason) {
@@ -359,7 +359,7 @@ index d7b091d572446c0a311de94cb701fa9e9925f6bc..32c8bce38d2ee090844b696d2476137f
          if (this.removalReason == null) {
              this.removalReason = reason;
          }
-@@ -4338,7 +4350,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4339,7 +4351,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      @Override
      public boolean shouldBeSaved() {
@@ -369,7 +369,7 @@ index d7b091d572446c0a311de94cb701fa9e9925f6bc..32c8bce38d2ee090844b696d2476137f
  
      @Override
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index 52c1310dd4a96c4ce6bff2d01e5d482f9360be33..b4ddd1517728a077d988ec4dd98563c0fcf410a7 100644
+index 44df5eacedc60462c6b9ff423bac60ed24a0d279..93eddc7fbb73e1b4e92711c92b6c7020f3eca8eb 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 @@ -139,6 +139,7 @@ import org.bukkit.event.entity.EntityRegainHealthEvent;
@@ -693,7 +693,7 @@ index cd706bcd127d6c8a22aadc3269749fccb73d81b7..0210ba4be9abf5b4404669baf4fd62ee
              for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
                  if (blockEntity instanceof Container container) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 5609212b27d075ce920e8f3f4eeb3115f98ab7e6..a7c46c1cddba0c1f067f099e1d5f6a7d8d58d7c1 100644
+index 0da1af36a3145a0dc36c44df76eb2701c9a02132..8e2362a69a02e394bf43b36d108fb46e06583a25 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -12,9 +12,13 @@ import io.netty.channel.socket.SocketChannel;

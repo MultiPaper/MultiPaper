@@ -89,8 +89,9 @@ public class CallDataStorageHandler {
 
     private static synchronized void saveYaml() {
         try {
-            Path file = Path.of("datastorage.yml");
-            Path tempFile = Files.createTempFile("datastorage.", ".yml");
+            Path directory = Path.of(".");
+            Path file = directory.resolve("datastorage.yml");
+            Path tempFile = Files.createTempFile(directory, "datastorage.yml.", ".tmp");
 
             try (BufferedWriter writer = Files.newBufferedWriter(tempFile)) {
                 DumperOptions options = new DumperOptions();

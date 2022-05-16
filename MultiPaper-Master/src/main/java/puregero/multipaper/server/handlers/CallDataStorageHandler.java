@@ -89,8 +89,8 @@ public class CallDataStorageHandler {
 
     private static synchronized void saveYaml() {
         try {
-            Path file = Path.of("datastorage.yaml");
-            Path tempFile = Files.createTempFile("datastorage.", ".yaml");
+            Path file = Path.of("datastorage.yml");
+            Path tempFile = Files.createTempFile("datastorage.", ".yml");
 
             try (BufferedWriter writer = Files.newBufferedWriter(tempFile)) {
                 DumperOptions options = new DumperOptions();
@@ -111,7 +111,13 @@ public class CallDataStorageHandler {
 
     private static synchronized void loadYaml() {
         if (yaml == null) {
-            File file = new File("datastorage.yaml");
+            File file = new File("datastorage.yml");
+
+            // Who called it .yaml... (backwards compatibility)
+            if (!file.isFile()) {
+                file = new File("datastorage.yaml");
+            }
+
             if (file.isFile()) {
                 try (FileInputStream in = new FileInputStream(file)) {
                     yaml = new Yaml().load(in);

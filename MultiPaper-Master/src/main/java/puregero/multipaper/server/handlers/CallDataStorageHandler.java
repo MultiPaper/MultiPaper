@@ -7,6 +7,10 @@ import puregero.multipaper.mastermessagingprotocol.messages.serverbound.Nullable
 import puregero.multipaper.server.ServerConnection;
 
 import java.io.*;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -84,12 +88,22 @@ public class CallDataStorageHandler {
     }
 
     private static synchronized void saveYaml() {
-        File file = new File("datastorage.yaml");
-        try (FileWriter out = new FileWriter(file)) {
-            DumperOptions options = new DumperOptions();
-            options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
-            options.setPrettyFlow(true);
-            new Yaml(options).dump(yaml, out);
+        try {
+            Path file = Path.of("datastorage.yaml");
+            Path tempFile = Files.createTempFile("datastorage.", ".yaml");
+
+            try (BufferedWriter writer = Files.newBufferedWriter(tempFile)) {
+                DumperOptions options = new DumperOptions();
+                options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+                options.setPrettyFlow(true);
+                new Yaml(options).dump(yaml, writer);
+            }
+
+            try {
+                Files.move(tempFile, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }

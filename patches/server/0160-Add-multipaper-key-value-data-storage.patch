@@ -41,15 +41,17 @@ index 0f20ddcb9d452576065a6c1cd0a8ece19ea8fbc8..9a3300646763c659cb3e0f93f0674006
      @Override
 diff --git a/src/main/java/puregero/multipaper/CraftMultiPaperDataStorage.java b/src/main/java/puregero/multipaper/CraftMultiPaperDataStorage.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a9e7e6e691f1c7d580e88c65e9f0ed3802889b47
+index 0000000000000000000000000000000000000000..92cec7d97c1ae20d0780ab607857af66820dcdc2
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/CraftMultiPaperDataStorage.java
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,38 @@
 +package puregero.multipaper;
 +
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.CallDataStorageMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.KeyValueStringMapMessageReply;
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.NullableStringMessageReply;
 +
++import java.util.Map;
 +import java.util.concurrent.CompletableFuture;
 +
 +public class CraftMultiPaperDataStorage implements MultiPaperDataStorage {
@@ -57,6 +59,13 @@ index 0000000000000000000000000000000000000000..a9e7e6e691f1c7d580e88c65e9f0ed38
 +    public CompletableFuture<String> get(String key) {
 +        return MultiPaper.getConnection()
 +                .sendAndAwaitReply(new CallDataStorageMessage(key, CallDataStorageMessage.Action.GET, null), NullableStringMessageReply.class)
++                .thenApply(reply -> reply.result);
++    }
++
++    @Override
++    public CompletableFuture<Map<String, String>> list(String prefix) {
++        return MultiPaper.getConnection()
++                .sendAndAwaitReply(new CallDataStorageMessage(prefix == null ? "" : prefix, CallDataStorageMessage.Action.LIST, null), KeyValueStringMapMessageReply.class)
 +                .thenApply(reply -> reply.result);
 +    }
 +

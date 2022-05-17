@@ -3,6 +3,7 @@ package puregero.multipaper.server.handlers;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.CallDataStorageMessage;
+import puregero.multipaper.mastermessagingprotocol.messages.serverbound.KeyValueStringMapMessageReply;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.NullableStringMessageReply;
 import puregero.multipaper.server.ServerConnection;
 
@@ -22,15 +23,22 @@ public class CallDataStorageHandler {
 
     public static void handle(ServerConnection connection, CallDataStorageMessage message) {
         CompletableFuture.runAsync(() -> {
-            String result = handleMessage(message);
-            connection.sendReply(new NullableStringMessageReply(result), message);
+            Object result = handleMessage(message);
+
+            if (result == null || result instanceof String) {
+                connection.sendReply(new NullableStringMessageReply((String) result), message);
+            } else if (result instanceof Map) {
+                connection.sendReply(new KeyValueStringMapMessageReply((Map) result), message);
+            } else {
+                throw new IllegalArgumentException("Unexpected result: " + result + " (" + result.getClass().getName() + ")");
+            }
         }).exceptionally(throwable -> {
             throwable.printStackTrace();
             return null;
         });
     }
 
-    private static synchronized String handleMessage(CallDataStorageMessage message) {
+    private static synchronized Object handleMessage(CallDataStorageMessage message) {
         loadYaml();
 
         String key = message.key;
@@ -38,7 +46,16 @@ public class CallDataStorageHandler {
 
         switch (message.action) {
             case GET -> {
-                return (String) yaml.get(key);
+                return yaml.get(key);
+            }
+            case LIST -> {
+                Map<String, String> list = new HashMap<>();
+                for (Map.Entry<String, Object> entry : yaml.entrySet()) {
+                    if (entry.getKey() != null && entry.getKey().startsWith(key) && entry.getValue() instanceof String string) {
+                        list.put(entry.getKey(), string);
+                    }
+                }
+                return list;
             }
             case SET -> {
                 if (value == null) {

@@ -26,6 +26,7 @@ public class ServerBoundProtocol extends Protocol<ServerBoundMessage> {
         addMessage(EntitySubscribersSyncMessage.class, EntitySubscribersSyncMessage::new);
         addMessage(DataStreamMessageReply.class, DataStreamMessageReply::new);
         addMessage(NullableStringMessageReply.class, NullableStringMessageReply::new);
+        addMessage(KeyValueStringMapMessageReply.class, KeyValueStringMapMessageReply::new);
     }
 
 }

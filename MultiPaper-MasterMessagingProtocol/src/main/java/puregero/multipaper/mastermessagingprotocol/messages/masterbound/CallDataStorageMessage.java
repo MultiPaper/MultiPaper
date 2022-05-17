@@ -41,6 +41,7 @@ public class CallDataStorageMessage extends MasterBoundMessage {
 
     public static enum Action {
         GET,
+        LIST,
         SET,
         ADD;
     }

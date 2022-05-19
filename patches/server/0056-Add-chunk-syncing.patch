@@ -1744,14 +1744,15 @@ index 361232ab565973d262cfb6ecc54fd823e28d799e..191294b08434bd4ea0a7ea29d040b782
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8330d34128d4049898be244fa140a1da7d059a4f
+index 0000000000000000000000000000000000000000..12db028e25b8548a9737e8cc9c370d8a52b4a78d
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,143 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import com.mojang.datafixers.util.Either;
 +import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.ListTag;
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ChunkHolder;
 +import net.minecraft.server.level.ServerLevel;
@@ -1851,19 +1852,24 @@ index 0000000000000000000000000000000000000000..8330d34128d4049898be244fa140a1da
 +            ChunkAccess chunk = either.left().get();
 +
 +            try {
-+                CompoundTag tag = ChunkSerializer.write(level, chunk);
++                ListTag entitiesToLoad = null;
++                ListTag blockEntitiesToLoad = null;
 +
-+                if (chunk instanceof ImposterProtoChunk imposterProtoChunk) {
-+                    chunk = imposterProtoChunk.getWrapped();
++                ChunkAccess fullChunk = chunk instanceof ImposterProtoChunk imposterProtoChunk ? imposterProtoChunk.getWrapped() : chunk;
++
++                if (fullChunk instanceof LevelChunk levelChunk) {
++                    // Cache these tags in case they get deleted while we serialize the chunk (multi-threaded fun!)
++                    entitiesToLoad = levelChunk.entitiesToLoad;
++                    blockEntitiesToLoad = levelChunk.blockEntitiesToLoad;
 +                }
 +
-+                if (chunk instanceof LevelChunk levelChunk) {
-+                    if (levelChunk.entitiesToLoad != null) {
-+                        tag.put("entities", levelChunk.entitiesToLoad);
-+                    }
-+                    if (levelChunk.blockEntitiesToLoad != null) {
-+                        tag.put("block_entities", levelChunk.blockEntitiesToLoad);
-+                    }
++                CompoundTag tag = ChunkSerializer.write(level, chunk);
++
++                if (entitiesToLoad != null) {
++                    tag.put("entities", entitiesToLoad);
++                }
++                if (blockEntitiesToLoad != null) {
++                    tag.put("block_entities", blockEntitiesToLoad);
 +                }
 +
 +                connection.send(new SendChunkPacket(world, cx, cz, tag));

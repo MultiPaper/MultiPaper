@@ -1,0 +1,123 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 21 Dec 2021 00:37:18 +1000
+Subject: [PATCH] Sync experience
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index c2f0b70b72b536a8a02a6d4f270b2c1c46eb52d1..1de8b2c75eb9344694821b2712806da5fc5da20b 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -160,10 +160,7 @@ import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
+ import org.bukkit.inventory.MainHand;
+ import puregero.multipaper.*;
+-import puregero.multipaper.externalserverprotocol.PlayerChangeDimensionPacket;
+-import puregero.multipaper.externalserverprotocol.PlayerChangeGamemodePacket;
+-import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
+-import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
++import puregero.multipaper.externalserverprotocol.*;
+ // CraftBukkit end
+ 
+ public class ServerPlayer extends Player {
+@@ -586,6 +583,20 @@ public class ServerPlayer extends Player {
+         this.lastSentExp = -1;
+     }
+ 
++    // MultiPaper start - sync xp
++    public float lastExperienceProgress = 0;
++    public int lastTotalExperience = 0;
++    public int lastExperienceLevel = 0;
++    public void syncExperience() {
++        if (experienceProgress != lastExperienceProgress || totalExperience != lastTotalExperience || experienceLevel != lastExperienceLevel) {
++            lastExperienceProgress = experienceProgress;
++            lastTotalExperience = totalExperience;
++            lastExperienceLevel = experienceLevel;
++            MultiPaper.broadcastPacketToExternalServers(new PlayerExperienceUpdatePacket(this, experienceProgress, totalExperience, experienceLevel));
++        }
++    }
++    // MultiPaper end
++
+     public void initMenu(AbstractContainerMenu screenHandler) {
+         screenHandler.addSlotListener(this.containerListener);
+         screenHandler.setSynchronizer(this.containerSynchronizer);
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index efa369431403c4c86f740cee75e5a41a8e0b6230..92ebdedae7601cc6d324d606cbc961da2303e71d 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -95,6 +95,8 @@ public class MultiPaper {
+ 
+                 externalPlayer.tickAttackStrength();
+             }
++
++            player.syncExperience();
+         }
+ 
+         for (ExternalServer server : getConnection().getServersMap().values()) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 3c4f1c605ca19a3b4ef40e120b460fb67d58e958..7c7ec63e3570bedef4d9f72c0a6aa33868c31613 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -56,6 +56,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(AdvancementGrantProgressPacket.class, AdvancementGrantProgressPacket::new);
+         addPacket(WeatherUpdatePacket.class, WeatherUpdatePacket::new);
+         addPacket(PlayerStatsIncreasePacket.class, PlayerStatsIncreasePacket::new);
++        addPacket(PlayerExperienceUpdatePacket.class, PlayerExperienceUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e558a400216b4386d9f3dbeaeb9d9d25bf7645ec
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java
+@@ -0,0 +1,49 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class PlayerExperienceUpdatePacket extends ExternalServerPacket {
++    private final UUID uuid;
++    private final float progress;
++    private final int total;
++    private final int level;
++
++    public PlayerExperienceUpdatePacket(ServerPlayer player, float progress, int total, int level) {
++        this.uuid = player.getUUID();
++        this.progress = progress;
++        this.total = total;
++        this.level = level;
++    }
++
++    public PlayerExperienceUpdatePacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++        progress = in.readFloat();
++        total = in.readInt();
++        level = in.readInt();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeFloat(progress);
++        out.writeInt(total);
++        out.writeInt(level);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            player.experienceProgress = player.lastExperienceProgress = progress;
++            player.totalExperience = player.lastTotalExperience = total;
++            player.experienceLevel = player.lastExperienceLevel = level;
++        });
++    }
++}

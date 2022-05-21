@@ -1,0 +1,135 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 24 Dec 2021 23:23:42 +1000
+Subject: [PATCH] Add /mpmap
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+index 4e86da4e5f8af5ab6e07f846545f7b4e51e629aa..dc9d2b7ff44b0ca31ab1b6e6258795c7df114f40 100644
+--- a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
++++ b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+@@ -5,6 +5,7 @@ import org.bukkit.Server;
+ import org.bukkit.command.Command;
+ import org.bukkit.command.SimpleCommandMap;
+ import puregero.multipaper.commands.MPDebugCommand;
++import puregero.multipaper.commands.MPMapCommand;
+ import puregero.multipaper.commands.ServersCommand;
+ 
+ public class CraftCommandMap extends SimpleCommandMap {
+@@ -25,6 +26,7 @@ public class CraftCommandMap extends SimpleCommandMap {
+     private void setDefaultCommands() {
+         register("multipaper", new MPDebugCommand("mpdebug"));
+         register("multipaper", new ServersCommand("servers"));
++        register("multipaper", new MPMapCommand("mpmap"));
+     }
+     // MultiPaper end
+ 
+diff --git a/src/main/java/puregero/multipaper/commands/MPDebugCommand.java b/src/main/java/puregero/multipaper/commands/MPDebugCommand.java
+index e93e39da68f776524063a4952aee12f4d6b1078d..25fe13e9e308c344e82c6b1f3d0254891c304f97 100644
+--- a/src/main/java/puregero/multipaper/commands/MPDebugCommand.java
++++ b/src/main/java/puregero/multipaper/commands/MPDebugCommand.java
+@@ -28,7 +28,7 @@ public class MPDebugCommand extends Command implements Runnable {
+ 
+     public MPDebugCommand(String command) {
+         super(command);
+-        setPermission(MultiPaperPermissions.registerCommandPermission(command, "MpDebug command", PermissionDefault.TRUE));
++        setPermission(MultiPaperPermissions.registerCommandPermission(command, "MPDebug command", PermissionDefault.TRUE));
+     }
+ 
+     @Override
+diff --git a/src/main/java/puregero/multipaper/commands/MPMapCommand.java b/src/main/java/puregero/multipaper/commands/MPMapCommand.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..b5fdfcd770f60b13599851da65f6489b84078f4c
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/commands/MPMapCommand.java
+@@ -0,0 +1,90 @@
++package puregero.multipaper.commands;
++
++import net.kyori.adventure.text.Component;
++import net.kyori.adventure.text.event.HoverEvent;
++import net.kyori.adventure.text.format.NamedTextColor;
++import net.minecraft.world.level.chunk.ChunkAccess;
++import net.minecraft.world.level.chunk.LevelChunk;
++import org.bukkit.ChatColor;
++import org.bukkit.command.Command;
++import org.bukkit.command.CommandSender;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.entity.Player;
++import org.bukkit.permissions.PermissionDefault;
++import org.jetbrains.annotations.NotNull;
++import puregero.multipaper.MultiPaper;
++
++public class MPMapCommand extends Command {
++
++    public MPMapCommand(String command) {
++        super(command);
++        setPermission(MultiPaperPermissions.registerCommandPermission(command, "MPMap command", PermissionDefault.TRUE));
++    }
++
++    @Override
++    public boolean execute(@NotNull CommandSender sender, @NotNull String commandLabel, String[] args) {
++        if (!(sender instanceof Player player)) {
++            sender.sendMessage(ChatColor.RED + "Only players can execute this command.");
++            return false;
++        }
++
++        int radius = 8;
++
++        sendMap(player, radius);
++
++        return true;
++    }
++
++    private void sendMap(Player player, int radius) {
++        sendHeader(player, radius);
++        for (int row = -radius; row <= radius; row++) {
++            sendRow(player, radius, row);
++        }
++        sendHeader(player, radius);
++    }
++
++    private LevelChunk getChunk(Player player, int x, int z) {
++        ChunkAccess chunkAccess = MultiPaper.getChunkAccess(player.getWorld().getName(), ((CraftPlayer) player).getHandle().blockPosition().offset(x << 4, 0, z << 4));
++
++        return chunkAccess instanceof LevelChunk levelChunk ? levelChunk : null;
++    }
++
++    private void sendRow(Player player, int radius, int row) {
++        Component component = Component.text(" | ").color(NamedTextColor.GOLD);
++
++        int i = -radius;
++        while (i <= radius) {
++            StringBuilder builder = new StringBuilder();
++            LevelChunk chunk = getChunk(player, row, i);
++            String name = chunk == null || chunk.externalOwner == null ? null : chunk.externalOwner.getName();
++            NamedTextColor color = chunk == null ? NamedTextColor.DARK_GRAY : (chunk.externalOwner == null ? NamedTextColor.WHITE : (chunk.externalOwner.isMe() ? NamedTextColor.AQUA : NamedTextColor.RED));
++
++            while (i <= radius) {
++                LevelChunk chunk2 = getChunk(player, row, i);
++
++                if ((chunk2 == null && chunk != null) || (chunk2 != null && chunk == null) || (chunk != null && chunk2.externalOwner != chunk.externalOwner)) {
++                    break;
++                }
++
++                builder.append(row == 0 && i == 0 ? "\u25A0 " : "+ ");
++
++                i++;
++            }
++
++            Component innerComponent = Component.text(builder.toString()).color(color);
++
++            if (name != null) {
++                innerComponent = innerComponent.hoverEvent(HoverEvent.showText(Component.text(name).color(color)));
++            }
++
++            component = component.append(innerComponent);
++        }
++
++        component = component.append(Component.text("| ").color(NamedTextColor.GOLD));
++        player.sendMessage(component);
++    }
++
++    private void sendHeader(Player player, int radius) {
++        player.sendMessage(Component.text("+ " + "- ".repeat(radius * 2 + 1) + "+").color(NamedTextColor.GOLD));
++    }
++}

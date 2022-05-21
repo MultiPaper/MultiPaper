@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 30 Dec 2021 15:09:05 +1000
+Subject: [PATCH] Broadcast block change when right-clicking a block to ensure
+ external servers are in sync
+
+
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index f61031b53c1113c46a56ff2c2bc4ece08c27f667..88f49ddad6a4b818dcde5df32f14b3a4a0d7ab71 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -1877,6 +1877,11 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+ 
+                 this.player.connection.send(new ClientboundBlockUpdatePacket(worldserver, blockposition));
+                 this.player.connection.send(new ClientboundBlockUpdatePacket(worldserver, blockposition.relative(enumdirection)));
++
++                // MultiPaper - broadcast block change to other servers as they may be out of sync
++                worldserver.chunkSource.blockChanged(blockposition);
++                worldserver.chunkSource.blockChanged(blockposition.relative(enumdirection));
++                // MultiPaper - broadcast block change to other servers as they may be out of sync
+             } else {
+                 ServerGamePacketListenerImpl.LOGGER.warn("Ignoring UseItemOnPacket from {}: Location {} too far away from hit block {}.", new Object[]{this.player.getGameProfile().getName(), vec3d, blockposition});
+             }

@@ -1,0 +1,119 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 4 Dec 2021 22:39:00 +1000
+Subject: [PATCH] Sync mob navigation when handing over to another server
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/ai/navigation/PathNavigation.java b/src/main/java/net/minecraft/world/entity/ai/navigation/PathNavigation.java
+index d35032a8d2612d555c3dad1fe496d7ae1c5a285b..90f8466df6d4f43c4c35518239e57e168da21713 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/navigation/PathNavigation.java
++++ b/src/main/java/net/minecraft/world/entity/ai/navigation/PathNavigation.java
+@@ -31,7 +31,7 @@ public abstract class PathNavigation {
+     protected final Level level;
+     @Nullable
+     protected Path path;
+-    protected double speedModifier;
++    public double speedModifier; // MultiPaper - make public
+     protected int tick;
+     protected int lastStuckCheck;
+     protected Vec3 lastStuckCheckPos = Vec3.ZERO;
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+index ac38e05564f07db8c20ca7a7ca6e80a93df59c72..889203ae8d4800318231a0a15a559135d384e616 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+@@ -116,6 +116,14 @@ public class MultiPaperEntitiesHandler {
+             if (!MultiPaper.isChunkLocal(chunkTo)) {
+                 // Leaving our jurisdiction, do a full entity update to ensure the new external server has all the required info
+                 MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity)));
++                if (entity instanceof Mob mob) {
++                    MultiPaper.runSync(() -> {
++                        BlockPos goal = mob.getNavigation().getTargetPos();
++                        if (goal != null) {
++                            MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new MobSetNavigationGoalPacket(mob, goal));
++                        }
++                    });
++                }
+             }
+             for (ExternalServer fromServer : chunkFrom.externalEntitiesSubscribers) {
+                 if (fromServer.getConnection() != null && !chunkTo.externalEntitiesSubscribers.contains(fromServer)) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 4d4e58030f6783c6fec0e63835061df3ca85d7fa..d722bee51dafa77f47d263ce723cbdcb48838070 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -47,6 +47,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(HurtEntityPacket.class, HurtEntityPacket::new);
+         addPacket(AddItemToEntityContainerPacket.class, AddItemToEntityContainerPacket::new);
+         addPacket(AddItemToContainerPacket.class, AddItemToContainerPacket::new);
++        addPacket(MobSetNavigationGoalPacket.class, MobSetNavigationGoalPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..1369ebb95e38919acaaefa64bf7f9faaa7e9fe13
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java
+@@ -0,0 +1,63 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.Mob;
++import net.minecraft.world.entity.ai.goal.WrappedGoal;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class MobSetNavigationGoalPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(MobSetNavigationGoalPacket.class.getSimpleName());
++
++    private final String world;
++    private final UUID uuid;
++    private final BlockPos goal;
++    private final double speed;
++
++    public MobSetNavigationGoalPacket(Mob mob, BlockPos goal) {
++        this.world = ((ServerLevel) mob.level).convertable.getLevelId();
++        this.uuid = mob.getUUID();
++        this.goal = goal;
++        this.speed = mob.getNavigation().speedModifier;
++    }
++
++    public MobSetNavigationGoalPacket(FriendlyByteBuf in) {
++        this.world = in.readUtf();
++        this.uuid = in.readUUID();
++        this.goal = BlockPos.of(in.readLong());
++        this.speed = in.readDouble();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUUID(uuid);
++        out.writeLong(goal.asLong());
++        out.writeDouble(speed);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++            Entity entity = level.getEntity(uuid);
++            if (entity instanceof Mob mob) {
++                mob.goalSelector.getRunningGoals().forEach(WrappedGoal::stop);
++                mob.targetSelector.getRunningGoals().forEach(WrappedGoal::stop);
++                mob.getNavigation().moveTo(mob.getNavigation().createPath(goal, 0), speed);
++            } else {
++                LOGGER.warn("Couldn't find mob " + uuid + " for navigation goal");
++            }
++        });
++    }
++}

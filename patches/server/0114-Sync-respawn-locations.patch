@@ -1,0 +1,145 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 14 Jan 2022 10:15:23 +1000
+Subject: [PATCH] Sync respawn locations
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index e4fde856060cc3b877abd426b5a5b45bec33066e..3e9e2ab7c8390a0685dada3045876cc9f955d7aa 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -206,11 +206,11 @@ public class ServerPlayer extends Player {
+     @Nullable
+     private Vec3 enteredLavaOnVehiclePosition;
+     private SectionPos lastSectionPos;
+-    private ResourceKey<Level> respawnDimension;
++    public ResourceKey<Level> respawnDimension; // MultiPaper - make public
+     @Nullable
+-    private BlockPos respawnPosition;
+-    private boolean respawnForced;
+-    private float respawnAngle;
++    public BlockPos respawnPosition; // MultiPaper - make public
++    public boolean respawnForced; // MultiPaper - make public
++    public float respawnAngle; // MultiPaper - make public
+     private final TextFilter textFilter;
+     private boolean textFilteringEnabled;
+     private boolean allowsListing;
+@@ -2201,6 +2201,8 @@ public class ServerPlayer extends Player {
+             this.respawnForced = false;
+         }
+ 
++        PlayerSetRespawnPosition.broadcastRespawnPosition(this); // MultiPaper
++
+         return true; // Paper
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 7602d355f8f330441f0587e1c6ed0db971803b2d..1d0332198c18bdae4aa4f096c2dc23d82d674ed2 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -59,6 +59,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerExperienceUpdatePacket.class, PlayerExperienceUpdatePacket::new);
+         addPacket(PlayerListNameUpdatePacket.class, PlayerListNameUpdatePacket::new);
+         addPacket(PlayerSetCameraPacket.class, PlayerSetCameraPacket::new);
++        addPacket(PlayerSetRespawnPosition.class, PlayerSetRespawnPosition::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+index fe7e5dda2d9d0f6f218e37b591d0a8559aa5c5b2..6c57fee7a01ab9fab452edbd81ec28e5d6f9c2a0 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+@@ -158,6 +158,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+         send(new EntityUpdatePacket(player, new ClientboundSetEntityDataPacket(player.getId(), player.getEntityData().getAll())), connections);
+         send(new PlayerFoodUpdatePacket(player), connections);
+         send(new PlayerListNameUpdatePacket(player), connections);
++        send(new PlayerSetRespawnPosition(player), connections);
+ 
+         MultiPaperInventoryHandler.sendFullInventoryUpdate(player, connections);
+         MultiPaperEnderChestHandler.sendFullEnderChestUpdate(player, connections);
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSetRespawnPosition.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSetRespawnPosition.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..81eb8c819b7119de8b2ab1ea123d2a17bad3176e
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSetRespawnPosition.java
+@@ -0,0 +1,80 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Registry;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.resources.ResourceKey;
++import net.minecraft.resources.ResourceLocation;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.level.Level;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class PlayerSetRespawnPosition extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PlayerSetRespawnPosition.class.getSimpleName());
++    private static boolean settingRespawnPosition = false;
++
++    private final UUID uuid;
++    private final ResourceKey<Level> dimension;
++    private final BlockPos pos;
++    private final float angle;
++    private final boolean forced;
++
++    public PlayerSetRespawnPosition(ServerPlayer player) {
++        this.uuid = player.getUUID();
++        this.dimension = player.respawnDimension;
++        this.pos = player.respawnPosition;
++        this.angle = player.respawnAngle;
++        this.forced = player.respawnForced;
++    }
++
++    public PlayerSetRespawnPosition(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++        dimension = ResourceKey.elementKey(Registry.DIMENSION_REGISTRY).apply(new ResourceLocation(in.readUtf()));
++        pos = in.readBoolean() ? BlockPos.of(in.readLong()) : null;
++        angle = in.readFloat();
++        forced = in.readBoolean();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeUtf(dimension.location().toString());
++
++        out.writeBoolean(pos != null);
++        if (pos != null) {
++            out.writeLong(pos.asLong());
++        }
++
++        out.writeFloat(angle);
++        out.writeBoolean(forced);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            if (player == null) {
++                LOGGER.warn("Tried to set a respawn position on a non-existent player with uuid " + uuid);
++                return;
++            }
++
++            settingRespawnPosition = true;
++            player.setRespawnPosition(dimension, pos, angle, forced, false);
++            settingRespawnPosition = false;
++        });
++    }
++
++    public static void broadcastRespawnPosition(ServerPlayer player) {
++        if (!settingRespawnPosition) {
++            MultiPaper.broadcastPacketToExternalServers(player, new PlayerSetRespawnPosition(player));
++        }
++    }
++}

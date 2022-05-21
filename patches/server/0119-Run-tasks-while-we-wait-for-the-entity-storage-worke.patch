@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 27 Jan 2022 22:43:56 +1000
+Subject: [PATCH] Run tasks while we wait for the entity storage worker to
+ close
+
+
+diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
+index 537ee82389f0e917836b510bb42d0791f8d4cd16..ece0817daee1e65185c78e85f026a2b23add375c 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
++++ b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
+@@ -122,7 +122,12 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+ 
+     @Override
+     public void flush(boolean sync) {
+-        this.worker.synchronize(sync).join();
++        // MultiPaper start - Run tasks while we wait for the entity storage worker to close
++        CompletableFuture<Void> completableFuture = this.worker.synchronize(sync);
++        if (!completableFuture.isDone()) {
++            level.chunkSource.mainThreadProcessor.managedBlock(completableFuture::isDone);
++        }
++        // MultiPaper end
+         this.entityDeserializerQueue.runAll();
+     }
+ 

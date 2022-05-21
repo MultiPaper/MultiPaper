@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 25 Nov 2021 00:20:51 +1000
+Subject: [PATCH] Add /servers
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+index 2fd69c0f915f1c3cb1c410d5dab0498f05d5c888..fa03c956d06f3b093545e2861a23c67b3cfff8f5 100644
+--- a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
++++ b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+@@ -4,13 +4,28 @@ import java.util.Map;
+ import org.bukkit.Server;
+ import org.bukkit.command.Command;
+ import org.bukkit.command.SimpleCommandMap;
++import puregero.multipaper.commands.ServersCommand;
+ 
+ public class CraftCommandMap extends SimpleCommandMap {
+ 
+     public CraftCommandMap(Server server) {
+         super(server);
++        setDefaultCommands(); // MultiPaper
+     }
+ 
++    // MultiPaper start
++    @Override
++    public void clearCommands() {
++        super.clearCommands();
++
++        setDefaultCommands();
++    }
++
++    private void setDefaultCommands() {
++        register("multipaper", new ServersCommand("servers"));
++    }
++    // MultiPaper end
++
+     public Map<String, Command> getKnownCommands() {
+         return knownCommands;
+     }
+diff --git a/src/main/java/puregero/multipaper/commands/ServersCommand.java b/src/main/java/puregero/multipaper/commands/ServersCommand.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..cf466251341c1586341d9dd251c4c687f08d326f
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/commands/ServersCommand.java
+@@ -0,0 +1,59 @@
++package puregero.multipaper.commands;
++
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import org.bukkit.ChatColor;
++import org.bukkit.command.Command;
++import org.bukkit.command.CommandSender;
++import org.bukkit.permissions.PermissionDefault;
++import org.jetbrains.annotations.NotNull;
++import puregero.multipaper.ExternalPlayer;
++import puregero.multipaper.ExternalServer;
++import puregero.multipaper.MultiPaper;
++
++public class ServersCommand extends Command {
++    public ServersCommand(String command) {
++        super(command);
++        setPermission(MultiPaperPermissions.registerCommandPermission(command, "Servers command", PermissionDefault.TRUE));
++    }
++
++    @Override
++    public boolean execute(CommandSender sender, @NotNull String commandLabel, String[] args) {
++        sender.sendMessage(ChatColor.GRAY + "[Servers] (Avg Tick Time / Tps / Player Count)");
++
++        for (ExternalServer server : MultiPaper.getConnection().getServersMap().values()) {
++            String tickTime = server.getAverageTickTime() + "ms";
++            if (server.getTps() >= 19.9) {
++                tickTime = ChatColor.GREEN + tickTime;
++            } else if (server.getTps() >= 17.5) {
++                tickTime = ChatColor.YELLOW + tickTime;
++            } else {
++                tickTime = ChatColor.RED + tickTime;
++            }
++
++            String tpsString = String.format("%.1f tps", server.getTps());
++
++            int players = 0;
++
++            for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
++                if ((server.isMe() && MultiPaper.isRealPlayer(player))
++                        || (player instanceof ExternalPlayer && ((ExternalPlayer) player).externalServerConnection == server.getConnection())) {
++                    players ++;
++                }
++            }
++
++            String playersString = players + " player";
++            if (players != 1) {
++                playersString += "s";
++            }
++
++            if (!server.isAlive()) {
++                sender.sendMessage(ChatColor.DARK_GRAY + "[" + server.getName() + "] " + server.getAverageTickTime() + "ms, " + tpsString + ", " + playersString);
++            } else {
++                sender.sendMessage(ChatColor.GREEN + "[" + (server.isMe() ? ChatColor.GOLD : "") + server.getName() + ChatColor.GREEN + "] " + tickTime + ", " + tpsString + ", " + playersString);
++            }
++        }
++
++        return true;
++    }
++}

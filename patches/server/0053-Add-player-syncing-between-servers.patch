@@ -1,0 +1,1032 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 15 Nov 2021 20:30:35 +1000
+Subject: [PATCH] Add player syncing between servers
+
+
+diff --git a/src/main/java/com/destroystokyo/paper/Metrics.java b/src/main/java/com/destroystokyo/paper/Metrics.java
+index 17ebc0ac3d4c91d6818c79e8821681b668bd95c6..e0dc397e12c8e1a07e50102f08bb248b42fda6ac 100644
+--- a/src/main/java/com/destroystokyo/paper/Metrics.java
++++ b/src/main/java/com/destroystokyo/paper/Metrics.java
+@@ -603,7 +603,7 @@ public class Metrics {
+                     return minecraftVersion;
+                 }));
+ 
+-                metrics.addCustomChart(new Metrics.SingleLineChart("players", () -> Bukkit.getOnlinePlayers().size()));
++                metrics.addCustomChart(new Metrics.SingleLineChart("players", () -> (int) Bukkit.getOnlinePlayers().stream().filter(MultiPaper::isRealPlayer).count())); // MultiPaper
+                 metrics.addCustomChart(new Metrics.SimplePie("online_mode", () -> Bukkit.getOnlineMode() ? "online" : "offline"));
+                 metrics.addCustomChart(new Metrics.SimplePie("multipaper_version", () -> (Metrics.class.getPackage().getImplementationVersion() != null) ? Metrics.class.getPackage().getImplementationVersion() : "unknown")); // Tuinity - we have our own bstats page // Airplane // MultiPaper
+                 metrics.addCustomChart(new Metrics.SimplePie("total_servers", () -> String.valueOf(MultiPaper.getConnection().getServersMap().values().stream().filter(ExternalServer::isAlive).count()))); // MultiPaper
+diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
+index 6cfbe844ac8603ef937714370b8ea3d0e6687ef4..6e8782ed12bbb0f7b5027d8a41f4ee0e1ee69cd7 100644
+--- a/src/main/java/net/minecraft/network/Connection.java
++++ b/src/main/java/net/minecraft/network/Connection.java
+@@ -53,6 +53,8 @@ import org.slf4j.MarkerFactory;
+ 
+ 
+ import io.netty.util.concurrent.AbstractEventExecutor; // Paper
++import puregero.multipaper.MultiPaper;
++
+ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+ 
+     private static final float AVERAGE_PACKETS_SMOOTHING = 0.75F;
+@@ -612,6 +614,9 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+         this.preparing = false;
+         clearPacketQueue(); // Paper
+         // Spigot End
++        if (getPlayer() != null && getPlayer().hasRegisteredOnMaster) {
++            MultiPaper.sendPlayerDisconnect(getPlayer()); // MultiPaper
++        }
+         if (this.channel.isOpen()) {
+             this.channel.close(); // We can't wait as this may be called from an event loop.
+             this.disconnectedReason = disconnectReason;
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index 95e0004c685d64f98ddb819a8b98b5d279533f09..d7d387b6182f6165aae824bc1239bc5aa724eb68 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -1478,6 +1478,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+             }
+         }
+ 
++        MultiPaper.tick(); // MultiPaper
++
+         // Paper start - incremental chunk and player saving
+         int playerSaveInterval = com.destroystokyo.paper.PaperConfig.playerAutoSaveRate;
+         if (playerSaveInterval < 0) {
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index a6edf5117d4ae03d8294e7bb74dd2d77048895a5..bcccddb2f65ec79bdc99e7aa9a6b59736212f3ac 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -6,14 +6,8 @@ import com.mojang.authlib.GameProfile;
+ import com.mojang.datafixers.util.Either;
+ import com.mojang.logging.LogUtils;
+ import com.mojang.serialization.DataResult;
+-import java.util.Collection;
+-import java.util.Iterator;
+-import java.util.List;
+-import java.util.Objects;
+-import java.util.Optional;
+-import java.util.OptionalInt;
+-import java.util.Random;
+-import java.util.UUID;
++
++import java.util.*;
+ import javax.annotation.Nullable;
+ import net.minecraft.BlockUtil;
+ import net.minecraft.ChatFormatting;
+@@ -165,6 +159,12 @@ import org.bukkit.event.player.PlayerPortalEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
+ import org.bukkit.inventory.MainHand;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.PlayerChangeDimensionPacket;
++import puregero.multipaper.externalserverprotocol.PlayerChangeGamemodePacket;
++import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
++import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
+ // CraftBukkit end
+ 
+ public class ServerPlayer extends Player {
+@@ -218,12 +218,14 @@ public class ServerPlayer extends Player {
+     private final TextFilter textFilter;
+     private boolean textFilteringEnabled;
+     private boolean allowsListing;
++    public boolean hasRegisteredOnMaster = false; // MultiPaper
++    public boolean didMultiPaperJoin = false; // MultiPaper
+     private final ContainerSynchronizer containerSynchronizer;
+     private final ContainerListener containerListener;
+     private int containerCounter;
+     public int latency;
+     public boolean wonGame;
+-    private int containerUpdateDelay; // Paper
++    public int containerUpdateDelay; // Paper // MultiPaper - make public
+     public long loginTime; // Paper
+     public int patrolSpawnDelay; // Paper - per player patrol spawns
+     // Paper start - cancellable death event
+@@ -1180,6 +1182,26 @@ public class ServerPlayer extends Player {
+             }
+             // Paper end
+ 
++            // MultiPaper start
++            ServerLevel destination = worldserver;
++            List<ExternalServerConnection> serversToCreatePlayerOn = new ArrayList<>();
++            MultiPaper.forEachExternalServer(externalServer -> {
++                if (externalServer.getConnection() != null && externalServer.getConnection().isOpen()) {
++                    boolean subscribedToSoruce = externalServer.getConnection().subscribedWorlds.contains(worldserver1.getWorld().getName());
++                    boolean subscribedToDestination = externalServer.getConnection().subscribedWorlds.contains(destination.getWorld().getName());
++
++                    if (subscribedToSoruce && subscribedToDestination) {
++                        externalServer.getConnection().send(new PlayerChangeDimensionPacket(this, false));
++                    } else if (subscribedToDestination) {
++                        serversToCreatePlayerOn.add(externalServer.getConnection());
++                    } else if (subscribedToSoruce) {
++                        externalServer.getConnection().send(new PlayerRemovePacket(this));
++                    }
++                }
++            });
++            PlayerCreatePacket.sendPlayer(this, serversToCreatePlayerOn.toArray(ExternalServerConnection[]::new));
++            // MultiPaper end
++
+             return this;
+         }
+     }
+@@ -1840,6 +1862,8 @@ public class ServerPlayer extends Player {
+                 this.setCamera(this);
+             }
+ 
++            MultiPaper.broadcastPacketToExternalServers(this, new PlayerChangeGamemodePacket(this)); // MultiPaper
++
+             this.onUpdateAbilities();
+             this.updateEffectVisibility();
+             return event; // Paper
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index f115aabaf67976a503a76f5213dd52b7b7dfab4e..33b5a4cd5fce1e7bec0c01bf8ce3f0a1a16d4fc9 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -23,6 +23,8 @@ import java.util.function.UnaryOperator;
+ import java.util.stream.Collectors;
+ import java.util.stream.Stream;
+ import javax.annotation.Nullable;
++
++import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+ import net.minecraft.ChatFormatting;
+ import net.minecraft.CrashReport;
+ import net.minecraft.CrashReportCategory;
+@@ -143,7 +145,6 @@ import net.minecraft.world.level.block.entity.CommandBlockEntity;
+ import net.minecraft.world.level.block.entity.JigsawBlockEntity;
+ import net.minecraft.world.level.block.entity.SignBlockEntity;
+ import net.minecraft.world.level.block.entity.StructureBlockEntity;
+-import net.minecraft.world.level.block.state.BlockBehaviour;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.BlockHitResult;
+@@ -177,7 +178,6 @@ import org.bukkit.Location;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
+ import org.bukkit.craftbukkit.event.CraftEventFactory;
+ import org.bukkit.craftbukkit.inventory.CraftItemStack;
+-import org.bukkit.craftbukkit.util.CraftChatMessage;
+ import org.bukkit.craftbukkit.util.CraftMagicNumbers;
+ import org.bukkit.craftbukkit.util.LazyPlayerSet;
+ import org.bukkit.craftbukkit.util.Waitable;
+@@ -194,7 +194,6 @@ import org.bukkit.event.inventory.InventoryCreativeEvent;
+ import org.bukkit.event.inventory.InventoryType.SlotType;
+ import org.bukkit.event.inventory.SmithItemEvent;
+ import org.bukkit.event.player.AsyncPlayerChatEvent;
+-import org.bukkit.event.player.PlayerAnimationEvent;
+ import org.bukkit.event.player.PlayerChatEvent;
+ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+ import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+@@ -213,6 +212,9 @@ import org.bukkit.inventory.EquipmentSlot;
+ import org.bukkit.inventory.InventoryView;
+ import org.bukkit.inventory.SmithingInventory;
+ import co.aikar.timings.MinecraftTimings; // Paper
++import puregero.multipaper.ExternalPlayer;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
+ // CraftBukkit end
+ 
+ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, ServerGamePacketListener {
+@@ -439,7 +441,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+ 
+         PlayerKickEvent event = new PlayerKickEvent(this.player.getBukkitEntity(), reason, leaveMessage, cause); // Paper - Adventure & kick event reason
+ 
+-        if (this.cserver.getServer().isRunning()) {
++        boolean shouldKick = reason != PlayerRemovePacket.EXTERNAL_DISCONNECT_COMPONENT && !(reason == PlayerRemovePacket.LOGGED_IN_FROM_ANOTHER_LOCATION && this.player instanceof ExternalPlayer); // MultiPaper - don't run kick event for external disconnects
++        if (this.cserver.getServer().isRunning() && shouldKick && !PlainTextComponentSerializer.plainText().serialize(reason).startsWith("sendto:")) { // MultiPaper
+             this.cserver.getPluginManager().callEvent(event);
+         }
+ 
+@@ -452,6 +455,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+         // CraftBukkit end
+ 
+         this.player.quitReason = org.bukkit.event.player.PlayerQuitEvent.QuitReason.KICKED; // Paper
++        if (shouldKick) // MultiPaper
+         this.connection.send(new ClientboundDisconnectPacket(ichatbasecomponent), (future) -> {
+             this.connection.disconnect(ichatbasecomponent);
+         });
+@@ -2008,7 +2012,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+         this.player.disconnect();
+         // Paper start - Adventure
+         quitMessage = quitMessage == null ? this.server.getPlayerList().remove(this.player) : this.server.getPlayerList().remove(this.player, quitMessage); // Paper - pass in quitMessage to fix kick message not being used
+-        if ((quitMessage != null) && !quitMessage.equals(net.kyori.adventure.text.Component.empty())) {
++        if ((quitMessage != null) && !quitMessage.equals(net.kyori.adventure.text.Component.empty()) && MultiPaper.isRealPlayer(this.player)) { // MultiPaper - Only run for real players
+             this.server.getPlayerList().broadcastMessage(PaperAdventure.asVanilla(quitMessage), ChatType.SYSTEM, Util.NIL_UUID);
+             // Paper end
+         }
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index 95fe4240f3e1174ec36598f24d63f0073c13b376..042fdc2f0829d77a3be4063f22af282b763bf32d 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -14,14 +14,7 @@ import java.io.File;
+ import java.net.SocketAddress;
+ import java.nio.file.Path;
+ import java.text.SimpleDateFormat;
+-import java.util.Collection;
+-import java.util.Iterator;
+-import java.util.List;
+-import java.util.Map;
+-import java.util.Objects;
+-import java.util.Optional;
+-import java.util.Set;
+-import java.util.UUID;
++import java.util.*;
+ import java.util.function.Function;
+ import javax.annotation.Nullable;
+ import net.minecraft.ChatFormatting;
+@@ -35,6 +28,7 @@ import net.minecraft.network.Connection;
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.network.chat.ChatType;
+ import net.minecraft.network.chat.Component;
++import net.minecraft.network.chat.TextComponent;
+ import net.minecraft.network.chat.TranslatableComponent;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.game.ClientboundChangeDifficultyPacket;
+@@ -118,6 +112,13 @@ import org.bukkit.event.player.PlayerJoinEvent;
+ import org.bukkit.event.player.PlayerLoginEvent;
+ import org.bukkit.event.player.PlayerQuitEvent;
+ import org.bukkit.event.player.PlayerRespawnEvent;
++import puregero.multipaper.ExternalPlayer;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.PlayerChangeDimensionPacket;
++import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
++import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
++import puregero.multipaper.externalserverprotocol.PlayerRespawnPacket;
+ // CraftBukkit end
+ 
+ public abstract class PlayerList {
+@@ -189,6 +190,22 @@ public abstract class PlayerList {
+         Optional<GameProfile> optional = usercache.get(gameprofile.getId());
+         String s = (String) optional.map(GameProfile::getName).orElse(gameprofile.getName());
+ 
++        // MultiPaper start
++        if (!MultiPaper.sendPlayerConnect(player).join()) {
++            TextComponent chatmessage = new TextComponent("You are already logged into another server.");
++            connection.send(new ClientboundDisconnectPacket(chatmessage));
++            connection.disconnect(chatmessage);
++            pendingPlayers.remove(player.getUUID(), player);
++            return;
++        }
++        player.hasRegisteredOnMaster = true;
++        if (!connection.isConnected()) {
++            MultiPaper.sendPlayerDisconnect(player); // MultiPaper
++            pendingPlayers.remove(player.getUUID(), player);
++            return;
++        }
++        // MultiPaper end
++
+         usercache.add(gameprofile);
+         CompoundTag nbttagcompound = this.load(player);
+         ResourceKey resourcekey;
+@@ -326,8 +343,10 @@ public abstract class PlayerList {
+     private void postChunkLoadJoin(ServerPlayer player, ServerLevel worldserver1, Connection networkmanager, ServerGamePacketListenerImpl playerconnection, CompoundTag nbttagcompound, String s1, String s) {
+         pendingPlayers.remove(player.getUUID(), player);
+         if (!networkmanager.isConnected()) {
++            MultiPaper.sendPlayerDisconnect(player); // MultiPaper
+             return;
+         }
++        MultiPaper.onPlayerJoin(player); // MultiPaper
+         player.didPlayerJoinEvent = true;
+         // Paper end
+         TranslatableComponent chatmessage;
+@@ -614,10 +633,10 @@ public abstract class PlayerList {
+         }
+ 
+         PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(entityplayer.getBukkitEntity(), leaveMessage, entityplayer.quitReason); // Paper - quit reason
+-        if (entityplayer.didPlayerJoinEvent) this.cserver.getPluginManager().callEvent(playerQuitEvent); // Paper - if we disconnected before join ever fired, don't fire quit
++        if (entityplayer.didPlayerJoinEvent && MultiPaper.isRealPlayer(entityplayer)) this.cserver.getPluginManager().callEvent(playerQuitEvent); // Paper - if we disconnected before join ever fired, don't fire quit // MultiPaper - don't run for external players
+         entityplayer.getBukkitEntity().disconnect(playerQuitEvent.getQuitMessage());
+ 
+-        if (server.isSameThread()) entityplayer.doTick(); // SPIGOT-924 // Paper - don't tick during emergency shutdowns (Watchdog)
++        if (server.isSameThread() && MultiPaper.isRealPlayer(entityplayer)) entityplayer.doTick(); // SPIGOT-924 // Paper - don't tick during emergency shutdowns (Watchdog) // MultiPaper - don't run for external players
+         // CraftBukkit end
+ 
+         // Paper start - Remove from collideRule team if needed
+@@ -699,6 +718,8 @@ public abstract class PlayerList {
+         this.cserver.getScoreboardManager().removePlayer(entityplayer.getBukkitEntity());
+         // CraftBukkit end
+ 
++        MultiPaper.onPlayerDisconnect(entityplayer); // MultiPaper
++
+         return entityplayer.didPlayerJoinEvent ? playerQuitEvent.quitMessage() : null; // CraftBukkit // Paper - Adventure // Paper - don't print quit if we never printed join
+     }
+ 
+@@ -828,6 +849,12 @@ public abstract class PlayerList {
+ 
+     public ServerPlayer respawn(ServerPlayer entityplayer, ServerLevel worldserver, boolean flag, Location location, boolean avoidSuffocation, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag...respawnFlags) {
+         // Paper end
++        // Multipaper start
++        if (MultiPaper.isExternalPlayer(entityplayer)) {
++            ((ExternalPlayer) entityplayer).externalServerConnection.send(new PlayerRespawnPacket(entityplayer, worldserver, flag, location, avoidSuffocation, respawnFlags));
++            return entityplayer;
++        }
++        // MultiPaper end
+         entityplayer.stopRiding(); // CraftBukkit
+         this.players.remove(entityplayer);
+         this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot
+@@ -1005,6 +1032,27 @@ public abstract class PlayerList {
+         // Paper end
+ 
+         // CraftBukkit end
++
++        // MultiPaper start
++        boolean isRespawnFinal = isRespawn;
++        List<ExternalServerConnection> serversToCreatePlayerOn = new ArrayList<>();
++        MultiPaper.forEachExternalServer(externalServer -> {
++            if (externalServer.getConnection() != null && externalServer.getConnection().isOpen()) {
++                boolean subscribedToSoruce = externalServer.getConnection().subscribedWorlds.contains(fromWorld.getName());
++                boolean subscribedToDestination = externalServer.getConnection().subscribedWorlds.contains(worldserver1.getWorld().getName());
++
++                if (subscribedToSoruce && subscribedToDestination) {
++                    externalServer.getConnection().send(new PlayerChangeDimensionPacket(entityplayer1, isRespawnFinal));
++                } else if (subscribedToDestination) {
++                    serversToCreatePlayerOn.add(externalServer.getConnection());
++                } else if (subscribedToSoruce) {
++                    externalServer.getConnection().send(new PlayerRemovePacket(entityplayer1));
++                }
++            }
++        });
++        PlayerCreatePacket.sendPlayer(entityplayer1, serversToCreatePlayerOn.toArray(ExternalServerConnection[]::new));
++        // MultiPaper end
++
+         return entityplayer1;
+     }
+ 
+@@ -1015,6 +1063,20 @@ public abstract class PlayerList {
+         this.sendPlayerPermissionLevel(player, i);
+     }
+ 
++    // MultiPaper start - Add player manually
++    public void addPlayer(ServerPlayer player) {
++        players.add(player);
++        playersByUUID.put(player.getUUID(), player);
++        playersByName.put(player.getScoreboardName().toLowerCase(Locale.ROOT), player);
++    }
++
++    public void removePlayer(ServerPlayer player) {
++        players.remove(player);
++        playersByUUID.remove(player.getUUID());
++        playersByName.remove(player.getScoreboardName().toLowerCase(Locale.ROOT));
++    }
++    // MultiPaper end
++
+     public void tick() {
+         if (++this.sendAllPlayerInfoIn > 600) {
+             // CraftBukkit start
+diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..d89fe348e38d98197c97f09264a3417c873d969a
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
+@@ -0,0 +1,87 @@
++package puregero.multipaper;
++
++import com.mojang.authlib.GameProfile;
++import io.netty.util.concurrent.Future;
++import io.netty.util.concurrent.GenericFutureListener;
++import net.minecraft.network.Connection;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.server.network.ServerGamePacketListenerImpl;
++import net.minecraft.world.level.GameType;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftServer;
++import org.bukkit.craftbukkit.CraftWorld;
++
++import javax.annotation.Nullable;
++import java.net.InetSocketAddress;
++import java.util.UUID;
++
++public class ExternalPlayer extends ServerPlayer {
++
++    private static final Logger LOGGER = LogManager.getLogger(ExternalPlayer.class.getSimpleName());
++    public ExternalServerConnection externalServerConnection;
++    private final InetSocketAddress address;
++    private boolean sendPackets = true;
++
++    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address) {
++        return new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address);
++    }
++
++    public ExternalPlayer(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address) {
++        super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), new GameProfile(uuid, name));
++        this.externalServerConnection = externalServerConnection;
++        this.address = address;
++        this.isRealPlayer = true;
++        this.didPlayerJoinEvent = true;
++        this.valid = true;
++        this.onGround = true;
++        connection = new ServerGamePacketListenerImpl(getServer(), new ExternalPlayerConnection(PacketFlow.CLIENTBOUND), this);
++        setPos(x, y, z);
++        setYRot(yaw);
++        setXRot(pitch);
++        getServer().getPlayerList().addPlayer(this);
++        ((ServerLevel) level).addNewPlayer(this);
++        sendPackets = false;
++        containerMenu.transferTo(containerMenu, getBukkitEntity());
++        initInventoryMenu();
++        sendPackets = true;
++        gameMode.changeGameModeForPlayer(gamemode);
++        detectEquipmentUpdates();
++        this.server.getProfileCache().add(this.getGameProfile());
++    }
++
++    @Override
++    public void tick() {
++        // Don't tick
++    }
++
++    private class ExternalPlayerConnection extends Connection {
++        public ExternalPlayerConnection(PacketFlow side) {
++            super(side);
++            this.address = ExternalPlayer.this.address;
++        }
++
++        @Override
++        public void setReadOnly() {
++            // Do nothing
++        }
++ 
++        @Override
++        public boolean isConnected() {
++            return true;
++        }
++
++        @Override
++        public void send(Packet<?> packet, @Nullable GenericFutureListener<? extends Future<? super Void>> callback) {
++            if (sendPackets) {
++
++            } else {
++//                LOGGER.info("Not sending packet " + packet.getClass().getSimpleName());
++            }
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+index 60bb4c2da01b07dee539c2a260d2c5e02c110988..9f7ce7885f2fde34ffe4b387b06852318ccea263 100644
+--- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
++++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+@@ -9,6 +9,8 @@ import io.netty.util.internal.SystemPropertyUtil;
+ import net.minecraft.network.*;
+ import net.minecraft.network.protocol.PacketFlow;
+ import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
++import net.minecraft.server.dedicated.DedicatedServer;
++import net.minecraft.server.level.ServerPlayer;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
+ import puregero.multipaper.externalserverprotocol.*;
+@@ -97,6 +99,17 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+                 LOGGER.info("Using Minecraft's event loop");
+             }
+         }
++
++        // And when this closes
++        channel.closeFuture().addListener(future -> {
++            if (future.isDone()) {
++                for (ServerPlayer player : DedicatedServer.getServer().getPlayerList().players) {
++                    if (player instanceof ExternalPlayer && ((ExternalPlayer) player).externalServerConnection == this) {
++                        MultiPaper.runSync(() -> player.connection.disconnect("External server disconnected"));
++                    }
++                }
++            }
++        });
+     }
+ 
+     public Channel getChannel() {
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 7cd6e0c934944b92852f650736bfaf718f78c499..206f3b6a58755b3fea6b607c346c574cc175fc39 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -2,9 +2,16 @@ package puregero.multipaper;
+ 
+ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.Entity;
++import org.bukkit.craftbukkit.entity.CraftEntity;
+ import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
++import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
++import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.PlayerConnectMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.PlayerDisconnectMessage;
+ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.StartMessage;
+ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteTickTimeMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
+ 
+ import java.net.InetSocketAddress;
+ import java.net.SocketAddress;
+@@ -15,6 +22,7 @@ import java.util.function.Consumer;
+ import java.util.function.Supplier;
+ 
+ public class MultiPaper {
++
+     private static MultiPaperConnection multiPaperConnection = null;
+ 
+     public static MultiPaperConnection getConnection() {
+@@ -25,10 +33,35 @@ public class MultiPaper {
+         return multiPaperConnection;
+     }
+ 
++    public static void tick() {
++        for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
++            if (player instanceof ExternalPlayer externalPlayer) {
++                // Copied from Paper start - Configurable container update tick rate
++                if (externalPlayer.containerMenu != externalPlayer.inventoryMenu && --externalPlayer.containerUpdateDelay <= 0) {
++                    externalPlayer.containerMenu.broadcastChanges();
++                    externalPlayer.containerUpdateDelay = externalPlayer.level.paperConfig.containerUpdateTickRate;
++                }
++                // Copied from Paper end
++            }
++        }
++    }
++
+     public static void sendTickTime(long time, double tps) {
+         getConnection().send(new WriteTickTimeMessage(time, (float) tps));
+     }
+ 
++    public static CompletableFuture<Boolean> sendPlayerConnect(ServerPlayer player) {
++        CompletableFuture<Boolean> future = new CompletableFuture<>();
++        getConnection().send(new PlayerConnectMessage(player.getUUID()), message -> {
++            future.complete(((BooleanMessageReply) message).result);
++        });
++        return future;
++    }
++
++    public static void sendPlayerDisconnect(ServerPlayer player) {
++        getConnection().send(new PlayerDisconnectMessage(player.getUUID()));
++    }
++
+     public static void onStart(SocketAddress bindAddress) {
+         getConnection().send(new StartMessage(
+                 System.getProperty("server.address", ((InetSocketAddress) bindAddress).getAddress().getHostAddress()),
+@@ -80,4 +113,39 @@ public class MultiPaper {
+     public static void broadcastPacketToExternalServers(ServerPlayer player, ExternalServerPacket packet) {
+         broadcastPacketToExternalServers(player.getLevel().getWorld().getName(), packet);
+     }
++
++    public static void onPlayerJoin(ServerPlayer player) {
++        player.didMultiPaperJoin = true;
++        PlayerCreatePacket.sendPlayer(player,
++                getConnection().getServersMap().values().stream()
++                        .map(ExternalServer::getConnection)
++                        .filter(connection -> connection != null && connection.isOpen() && connection.subscribedWorlds.contains(player.getLevel().getWorld().getName()))
++                        .toArray(ExternalServerConnection[]::new)
++        );
++    }
++
++    public static void onPlayerDisconnect(ServerPlayer player) {
++        if (!(player instanceof ExternalPlayer) && player.didMultiPaperJoin) {
++            broadcastPacketToExternalServers(player, new PlayerRemovePacket(player));
++        }
++        if (MultiPaper.isRealPlayer(player)) {
++            sendPlayerDisconnect(player);
++        }
++    }
++
++    public static boolean isRealPlayer(Entity entity) {
++        return entity instanceof ServerPlayer && !(entity instanceof ExternalPlayer);
++    }
++
++    public static boolean isRealPlayer(org.bukkit.entity.Entity bukkitEntity) {
++        return isRealPlayer(((CraftEntity) bukkitEntity).getHandle());
++    }
++
++    public static boolean isExternalPlayer(Entity entity) {
++        return entity instanceof ExternalPlayer;
++    }
++
++    public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
++        return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index e3cf79d81b58fabeddf5f42a9351f36a5f2197be..10a45aba2d7fb538e76c7bc7889b52811278d255 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -14,6 +14,11 @@ public class ExternalServerPacketSerializer {
+         addPacket(HelloPacket.class, HelloPacket::new);
+         addPacket(SetCompressionPacket.class, SetCompressionPacket::new);
+         addPacket(SubscribeToWorldPacket.class, SubscribeToWorldPacket::new);
++        addPacket(PlayerCreatePacket.class, PlayerCreatePacket::new);
++        addPacket(PlayerRemovePacket.class, PlayerRemovePacket::new);
++        addPacket(PlayerChangeGamemodePacket.class, PlayerChangeGamemodePacket::new);
++        addPacket(PlayerRespawnPacket.class, PlayerRespawnPacket::new);
++        addPacket(PlayerChangeDimensionPacket.class, PlayerChangeDimensionPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..28784d2cb62328bb087bd22485696ae0c359bbe8
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java
+@@ -0,0 +1,73 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.Entity;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class PlayerChangeDimensionPacket extends ExternalServerPacket {
++
++    private final UUID uuid;
++    private final String world;
++    private final double x;
++    private final double y;
++    private final double z;
++    private final boolean reset;
++
++    public PlayerChangeDimensionPacket(ServerPlayer player, boolean reset) {
++        this.uuid = player.getUUID();
++        this.world = player.getLevel().convertable.getLevelId();
++        this.x = player.getX();
++        this.y = player.getY();
++        this.z = player.getZ();
++        this.reset = reset;
++    }
++
++    public PlayerChangeDimensionPacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++        world = in.readUtf();
++        x = in.readDouble();
++        y = in.readDouble();
++        z = in.readDouble();
++        reset = in.readBoolean();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeUtf(world);
++        out.writeDouble(x);
++        out.writeDouble(y);
++        out.writeDouble(z);
++        out.writeBoolean(reset);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            // Remove from old world
++            player.getLevel().removePlayerImmediately(player, Entity.RemovalReason.DISCARDED);
++
++            player.setPosRaw(x, y, z);
++
++            if (reset) {
++                player.reset();
++            }
++
++            // Add to new world
++            player.setLevel(level);
++            player.unsetRemoved();
++            level.addRespawnedPlayer(player);
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..a9814bbe4fc9eff864f30b389e88cb1375704de0
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java
+@@ -0,0 +1,37 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.level.GameType;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class PlayerChangeGamemodePacket extends ExternalServerPacket {
++
++    private final UUID uuid;
++    private final GameType gamemode;
++
++    public PlayerChangeGamemodePacket(ServerPlayer player) {
++        this.uuid = player.getUUID();
++        this.gamemode = player.gameMode.getGameModeForPlayer();
++    }
++
++    public PlayerChangeGamemodePacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++        gamemode = GameType.byId(in.readByte());
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeByte(gamemode.getId());
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> MinecraftServer.getServer().getPlayerList().getPlayer(uuid).gameMode.changeGameModeForPlayer(gamemode));
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..41898cbf342a5614fc6d08a3828a72398713cc82
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+@@ -0,0 +1,113 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.level.GameType;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.event.player.PlayerKickEvent;
++import puregero.multipaper.ExternalPlayer;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.net.InetAddress;
++import java.net.InetSocketAddress;
++import java.net.UnknownHostException;
++import java.util.UUID;
++
++public class PlayerCreatePacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PlayerCreatePacket.class.getSimpleName());
++
++    private final String name;
++    private final UUID uuid;
++    private final String world;
++    private final double x;
++    private final double y;
++    private final double z;
++    private final float yaw;
++    private final float pitch;
++    private final GameType gamemode;
++    private final byte[] ip;
++    private final short port;
++
++    private PlayerCreatePacket(ServerPlayer player) {
++        this.name = player.getScoreboardName();
++        this.uuid = player.getUUID();
++        this.world = player.getLevel().convertable.getLevelId();
++        this.x = player.getX();
++        this.y = player.getY();
++        this.z = player.getZ();
++        this.yaw = player.getYRot();
++        this.pitch = player.getXRot();
++        this.gamemode = player.gameMode.getGameModeForPlayer();
++        this.ip = ((InetSocketAddress) player.connection.connection.address).getAddress().getAddress();
++        this.port = (short) ((InetSocketAddress) player.connection.connection.address).getPort();
++    }
++
++    public PlayerCreatePacket(FriendlyByteBuf in) {
++        name = in.readUtf();
++        uuid = in.readUUID();
++        world = in.readUtf();
++        x = in.readDouble();
++        y = in.readDouble();
++        z = in.readDouble();
++        yaw = in.readFloat();
++        pitch = in.readFloat();
++        gamemode = GameType.byId(in.readByte());
++        ip = in.readByteArray();
++        port = in.readShort();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(name);
++        out.writeUUID(uuid);
++        out.writeUtf(world);
++        out.writeDouble(x);
++        out.writeDouble(y);
++        out.writeDouble(z);
++        out.writeFloat(yaw);
++        out.writeFloat(pitch);
++        out.writeByte(gamemode.getId());
++        out.writeByteArray(ip);
++        out.writeShort(port);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        LOGGER.info("Adding player " + name + " (" + uuid + ")");
++        MultiPaper.runSync(() -> {
++            ServerPlayer existingPlayer = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++            if (existingPlayer != null) {
++                LOGGER.warn("Trying to add external player " + name + " (" + uuid + "), but they're already online as a " + existingPlayer.getClass().getSimpleName() + ", kicking them");
++                existingPlayer.connection.disconnect(PlayerRemovePacket.LOGGED_IN_FROM_ANOTHER_LOCATION, PlayerKickEvent.Cause.DUPLICATE_LOGIN);
++            }
++
++            InetSocketAddress address = null;
++            try {
++                address = new InetSocketAddress(InetAddress.getByAddress(ip), port & 0xFFFF);
++            } catch (UnknownHostException e) {
++                e.printStackTrace();
++            }
++
++            ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address);
++        });
++    }
++
++    private static void send(ExternalServerPacket packet, ExternalServerConnection... connections) {
++        for (ExternalServerConnection connection : connections) {
++            connection.send(packet);
++        }
++    }
++
++    public static void sendPlayer(ServerPlayer player, ExternalServerConnection... connections) {
++        if (connections.length == 0) {
++            // Don't process packets if there's no one to send to
++            return;
++        }
++
++        send(new PlayerCreatePacket(player), connections);
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..d5853995ed4774799475e5f1c156d5814e524c9d
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
+@@ -0,0 +1,49 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.kyori.adventure.text.Component;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.event.player.PlayerKickEvent;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class PlayerRemovePacket extends ExternalServerPacket {
++
++    public static Component EXTERNAL_DISCONNECT_COMPONENT = Component.text("Disconnected from external server");
++    public static Component LOGGED_IN_FROM_ANOTHER_LOCATION = Component.text("Logged in from another location");
++    private static final Logger LOGGER = LogManager.getLogger(PlayerRemovePacket.class.getSimpleName());
++
++    private final UUID uuid;
++
++    public PlayerRemovePacket(ServerPlayer player) {
++        this.uuid = player.getUUID();
++    }
++
++    public PlayerRemovePacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            if (player == null) {
++                LOGGER.warn("Tried to remove a non-existent player with uuid " + uuid);
++                return;
++            }
++
++            player.connection.disconnect(EXTERNAL_DISCONNECT_COMPONENT, PlayerKickEvent.Cause.TIMEOUT);
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRespawnPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRespawnPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..4d92fd923e58058422f0cdaa7df47c6c3ead888b
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRespawnPacket.java
+@@ -0,0 +1,86 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
++import org.bukkit.Bukkit;
++import org.bukkit.Location;
++import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.event.player.PlayerRespawnEvent;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class PlayerRespawnPacket extends ExternalServerPacket {
++
++    private final UUID uuid;
++    private final String world;
++    private final boolean alive;
++    private final double x;
++    private final double y;
++    private final double z;
++    private final float yaw;
++    private final float pitch;
++    private final boolean avoidSuffocation;
++    private final PlayerRespawnEvent.RespawnFlag[] respawnFlags;
++
++    public PlayerRespawnPacket(ServerPlayer player, ServerLevel worldserver, boolean alive, Location location, boolean avoidSuffocation, PlayerRespawnEvent.RespawnFlag[] respawnFlags) {
++        this.uuid = player.getUUID();
++        this.world = worldserver.convertable.getLevelId();
++        this.alive = alive;
++        this.x = location.getX();
++        this.y = location.getY();
++        this.z = location.getZ();
++        this.yaw = location.getYaw();
++        this.pitch = location.getPitch();
++        this.avoidSuffocation = avoidSuffocation;
++        this.respawnFlags = respawnFlags;
++    }
++
++    public PlayerRespawnPacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++        world = in.readUtf();
++        alive = in.readBoolean();
++        x = in.readDouble();
++        y = in.readDouble();
++        z = in.readDouble();
++        yaw = in.readFloat();
++        pitch = in.readFloat();
++        avoidSuffocation = in.readBoolean();
++
++        respawnFlags = new PlayerRespawnEvent.RespawnFlag[in.readInt()];
++        for (int i = 0; i < respawnFlags.length; i++) {
++            respawnFlags[i] = PlayerRespawnEvent.RespawnFlag.valueOf(in.readUtf());
++        }
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeUtf(world);
++        out.writeBoolean(alive);
++        out.writeDouble(x);
++        out.writeDouble(y);
++        out.writeDouble(z);
++        out.writeFloat(yaw);
++        out.writeFloat(pitch);
++        out.writeBoolean(avoidSuffocation);
++
++        out.writeInt(respawnFlags.length);
++        for (PlayerRespawnEvent.RespawnFlag flag : respawnFlags) {
++            out.writeUtf(flag.name());
++        }
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            level.getServer().getPlayerList().respawn(player, level, alive, new Location(level.getWorld(), x, y, z, yaw, pitch), avoidSuffocation, respawnFlags);
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
+index 5cbf42b51d99d13545b17be258e52f0638d73ef9..d6c1f3684d6209d9309c144170e20e9d0c12fe93 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
+@@ -1,6 +1,7 @@
+ package puregero.multipaper.externalserverprotocol;
+ 
+ import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.level.ServerPlayer;
+ import org.bukkit.Bukkit;
+ import org.bukkit.World;
+ import org.bukkit.craftbukkit.CraftWorld;
+@@ -35,6 +36,10 @@ public class SubscribeToWorldPacket extends ExternalServerPacket {
+     }
+ 
+     private void onWorldSubscribe(ExternalServerConnection connection, CraftWorld craftWorld) {
+-
++        for (ServerPlayer player : craftWorld.getHandle().players) {
++            if (MultiPaper.isRealPlayer(player)) {
++                PlayerCreatePacket.sendPlayer(player, connection);
++            }
++        }
+     }
+ }

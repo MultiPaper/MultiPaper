@@ -26,6 +26,26 @@ index 1e0d261439255091a6f61485c0747231fbd5b1db..345a6822c9cc8e8a74e63d78dbbeeaeb
              Bootstrap.bootStrap();
              Bootstrap.validate();
              Util.startTimerHackThread();
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 0a6c7b042ed9a21c026afb84aff847729491f752..9b73c28ee0d435da5a967eea2893f3832ebe8a0d 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -244,6 +244,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
+ import org.yaml.snakeyaml.error.MarkedYAMLException;
+ 
+ import net.md_5.bungee.api.chat.BaseComponent; // Spigot
++import puregero.multipaper.permissions.MultiPaperPermissions;
+ 
+ import javax.annotation.Nullable; // Paper
+ import javax.annotation.Nonnull; // Paper
+@@ -484,6 +485,7 @@ public final class CraftServer implements Server {
+             this.commandMap.registerServerAliases();
+             DefaultPermissions.registerCorePermissions();
+             CraftDefaultPermissions.registerCorePermissions();
++            MultiPaperPermissions.registerCorePermissions(); // MultiPaper
+             if (!com.destroystokyo.paper.PaperConfig.loadPermsBeforePlugins) this.loadCustomPermissions(); // Paper
+             this.helpMap.initializeCommands();
+             this.syncCommands();
 diff --git a/src/main/java/org/bukkit/craftbukkit/Main.java b/src/main/java/org/bukkit/craftbukkit/Main.java
 index fbe68bd4739d9a0e7d9bc4c3d5ba8ecfd2d13954..74fb5b3197cd2bdb151058dcb0b8630261e82bd9 100644
 --- a/src/main/java/org/bukkit/craftbukkit/Main.java
@@ -244,5 +264,50 @@ index 0000000000000000000000000000000000000000..9c8ec4362967e2bfa54f4d7ae2956f99
 +    public static boolean useLocalPlayerCountForServerIsFullKick;
 +    private static void useLocalPlayerCountForServerIsFullKick() {
 +        useLocalPlayerCountForServerIsFullKick = getBoolean("useLocalPlayerCountForServerIsFullKick", false);
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java b/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..f7d9a1538ec842e453e5add3f9e33f8c43bfa3d2
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java
+@@ -0,0 +1,17 @@
++package puregero.multipaper.permissions;
++
++import org.bukkit.permissions.Permission;
++import org.bukkit.util.permissions.DefaultPermissions;
++import org.jetbrains.annotations.NotNull;
++
++public class MultiPaperCommandPermissions {
++    private static final String ROOT = "multipaper.command";
++    private static final String PREFIX = ROOT + ".";
++
++    public static void registerPermissions(@NotNull Permission parent) {
++        Permission commands = DefaultPermissions.registerPermission(ROOT, "Gives the user the ability to use all MultiPaper commands", parent);
++
++
++        commands.recalculatePermissibles();
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/permissions/MultiPaperPermissions.java b/src/main/java/puregero/multipaper/permissions/MultiPaperPermissions.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..91b2e3564d7c737b2006f8c2860ab43846637384
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/permissions/MultiPaperPermissions.java
+@@ -0,0 +1,16 @@
++package puregero.multipaper.permissions;
++
++import org.bukkit.permissions.Permission;
++import org.bukkit.util.permissions.DefaultPermissions;
++
++public class MultiPaperPermissions {
++    private static final String ROOT = "multipaper";
++
++    public static void registerCorePermissions() {
++        Permission parent = DefaultPermissions.registerPermission(ROOT, "Gives the user the ability to use all MultiPaper utilities and commands");
++
++        MultiPaperCommandPermissions.registerPermissions(parent);
++
++        parent.recalculatePermissibles();
 +    }
 +}

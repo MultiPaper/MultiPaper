@@ -26,15 +26,14 @@ index fa03c956d06f3b093545e2861a23c67b3cfff8f5..4e86da4e5f8af5ab6e07f846545f7b4e
      // MultiPaper end
 diff --git a/src/main/java/puregero/multipaper/commands/MPDebugCommand.java b/src/main/java/puregero/multipaper/commands/MPDebugCommand.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..009922076cc4c33f7a5be7d977215ca7d482811f
+index 0000000000000000000000000000000000000000..d50f2d396a41b6eb5486e48612ce38885bc8cfbb
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/commands/MPDebugCommand.java
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,103 @@
 +package puregero.multipaper.commands;
 +
 +import net.kyori.adventure.text.Component;
 +import net.kyori.adventure.text.format.NamedTextColor;
-+import net.kyori.adventure.text.format.TextColor;
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.phys.Vec3;
@@ -47,6 +46,7 @@ index 0000000000000000000000000000000000000000..009922076cc4c33f7a5be7d977215ca7
 +import org.bukkit.craftbukkit.scheduler.CraftScheduler;
 +import org.bukkit.entity.Player;
 +import org.bukkit.scheduler.BukkitTask;
++import org.jetbrains.annotations.NotNull;
 +import puregero.multipaper.ExternalServer;
 +import puregero.multipaper.MultiPaper;
 +
@@ -54,21 +54,20 @@ index 0000000000000000000000000000000000000000..009922076cc4c33f7a5be7d977215ca7
 +import java.util.Iterator;
 +
 +public class MPDebugCommand extends Command implements Runnable {
-+    private HashSet<Player> debugEnabled = new HashSet<>();
++    private final HashSet<Player> debugEnabled = new HashSet<>();
 +    private BukkitTask task = null;
 +
 +    public MPDebugCommand(String command) {
 +        super(command);
++        setPermission("multipaper.command.mpdebug");
 +    }
 +
 +    @Override
-+    public boolean execute(CommandSender sender, String commandLabel, String[] args) {
-+        if (!(sender instanceof Player)) {
++    public boolean execute(@NotNull CommandSender sender, @NotNull String commandLabel, String[] args) {
++        if (!(sender instanceof Player player)) {
 +            sender.sendMessage(ChatColor.RED + "Only players can execute this command.");
 +            return false;
 +        }
-+
-+        Player player = (Player) sender;
 +
 +        if (debugEnabled.remove(player)) {
 +            player.sendMessage("MultiPaper debug disabled");
@@ -134,3 +133,15 @@ index 0000000000000000000000000000000000000000..009922076cc4c33f7a5be7d977215ca7
 +        }
 +    }
 +}
+diff --git a/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java b/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java
+index b7eb85651189c54cf380c150678761ebb56778c2..546da05992c945e90545bcd0d3f2cb5c2c4dbb03 100644
+--- a/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java
++++ b/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java
+@@ -13,6 +13,7 @@ public class MultiPaperCommandPermissions {
+         Permission commands = DefaultPermissions.registerPermission(ROOT, "Gives the user the ability to use all MultiPaper commands", parent);
+ 
+         DefaultPermissions.registerPermission(PREFIX + "servers", "List details about servers running on this MultiPaper network", PermissionDefault.TRUE, commands);
++        DefaultPermissions.registerPermission(PREFIX + "mpdebug", "MPDebug command", PermissionDefault.TRUE, commands);
+ 
+         commands.recalculatePermissibles();
+     }

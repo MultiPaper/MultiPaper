@@ -20,7 +20,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 
-public class MultiPaperProxy extends Plugin implements Listener {
+public class MultiPaperBungee extends Plugin implements Listener {
 
     private final HashSet<ProxiedPlayer> usingServerCommand = new HashSet<>();
     private boolean balanceNodes = true;

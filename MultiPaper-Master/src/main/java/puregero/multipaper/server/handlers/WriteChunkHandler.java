@@ -10,12 +10,13 @@ import java.util.concurrent.CompletableFuture;
 
 public class WriteChunkHandler {
     public static void handle(ServerConnection connection, WriteChunkMessage message) {
-        if (message.path.equals("region")) {
-            ChunkLockManager.writtenChunk(message.world, message.cx, message.cz);
-        }
-
         CompletableFuture.runAsync(() -> {
             RegionFileCache.putChunkDeflatedData(ReadChunkHandler.getWorldDir(message.world, message.path), message.cx, message.cz, message.data);
+
+            if (message.path.equals("region")) {
+                ChunkLockManager.writtenChunk(message.world, message.cx, message.cz);
+            }
+
             connection.sendReply(new BooleanMessageReply(true), message);
         });
     }

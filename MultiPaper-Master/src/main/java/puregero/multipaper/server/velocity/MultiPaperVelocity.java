@@ -44,7 +44,7 @@ public class MultiPaperVelocity {
     public void onProxyInitialization(ProxyInitializeEvent event) {
         Toml config = this.getConfig();
 
-        this.port = Integer.parseInt(config.getString("port", String.valueOf(MultiPaperServer.DEFAULT_PORT)));
+        this.port = Math.toIntExact(config.getLong("port", Long.valueOf(MultiPaperServer.DEFAULT_PORT)));
         this.balanceNodes = config.getBoolean("balance-nodes", true);
 
         new MultiPaperServer(this.port);

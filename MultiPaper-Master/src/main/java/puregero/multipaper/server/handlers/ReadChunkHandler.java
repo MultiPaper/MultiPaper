@@ -3,10 +3,7 @@ package puregero.multipaper.server.handlers;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.ReadChunkMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ChunkLoadedOnAnotherServerMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.DataMessageReply;
-import puregero.multipaper.server.ChunkLockManager;
-import puregero.multipaper.server.ChunkSubscriptionManager;
-import puregero.multipaper.server.EntitiesSubscriptionManager;
-import puregero.multipaper.server.ServerConnection;
+import puregero.multipaper.server.*;
 import puregero.multipaper.server.util.RegionFileCache;
 
 import java.io.File;
@@ -30,6 +27,8 @@ public class ReadChunkHandler {
 
         if (message.path.equals("region")) {
             ChunkLockManager.waitForLock(message.world, message.cx, message.cz, callback);
+        } else if (message.path.equals("entities")) {
+            EntitiesLockManager.waitForLock(message.world, message.cx, message.cz, callback);
         } else {
             callback.run();
         }

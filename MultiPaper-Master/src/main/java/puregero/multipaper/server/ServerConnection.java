@@ -340,6 +340,11 @@ public class ServerConnection extends MasterBoundMessageHandler {
     }
 
     @Override
+    public void handle(WillSaveEntitiesLaterMessage message) {
+        WillSaveEntitiesHandler.handle(this, message);
+    }
+
+    @Override
     public void handle(WriteAdvancementsMessage message) {
         WriteAdvancementsHandler.handle(this, message);
     }

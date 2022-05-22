@@ -71,6 +71,8 @@ public abstract class MasterBoundMessageHandler extends MessageHandler<MasterBou
 
     public abstract void handle(WillSaveChunkLaterMessage message);
 
+    public abstract void handle(WillSaveEntitiesLaterMessage message);
+
     public abstract void handle(WriteAdvancementsMessage message);
 
     public abstract void handle(WriteChunkMessage message);

@@ -446,6 +446,34 @@ index c8bc4898c9b46ff28e62d3155381922b8959ffb0..4e66707e0537a0fa280d57025bfbe2eb
      @Nullable
      private Supplier<ChunkHolder.FullChunkStatus> fullStatus;
      @Nullable
+diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
+index 537ee82389f0e917836b510bb42d0791f8d4cd16..8d074ebb7c9c7e568f48e3475816ac2cde67dc4b 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
++++ b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
+@@ -25,6 +25,7 @@ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.entity.ChunkEntities;
+ import net.minecraft.world.level.entity.EntityPersistentStorage;
+ import org.slf4j.Logger;
++import puregero.multipaper.MultiPaperEntitiesHandler;
+ 
+ public class EntityStorage implements EntityPersistentStorage<Entity> {
+     private static final Logger LOGGER = LogUtils.getLogger();
+@@ -85,6 +86,7 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+         ChunkPos chunkPos = dataList.getPos();
+         if (dataList.isEmpty()) {
+             if (this.emptyChunks.add(chunkPos.toLong())) {
++                MultiPaperEntitiesHandler.willWriteEntities(level, chunkPos); // MultiPaper
+                 this.worker.store(chunkPos, (CompoundTag)null);
+             }
+             this.emptyChunks.remove(chunkPos.toLong()); // MultiPaper - don't cache empty chunks
+@@ -112,6 +114,7 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+             compoundTag.putInt("DataVersion", SharedConstants.getCurrentVersion().getWorldVersion());
+             compoundTag.put("Entities", listTag);
+             writeChunkPos(compoundTag, chunkPos);
++            MultiPaperEntitiesHandler.willWriteEntities(level, chunkPos); // MultiPaper
+             this.worker.store(chunkPos, compoundTag).exceptionally((ex) -> {
+                 LOGGER.error("Failed to store chunk {}", chunkPos, ex);
+                 return null;
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
 index 303b70f0433ff49a3bee2a0d92c41f01aec38bee..5d1a6394cc8a4de60038149807926ef48d934980 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
@@ -480,7 +508,7 @@ index 303b70f0433ff49a3bee2a0d92c41f01aec38bee..5d1a6394cc8a4de60038149807926ef4
          try { // Paper
          int attempts = 0; Exception laste = null; while (attempts++ < 5) { try { // Paper
 diff --git a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
-index b478b5f0371ffdf1c498becd2d950b4434881a3a..89c05c4d84af0ba828a737a906abeddf309c303c 100644
+index b478b5f0371ffdf1c498becd2d950b4434881a3a..42370672b5297e7360f45c0fc167c110b5a8f1a0 100644
 --- a/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 +++ b/src/main/java/net/minecraft/world/level/entity/PersistentEntitySectionManager.java
 @@ -26,10 +26,15 @@ import net.minecraft.util.CsvOutput;
@@ -511,22 +539,22 @@ index b478b5f0371ffdf1c498becd2d950b4434881a3a..89c05c4d84af0ba828a737a906abeddf
      public final io.papermc.paper.world.EntitySliceManager entitySliceManager; // Paper
  
      public PersistentEntitySectionManager(Class<T> entityClass, LevelCallback<T> handler, EntityPersistentStorage<T> dataAccess, io.papermc.paper.world.EntitySliceManager entitySliceManager) { // Paper
-@@ -311,6 +316,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
-             if (list.isEmpty()) {
+@@ -312,6 +317,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
                  if (persistententitysectionmanager_b == PersistentEntitySectionManager.ChunkLoadStatus.LOADED) {
                      if (callEvent) CraftEventFactory.callEntitiesUnloadEvent(((EntityStorage) this.permanentStorage).level, new ChunkPos(i), ImmutableList.of()); // CraftBukkit
-+                    if (callEvent) MultiPaperEntitiesHandler.onEntitiesUnload(entitySliceManager.world, new ChunkPos(i)); // MultiPaper
                      this.permanentStorage.storeEntities(new ChunkEntities<>(new ChunkPos(i), ImmutableList.of()));
++                    if (callEvent) MultiPaperEntitiesHandler.onEntitiesUnload(entitySliceManager.world, new ChunkPos(i)); // MultiPaper
                  }
  
-@@ -320,6 +326,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
-                 return false;
+                 return true;
+@@ -321,6 +327,7 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
              } else {
                  if (callEvent) CraftEventFactory.callEntitiesUnloadEvent(((EntityStorage) this.permanentStorage).level, new ChunkPos(i), list.stream().map(entity -> (Entity) entity).collect(Collectors.toList())); // CraftBukkit
-+                if (callEvent) MultiPaperEntitiesHandler.onEntitiesUnload(entitySliceManager.world, new ChunkPos(i)); // MultiPaper
                  this.permanentStorage.storeEntities(new ChunkEntities<>(new ChunkPos(i), list));
++                if (callEvent) MultiPaperEntitiesHandler.onEntitiesUnload(entitySliceManager.world, new ChunkPos(i)); // MultiPaper
                  list.forEach(consumer);
                  return true;
+             }
 @@ -371,14 +378,26 @@ public class PersistentEntitySectionManager<T extends EntityAccess> implements A
          ChunkEntities<T> chunkentities; // CraftBukkit - decompile error
  
@@ -803,10 +831,10 @@ index 0da1af36a3145a0dc36c44df76eb2701c9a02132..8e2362a69a02e394bf43b36d108fb46e
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ac38e05564f07db8c20ca7a7ca6e80a93df59c72
+index 0000000000000000000000000000000000000000..f997ed6f246b310ea5c0e09f7aff979a1d9f6eea
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,347 @@
+@@ -0,0 +1,352 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -836,6 +864,7 @@ index 0000000000000000000000000000000000000000..ac38e05564f07db8c20ca7a7ca6e80a9
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.externalserverprotocol.*;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.UnsubscribeEntitiesMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WillSaveEntitiesLaterMessage;
 +
 +import java.util.ArrayList;
 +import java.util.List;
@@ -908,6 +937,10 @@ index 0000000000000000000000000000000000000000..ac38e05564f07db8c20ca7a7ca6e80a9
 +        if (chunk instanceof LevelChunk levelChunk) {
 +            levelChunk.externalEntitiesSubscribers.clear();
 +        }
++    }
++
++    public static void willWriteEntities(ServerLevel level, ChunkPos pos) {
++        MultiPaper.getConnection().send(new WillSaveEntitiesLaterMessage(level.convertable.getLevelId(), pos.x, pos.z));
 +    }
 +
 +    public static void onChunkMove(Entity entity, BlockPos to, BlockPos from) {

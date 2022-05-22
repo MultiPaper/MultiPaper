@@ -36,6 +36,7 @@ public class MasterBoundProtocol extends Protocol<MasterBoundMessage> {
         addMessage(UnsubscribeEntitiesMessage.class, UnsubscribeEntitiesMessage::new);
         addMessage(UploadFileMessage.class, UploadFileMessage::new);
         addMessage(WillSaveChunkLaterMessage.class, WillSaveChunkLaterMessage::new);
+        addMessage(WillSaveEntitiesLaterMessage.class, WillSaveEntitiesLaterMessage::new);
         addMessage(WriteAdvancementsMessage.class, WriteAdvancementsMessage::new);
         addMessage(WriteChunkMessage.class, WriteChunkMessage::new);
         addMessage(WriteDataMessage.class, WriteDataMessage::new);

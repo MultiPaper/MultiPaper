@@ -7,7 +7,6 @@ import puregero.multipaper.server.*;
 import puregero.multipaper.server.util.RegionFileCache;
 
 import java.io.File;
-import java.util.concurrent.CompletableFuture;
 
 public class ReadChunkHandler {
     public static void handle(ServerConnection connection, ReadChunkMessage message) {
@@ -16,8 +15,8 @@ public class ReadChunkHandler {
         }
 
         Runnable callback = () -> {
-            CompletableFuture.runAsync(() -> {
-                byte[] b = RegionFileCache.getChunkDeflatedData(getWorldDir(message.world, message.path), message.cx, message.cz);
+            RegionFileCache.getChunkDeflatedDataAsync(getWorldDir(message.world, message.path), message.cx, message.cz).thenAccept(b -> {
+                System.out.println("[" + (System.currentTimeMillis() % 60000) + "] " + Thread.currentThread().getName() + ": Read " + message.world + " " + message.path + " " + message.cx + " " + message.cz);
                 if (b == null) {
                     b = new byte[0];
                 }

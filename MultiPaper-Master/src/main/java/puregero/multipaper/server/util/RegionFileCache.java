@@ -28,6 +28,7 @@ package puregero.multipaper.server.util;
 import java.io.*;
 import java.lang.ref.*;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 public class RegionFileCache {
 
@@ -67,7 +68,17 @@ public class RegionFileCache {
     }
 
     public static synchronized RegionFile getRegionFileIfExists(File regionDir, int chunkX, int chunkZ) {
-        if (getFileForRegionFile(regionDir, chunkX, chunkZ).isFile()) {
+        File file = getFileForRegionFile(regionDir, chunkX, chunkZ);
+
+        file = canonical(file);
+
+        Reference<RegionFile> ref = cache.get(file);
+
+        if (ref != null && ref.get() != null) {
+            return ref.get();
+        }
+
+        if (file.isFile()) {
             return getRegionFile(regionDir, chunkX, chunkZ);
         } else {
             return null;
@@ -130,7 +141,16 @@ public class RegionFileCache {
         return r.getChunkDataOutputStream(chunkX, chunkZ);
     }
 
-    public static byte[] getChunkDeflatedData(File basePath, int chunkX, int chunkZ) {
+    public static CompletableFuture<byte[]> getChunkDeflatedDataAsync(File basePath, int chunkX, int chunkZ) {
+        RegionFile r = getRegionFileIfExists(basePath, chunkX, chunkZ);
+        if (r != null) {
+            return r.submitTask(regionFile -> regionFile.getDeflatedBytes(chunkX, chunkZ));
+        } else {
+            return CompletableFuture.completedFuture(null);
+        }
+    }
+
+    private static byte[] getChunkDeflatedData(File basePath, int chunkX, int chunkZ) {
         try {
             RegionFile r = getRegionFileIfExists(basePath, chunkX, chunkZ);
             if (r != null) {
@@ -144,7 +164,15 @@ public class RegionFileCache {
         }
     }
 
-    public static void putChunkDeflatedData(File basePath, int chunkX, int chunkZ, byte[] data) {
+    public static CompletableFuture<Void> putChunkDeflatedDataAsync(File basePath, int chunkX, int chunkZ, byte[] data) {
+        RegionFile r = getRegionFile(basePath, chunkX, chunkZ);
+        return r.submitTask(regionFile -> {
+            regionFile.putDeflatedBytes(chunkX, chunkZ, data);
+            return null;
+        });
+    }
+
+    private static void putChunkDeflatedData(File basePath, int chunkX, int chunkZ, byte[] data) {
         try {
             RegionFile r = getRegionFile(basePath, chunkX, chunkZ);
             r.putDeflatedBytes(chunkX, chunkZ, data);

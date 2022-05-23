@@ -63,6 +63,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import java.util.zip.*;
 
 public class RegionFile {
@@ -84,6 +88,7 @@ public class RegionFile {
     private ArrayList<Boolean> sectorFree;
     private int sizeDelta;
     private long lastModified = 0;
+    private CompletableFuture<?> lastTaskInQueue = CompletableFuture.completedFuture(null);
 
     public RegionFile(File path) {
         offsets = new int[SECTOR_INTS];
@@ -146,6 +151,23 @@ public class RegionFile {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Run one task on this RegionFile at a time. This method ensures only one
+     * task is being executed at a time, so that the CompletableFuture async
+     * pool isn't full of tasks that are waiting upon a single RegionFile.
+     * @param task The task to execute
+     */
+    public <T> CompletableFuture<T> submitTask(Function<RegionFile, T> task) {
+        CompletableFuture<T> future = lastTaskInQueue.orTimeout(15, TimeUnit.SECONDS).exceptionally(e -> {
+            if (e instanceof TimeoutException) {
+                e.printStackTrace();
+            }
+            return null;
+        }).thenApplyAsync((value) -> task.apply(this));
+        lastTaskInQueue = future;
+        return future;
     }
 
     /* the modification date of the region file when it was first opened */

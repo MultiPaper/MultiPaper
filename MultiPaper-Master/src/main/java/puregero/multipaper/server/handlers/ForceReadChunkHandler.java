@@ -15,8 +15,7 @@ import java.util.concurrent.CompletableFuture;
 public class ForceReadChunkHandler {
     public static void handle(ServerConnection connection, ForceReadChunkMessage message) {
         ChunkLockManager.waitForLock(message.world, message.cx, message.cz, () -> {
-            CompletableFuture.runAsync(() -> {
-                byte[] b = RegionFileCache.getChunkDeflatedData(getWorldDir(message.world, message.path), message.cx, message.cz);
+            RegionFileCache.getChunkDeflatedDataAsync(getWorldDir(message.world, message.path), message.cx, message.cz).thenAccept(b -> {
                 if (b == null) {
                     b = new byte[0];
                 }

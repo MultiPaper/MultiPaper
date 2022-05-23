@@ -5,15 +5,17 @@ Subject: [PATCH] Load entities async
 
 
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
-index 18504b91ff4f10e5f06dd2f0cca7fb4d41ff172f..a9b6b7d05fb1955188f852e8aaf3ff726a7623de 100644
+index 18504b91ff4f10e5f06dd2f0cca7fb4d41ff172f..3ea9351d2332e38d5700ca0d70c42362185404a1 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
-@@ -11,11 +11,11 @@ import java.util.List;
+@@ -9,15 +9,12 @@ import java.io.IOException;
+ import java.nio.file.Path;
+ import java.util.List;
  import java.util.Objects;
- import java.util.concurrent.CompletableFuture;
- import java.util.concurrent.Executor;
-+import java.util.concurrent.TimeUnit;
-+import java.util.concurrent.TimeoutException;
+-import java.util.concurrent.CompletableFuture;
+-import java.util.concurrent.Executor;
++import java.util.Set;
++import java.util.concurrent.*;
 +
  import net.minecraft.SharedConstants;
 -import net.minecraft.nbt.CompoundTag;
@@ -22,9 +24,11 @@ index 18504b91ff4f10e5f06dd2f0cca7fb4d41ff172f..a9b6b7d05fb1955188f852e8aaf3ff72
 -import net.minecraft.nbt.NbtUtils;
 +import net.minecraft.nbt.*;
  import net.minecraft.server.level.ServerLevel;
- import net.minecraft.util.datafix.DataFixTypes;
+-import net.minecraft.util.datafix.DataFixTypes;
  import net.minecraft.util.thread.ProcessorMailbox;
-@@ -25,6 +25,7 @@ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityType;
+@@ -25,6 +22,7 @@ import net.minecraft.world.level.ChunkPos;
  import net.minecraft.world.level.entity.ChunkEntities;
  import net.minecraft.world.level.entity.EntityPersistentStorage;
  import org.slf4j.Logger;
@@ -32,7 +36,15 @@ index 18504b91ff4f10e5f06dd2f0cca7fb4d41ff172f..a9b6b7d05fb1955188f852e8aaf3ff72
  import puregero.multipaper.MultiPaperEntitiesHandler;
  
  public class EntityStorage implements EntityPersistentStorage<Entity> {
-@@ -44,9 +45,34 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+@@ -36,6 +34,7 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+     private final LongSet emptyChunks = new LongOpenHashSet();
+     public final ProcessorMailbox<Runnable> entityDeserializerQueue;
+     protected final DataFixer fixerUpper;
++    private final Set<CompletableFuture<CompoundTag>> loadingTasksInProgress = ConcurrentHashMap.newKeySet(); // MultiPaper
+ 
+     public EntityStorage(ServerLevel world, Path path, DataFixer dataFixer, boolean dsync, Executor executor) {
+         this.level = world;
+@@ -44,9 +43,39 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
          this.worker = new IOWorker(path, dsync, "entities");
      }
  
@@ -42,7 +54,7 @@ index 18504b91ff4f10e5f06dd2f0cca7fb4d41ff172f..a9b6b7d05fb1955188f852e8aaf3ff72
 +        String path = "entities";
 +        int cx = pos.x;
 +        int cz = pos.z;
-+        return MultiPaper.readRegionFileAsync(world, path, cx, cz)
++        CompletableFuture<CompoundTag> future = MultiPaper.readRegionFileAsync(world, path, cx, cz)
 +                .orTimeout(20, TimeUnit.SECONDS)
 +                .thenApplyAsync(in -> {
 +                    try {
@@ -58,6 +70,11 @@ index 18504b91ff4f10e5f06dd2f0cca7fb4d41ff172f..a9b6b7d05fb1955188f852e8aaf3ff72
 +                    }
 +                    return CompletableFuture.failedFuture(exception);
 +                });
++
++        loadingTasksInProgress.add(future);
++        future.whenComplete((tag, throwable) -> loadingTasksInProgress.remove(future));
++
++        return future;
 +    }
 +    // MultiPaper end
 +
@@ -68,3 +85,17 @@ index 18504b91ff4f10e5f06dd2f0cca7fb4d41ff172f..a9b6b7d05fb1955188f852e8aaf3ff72
              if (compound == null) {
                  // this.emptyChunks.add(pos.toLong()); // MultiPaper - don't cache empty chunks
                  return emptyChunk(pos);
+@@ -125,6 +154,13 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+ 
+     @Override
+     public void flush(boolean sync) {
++        // MultiPaper start - wait for async loading tasks
++        while (!loadingTasksInProgress.isEmpty()) {
++            for (CompletableFuture<CompoundTag> future : loadingTasksInProgress) {
++                level.chunkSource.mainThreadProcessor.managedBlock(future::isDone);
++            }
++        }
++        // MultiPaper end
+         // MultiPaper start - Run tasks while we wait for the entity storage worker to close
+         CompletableFuture<Void> completableFuture = this.worker.synchronize(sync);
+         if (!completableFuture.isDone()) {

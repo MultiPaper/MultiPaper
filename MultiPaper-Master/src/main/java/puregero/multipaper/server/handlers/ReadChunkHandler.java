@@ -16,7 +16,6 @@ public class ReadChunkHandler {
 
         Runnable callback = () -> {
             RegionFileCache.getChunkDeflatedDataAsync(getWorldDir(message.world, message.path), message.cx, message.cz).thenAccept(b -> {
-                System.out.println("[" + (System.currentTimeMillis() % 60000) + "] " + Thread.currentThread().getName() + ": Read " + message.world + " " + message.path + " " + message.cx + " " + message.cz);
                 if (b == null) {
                     b = new byte[0];
                 }

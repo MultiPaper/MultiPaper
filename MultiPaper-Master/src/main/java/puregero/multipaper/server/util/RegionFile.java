@@ -161,7 +161,7 @@ public class RegionFile {
      */
     public <T> CompletableFuture<T> submitTask(Function<RegionFile, T> task) {
         CompletableFuture<T> future = lastTaskInQueue.orTimeout(15, TimeUnit.SECONDS).exceptionally(e -> {
-            if (e instanceof TimeoutException) {
+            if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
                 e.printStackTrace();
             }
             return null;

@@ -9,7 +9,7 @@ the time, however things can occasionally break.
 to scale a single world across multiple servers. Multiple MultiPaper servers run
 the same world and use a MultiPaper-Master to coordinate with eachother and
 store server data. While the MultiPaper-Master is usually run as a standalone
-server, it can also be run as a BungeeCord plugin, which has some benefits
+server, it can also be run as a BungeeCord or Velocity plugin, which has some benefits
 including being able to send players to the least busiest server when they
 join.
 
@@ -19,7 +19,7 @@ MultiPaper 2.0:
     - Each server caches chunks that are needed by the players it's serving
     - The servers keep each others' caches in sync with eachother
     - The servers work together to ensure every chunk gets ticked
-    - Does not require BungeeCord, just some node balancing method to evenly
+    - Does not require BungeeCord or Velocity, just some node balancing method to evenly
       distribute players across the servers
 
 - MultiPaper-Master
@@ -27,7 +27,7 @@ MultiPaper 2.0:
     - Coordinates the servers
         - Decides who gets to tick the chunk (first in first served basis)
     - Runs as a standalone process
-        - For your convenience, it can also run as a BungeeCord plugin
+        - For your convenience, it can also run as a BungeeCord or Velocity plugin
 
 ![MultiPaper diagram](assets/multipaper-diagram.jpg)
 
@@ -96,11 +96,12 @@ server as shown as grey.
   * Place your worlds inside the directory being used for MultiPaper-Master
   * Start the MultiPaper-Master by either:
     * Standalone: `java -jar multipaper-master.jar <port> [optionalProxyPort]`
-    * BungeeCord plugin: Set the port in `plugins/MultiPaperProxy/config.yml`
+    * BungeeCord plugin: Set the port in `plugins/MultiPaperBungee/config.yml`
+    * Velocity plugin: Set the port in `plugins/multipaper-velocity/config.toml`
   * In each MultiPaper server:
     * Run the server once the generate the config file `multipaper.yml`
-    * Put the name of the server used in BungeeCord's config.yml in `bungeecordName`
-      * If you're not using BungeeCord, just make it some unique identifier
+    * Put the name of the server used in the BungeeCord or Velocity config in `bungeecordName`
+      * If you're not using BungeeCord or Velocity, just make it some unique identifier
       * eg. `survival1`
     * Put the address and port of the MultiPaper-Master in `multipaperMasterAddress`
       * eg. `localhost:35353`

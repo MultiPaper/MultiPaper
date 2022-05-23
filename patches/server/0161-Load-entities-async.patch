@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 23 May 2022 15:37:49 +1000
+Subject: [PATCH] Load entities async
+
+
+diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
+index 18504b91ff4f10e5f06dd2f0cca7fb4d41ff172f..a9b6b7d05fb1955188f852e8aaf3ff726a7623de 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
++++ b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
+@@ -11,11 +11,11 @@ import java.util.List;
+ import java.util.Objects;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.Executor;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.TimeoutException;
++
+ import net.minecraft.SharedConstants;
+-import net.minecraft.nbt.CompoundTag;
+-import net.minecraft.nbt.IntArrayTag;
+-import net.minecraft.nbt.ListTag;
+-import net.minecraft.nbt.NbtUtils;
++import net.minecraft.nbt.*;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.util.datafix.DataFixTypes;
+ import net.minecraft.util.thread.ProcessorMailbox;
+@@ -25,6 +25,7 @@ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.entity.ChunkEntities;
+ import net.minecraft.world.level.entity.EntityPersistentStorage;
+ import org.slf4j.Logger;
++import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperEntitiesHandler;
+ 
+ public class EntityStorage implements EntityPersistentStorage<Entity> {
+@@ -44,9 +45,34 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+         this.worker = new IOWorker(path, dsync, "entities");
+     }
+ 
++    // MultiPaper start - async entity loading
++    private CompletableFuture<CompoundTag> loadAsync(ChunkPos pos) {
++        String world = level.getWorld().getName();
++        String path = "entities";
++        int cx = pos.x;
++        int cz = pos.z;
++        return MultiPaper.readRegionFileAsync(world, path, cx, cz)
++                .orTimeout(20, TimeUnit.SECONDS)
++                .thenApplyAsync(in -> {
++                    try {
++                        return in == null ? null : NbtIo.read(in);
++                    } catch (IOException e) {
++                        throw new RuntimeException(e);
++                    }
++                })
++                .exceptionallyCompose(exception -> {
++                    if (exception instanceof TimeoutException) {
++                        LOGGER.warn("Timed out reading " + world + "," + path + "," + cx + "," + cz + ", retrying...");
++                        return loadAsync(pos);
++                    }
++                    return CompletableFuture.failedFuture(exception);
++                });
++    }
++    // MultiPaper end
++
+     @Override
+     public CompletableFuture<ChunkEntities<Entity>> loadEntities(ChunkPos pos) {
+-        return this.emptyChunks.contains(pos.toLong()) ? CompletableFuture.completedFuture(emptyChunk(pos)) : this.worker.loadAsync(pos).thenApplyAsync((compound) -> {
++        return this.emptyChunks.contains(pos.toLong()) ? CompletableFuture.completedFuture(emptyChunk(pos)) : loadAsync(pos).thenApplyAsync((compound) -> { // MultiPaper - replace this.worker.loadAsync(pos) with async chunk loading
+             if (compound == null) {
+                 // this.emptyChunks.add(pos.toLong()); // MultiPaper - don't cache empty chunks
+                 return emptyChunk(pos);

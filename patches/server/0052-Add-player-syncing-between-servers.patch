@@ -140,7 +140,7 @@ index a6edf5117d4ae03d8294e7bb74dd2d77048895a5..bcccddb2f65ec79bdc99e7aa9a6b5973
              this.updateEffectVisibility();
              return event; // Paper
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index f115aabaf67976a503a76f5213dd52b7b7dfab4e..33b5a4cd5fce1e7bec0c01bf8ce3f0a1a16d4fc9 100644
+index 72d9ffc0a6322c53d66dc7fd239dd03ed93f61d7..f2bdc2afeacf10b27bff710471b7897fe43f7408 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -23,6 +23,8 @@ import java.util.function.UnaryOperator;
@@ -214,7 +214,7 @@ index f115aabaf67976a503a76f5213dd52b7b7dfab4e..33b5a4cd5fce1e7bec0c01bf8ce3f0a1
              // Paper end
          }
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 95fe4240f3e1174ec36598f24d63f0073c13b376..042fdc2f0829d77a3be4063f22af282b763bf32d 100644
+index 624946f48f0811c94d05174f28d0b1fc6d5e6a00..757038c2f480c392abae9401906700907d2e4cd1 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -14,14 +14,7 @@ import java.io.File;
@@ -324,13 +324,12 @@ index 95fe4240f3e1174ec36598f24d63f0073c13b376..042fdc2f0829d77a3be4063f22af282b
          entityplayer.stopRiding(); // CraftBukkit
          this.players.remove(entityplayer);
          this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot
-@@ -1005,6 +1032,27 @@ public abstract class PlayerList {
+@@ -1005,6 +1032,26 @@ public abstract class PlayerList {
          // Paper end
  
          // CraftBukkit end
 +
 +        // MultiPaper start
-+        boolean isRespawnFinal = isRespawn;
 +        List<ExternalServerConnection> serversToCreatePlayerOn = new ArrayList<>();
 +        MultiPaper.forEachExternalServer(externalServer -> {
 +            if (externalServer.getConnection() != null && externalServer.getConnection().isOpen()) {
@@ -338,7 +337,7 @@ index 95fe4240f3e1174ec36598f24d63f0073c13b376..042fdc2f0829d77a3be4063f22af282b
 +                boolean subscribedToDestination = externalServer.getConnection().subscribedWorlds.contains(worldserver1.getWorld().getName());
 +
 +                if (subscribedToSoruce && subscribedToDestination) {
-+                    externalServer.getConnection().send(new PlayerChangeDimensionPacket(entityplayer1, isRespawnFinal));
++                    externalServer.getConnection().send(new PlayerChangeDimensionPacket(entityplayer1, !flag));
 +                } else if (subscribedToDestination) {
 +                    serversToCreatePlayerOn.add(externalServer.getConnection());
 +                } else if (subscribedToSoruce) {
@@ -352,7 +351,7 @@ index 95fe4240f3e1174ec36598f24d63f0073c13b376..042fdc2f0829d77a3be4063f22af282b
          return entityplayer1;
      }
  
-@@ -1015,6 +1063,20 @@ public abstract class PlayerList {
+@@ -1015,6 +1062,20 @@ public abstract class PlayerList {
          this.sendPlayerPermissionLevel(player, i);
      }
  

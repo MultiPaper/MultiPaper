@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Noel <96398669+noelvnx@users.noreply.github.com>
+Date: Mon, 30 May 2022 16:24:38 -0400
+Subject: [PATCH] Add FileSyncCompleteEvent
+
+
+diff --git a/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
+index 500be6f539557784b353ec12ea215c61f5cf6e65..dcda226653d7190354ee91201de502cdb1b61198 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
++++ b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
+@@ -3,6 +3,7 @@ package puregero.multipaper;
+ import io.methvin.watcher.DirectoryWatcher;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.event.FileSyncCompleteEvent;
+ import puregero.multipaper.mastermessagingprotocol.datastream.InboundDataStream;
+ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.DownloadFileMessage;
+ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.RequestFilesToSyncMessage;
+@@ -83,6 +84,8 @@ public class MultiPaperFileSyncer extends Thread {
+                 if (MultiPaperConfig.logFileSyncing) {
+                     LOGGER.info("Uploaded " + file.getPath() + " (" + data.length / 1024 + "KB)");
+                 }
++
++                new FileSyncCompleteEvent(file, FileSyncCompleteEvent.Cause.UPLOAD).callEvent();
+             });
+         } catch (IOException e) {
+             e.printStackTrace();
+@@ -252,6 +255,9 @@ public class MultiPaperFileSyncer extends Thread {
+                                     if (MultiPaperConfig.logFileSyncing) {
+                                         LOGGER.info("Downloaded " + file.getPath() + " (" + file.length() / 1024 + "KB)");
+                                     }
++
++                                    new FileSyncCompleteEvent(file, FileSyncCompleteEvent.Cause.DOWNLOAD).callEvent();
++
+                                     fileDownloadedFuture.complete(null);
+                                 });
+                             } catch (IOException e) {

@@ -10,6 +10,9 @@ repositories {
     maven {
         url = uri("https://oss.sonatype.org/content/repositories/snapshots")
     }
+    maven {
+        url = uri("https://repo.velocitypowered.com/snapshots/")
+    }
 }
 
 dependencies {
@@ -19,6 +22,8 @@ dependencies {
     implementation("org.yaml:snakeyaml:1.30")
     implementation("io.netty:netty-all:4.1.75.Final")
     compileOnly("net.md-5:bungeecord-api:1.16-R0.4")
+    compileOnly("com.velocitypowered:velocity-api:3.0.1")
+    annotationProcessor("com.velocitypowered:velocity-api:3.0.1")
 }
 
 tasks.jar {

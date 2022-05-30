@@ -96,7 +96,7 @@ server as shown as grey.
   * Place your worlds inside the directory being used for MultiPaper-Master
   * Start the MultiPaper-Master by either:
     * Standalone: `java -jar multipaper-master.jar <port> [optionalProxyPort]`
-    * BungeeCord plugin: Set the port in `plugins/MultiPaperBungee/config.yml`
+    * BungeeCord plugin: Set the port in `plugins/MultiPaperProxy/config.yml`
     * Velocity plugin: Set the port in `plugins/multipaper-velocity/config.toml`
   * In each MultiPaper server:
     * Run the server once the generate the config file `multipaper.yml`

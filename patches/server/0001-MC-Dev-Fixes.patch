@@ -5,29 +5,29 @@ Subject: [PATCH] MC-Dev Fixes
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/ai/Brain.java b/src/main/java/net/minecraft/world/entity/ai/Brain.java
-index 32456644dfd2e45dfc02cd1fa77d7afd9e1db1e9..9272343fdbda1bfc743a3236025ce29ea0b219df 100644
+index 1730adf15b897fb066f20c51fb97e31e229d361e..6a9e4cc161ab23c157c527804250d9b81dbe5929 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/Brain.java
 +++ b/src/main/java/net/minecraft/world/entity/ai/Brain.java
-@@ -73,15 +73,15 @@ public class Brain<E extends LivingEntity> {
+@@ -71,15 +71,15 @@ public class Brain<E extends LivingEntity> {
              }
  
              public <T> DataResult<Brain<E>> decode(DynamicOps<T> dynamicOps, MapLike<T> mapLike) {
--                MutableObject<DataResult<Builder<Brain.MemoryValue<?>>>> mutableObject = new MutableObject<>(DataResult.success(ImmutableList.builder()));
-+                MutableObject<DataResult<Builder<Brain.MemoryValue<?>>>> mutableObject2 = new MutableObject<>(DataResult.success(ImmutableList.builder())); // Airplane - compile error due to decompiler
+-                MutableObject<DataResult<ImmutableList.Builder<Brain.MemoryValue<?>>>> mutableObject = new MutableObject<>(DataResult.success(ImmutableList.builder()));
++                MutableObject<DataResult<ImmutableList.Builder<Brain.MemoryValue<?>>>> mutableObject2 = new MutableObject<>(DataResult.success(ImmutableList.builder())); // Airplane - fix decompiler error
                  mapLike.entries().forEach((pair) -> {
                      DataResult<MemoryModuleType<?>> dataResult = Registry.MEMORY_MODULE_TYPE.byNameCodec().parse(dynamicOps, pair.getFirst());
                      DataResult<? extends Brain.MemoryValue<?>> dataResult2 = dataResult.flatMap((memoryModuleType) -> {
                          return this.captureRead(memoryModuleType, dynamicOps, (T)pair.getSecond());
                      });
--                    mutableObject.setValue(mutableObject.getValue().apply2(Builder::add, dataResult2));
-+                    mutableObject2.setValue(mutableObject2.getValue().apply2(Builder::add, dataResult2)); // Airplane - compile error due to decompiler
+-                    mutableObject.setValue(mutableObject.getValue().apply2(ImmutableList.Builder::add, dataResult2));
++                    mutableObject2.setValue(mutableObject2.getValue().apply2(ImmutableList.Builder::add, dataResult2)); // Airplane - fix decompiler error
                  });
--                ImmutableList<Brain.MemoryValue<?>> immutableList = mutableObject.getValue().resultOrPartial(Brain.LOGGER::error).map(Builder::build).orElseGet(ImmutableList::of);
-+                ImmutableList<Brain.MemoryValue<?>> immutableList = mutableObject2.getValue().resultOrPartial(Brain.LOGGER::error).map(Builder::build).orElseGet(ImmutableList::of); // Airplane - compile error due to decompiler
+-                ImmutableList<Brain.MemoryValue<?>> immutableList = mutableObject.getValue().resultOrPartial(Brain.LOGGER::error).map(ImmutableList.Builder::build).orElseGet(ImmutableList::of);
++                ImmutableList<Brain.MemoryValue<?>> immutableList = mutableObject2.getValue().resultOrPartial(Brain.LOGGER::error).map(ImmutableList.Builder::build).orElseGet(ImmutableList::of); // Airplane - fix decompiler error
                  return DataResult.success(new Brain<>(memoryModules, sensors, immutableList, mutableObject::getValue));
              }
  
-@@ -170,7 +170,7 @@ public class Brain<E extends LivingEntity> {
+@@ -168,7 +168,7 @@ public class Brain<E extends LivingEntity> {
      }
  
      public <U> Optional<U> getMemory(MemoryModuleType<U> type) {
@@ -36,7 +36,7 @@ index 32456644dfd2e45dfc02cd1fa77d7afd9e1db1e9..9272343fdbda1bfc743a3236025ce29e
      }
  
      public <U> long getTimeUntilExpiry(MemoryModuleType<U> type) {
-@@ -464,7 +464,7 @@ public class Brain<E extends LivingEntity> {
+@@ -462,7 +462,7 @@ public class Brain<E extends LivingEntity> {
          private final Optional<? extends ExpirableValue<U>> value;
  
          static <U> Brain.MemoryValue<U> createUnchecked(MemoryModuleType<U> type, Optional<? extends ExpirableValue<?>> data) {

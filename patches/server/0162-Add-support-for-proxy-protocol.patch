@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 1 Jun 2022 14:01:39 +1000
+Subject: [PATCH] Add support for proxy protocol
+
+
+diff --git a/src/main/java/net/minecraft/server/network/ServerConnectionListener.java b/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
+index 53520f04e45ec62f526ee9599e2882ca59007e11..282b6921e9d0862d2848680fd7f3955a8e33b9d1 100644
+--- a/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
++++ b/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
+@@ -135,13 +135,15 @@ public class ServerConnectionListener {
+                             @Override
+                             public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+                                 if (msg instanceof io.netty.handler.codec.haproxy.HAProxyMessage message) {
+-                                    String realaddress = message.sourceAddress();
+-                                    int realport = message.sourcePort();
++                                    if (message.command() == io.netty.handler.codec.haproxy.HAProxyCommand.PROXY) {
++                                        String realaddress = message.sourceAddress();
++                                        int realport = message.sourcePort();
+ 
+-                                    SocketAddress socketaddr = new java.net.InetSocketAddress(realaddress, realport);
++                                        SocketAddress socketaddr = new java.net.InetSocketAddress(realaddress, realport);
+ 
+-                                    Connection connection = (Connection) channel.pipeline().get("packet_handler");
+-                                    connection.address = socketaddr;
++                                        Connection connection = (Connection) channel.pipeline().get("packet_handler");
++                                        connection.address = socketaddr;
++                                    }
+                                 } else {
+                                     super.channelRead(ctx, msg);
+                                 }
+diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+index ae5f006b5876b933a02ba11b75a9353848150d6c..e55daee93cd78a22852b7af134365dc262d871ae 100644
+--- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
++++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
+@@ -1,10 +1,12 @@
+ package puregero.multipaper;
+ 
+ import io.netty.channel.Channel;
++import io.netty.channel.ChannelFuture;
+ import io.netty.channel.ChannelFutureListener;
+ import io.netty.channel.ChannelInitializer;
+ import io.netty.channel.socket.SocketChannel;
+ import io.netty.handler.codec.compression.Zstd;
++import io.netty.handler.codec.haproxy.*;
+ import io.netty.util.internal.SystemPropertyUtil;
+ import net.minecraft.network.*;
+ import net.minecraft.network.protocol.Packet;
+@@ -68,6 +70,17 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+     }
+ 
+     public void sendMinecraftHandshake(String address, String secret, int port) {
++        // MultiPaper start - Add support for Proxy Protocol
++        ChannelFuture future2 = channel.newSucceededFuture();
++
++        if (com.destroystokyo.paper.PaperConfig.useProxyProtocol) {
++            channel.pipeline().addLast("haproxy-encoder", HAProxyMessageEncoder.INSTANCE);
++            future2 = channel.writeAndFlush(new HAProxyMessage(HAProxyProtocolVersion.V2, HAProxyCommand.LOCAL, HAProxyProxiedProtocol.UNKNOWN, null, null, 0, 0));
++        }
++
++        future2.addListener(future1 -> {
++        // MultiPaper end
++
+         channel.pipeline()
+                 .addLast("prepender", new MessageLengthEncoder())
+                 .addLast("encoder", new PacketEncoder(PacketFlow.SERVERBOUND));
+@@ -80,6 +93,8 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+                         future.cause().printStackTrace();
+                     }
+                 });
++
++        }); // MultiPaper - Add support for Proxy Protocol
+     }
+ 
+     public void setupPipeline() {

@@ -110,6 +110,22 @@ server as shown as grey.
       * This value can be different for each server
       * Other servers are let known of your port via MultiPaper-Master
 
+### Command line options
+
+Command line options are provided that allow the config files server.properties,
+spigot.yml, paper.yml, and multipaper.yml to be overridden for easier
+scalability. For example:
+
+```bash
+java
+  -DbungeecordName=server1
+  -DmultipaperMasterAddress=127.0.0.1:35353
+  -Dproperties.view-distance=16
+  -Dpaper.settings.proxy-protocol=true
+  -Dspigot.world-settings.default.entity-tracking-range.players=128
+  -jar multipaper.jar
+```
+
 ## The built-in proxy
 MultiPaper provides a proxy (like Bungeecord or Velocity) that can be used to
 hide the multipaper servers behind a single address. The proxy automatically

@@ -1,0 +1,134 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 2 Jun 2022 16:35:35 +1000
+Subject: [PATCH] Allow config files to be overriden through the command line
+
+
+diff --git a/src/main/java/com/destroystokyo/paper/PaperConfig.java b/src/main/java/com/destroystokyo/paper/PaperConfig.java
+index 02f3d9e8a747539254c1cb909a2313000a961f63..f51dfea205c039af2dca7fbfee48fcc7e11f52b8 100644
+--- a/src/main/java/com/destroystokyo/paper/PaperConfig.java
++++ b/src/main/java/com/destroystokyo/paper/PaperConfig.java
+@@ -200,21 +200,25 @@ public class PaperConfig {
+     }
+ 
+     private static boolean getBoolean(String path, boolean def) {
++        if (System.getProperty("paper." + path) != null) return Boolean.getBoolean("paper." + path); // MultiPaper
+         config.addDefault(path, def);
+         return config.getBoolean(path, config.getBoolean(path));
+     }
+ 
+     private static double getDouble(String path, double def) {
++        if (System.getProperty("paper." + path) != null) return Double.parseDouble(System.getProperty("paper." + path)); // MultiPaper
+         config.addDefault(path, def);
+         return config.getDouble(path, config.getDouble(path));
+     }
+ 
+     private static float getFloat(String path, float def) {
++        if (System.getProperty("paper." + path) != null) return (float) Double.parseDouble(System.getProperty("paper." + path)); // MultiPaper
+         // TODO: Figure out why getFloat() always returns the default value.
+         return (float) getDouble(path, (double) def);
+     }
+ 
+     private static int getInt(String path, int def) {
++        if (System.getProperty("paper." + path) != null) return Integer.getInteger("paper." + path); // MultiPaper
+         config.addDefault(path, def);
+         return config.getInt(path, config.getInt(path));
+     }
+@@ -225,6 +229,7 @@ public class PaperConfig {
+     }
+ 
+     private static String getString(String path, String def) {
++        if (System.getProperty("paper." + path) != null) return System.getProperty("paper." + path); // MultiPaper
+         config.addDefault(path, def);
+         return config.getString(path, config.getString(path));
+     }
+diff --git a/src/main/java/net/minecraft/server/dedicated/Settings.java b/src/main/java/net/minecraft/server/dedicated/Settings.java
+index aafa84578c7fb25feeee043259f9c056929ca008..31ffea93e99c8e262aa7ed5b43ca68635e21f26b 100644
+--- a/src/main/java/net/minecraft/server/dedicated/Settings.java
++++ b/src/main/java/net/minecraft/server/dedicated/Settings.java
+@@ -34,6 +34,12 @@ public abstract class Settings<T extends Settings<T>> {
+     }
+ 
+     private String getOverride(String name, String value) {
++        // MultiPaper start - Allow properties to be set from the command line
++        if (System.getProperty("properties." + name) != null) {
++            return System.getProperty("properties." + name);
++        }
++        // MultiPaper end
++
+         if ((this.options != null) && (this.options.has(name)) && !name.equals( "online-mode")) { // Spigot
+             return String.valueOf(this.options.valueOf(name));
+         }
+diff --git a/src/main/java/org/spigotmc/SpigotConfig.java b/src/main/java/org/spigotmc/SpigotConfig.java
+index d509187ca63963fdd7f1a44d89d2aa1a1b1ce3bd..cbf5ba7d7505d8d1f3cfdd159ad02255ecddb575 100644
+--- a/src/main/java/org/spigotmc/SpigotConfig.java
++++ b/src/main/java/org/spigotmc/SpigotConfig.java
+@@ -141,12 +141,14 @@ public class SpigotConfig
+ 
+     private static boolean getBoolean(String path, boolean def)
+     {
++        if (System.getProperty("spigot." + path) != null) return Boolean.getBoolean("spigot." + path); // MultiPaper
+         SpigotConfig.config.addDefault( path, def );
+         return SpigotConfig.config.getBoolean( path, SpigotConfig.config.getBoolean( path ) );
+     }
+ 
+     private static int getInt(String path, int def)
+     {
++        if (System.getProperty("spigot." + path) != null) return Integer.getInteger("spigot." + path); // MultiPaper
+         SpigotConfig.config.addDefault( path, def );
+         return SpigotConfig.config.getInt( path, SpigotConfig.config.getInt( path ) );
+     }
+@@ -159,12 +161,14 @@ public class SpigotConfig
+ 
+     private static String getString(String path, String def)
+     {
++        if (System.getProperty("spigot." + path) != null) return System.getProperty("spigot." + path); // MultiPaper
+         SpigotConfig.config.addDefault( path, def );
+         return SpigotConfig.config.getString( path, SpigotConfig.config.getString( path ) );
+     }
+ 
+     private static double getDouble(String path, double def)
+     {
++        if (System.getProperty("spigot." + path) != null) return Double.parseDouble(System.getProperty("spigot." + path)); // MultiPaper
+         SpigotConfig.config.addDefault( path, def );
+         return SpigotConfig.config.getDouble( path, SpigotConfig.config.getDouble( path ) );
+     }
+diff --git a/src/main/java/org/spigotmc/SpigotWorldConfig.java b/src/main/java/org/spigotmc/SpigotWorldConfig.java
+index 31a447e6e156b7b244b2ac69a9c03c09c7ed388c..facf0f7450dcc04813eafe580695179bc2e283bb 100644
+--- a/src/main/java/org/spigotmc/SpigotWorldConfig.java
++++ b/src/main/java/org/spigotmc/SpigotWorldConfig.java
+@@ -41,12 +41,16 @@ public class SpigotWorldConfig
+ 
+     public boolean getBoolean(String path, boolean def)
+     {
++        if (System.getProperty("spigot.world-settings." + this.worldName + "." + path) != null) return Boolean.getBoolean("spigot.world-settings." + this.worldName + "." + path); // MultiPaper
++        if (!this.config.contains( "world-settings." + this.worldName + "." + path) && System.getProperty("spigot.world-settings.default." + path) != null) return Boolean.getBoolean("spigot.world-settings.default." + path); // MultiPaper
+         this.config.addDefault( "world-settings.default." + path, def );
+         return this.config.getBoolean( "world-settings." + this.worldName + "." + path, this.config.getBoolean( "world-settings.default." + path ) );
+     }
+ 
+     public double getDouble(String path, double def)
+     {
++        if (System.getProperty("spigot.world-settings." + this.worldName + "." + path) != null) return Double.parseDouble(System.getProperty("spigot.world-settings." + this.worldName + "." + path)); // MultiPaper
++        if (!this.config.contains( "world-settings." + this.worldName + "." + path) && System.getProperty("spigot.world-settings.default." + path) != null) return Double.parseDouble(System.getProperty("spigot.world-settings.default." + path)); // MultiPaper
+         this.config.addDefault( "world-settings.default." + path, def );
+         return this.config.getDouble( "world-settings." + this.worldName + "." + path, this.config.getDouble( "world-settings.default." + path ) );
+     }
+@@ -63,6 +67,8 @@ public class SpigotWorldConfig
+     }
+     public int getInt(String path, int def, boolean setDef)
+     {
++        if (System.getProperty("spigot.world-settings." + this.worldName + "." + path) != null) return Integer.getInteger("spigot.world-settings." + this.worldName + "." + path); // MultiPaper
++        if (!this.config.contains( "world-settings." + this.worldName + "." + path) && System.getProperty("spigot.world-settings.default." + path) != null) return Integer.getInteger("spigot.world-settings.default." + path); // MultiPaper
+         if (setDef) this.config.addDefault( "world-settings.default." + path, def );
+         return this.config.getInt( "world-settings." + this.worldName + "." + path, this.config.getInt( "world-settings.default." + path, def ) );
+         // Paper end
+@@ -76,6 +82,8 @@ public class SpigotWorldConfig
+ 
+     public String getString(String path, String def)
+     {
++        if (System.getProperty("spigot.world-settings." + this.worldName + "." + path) != null) return System.getProperty("spigot.world-settings." + this.worldName + "." + path); // MultiPaper
++        if (!this.config.contains( "world-settings." + this.worldName + "." + path) && System.getProperty("spigot.world-settings.default." + path) != null) return System.getProperty("spigot.world-settings.default." + path); // MultiPaper
+         this.config.addDefault( "world-settings.default." + path, def );
+         return this.config.getString( "world-settings." + this.worldName + "." + path, this.config.getString( "world-settings.default." + path ) );
+     }

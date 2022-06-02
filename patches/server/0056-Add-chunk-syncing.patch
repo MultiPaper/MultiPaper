@@ -863,7 +863,7 @@ index 96f62ac0e95c1db86f6e53eb0397ef79aefed914..ec325d9fee73e64a043f3e9a9d965e87
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index d9a43825bc44a21c9adc4ba2d86ad8ba38004e74..3a6981653ca631d4bd5c92c2ef28da620854706b 100644
+index d9a43825bc44a21c9adc4ba2d86ad8ba38004e74..3c039c56f1ee5cf9f78d3cafe56aad79b06d2efc 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,29 +1,63 @@
@@ -961,7 +961,7 @@ index d9a43825bc44a21c9adc4ba2d86ad8ba38004e74..3a6981653ca631d4bd5c92c2ef28da62
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -155,4 +208,218 @@ public class MultiPaper {
+@@ -155,4 +208,221 @@ public class MultiPaper {
      public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
          return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
      }
@@ -1011,7 +1011,10 @@ index d9a43825bc44a21c9adc4ba2d86ad8ba38004e74..3a6981653ca631d4bd5c92c2ef28da62
 +            if (message instanceof ChunkLoadedOnAnotherServerMessage chunkLoadedOnAnotherServerMessage) {
 +                ExternalServer server = getConnection().getServersMap().get(chunkLoadedOnAnotherServerMessage.server);
 +                CompletableFuture<DataInputStream> future = new CompletableFuture<>();
-+                if (path.equals("region")) {
++                if (server.getConnection() == null) {
++                    // Don't throw the exception as that will cause the chunk to get corrupted and regenerate, losing data. Instead, allow the chunk loader to naturally timeout and try again.
++                    new Exception("Tried to request a chunk " + world + "," + path + "," + cx + "," + cz + " from " + chunkLoadedOnAnotherServerMessage.server + ", but we are not connected to them!").printStackTrace();
++                } else if (path.equals("region")) {
 +                    server.getConnection().requestChunk(world, cx, cz, inputStream -> {
 +                        RequestChunkPacket.blocker = null;
 +                        future.complete(inputStream);

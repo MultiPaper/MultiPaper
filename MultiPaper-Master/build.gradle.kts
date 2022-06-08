@@ -38,3 +38,9 @@ tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
     relocate("io.netty", "puregero.multipaper.master.libs.netty")
     relocate("org.yaml.snakeyaml", "puregero.multipaper.master.libs.snakeyaml")
 }
+
+publishing {
+    publications.create<MavenPublication>("maven") {
+        artifact(tasks.shadowJar)
+    }
+}

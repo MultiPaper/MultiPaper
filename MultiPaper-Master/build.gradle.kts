@@ -41,6 +41,6 @@ tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
 
 publishing {
     publications.create<MavenPublication>("maven") {
-        artifact(tasks.shadowJar)
+        artifact(tasks.jar)
     }
 }

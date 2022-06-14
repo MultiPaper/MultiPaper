@@ -105,10 +105,6 @@ server as shown as grey.
       * eg. `survival1`
     * Put the address and port of the MultiPaper-Master in `multipaperMasterAddress`
       * eg. `localhost:35353`
-    * Enter the port for your local peer-to-peer server in `externalServerPort`
-      * Leave this as `0` for it to automatically choose a port for you
-      * This value can be different for each server
-      * Other servers are let known of your port via MultiPaper-Master
 
 ### Command line options
 

@@ -230,7 +230,7 @@ index b50a576c77adf30a6dcb004e340706062e0a519d..c2f0b70b72b536a8a02a6d4f270b2c1c
          this.clientViewDistance = packet.viewDistance;
          // CraftBukkit end
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index ec4281d1195e3e1dc62ae5f1aaab112bd7477989..b1c0a41ef719bb9d3bf96b1240364b771af2c07d 100644
+index 8c0bcc91c60eea92269bad74fd3d84519f5d1226..dc3f39ee5b7ce11904cc9be91319d1730e684d98 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -215,6 +215,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
@@ -369,7 +369,7 @@ index 06739d308934a2d54abe4b7cef1244723bf6cbcf..3fdbce8e17e89c008db959183152552f
  
      @Override
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index 44df5eacedc60462c6b9ff423bac60ed24a0d279..93eddc7fbb73e1b4e92711c92b6c7020f3eca8eb 100644
+index bfeb057681f04eef2afbbdae0fe364dcb377f8b4..ee5dc211e480f72133c28aba1d920b9af9bf2b5d 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 @@ -139,6 +139,7 @@ import org.bukkit.event.entity.EntityRegainHealthEvent;
@@ -1849,10 +1849,10 @@ index 0000000000000000000000000000000000000000..cb6d153158d5de470582b66f9253fde2
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c991d081b5d1f880bfc6f4cb816047e9445f80c5
+index 0000000000000000000000000000000000000000..ad20a754e775df761f5c8f54550237cf52403803
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,88 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
@@ -1860,6 +1860,7 @@ index 0000000000000000000000000000000000000000..c991d081b5d1f880bfc6f4cb816047e9
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
++import org.apache.commons.lang3.tuple.Pair;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
@@ -1867,7 +1868,11 @@ index 0000000000000000000000000000000000000000..c991d081b5d1f880bfc6f4cb816047e9
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
++import java.util.Map;
 +import java.util.UUID;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.TimeUnit;
 +
 +public class RequestEntityPacket extends ExternalServerPacket {
 +
@@ -1878,7 +1883,7 @@ index 0000000000000000000000000000000000000000..c991d081b5d1f880bfc6f4cb816047e9
 +
 +    public RequestEntityPacket(String world, UUID uuid) {
 +        this.world = world;
-+        this.uuid =uuid;
++        this.uuid = uuid;
 +    }
 +
 +    public RequestEntityPacket(FriendlyByteBuf in) {
@@ -1892,6 +1897,8 @@ index 0000000000000000000000000000000000000000..c991d081b5d1f880bfc6f4cb816047e9
 +        out.writeUUID(uuid);
 +    }
 +
++    private static final Map<Pair<UUID, ExternalServerConnection>, Integer> playerRequestCounts = new ConcurrentHashMap<>();
++
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
 +        MultiPaper.runSync(() -> {
@@ -1899,7 +1906,7 @@ index 0000000000000000000000000000000000000000..c991d081b5d1f880bfc6f4cb816047e9
 +            Entity entity = level.entityManager.knownUuids.get(uuid);
 +            if (entity != null) {
 +                if (entity instanceof ServerPlayer serverPlayer) {
-+                    LOGGER.warn(connection.externalServer.getName() + " tried to request entity " + uuid + ", which is the player " + serverPlayer.getScoreboardName() + "! This means that server is missing that player.");
++                    triedToRequestPlayer(connection, serverPlayer);
 +                    return;
 +                }
 +
@@ -1917,6 +1924,21 @@ index 0000000000000000000000000000000000000000..c991d081b5d1f880bfc6f4cb816047e9
 +                LOGGER.warn(connection.externalServer.getName() + " requested entity " + uuid + ", but that entity doesn't exist");
 +            }
 +        });
++    }
++
++    private void triedToRequestPlayer(ExternalServerConnection connection, ServerPlayer serverPlayer) {
++        Pair<UUID, ExternalServerConnection> key = Pair.of(serverPlayer.getUUID(), connection);
++        int count = playerRequestCounts.getOrDefault(key, 0);
++        playerRequestCounts.put(key, count + 1);
++
++        if (count > 10) {
++            LOGGER.error(connection.externalServer.getName() + " tried to request player " + serverPlayer.getScoreboardName() + " more than 10 times! This means they didn't sync correctly. Kicking them.");
++            serverPlayer.getBukkitEntity().kickPlayer("Your player failed to sync. Please reconnect.");
++            playerRequestCounts.remove(key);
++        } else {
++            LOGGER.warn(connection.externalServer.getName() + " tried to request entity " + uuid + ", which is the player " + serverPlayer.getScoreboardName() + "! This means that server is missing that player.");
++            CompletableFuture.runAsync(() -> playerRequestCounts.remove(key), CompletableFuture.delayedExecutor(10, TimeUnit.SECONDS));
++        }
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java

@@ -264,18 +264,33 @@ public class ChunkSubscriptionManager {
     }
 
     public static void unsubscribeAndUnlockAll(ServerConnection serverConnection) {
-        HashSet<ChunkKey> lockedChunkSet = ownedChunks.remove(serverConnection);
-        if (lockedChunkSet != null) {
-            lockedChunkSet.forEach(chunk -> unlock(serverConnection, chunk));
+        chunkOwnersLock.writeLock().lock();
+        try {
+            HashSet<ChunkKey> lockedChunkSet = ownedChunks.remove(serverConnection);
+            if (lockedChunkSet != null) {
+                lockedChunkSet.forEach(chunk -> unlock(serverConnection, chunk));
+            }
+        } finally {
+            chunkOwnersLock.writeLock().unlock();
         }
 
-        HashSet<ChunkKey> subscribedChunkSet = subscribedChunks.remove(serverConnection);
-        if (subscribedChunkSet != null) {
-            subscribedChunkSet.forEach(chunk -> unsubscribe(serverConnection, chunk));
+        chunkSubscribersLock.writeLock().lock();
+        try {
+            HashSet<ChunkKey> subscribedChunkSet = subscribedChunks.remove(serverConnection);
+            if (subscribedChunkSet != null) {
+                subscribedChunkSet.forEach(chunk -> unsubscribe(serverConnection, chunk));
+            }
+        } finally {
+            chunkSubscribersLock.writeLock().unlock();
         }
     }
 
     public static List<ServerConnection> getSubscribers(String world, int cx, int cz) {
-        return chunkSubscribers.getOrDefault(new ChunkKey(world, cx, cz), Collections.emptyList());
+        chunkSubscribersLock.readLock().lock();
+        try {
+            return chunkSubscribers.getOrDefault(new ChunkKey(world, cx, cz), Collections.emptyList());
+        } finally {
+            chunkSubscribersLock.readLock().unlock();
+        }
     }
 }

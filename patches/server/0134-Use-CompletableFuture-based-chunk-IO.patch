@@ -49,20 +49,22 @@ index d139536be7ab15293b798af115e71a8dbe4a2f3d..928fe46b5061ff6a1acbec61eec69875
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaperIO.java b/src/main/java/puregero/multipaper/MultiPaperIO.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..739e275eeee9d4ef45c2e004cd0ab55400e6da6b
+index 0000000000000000000000000000000000000000..e0bbc5f5a443ed473199bb8ba3ec13b02fa98ffc
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperIO.java
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,145 @@
 +package puregero.multipaper;
 +
 +import com.destroystokyo.paper.io.PaperFileIOThread;
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.nbt.NbtIo;
++import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerLevel;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +
 +import java.io.IOException;
++import java.util.Set;
 +import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.ConcurrentHashMap;
 +import java.util.concurrent.TimeUnit;
@@ -73,23 +75,34 @@ index 0000000000000000000000000000000000000000..739e275eeee9d4ef45c2e004cd0ab554
 +
 +    private final ConcurrentHashMap<ChunkKey, CompletableFuture<CompoundTag>> chunkReadsInProgress = new ConcurrentHashMap<>();
 +    private final ConcurrentHashMap<ChunkKey, CompletableFuture<CompoundTag>> poiReadsInProgress = new ConcurrentHashMap<>();
++    private final Set<CompletableFuture<Void>> writesInProgress = ConcurrentHashMap.newKeySet();
 +
 +    public void scheduleSave(ServerLevel world, int chunkX, int chunkZ, CompoundTag poiData, CompoundTag chunkData, int priority) {
 +        if (poiData != null) {
-+            try {
-+                MultiPaper.writeRegionFileNBT(world.convertable.getLevelId(), "poi", chunkX, chunkZ, poiData);
-+            } catch (IOException e) {
-+                e.printStackTrace();
-+            }
++            writeAsync(() -> {
++                try {
++                    MultiPaper.writeRegionFileNBT(world.convertable.getLevelId(), "poi", chunkX, chunkZ, poiData);
++                } catch (IOException e) {
++                    throw new RuntimeException(e);
++                }
++            });
 +        }
 +
 +        if (chunkData != null) {
-+            try {
-+                MultiPaper.writeRegionFileNBT(world.convertable.getLevelId(), "region", chunkX, chunkZ, chunkData);
-+            } catch (IOException e) {
-+                e.printStackTrace();
-+            }
++            writeAsync(() -> {
++                try {
++                    MultiPaper.writeRegionFileNBT(world.convertable.getLevelId(), "region", chunkX, chunkZ, chunkData);
++                } catch (IOException e) {
++                    throw new RuntimeException(e);
++                }
++            });
 +        }
++    }
++
++    private void writeAsync(Runnable runnable) {
++        CompletableFuture<Void> future = CompletableFuture.runAsync(runnable);
++        writesInProgress.add(future);
++        future.whenComplete((_void, throwable) -> writesInProgress.remove(future));
 +    }
 +
 +    public CompletableFuture<PaperFileIOThread.ChunkData> loadChunkDataAsyncFuture(final ServerLevel world, final int chunkX, final int chunkZ,
@@ -121,14 +134,14 @@ index 0000000000000000000000000000000000000000..739e275eeee9d4ef45c2e004cd0ab554
 +    private CompletableFuture<CompoundTag> readChunk(final ServerLevel world, final int chunkX, final int chunkZ) {
 +        ChunkKey key = new ChunkKey(world.convertable.getLevelId(), chunkX, chunkZ);
 +        CompletableFuture<CompoundTag> future = chunkReadsInProgress.computeIfAbsent(key, key2 -> readChunk(key2, "region"));
-+        future.thenRun(() -> chunkReadsInProgress.remove(key, future));
++        future.whenComplete((tag, throwable) -> chunkReadsInProgress.remove(key, future));
 +        return future;
 +    }
 +
 +    private CompletableFuture<CompoundTag> readPoi(final ServerLevel world, final int chunkX, final int chunkZ) {
 +        ChunkKey key = new ChunkKey(world.convertable.getLevelId(), chunkX, chunkZ);
 +        CompletableFuture<CompoundTag> future = poiReadsInProgress.computeIfAbsent(key, key2 -> readChunk(key2, "poi"));
-+        future.thenRun(() -> poiReadsInProgress.remove(key, future));
++        future.whenComplete((tag, throwable) -> poiReadsInProgress.remove(key, future));
 +        return future;
 +    }
 +
@@ -172,10 +185,16 @@ index 0000000000000000000000000000000000000000..739e275eeee9d4ef45c2e004cd0ab554
 +    }
 +
 +    public void flush() {
-+        // Do nothing, we don't have a queue
++        while (!writesInProgress.isEmpty()) {
++            for (CompletableFuture<Void> future : writesInProgress) {
++                MinecraftServer.getServer().managedBlock(future::isDone);
++            }
++        }
 +    }
 +
-+    public void close(boolean b, boolean b1) {
-+        // Do nothing, we don't have a queue
++    public void close(boolean wait, boolean killQueue) {
++        if (wait) {
++            flush();
++        }
 +    }
 +}

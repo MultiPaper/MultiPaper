@@ -8,27 +8,34 @@ import puregero.multipaper.mastermessagingprotocol.messages.serverbound.SetChunk
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ChunkSubscriptionManager {
 
-    private static final Queue<List<ServerConnection>> objectPool = new LinkedList<>();
+    private static final Queue<List<ServerConnection>> serverPool = new LinkedList<>();
 
     // Index 0 in the list is the current chunk owning it
-    private static final Map<ChunkKey, List<ServerConnection>> chunkLocks = new ConcurrentHashMap<>();
-    private static final Map<ChunkKey, List<ServerConnection>> chunkSubscribers = new ConcurrentHashMap<>();
+    private static final Map<ChunkKey, List<ServerConnection>> chunkOwners = new ConcurrentHashMap<>();
+    private static final ReentrantReadWriteLock chunkOwnersLock = new ReentrantReadWriteLock();
 
-    private static final Map<ServerConnection, HashSet<ChunkKey>> lockedChunks = new HashMap<>();
+    private static final Map<ChunkKey, List<ServerConnection>> chunkSubscribers = new ConcurrentHashMap<>();
+    private static final ReentrantReadWriteLock chunkSubscribersLock = new ReentrantReadWriteLock();
+
+    private static final Map<ServerConnection, HashSet<ChunkKey>> ownedChunks = new HashMap<>();
     private static final Map<ServerConnection, HashSet<ChunkKey>> subscribedChunks = new HashMap<>();
 
     public static ServerConnection getOwner(String world, int cx, int cz) {
         final ChunkKey key = new ChunkKey(world, cx, cz);
-        synchronized (chunkLocks.get(key)) {
-            List<ServerConnection> serverConnections = chunkLocks.get(key);
+        chunkOwnersLock.readLock().lock();
+        try {
+            List<ServerConnection> serverConnections = chunkOwners.get(key);
             if (serverConnections != null && !serverConnections.isEmpty()) {
                 return serverConnections.get(0);
             }
+            return null;
+        } finally {
+            chunkOwnersLock.readLock().unlock();
         }
-        return null;
     }
 
     public static ServerConnection getOwnerOrSubscriber(String world, int cx, int cz) {
@@ -38,14 +45,17 @@ public class ChunkSubscriptionManager {
         }
 
         final ChunkKey key = new ChunkKey(world, cx, cz);
-        synchronized (chunkSubscribers.get(key)) {
+        chunkSubscribersLock.readLock().lock();
+        try {
             List<ServerConnection> serverConnections = chunkSubscribers.get(key);
             if (serverConnections != null && !serverConnections.isEmpty()) {
                 return serverConnections.get(0);
             }
-        }
 
-        return null;
+            return null;
+        } finally {
+            chunkSubscribersLock.readLock().unlock();
+        }
     }
 
     public static ServerConnection lock(ServerConnection serverConnection, String world, int cx, int cz) {
@@ -54,10 +64,12 @@ public class ChunkSubscriptionManager {
 
     public static ServerConnection lock(ServerConnection serverConnection, String world, int cx, int cz, boolean force) {
         ChunkKey key = new ChunkKey(world, cx, cz);
-        synchronized (chunkLocks) {
-            List<ServerConnection> serverConnections = chunkLocks.computeIfAbsent(key, key2 -> {
-                synchronized (objectPool) {
-                    List<ServerConnection> list = objectPool.poll();
+
+        chunkOwnersLock.writeLock().lock();
+        try {
+            List<ServerConnection> serverConnections = chunkOwners.computeIfAbsent(key, key2 -> {
+                synchronized (serverPool) {
+                    List<ServerConnection> list = serverPool.poll();
                     if (list != null) {
                         return list;
                     }
@@ -76,18 +88,23 @@ public class ChunkSubscriptionManager {
                     serverConnections.add(serverConnection);
                 }
 
-                lockedChunks.computeIfAbsent(serverConnection, k -> new HashSet<>()).add(key);
+                ownedChunks.computeIfAbsent(serverConnection, k -> new HashSet<>()).add(key);
 
                 if (serverConnections.size() == 1 || force) {
-                    synchronized (chunkSubscribers.get(key)) {
+                    chunkSubscribersLock.readLock().lock();
+                    try {
                         if (chunkSubscribers.get(key) != null) {
                             updateOwner(serverConnections.get(0), chunkSubscribers.get(key), key.world, key.x, key.z);
                         }
+                    } finally {
+                        chunkSubscribersLock.readLock().unlock();
                     }
                 }
             }
 
             return serverConnections.get(0);
+        } finally {
+            chunkOwnersLock.writeLock().unlock();
         }
     }
 
@@ -96,15 +113,18 @@ public class ChunkSubscriptionManager {
     }
 
     public static void unlock(ServerConnection serverConnection, ChunkKey key) {
-        synchronized (chunkLocks.get(key)) {
-            List<ServerConnection> serverConnections = chunkLocks.get(key);
+
+        chunkOwnersLock.writeLock().lock();
+        try {
+            List<ServerConnection> serverConnections = chunkOwners.get(key);
             if (serverConnections != null) {
                 for (int i = 0; i < serverConnections.size(); i++) {
                     if (serverConnections.get(i) == serverConnection) {
                         serverConnections.remove(i--);
 
                         if (i == -1) {
-                            synchronized (chunkSubscribers.get(key)) {
+                            chunkSubscribersLock.readLock().lock();
+                            try {
                                 if (chunkSubscribers.get(key) != null) {
                                     if (serverConnections.isEmpty()) {
                                         updateOwner(null, chunkSubscribers.get(key), key.world, key.x, key.z);
@@ -112,22 +132,26 @@ public class ChunkSubscriptionManager {
                                         updateOwner(serverConnections.get(0), chunkSubscribers.get(key), key.world, key.x, key.z);
                                     }
                                 }
+                            } finally {
+                                chunkSubscribersLock.readLock().unlock();
                             }
                         }
                     }
                 }
                 if (serverConnections.isEmpty()) {
-                    chunkLocks.remove(key);
-                    synchronized (objectPool) {
-                        objectPool.add(serverConnections);
+                    chunkOwners.remove(key);
+                    synchronized (serverPool) {
+                        serverPool.add(serverConnections);
                     }
                 }
             }
 
-            HashSet<ChunkKey> chunks = lockedChunks.get(serverConnection);
+            HashSet<ChunkKey> chunks = ownedChunks.get(serverConnection);
             if (chunks != null) {
                 chunks.remove(key);
             }
+        } finally {
+            chunkOwnersLock.writeLock().unlock();
         }
     }
 
@@ -141,10 +165,12 @@ public class ChunkSubscriptionManager {
 
     public static void subscribe(ServerConnection serverConnection, String world, int cx, int cz) {
         ChunkKey key = new ChunkKey(world, cx, cz);
-        synchronized (chunkSubscribers.get(key)) {
+
+        chunkSubscribersLock.writeLock().lock();
+        try {
             List<ServerConnection> serverConnections = chunkSubscribers.computeIfAbsent(key, key2 -> {
-                synchronized (objectPool) {
-                    List<ServerConnection> list = objectPool.poll();
+                synchronized (serverPool) {
+                    List<ServerConnection> list = serverPool.poll();
                     if (list != null) {
                         return list;
                     }
@@ -167,9 +193,11 @@ public class ChunkSubscriptionManager {
                 subscribedChunks.computeIfAbsent(serverConnection, k -> new HashSet<>()).add(key);
             }
 
-            if (chunkLocks.get(key) != null && !chunkLocks.get(key).isEmpty()) {
-                updateOwner(chunkLocks.get(key).get(0), Collections.singletonList(serverConnection), key.world, key.x, key.z);
+            if (chunkOwners.get(key) != null && !chunkOwners.get(key).isEmpty()) {
+                updateOwner(chunkOwners.get(key).get(0), Collections.singletonList(serverConnection), key.world, key.x, key.z);
             }
+        } finally {
+            chunkSubscribersLock.writeLock().unlock();
         }
     }
 
@@ -178,7 +206,8 @@ public class ChunkSubscriptionManager {
     }
 
     public static void unsubscribe(ServerConnection serverConnection, ChunkKey key) {
-        synchronized (chunkSubscribers.get(key)) {
+        chunkSubscribersLock.writeLock().lock();
+        try {
             List<ServerConnection> serverConnections = chunkSubscribers.get(key);
             if (serverConnections != null) {
                 if (serverConnections.remove(serverConnection)) {
@@ -186,8 +215,8 @@ public class ChunkSubscriptionManager {
                 }
                 if (serverConnections.isEmpty()) {
                     chunkSubscribers.remove(key);
-                    synchronized (objectPool) {
-                        objectPool.add(serverConnections);
+                    synchronized (serverPool) {
+                        serverPool.add(serverConnections);
                     }
                 }
             }
@@ -196,6 +225,8 @@ public class ChunkSubscriptionManager {
             if (chunks != null) {
                 chunks.remove(key);
             }
+        } finally {
+            chunkSubscribersLock.writeLock().unlock();
         }
     }
 
@@ -217,19 +248,23 @@ public class ChunkSubscriptionManager {
 
     public static void syncSubscribers(ServerConnection serverConnection, String world, int cx, int cz) {
         ChunkKey key = new ChunkKey(world, cx, cz);
-        synchronized (chunkSubscribers.get(key)) {
+
+        chunkSubscribersLock.readLock().lock();
+        try {
             if (!chunkSubscribers.containsKey(key) || !chunkSubscribers.get(key).contains(serverConnection)) {
                 subscribe(serverConnection, world, cx, cz);
             }
 
             String[] subscribers = chunkSubscribers.get(key).stream().filter(subscriber -> subscriber != serverConnection).map(ServerConnection::getBungeeCordName).toArray(String[]::new);
 
-            serverConnection.send(new ChunkSubscribersSyncMessage(world, cx, cz, chunkLocks.get(key) != null && !chunkLocks.get(key).isEmpty() ? chunkLocks.get(key).get(0).getBungeeCordName() : "", subscribers));
+            serverConnection.send(new ChunkSubscribersSyncMessage(world, cx, cz, chunkOwners.get(key) != null && !chunkOwners.get(key).isEmpty() ? chunkOwners.get(key).get(0).getBungeeCordName() : "", subscribers));
+        } finally {
+            chunkSubscribersLock.readLock().unlock();
         }
     }
 
     public static void unsubscribeAndUnlockAll(ServerConnection serverConnection) {
-        HashSet<ChunkKey> lockedChunkSet = lockedChunks.remove(serverConnection);
+        HashSet<ChunkKey> lockedChunkSet = ownedChunks.remove(serverConnection);
         if (lockedChunkSet != null) {
             lockedChunkSet.forEach(chunk -> unlock(serverConnection, chunk));
         }

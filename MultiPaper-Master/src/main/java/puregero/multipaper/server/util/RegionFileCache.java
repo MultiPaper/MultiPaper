@@ -32,7 +32,7 @@ import java.util.concurrent.CompletableFuture;
 
 public class RegionFileCache {
 
-    private static final int MAX_CACHE_SIZE = 256;
+    private static final int MAX_CACHE_SIZE = Integer.getInteger("max.regionfile.cache.size", 256);
 
     private static final LinkedHashMap<File, Reference<RegionFile>> cache = new LinkedHashMap<>(16, 0.75f, true);
 

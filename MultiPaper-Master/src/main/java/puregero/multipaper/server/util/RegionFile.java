@@ -91,6 +91,8 @@ public class RegionFile {
     private CompletableFuture<?> lastTaskInQueue = CompletableFuture.completedFuture(null);
 
     public RegionFile(File path) {
+        System.out.println("Opening region file " + path);
+
         offsets = new int[SECTOR_INTS];
         chunkTimestamps = new int[SECTOR_INTS];
 
@@ -456,7 +458,12 @@ public class RegionFile {
         file.writeInt(value);
     }
 
-    public synchronized void close() throws IOException {
-        file.close();
+    public void close() throws IOException {
+        while (!lastTaskInQueue.isDone()) {
+            lastTaskInQueue.join();
+        }
+        synchronized (this) {
+            file.close();
+        }
     }
 }

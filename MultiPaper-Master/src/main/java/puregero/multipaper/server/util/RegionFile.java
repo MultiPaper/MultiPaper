@@ -91,8 +91,6 @@ public class RegionFile {
     private CompletableFuture<?> lastTaskInQueue = CompletableFuture.completedFuture(null);
 
     public RegionFile(File path) {
-        System.out.println("Opening region file " + path);
-
         offsets = new int[SECTOR_INTS];
         chunkTimestamps = new int[SECTOR_INTS];
 

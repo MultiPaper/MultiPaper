@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 23 Jun 2022 19:51:08 +1000
+Subject: [PATCH] Allow for safe caching of empty entity chunks
+
+This allows MultiPaper to not have to write empty entity chunks
+when they are already empty on the disk.
+
+diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
+index ef3d23bc931a809f2f85d2eab079a8203893b0ab..c88858693880dd8889e2b8fbcceb8adcf889f933 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
++++ b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
+@@ -31,7 +31,7 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+     private static final String POSITION_TAG = "Position";
+     public final ServerLevel level;
+     private final IOWorker worker;
+-    private final LongSet emptyChunks = new LongOpenHashSet();
++    public final LongSet emptyChunks = new LongOpenHashSet(); // MultiPaper - make public
+     public final ProcessorMailbox<Runnable> entityDeserializerQueue;
+     protected final DataFixer fixerUpper;
+     private final Set<CompletableFuture<CompoundTag>> loadingTasksInProgress = ConcurrentHashMap.newKeySet(); // MultiPaper
+@@ -77,7 +77,7 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+     public CompletableFuture<ChunkEntities<Entity>> loadEntities(ChunkPos pos) {
+         return this.emptyChunks.contains(pos.toLong()) ? CompletableFuture.completedFuture(emptyChunk(pos)) : loadAsync(pos).thenApplyAsync((compound) -> { // MultiPaper - replace this.worker.loadAsync(pos) with async chunk loading
+             if (compound == null) {
+-                // this.emptyChunks.add(pos.toLong()); // MultiPaper - don't cache empty chunks
++                this.emptyChunks.add(pos.toLong()); // MultiPaper - don't cache empty chunks // MultiPaper - allow for safe caching of empty entity chunks
+                 return emptyChunk(pos);
+             } else {
+                 try {
+@@ -92,6 +92,7 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+                 CompoundTag compoundTag = this.upgradeChunkTag(compound);
+                 ListTag listTag = compoundTag.getList("Entities", 10);
+                 List<Entity> list = EntityType.loadEntitiesRecursive(listTag, this.level).collect(ImmutableList.toImmutableList());
++                if (list.isEmpty()) this.emptyChunks.add(pos.toLong()); // MultiPaper - allow for safe caching of empty entity chunks
+                 return new ChunkEntities<>(pos, list);
+             }
+         }, this.entityDeserializerQueue::tell);
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+index 6fd8dbab2ffc53be80dd680ff98c60cdd647a3a9..b8159c561403052929f1e9efd1e6e0d1d377761d 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
+@@ -22,6 +22,7 @@ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.chunk.ChunkAccess;
+ import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.level.chunk.storage.EntityStorage;
+ import net.minecraft.world.phys.Vec3;
+ import org.apache.commons.lang.ArrayUtils;
+ import org.apache.logging.log4j.LogManager;
+@@ -111,6 +112,12 @@ public class MultiPaperEntitiesHandler {
+     }
+ 
+     public static void onChunkMove(Entity entity, BlockPos to, BlockPos from) {
++        // MultiPaper start - allow for safe caching of empty entity chunks
++        if (entity.shouldBeSaved()) {
++            ((EntityStorage) ((ServerLevel) entity.level).entityManager.permanentStorage).emptyChunks.remove(new ChunkPos(to).toLong());
++        }
++        // MultiPaper end - allow for safe caching of empty entity chunks
++
+         if (from.equals(BlockPos.ZERO)) return; // They just spawned
+         if (!entity.shouldBeSaved() && !(entity.isVehicle() && entity.hasExactlyOnePlayerPassenger())) return; // Entity shouldn't be synced (eg players)
+ 

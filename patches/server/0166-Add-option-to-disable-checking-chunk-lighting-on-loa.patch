@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 23 Jun 2022 19:13:45 +1000
+Subject: [PATCH] Add option to disable checking chunk lighting on load
+
+Disabling this can cause lighting issues when generating chunks,
+but for pregenerated worlds, disabling this can reduce the number
+of chunks being saved significantly.
+
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index b1629a0f2604af82dfb6554e96c8f156bda801c4..92dc32ead1589846ff312e49553fade97aba5c47 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -1291,7 +1291,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         // Paper end - force competion on the main thread
+     }
+ 
+-    protected void releaseLightTicket(ChunkPos pos) {
++    public void releaseLightTicket(ChunkPos pos) {
+         this.mainThreadExecutor.tell(Util.name(() -> {
+             this.distanceManager.removeTicket(TicketType.LIGHT, pos, 33 + ChunkStatus.getDistance(ChunkStatus.LIGHT), pos);
+         }, () -> {
+diff --git a/src/main/java/net/minecraft/world/level/chunk/ChunkStatus.java b/src/main/java/net/minecraft/world/level/chunk/ChunkStatus.java
+index 954e141e5617d6d52e2f3008c25fe9e2fe2f0f9a..592a05ee3d7f48c65289b407b3ef5c6db7fd6a98 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/ChunkStatus.java
++++ b/src/main/java/net/minecraft/world/level/chunk/ChunkStatus.java
+@@ -26,6 +26,7 @@ import net.minecraft.world.level.levelgen.GenerationStep;
+ import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.levelgen.blending.Blender;
+ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureManager;
++import puregero.multipaper.MultiPaperConfig;
+ 
+ public class ChunkStatus {
+ 
+@@ -155,7 +156,14 @@ public class ChunkStatus {
+     public static final ChunkStatus LIGHT = ChunkStatus.register("light", ChunkStatus.FEATURES, 1, ChunkStatus.POST_FEATURES, ChunkStatus.ChunkType.PROTOCHUNK, (chunkstatus, executor, worldserver, chunkgenerator, definedstructuremanager, lightenginethreaded, function, list, ichunkaccess, flag) -> {
+         return ChunkStatus.lightChunk(chunkstatus, lightenginethreaded, ichunkaccess);
+     }, (chunkstatus, worldserver, definedstructuremanager, lightenginethreaded, function, ichunkaccess) -> {
+-        return ChunkStatus.lightChunk(chunkstatus, lightenginethreaded, ichunkaccess);
++        // MultiPaper start
++        if (MultiPaperConfig.checkChunkLightingOnLoad) {
++            return ChunkStatus.lightChunk(chunkstatus, lightenginethreaded, ichunkaccess);
++        } else {
++            worldserver.chunkSource.chunkMap.releaseLightTicket(ichunkaccess.chunkPos);
++            return CompletableFuture.completedFuture(Either.left(ichunkaccess));
++        }
++        // MultiPaper end
+     });
+     public static final ChunkStatus SPAWN = ChunkStatus.registerSimple("spawn", ChunkStatus.LIGHT, 0, ChunkStatus.POST_FEATURES, ChunkStatus.ChunkType.PROTOCHUNK, (chunkstatus, worldserver, chunkgenerator, list, ichunkaccess) -> {
+         if (!ichunkaccess.isUpgrading()) {

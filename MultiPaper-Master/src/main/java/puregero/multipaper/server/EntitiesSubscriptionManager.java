@@ -4,6 +4,7 @@ import puregero.multipaper.mastermessagingprotocol.ChunkKey;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.AddEntitySubscriberMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.RemoveEntitySubscriberMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.EntitySubscribersSyncMessage;
+import puregero.multipaper.server.util.EntitiesLock;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,8 +17,9 @@ public class EntitiesSubscriptionManager {
     private static final Map<ServerConnection, HashSet<ChunkKey>> subscribedChunks = new HashMap<>();
 
     public static ServerConnection getSubscriber(String world, int cx, int cz) {
-        synchronized (chunkSubscribers) {
-            List<ServerConnection> serverConnections = chunkSubscribers.get(new ChunkKey(world, cx, cz));
+        ChunkKey key = new ChunkKey(world, cx, cz);
+        synchronized (EntitiesLock.getEntitiesLock(key)) {
+            List<ServerConnection> serverConnections = chunkSubscribers.get(key);
             if (serverConnections != null && !serverConnections.isEmpty()) {
                 return serverConnections.get(0);
             }
@@ -28,7 +30,7 @@ public class EntitiesSubscriptionManager {
 
     public static void subscribe(ServerConnection serverConnection, String world, int cx, int cz) {
         ChunkKey key = new ChunkKey(world, cx, cz);
-        synchronized (chunkSubscribers) {
+        synchronized (EntitiesLock.getEntitiesLock(key)) {
             List<ServerConnection> serverConnections = chunkSubscribers.computeIfAbsent(key, key2 -> {
                 synchronized (objectPool) {
                     List<ServerConnection> list = objectPool.poll();
@@ -61,7 +63,7 @@ public class EntitiesSubscriptionManager {
     }
 
     public static void unsubscribe(ServerConnection serverConnection, ChunkKey key) {
-        synchronized (chunkSubscribers) {
+        synchronized (EntitiesLock.getEntitiesLock(key)) {
             List<ServerConnection> serverConnections = chunkSubscribers.get(key);
             if (serverConnections != null) {
                 if (serverConnections.remove(serverConnection)) {
@@ -100,7 +102,7 @@ public class EntitiesSubscriptionManager {
 
     public static void syncSubscribers(ServerConnection serverConnection, String world, int cx, int cz) {
         ChunkKey key = new ChunkKey(world, cx, cz);
-        synchronized (chunkSubscribers) {
+        synchronized (EntitiesLock.getEntitiesLock(key)) {
             if (!chunkSubscribers.containsKey(key) || !chunkSubscribers.get(key).contains(serverConnection)) {
                 subscribe(serverConnection, world, cx, cz);
             }
@@ -112,11 +114,9 @@ public class EntitiesSubscriptionManager {
     }
 
     public static void unsubscribeAll(ServerConnection serverConnection) {
-        synchronized (chunkSubscribers) {
-            HashSet<ChunkKey> chunks = subscribedChunks.remove(serverConnection);
-            if (chunks != null) {
-                chunks.forEach(chunk -> unsubscribe(serverConnection, chunk));
-            }
+        HashSet<ChunkKey> chunks = subscribedChunks.remove(serverConnection);
+        if (chunks != null) {
+            chunks.forEach(chunk -> unsubscribe(serverConnection, chunk));
         }
     }
 }

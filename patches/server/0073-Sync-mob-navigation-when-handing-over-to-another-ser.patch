@@ -18,24 +18,24 @@ index d35032a8d2612d555c3dad1fe496d7ae1c5a285b..90f8466df6d4f43c4c35518239e57e16
      protected int lastStuckCheck;
      protected Vec3 lastStuckCheckPos = Vec3.ZERO;
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-index f997ed6f246b310ea5c0e09f7aff979a1d9f6eea..b2cec806cac3a2e303f2dee17d991e6c6cea22a5 100644
+index 2f092bb9be270ee36979d1fdf176b368c25a9aaf..ad81150f0a1c5f687477f9de5f3a2e088055149f 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -121,6 +121,14 @@ public class MultiPaperEntitiesHandler {
-             if (!MultiPaper.isChunkLocal(chunkTo)) {
+@@ -122,6 +122,14 @@ public class MultiPaperEntitiesHandler {
                  // Leaving our jurisdiction, do a full entity update to ensure the new external server has all the required info
-                 MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity)));
-+                if (entity instanceof Mob mob) {
-+                    MultiPaper.runSync(() -> {
-+                        BlockPos goal = mob.getNavigation().getTargetPos();
-+                        if (goal != null) {
-+                            MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new MobSetNavigationGoalPacket(mob, goal));
-+                        }
-+                    });
-+                }
+                 if (!(entity instanceof ServerPlayer)) { // Ignore players as they aren't ticked by the new external server
+                     MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity)));
++                    if (entity instanceof Mob mob) {
++                        MultiPaper.runSync(() -> {
++                            BlockPos goal = mob.getNavigation().getTargetPos();
++                            if (goal != null) {
++                                MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new MobSetNavigationGoalPacket(mob, goal));
++                            }
++                        });
++                    }
+                 }
              }
              for (ExternalServer fromServer : chunkFrom.externalEntitiesSubscribers) {
-                 if (fromServer.getConnection() != null && !chunkTo.externalEntitiesSubscribers.contains(fromServer)) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 index c5159b724bb5bb96493386f861a96e8f8373547a..c1de5fe02bac4b0581fedb3e5fbf2416c34f6f29 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java

@@ -78,3 +78,10 @@ Whether to sync player permissions between servers. This can be quite resource
 intensive at higher player counts, and can be disabled if you do not use
 permissions, or have a permissions manager that already syncs the permissions
 between servers.
+
+`reducePlayerPositionUpdatesInUnloadedChunks`
+Enabling this will prevent a player's position being updated every tick on
+external servers that don't have the player's chunk loaded. This will mean that
+if you teleport to the player, you will be teleported to an outdated location.
+`Player.getLocation()` will also return an outdated location for external
+players in unloaded chunks.

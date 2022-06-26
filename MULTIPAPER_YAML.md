@@ -68,11 +68,6 @@ Kick connecting players whether the player count summed across all servers
 exceeds the max-players value (false, default), or whether the player count on
 just the local server exceeds the max-players value (true).
 
-`checkChunkLightingOnLoad`
-Disabling this can cause lighting issues when generating chunks, but for
-pre-generated worlds, disabling this can significantly reduce the number of
-chunks being saved unnecessarily.
-
 `syncPermissions`  
 Whether to sync player permissions between servers. This can be quite resource
 intensive at higher player counts, and can be disabled if you do not use

@@ -80,3 +80,9 @@ external servers that don't have the player's chunk loaded. This will mean that
 if you teleport to the player, you will be teleported to an outdated location.
 `Player.getLocation()` will also return an outdated location for external
 players in unloaded chunks.
+
+`dontSaveLightingUpdates`
+When loading chunks, lighting updates are frequently applied to them even if
+the chunks are pre-generated, causing unnecessary savings of the chunks.
+Enabling this option can significantly reduce the number of chunks being saved
+unnecessarily.

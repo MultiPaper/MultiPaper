@@ -86,3 +86,9 @@ When loading chunks, lighting updates are frequently applied to them even if
 the chunks are pre-generated, causing unnecessary savings of the chunks.
 Enabling this option can significantly reduce the number of chunks being saved
 unnecessarily.
+
+`disableRedstoneSafetySync`
+When executing a redstone contraption that is run across multiple servers,
+MultiPaper syncs these servers together such that the redstone contraption can
+run without getting out of sync. Disabling this can prevent lag spikes caused
+by this system, but can also mess up cross-server redstone.

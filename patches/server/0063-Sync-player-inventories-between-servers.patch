@@ -458,10 +458,10 @@ index e1a9a761ebfcbc2e9d5f1fd2682159cb401965d5..260beef2e59be83b72e806c39fd95bdd
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f0d0f921d1d73218d6dfbac9cb0dedccc3f3e906
+index 0000000000000000000000000000000000000000..5658fd6060aa58e2b4dd527b0832e0b22f1fc779
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-@@ -0,0 +1,360 @@
+@@ -0,0 +1,363 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -488,6 +488,7 @@ index 0000000000000000000000000000000000000000..f0d0f921d1d73218d6dfbac9cb0dedcc
 +
 +    private static boolean updatingInventory = false;
 +    private static final HashMap<UUID, ArrayList<AwaitingTeleport>> awaitingTeleports = new HashMap<>();
++    private static final Set<NonNullListFilter<? extends ItemStack>> modifiedInventories = new LinkedHashSet<>();
 +
 +    public static boolean handlePacketFromExternalServer(ExternalServer server, ServerPlayer player, Packet<?> packet) {
 +        if (packet instanceof ClientboundOpenScreenPacket) {
@@ -715,7 +716,12 @@ index 0000000000000000000000000000000000000000..f0d0f921d1d73218d6dfbac9cb0dedcc
 +     * Returns true if the changes to the inventory component should be marked as dirty.
 +     */
 +    public static <E extends ItemStack> boolean markDirty(NonNullListFilter<E> inventoryComponent) {
-+        return !updatingInventory;
++        if (!updatingInventory) {
++            modifiedInventories.add(inventoryComponent);
++            return true;
++        }
++
++        return false;
 +    }
 +
 +    /**
@@ -723,19 +729,16 @@ index 0000000000000000000000000000000000000000..f0d0f921d1d73218d6dfbac9cb0dedcc
 +     * to other servers without a tick delay.
 +     */
 +    public static void tick() {
-+        for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
-+            for (NonNullListFilter<? extends ItemStack> inventoryComponent : new NonNullListFilter[] {
-+                    player.getInventory().items,
-+                    player.getInventory().armor,
-+                    player.getInventory().offhand,
-+            }) {
++        for (NonNullListFilter<? extends ItemStack> inventoryComponent : modifiedInventories) {
++            if (inventoryComponent.player instanceof ServerPlayer player) {
 +                broadcastComponentChanges(player, inventoryComponent);
 +            }
 +        }
++        modifiedInventories.clear();
 +    }
 +
 +    public static void broadcastComponentChanges(ServerPlayer player, NonNullListFilter<? extends ItemStack> inventoryComponent) {
-+        if (!((ServerPlayer) inventoryComponent.player).didPlayerJoinEvent) {
++        if (!player.didPlayerJoinEvent) {
 +            // Don't update the inventory until they fully join
 +            return;
 +        }

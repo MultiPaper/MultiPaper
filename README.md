@@ -5,7 +5,7 @@
 **MultiPaper is in public beta.** Most features work for most players most of
 the time, however things can occasionally break.
 
-1.18 [Paper](https://github.com/PaperMC/Paper) fork that enables a server admin
+1.19 [Paper](https://github.com/PaperMC/Paper) fork that enables a server admin
 to scale a single world across multiple servers. Multiple MultiPaper servers run
 the same world and use a MultiPaper-Master to coordinate with eachother and
 store server data. While the MultiPaper-Master is usually run as a standalone
@@ -178,7 +178,7 @@ repositories {
 }
 
 dependencies {
-  compile "com.github.puregero:multipaper-api:1.18.2-R0.1-SNAPSHOT"
+  compile "com.github.puregero:multipaper-api:1.19-R0.1-SNAPSHOT"
 }
 ```
 
@@ -195,7 +195,7 @@ Or in your pom.xml:
     <dependency>
         <groupId>com.github.puregero</groupId>
         <artifactId>multipaper-api</artifactId>
-        <version>1.18.2-R0.1-SNAPSHOT</version>
+        <version>1.19-R0.1-SNAPSHOT</version>
     </dependency>
 </dependencies>
 ```

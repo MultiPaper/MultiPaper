@@ -1,0 +1,127 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 25 Nov 2021 15:19:41 +1000
+Subject: [PATCH] Sync level.dat
+
+
+diff --git a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
+index 69fb994ae11f0ea8ad5de8861477fcb25529f7ab..73fc5d660b34aebd13bd2b5d0a8691f7386d637d 100644
+--- a/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
++++ b/src/main/java/net/minecraft/world/level/storage/LevelStorageSource.java
+@@ -60,6 +60,7 @@ import net.minecraft.world.level.dimension.LevelStem;
+ import net.minecraft.world.level.levelgen.WorldGenSettings;
+ import net.minecraft.world.level.levelgen.presets.WorldPresets;
+ import org.slf4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class LevelStorageSource {
+ 
+@@ -193,7 +194,7 @@ public class LevelStorageSource {
+         } else {
+             Path path = levelSave.dataFile();
+ 
+-            if (Files.exists(path, new LinkOption[0])) {
++            if (true || Files.exists(path, new LinkOption[0])) { // MultiPaper
+                 T t0 = levelDataParser.apply(path, this.fixerUpper);
+ 
+                 if (t0 != null) {
+@@ -229,7 +230,14 @@ public class LevelStorageSource {
+     static BiFunction<Path, DataFixer, PrimaryLevelData> getLevelData(DynamicOps<Tag> ops, DataPackConfig dataPackSettings, Lifecycle lifecycle) {
+         return (path, datafixer) -> {
+             try {
+-                CompoundTag nbttagcompound = NbtIo.readCompressed(path.toFile());
++                CompoundTag nbttagcompound = MultiPaper.readLevel(path.toFile().getParentFile().getName()); // NbtIo.readCompressed(path.toFile()); // MultiPaper
++                // MultiPaper start
++                if (nbttagcompound == null) {
++                    LOGGER.info("A new level.dat is being generated at " + path.toFile().getPath() + ", forcing it to save");
++                    MultiPaper.levelDatNeedsSaving = true;
++                    return null;
++                }
++                // MultiPaper end
+                 CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
+                 CompoundTag nbttagcompound2 = nbttagcompound1.contains("Player", 10) ? nbttagcompound1.getCompound("Player") : null;
+ 
+@@ -288,6 +296,7 @@ public class LevelStorageSource {
+ 
+     @Nullable
+     private static Tag readLightweightData(Path path) throws IOException {
++        if (true) return MultiPaper.readLevel(file.getParentFile().getName()); // MultiPaper
+         SkipFields skipfields = new SkipFields(new FieldSelector[]{new FieldSelector("Data", CompoundTag.TYPE, "Player"), new FieldSelector("Data", CompoundTag.TYPE, "WorldGenSettings")});
+ 
+         NbtIo.parseCompressed(path.toFile(), skipfields);
+@@ -455,6 +464,13 @@ public class LevelStorageSource {
+             nbttagcompound2.put("Data", nbttagcompound1);
+ 
+             try {
++                // MultiPaper start
++                if (true) {
++                    MultiPaper.writeLevel(file.getName(), nbttagcompound2);
++                    return;
++                }
++                // MultiPaper end
++
+                 File file1 = File.createTempFile("level", ".dat", file);
+ 
+                 NbtIo.writeCompressed(nbttagcompound2, file1);
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index a4b92e9077582d74c35afb2b087dcbeab40e3df9..05e6927e995b8686f83cf13e20ea2efa9838d71d 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -16,6 +16,8 @@ import net.minecraft.world.level.chunk.ChunkAccess;
+ import net.minecraft.world.level.chunk.ChunkStatus;
+ import net.minecraft.world.level.chunk.ImposterProtoChunk;
+ import net.minecraft.world.level.chunk.LevelChunk;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
+ import org.bukkit.Bukkit;
+ import org.bukkit.Chunk;
+ import org.bukkit.World;
+@@ -50,11 +52,14 @@ import java.util.zip.InflaterInputStream;
+ 
+ public class MultiPaper {
+ 
++    private static final Logger LOGGER = LogManager.getLogger(MultiPaper.class.getSimpleName());
++
+     public final static ConcurrentHashMap<ChunkKey, ExternalServer> chunkOwnerToSet = new ConcurrentHashMap<>();
+     public final static ConcurrentHashMap<ChunkKey, HashSet<ExternalServer>> chunkSubscribersToSet = new ConcurrentHashMap<>();
+     public final static ConcurrentHashMap<ChunkKey, Runnable> reloadChunks = new ConcurrentHashMap<>();
+     private static MultiPaperConnection multiPaperConnection = null;
+     private final static List<ChunkHolder> visibleChunksToCheck = new ArrayList<>();
++    public static boolean levelDatNeedsSaving = false;
+ 
+     public static MultiPaperConnection getConnection() {
+         if (multiPaperConnection == null) {
+@@ -101,6 +106,14 @@ public class MultiPaper {
+                 break;
+             }
+         }
++
++        if (levelDatNeedsSaving) {
++            levelDatNeedsSaving = false;
++            LOGGER.info("A level.dat needs saving, all worlds are being force saved");
++            for (ServerLevel level : MinecraftServer.getServer().getAllLevels()) {
++                level.saveIncrementally(true);
++            }
++        }
+     }
+ 
+     public static void sendTickTime(long time, double tps) {
+@@ -320,6 +333,18 @@ public class MultiPaper {
+         writeRegionFile(world, path, cx, cz, nbtToBytes(compoundTag));
+     }
+ 
++    public static CompoundTag readLevel(String world) throws IOException {
++        byte[] data = getConnection().sendAndAwaitReply(new ReadLevelMessage(world), DataMessageReply.class).thenApply(message -> message.data).join();
++
++        return data.length == 0 ? null : NbtIo.readCompressed(new ByteArrayInputStream(data));
++    }
++
++    public static void writeLevel(String world, CompoundTag compoundTag) throws IOException {
++        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
++        NbtIo.writeCompressed(compoundTag, buffer);
++        getConnection().send(new WriteLevelMessage(world, buffer.toByteArray()), message -> { /* do nothing */ });
++    }
++
+     private static String getWorld(File path) {
+         do {
+             path = path.getParentFile();

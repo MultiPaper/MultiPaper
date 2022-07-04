@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paul <paul@technove.co>
+Date: Mon, 20 Sep 2021 12:53:35 -0500
+Subject: [PATCH] Ensure level height is inlined
+
+
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index 8bca0ac5115e1fc60845490e55a1a0f7c0b53323..7448a1235281e1e6851fe57e2e145aefcc167fc8 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -272,6 +272,15 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+ 
+     public abstract ResourceKey<LevelStem> getTypeKey();
+ 
++    // Airplane start - ensure these get inlined
++    private final int minBuildHeight, minSection, height, maxBuildHeight, maxSection;
++    @Override public final int getMaxBuildHeight() { return this.maxBuildHeight; }
++    @Override public final int getMinSection() { return this.minSection; }
++    @Override public final int getMaxSection() { return this.maxSection; }
++    @Override public final int getMinBuildHeight() { return this.minBuildHeight; }
++    @Override public final int getHeight() { return this.height; }
++    // Airplane end
++
+     protected Level(WritableLevelData worlddatamutable, ResourceKey<Level> resourcekey, Holder<DimensionType> holder, Supplier<ProfilerFiller> supplier, boolean flag, boolean flag1, long i, int j, org.bukkit.generator.ChunkGenerator gen, org.bukkit.generator.BiomeProvider biomeProvider, org.bukkit.World.Environment env, java.util.function.Function<org.spigotmc.SpigotWorldConfig, io.papermc.paper.configuration.WorldConfiguration> paperWorldConfigCreator, java.util.concurrent.Executor executor) { // Paper - Async-Anti-Xray - Pass executor
+         this.spigotConfig = new org.spigotmc.SpigotWorldConfig(((net.minecraft.world.level.storage.PrimaryLevelData) worlddatamutable).getLevelName()); // Spigot
+         this.paperConfig = paperWorldConfigCreator.apply(this.spigotConfig); // Paper
+@@ -294,6 +303,14 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+         });
+         final DimensionType dimensionmanager = (DimensionType) holder.value();
+ 
++        // Airplane start
++        this.minBuildHeight = dimensionmanager.minY();
++        this.minSection = SectionPos.blockToSectionCoord(this.minBuildHeight);
++        this.height = dimensionmanager.height();
++        this.maxBuildHeight = this.minBuildHeight + this.height;
++        this.maxSection = SectionPos.blockToSectionCoord(this.maxBuildHeight - 1) + 1;
++        // Airplane end
++
+         this.dimension = resourcekey;
+         this.isClientSide = flag;
+         if (dimensionmanager.coordinateScale() != 1.0D) {

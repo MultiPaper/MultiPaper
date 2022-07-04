@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 14 Dec 2021 00:54:24 +1000
+Subject: [PATCH] Sync advancements in real time
+
+
+diff --git a/src/main/java/net/minecraft/server/PlayerAdvancements.java b/src/main/java/net/minecraft/server/PlayerAdvancements.java
+index 5d99896a52ff1e446f19aff657227f78de51cae0..b3885910b45bb5e0e748f8ca4395063f9d624ad7 100644
+--- a/src/main/java/net/minecraft/server/PlayerAdvancements.java
++++ b/src/main/java/net/minecraft/server/PlayerAdvancements.java
+@@ -52,6 +52,7 @@ import net.minecraft.world.level.GameRules;
+ import org.slf4j.Logger;
+ import puregero.multipaper.ExternalPlayer;
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.AdvancementGrantProgressPacket;
+ 
+ public class PlayerAdvancements {
+ 
+@@ -307,10 +308,11 @@ public class PlayerAdvancements {
+                 return false;
+             }
+             // Paper end
++            AdvancementGrantProgressPacket.onAdvancementGrantProgress(this.player, advancement, criterionName);
+             this.unregisterListeners(advancement);
+             this.progressChanged.add(advancement);
+             flag = true;
+-            if (!flag1 && advancementprogress.isDone()) {
++            if (!flag1 && advancementprogress.isDone() && MultiPaper.isRealPlayer(player)) { // MultiPaper - only broadcast advancement message for our players
+                 // Paper start - Add Adventure message to PlayerAdvancementDoneEvent
+                 boolean announceToChat = advancement.getDisplay() != null && advancement.getDisplay().shouldAnnounceChat();
+                 net.kyori.adventure.text.Component message = announceToChat ? io.papermc.paper.adventure.PaperAdventure.asAdventure(Component.translatable("chat.type.advancement." + advancement.getDisplay().getFrame().getName(), this.player.getDisplayName(), advancement.getChatComponent())) : null;
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/AdvancementGrantProgressPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/AdvancementGrantProgressPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e1130055ba1cb66678d8e6bbeecef5dc98aea7f5
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/AdvancementGrantProgressPacket.java
+@@ -0,0 +1,55 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.advancements.Advancement;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.resources.ResourceLocation;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class AdvancementGrantProgressPacket extends ExternalServerPacket {
++
++    private static boolean updatingAdvancements = false;
++
++    private final UUID uuid;
++    private final String advancement;
++    private final String criterion;
++
++    public AdvancementGrantProgressPacket(ServerPlayer player, Advancement advancement, String criterion) {
++        this.uuid = player.getUUID();
++        this.advancement = advancement.getId().toString();
++        this.criterion = criterion;
++    }
++
++    public AdvancementGrantProgressPacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++        advancement = in.readUtf();
++        criterion = in.readUtf();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeUtf(advancement);
++        out.writeUtf(criterion);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            updatingAdvancements = true;
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++            player.getAdvancements().award(player.getServer().getAdvancements().getAdvancement(new ResourceLocation(advancement)), criterion);
++            updatingAdvancements = false;
++        });
++    }
++
++    public static void onAdvancementGrantProgress(ServerPlayer player, Advancement advancement, String criterion) {
++        if (!updatingAdvancements) {
++            MultiPaper.broadcastPacketToExternalServers(new AdvancementGrantProgressPacket(player, advancement, criterion));
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 39d19ad36a0591fdf391bf96330842d5e321232b..02c69b6ed8b08d78947252111da9f74d94f81bb6 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -54,6 +54,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerFoodUpdatePacket.class, PlayerFoodUpdatePacket::new);
+         addPacket(EntityUpdateEffectPacket.class, EntityUpdateEffectPacket::new);
+         addPacket(GameRuleUpdatePacket.class, GameRuleUpdatePacket::new);
++        addPacket(AdvancementGrantProgressPacket.class, AdvancementGrantProgressPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {

@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 5 Apr 2022 13:08:48 +1000
+Subject: [PATCH] Tick death for external players
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+index f67674f95f04ab1e194024db61185eb7d3a9d0fd..d8b93642d851790c528c6167ce35b9c9cba3c771 100644
+--- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
++++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
+@@ -623,6 +623,14 @@ public abstract class LivingEntity extends Entity {
+         return false;
+     }
+ 
++    // MultiPaper
++    public void tickDeathIfDead() {
++        if (this.isDeadOrDying() && this.level.shouldTickDeath(this)) {
++            this.tickDeath();
++        }
++    }
++    // MultiPaper end
++
+     protected void tickDeath() {
+         ++this.deathTime;
+         if (this.deathTime == 20 && !this.level.isClientSide()) {
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index ff1ae39da80db84d8d497a8c8312b4e659fe3e6d..89b58d6b58fe888d462823932336150978acb747 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -94,6 +94,8 @@ public class MultiPaper {
+                 if (player.takeXpDelay > 0) {
+                     --player.takeXpDelay;
+                 }
++
++                externalPlayer.tickDeathIfDead();
+             }
+ 
+             player.syncExperience();

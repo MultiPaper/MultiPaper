@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 1 Jul 2022 17:21:37 +1000
+Subject: [PATCH] Only send latency updates for local players
+
+External players' latency isn't synced, thus making it pointless
+and wasting resources to send latency updates for those players
+
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index 760f96ccfb6e58ee874a73cbd0402b6d4bbeccf5..0b347c2d27f17a4be6ea0572645a0382db04b405 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -1080,7 +1080,7 @@ public abstract class PlayerList {
+             for (int i = 0; i < this.players.size(); ++i) {
+                 final ServerPlayer target = (ServerPlayer) this.players.get(i);
+ 
+-                target.connection.send(new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.UPDATE_LATENCY, this.players.stream().filter(new Predicate<ServerPlayer>() {
++                target.connection.send(new ClientboundPlayerInfoPacket(ClientboundPlayerInfoPacket.Action.UPDATE_LATENCY, this.localPlayers.stream().filter(new Predicate<ServerPlayer>() { // Multipaper - use this.localPlayers instead of this.players
+                     @Override
+                     public boolean apply(ServerPlayer input) {
+                         return target.getBukkitEntity().canSee(input.getBukkitEntity());

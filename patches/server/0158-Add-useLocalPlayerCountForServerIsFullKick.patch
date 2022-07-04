@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 28 Apr 2022 21:49:48 +1000
+Subject: [PATCH] Add useLocalPlayerCountForServerIsFullKick
+
+
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index 417befff4c1a0426d9ebd24cb8f96e11d48e45bc..760f96ccfb6e58ee874a73cbd0402b6d4bbeccf5 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -91,6 +91,7 @@ import org.bukkit.event.player.PlayerRespawnEvent;
+ import puregero.multipaper.ExternalPlayer;
+ import puregero.multipaper.ExternalServerConnection;
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperConfig;
+ import puregero.multipaper.externalserverprotocol.*;
+ // CraftBukkit end
+ 
+@@ -784,7 +785,8 @@ public abstract class PlayerList {
+             event.disallow(PlayerLoginEvent.Result.KICK_BANNED, PaperAdventure.asAdventure(ichatmutablecomponent)); // Paper - Adventure
+         } else {
+             // return this.players.size() >= this.maxPlayers && !this.canBypassPlayerLimit(gameprofile) ? IChatBaseComponent.translatable("multiplayer.disconnect.server_full") : null;
+-            if (this.players.size() >= this.maxPlayers && !this.canBypassPlayerLimit(gameprofile)) {
++            boolean isFull = MultiPaperConfig.useLocalPlayerCountForServerIsFullKick ? this.localPlayers.size() >= this.maxPlayers : this.players.size() >= this.maxPlayers; // MultiPaper - add isFull
++            if (isFull && !this.canBypassPlayerLimit(gameprofile)) { // MultiPaper - add isFull
+                 event.disallow(PlayerLoginEvent.Result.KICK_FULL, net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection().deserialize(org.spigotmc.SpigotConfig.serverFullMessage)); // Spigot // Paper - Adventure
+             }
+         }

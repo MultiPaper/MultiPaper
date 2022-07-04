@@ -1,0 +1,131 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 28 Nov 2021 23:37:01 +1000
+Subject: [PATCH] Sync attack strength
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
+index 36c1b695c188e10a765419b63bfb47839e8c1a9f..7f5c2dd786258a7b47ef785afe6c715085132445 100644
+--- a/src/main/java/net/minecraft/world/entity/player/Player.java
++++ b/src/main/java/net/minecraft/world/entity/player/Player.java
+@@ -125,6 +125,7 @@ import org.bukkit.event.entity.EntityExhaustionEvent;
+ import org.bukkit.event.player.PlayerDropItemEvent;
+ import org.bukkit.event.player.PlayerVelocityEvent;
+ import puregero.multipaper.MultiPaperEntityInteractHandler;
++import puregero.multipaper.externalserverprotocol.PlayerResetAttackStrengthPacket;
+ // CraftBukkit end
+ 
+ public abstract class Player extends LivingEntity {
+@@ -307,7 +308,18 @@ public abstract class Player extends LivingEntity {
+             this.setPos(d0, this.getY(), d1);
+         }
+ 
++    // MultiPaper start
++        tickAttackStrength();
++        tickAttackStrengthAfter();
++    }
++
++    public void tickAttackStrength() {
+         ++this.attackStrengthTicker;
++    }
++
++    public void tickAttackStrengthAfter() {
++    // MultiPaper end
++
+         ItemStack itemstack = this.getMainHandItem();
+ 
+         if (!ItemStack.matches(this.lastItemInMainHand, itemstack)) {
+@@ -2237,6 +2249,7 @@ public abstract class Player extends LivingEntity {
+     }
+ 
+     public void resetAttackStrengthTicker() {
++        PlayerResetAttackStrengthPacket.broadcastResetAttackStrength(this);
+         this.attackStrengthTicker = 0;
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 86b3528c9c750251ddc0930af4b607eae662d1ae..bece6987454a8379dec67a558f31e5257715c36a 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -87,6 +87,8 @@ public class MultiPaper {
+                 // Copied from Paper end
+ 
+                 externalPlayer.checkInsideBlocks();
++
++                externalPlayer.tickAttackStrength();
+             }
+         }
+ 
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index aabc8ed6261846cbed62ab68c5d8ab8a135a0fed..019b98edfa8d7f0120099ffc4aad0134cab9094a 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -45,6 +45,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerActionOnEntityPacket.class, PlayerActionOnEntityPacket::new);
+         addPacket(PlayerTouchEntityPacket.class, PlayerTouchEntityPacket::new);
+         addPacket(HurtEntityPacket.class, HurtEntityPacket::new);
++        addPacket(PlayerResetAttackStrengthPacket.class, PlayerResetAttackStrengthPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerResetAttackStrengthPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerResetAttackStrengthPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..048e25da96045e81871b5024b379d8b10f80efe7
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerResetAttackStrengthPacket.java
+@@ -0,0 +1,55 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.player.Player;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class PlayerResetAttackStrengthPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PlayerResetAttackStrengthPacket.class.getSimpleName());
++    private static boolean settingAttackStrength = false;
++
++    private final UUID uuid;
++
++    public PlayerResetAttackStrengthPacket(Player player) {
++        this.uuid = player.getUUID();
++    }
++
++    public PlayerResetAttackStrengthPacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            if (player == null) {
++                LOGGER.warn("Tried to reset attack strength of a non-existent player with uuid " + uuid);
++                return;
++            }
++
++            settingAttackStrength = true;
++            player.resetAttackStrengthTicker();
++            settingAttackStrength = false;
++        });
++    }
++
++    public static void broadcastResetAttackStrength(Player player) {
++        if (!settingAttackStrength && player instanceof ServerPlayer serverPlayer) {
++            MultiPaper.broadcastPacketToExternalServers(serverPlayer, new PlayerResetAttackStrengthPacket(player));
++        }
++    }
++}

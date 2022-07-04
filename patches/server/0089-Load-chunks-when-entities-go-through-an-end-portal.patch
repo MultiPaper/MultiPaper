@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 22 Dec 2021 17:48:55 +1000
+Subject: [PATCH] Load chunks when entities go through an end portal
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 222e3ab6e6e146654a186b32fd360aafa6cf4d2e..3e7b86acf8c58a46cf3454daa3f1accfa052b73e 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -3495,6 +3495,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+                 Entity entity = this.getType().create(worldserver);
+ 
+                 if (entity != null) {
++                    // MultiPaper start - Load chunk fully for portals
++                    BlockPos pos = new BlockPos(position);
++                    worldserver.getChunkSource().addRegionTicket(TicketType.PORTAL, new ChunkPos(pos), 1, pos);
++                    worldserver.getChunkAt(pos);
++                    // MultiPaper end - Load chunk fully for portals
+                     entity.restoreFrom(this);
+                     entity.moveTo(position.x, position.y, position.z, yaw, pitch); // Paper - use EntityPortalExitEvent values
+                     entity.setDeltaMovement(velocity); // Paper - use EntityPortalExitEvent values

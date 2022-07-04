@@ -1,0 +1,374 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 26 Nov 2021 01:30:05 +1000
+Subject: [PATCH] Interact with external entities
+
+
+diff --git a/src/main/java/net/minecraft/network/protocol/game/ServerboundInteractPacket.java b/src/main/java/net/minecraft/network/protocol/game/ServerboundInteractPacket.java
+index c45b5ab6776f3ac79f856c3a6467c510e20db25a..53ca673c9a98c580403232972d11a02f3a12ef65 100644
+--- a/src/main/java/net/minecraft/network/protocol/game/ServerboundInteractPacket.java
++++ b/src/main/java/net/minecraft/network/protocol/game/ServerboundInteractPacket.java
+@@ -29,7 +29,9 @@ public class ServerboundInteractPacket implements Packet<ServerGamePacketListene
+         }
+     };
+ 
+-    private ServerboundInteractPacket(int entityId, boolean playerSneaking, ServerboundInteractPacket.Action type) {
++    public final ServerboundInteractPacket.Action getAction() { return this.action; } // MultiPaper - add accessor
++
++    public ServerboundInteractPacket(int entityId, boolean playerSneaking, ServerboundInteractPacket.Action type) { // MultiPaper - make public
+         this.entityId = entityId;
+         this.action = type;
+         this.usingSecondaryAction = playerSneaking;
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index e8b020e3c598afebf3d055fb8e3c5ff59be4c5f9..f809c3ccb6447511bf465bfd401addf1f56904ab 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -227,10 +227,7 @@ import org.bukkit.inventory.CraftingInventory;
+ import org.bukkit.inventory.EquipmentSlot;
+ import org.bukkit.inventory.InventoryView;
+ import org.bukkit.inventory.SmithingInventory;
+-import puregero.multipaper.ExternalPlayer;
+-import puregero.multipaper.MultiPaper;
+-import puregero.multipaper.MultiPaperInventoryHandler;
+-import puregero.multipaper.MultiPaperPlayerHandler;
++import puregero.multipaper.*;
+ import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
+ // CraftBukkit end
+ 
+@@ -2663,6 +2660,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+         this.player.resetLastActionTime();
+         this.player.setShiftKeyDown(packet.isUsingSecondaryAction());
+         if (entity != null) {
++            if (MultiPaperEntityInteractHandler.handleEntityInteract(player, entity, packet)) return; // MultiPaper
++
+             if (!worldserver.getWorldBorder().isWithinBounds(entity.blockPosition())) {
+                 return;
+             }
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index f1e472b469b9808181cb6ab05de7b01018862759..830f7687c33e48d4b3a54b66168c4e81b8594cb6 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -50,6 +50,7 @@ import net.minecraft.network.chat.HoverEvent;
+ import net.minecraft.network.chat.MutableComponent;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
++import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
+ import net.minecraft.network.protocol.game.VecDeltaCodec;
+ import net.minecraft.network.syncher.EntityDataAccessor;
+ import net.minecraft.network.syncher.EntityDataSerializers;
+@@ -95,6 +96,7 @@ import net.minecraft.world.level.block.*;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.border.WorldBorder;
++import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.level.dimension.DimensionType;
+ import net.minecraft.world.level.dimension.LevelStem;
+ import net.minecraft.world.level.entity.EntityAccess;
+@@ -145,10 +147,13 @@ import org.bukkit.event.entity.EntityPortalEvent;
+ import org.bukkit.event.entity.EntityPoseChangeEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
+ import org.bukkit.plugin.PluginManager;
++import puregero.multipaper.ExternalPlayer;
+ import puregero.multipaper.ExternalServer;
+ import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperEntitiesHandler;
+ import puregero.multipaper.externalserverprotocol.EntityRemovePacket;
++import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
++import puregero.multipaper.externalserverprotocol.EntityUpdateWithDependenciesPacket;
+ // CraftBukkit end
+ 
+ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2674,6 +2679,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+                 }).forEach((entity2) -> {
+                     CriteriaTriggers.START_RIDING_TRIGGER.trigger((ServerPlayer) entity2);
+                 });
++                // MultiPaper start - inform the player's server that they are now riding an entity and hand them the entity's data
++                if (MultiPaperEntitiesHandler.getControllingPassenger(vehicle) == this && MultiPaper.isChunkLocal(level.getChunkIfLoaded(vehicle.blockPosition)) && this instanceof ExternalPlayer player) {
++                    player.externalServerConnection.send(new EntityUpdateNBTPacket(vehicle));
++                    player.externalServerConnection.send(new EntityUpdateWithDependenciesPacket(vehicle, vehicle.getPassengers(), new ClientboundSetPassengersPacket(vehicle)));
++                }
++                // MultiPaper end - inform the player's server that they are now riding an entity and hand them the entity's data
+                 return true;
+             }
+         }
+@@ -2705,6 +2716,14 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+ 
+             this.vehicle = null;
+             if (!entity.removePassenger(this, suppressCancellation)) this.vehicle = entity; // CraftBukkit // Paper
++
++            // MultiPaper start - inform the vehicle's server that the player is no longer riding the entity and hand them the entity's data
++            LevelChunk chunk = level.getChunkIfLoaded(entity.blockPosition);
++            if (vehicle == null && MultiPaper.isRealPlayer(this) && MultiPaper.isChunkExternal(chunk)) {
++                chunk.externalOwner.getConnection().send(new EntityUpdateNBTPacket(entity));
++                chunk.externalOwner.getConnection().send(new EntityUpdateWithDependenciesPacket(entity, entity.getPassengers(), new ClientboundSetPassengersPacket(entity)));
++            }
++            // MultiPaper end - inform the vehicle's server that the player is no longer riding the entity and hand them the entity's data
+         }
+ 
+     }
+diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
+index 065285f45ea6e3655521464eb1e883ad78167122..36c1b695c188e10a765419b63bfb47839e8c1a9f 100644
+--- a/src/main/java/net/minecraft/world/entity/player/Player.java
++++ b/src/main/java/net/minecraft/world/entity/player/Player.java
+@@ -124,6 +124,7 @@ import org.bukkit.event.entity.EntityCombustByEntityEvent;
+ import org.bukkit.event.entity.EntityExhaustionEvent;
+ import org.bukkit.event.player.PlayerDropItemEvent;
+ import org.bukkit.event.player.PlayerVelocityEvent;
++import puregero.multipaper.MultiPaperEntityInteractHandler;
+ // CraftBukkit end
+ 
+ public abstract class Player extends LivingEntity {
+@@ -626,6 +627,7 @@ public abstract class Player extends LivingEntity {
+     }
+ 
+     private void touch(Entity entity) {
++        if (MultiPaperEntityInteractHandler.touchEntity(this, entity)) return; // MultiPaper
+         entity.playerTouch(this);
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..deb7bd1800d5ad2a04bc605d61027bb76d3b7afc
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperEntityInteractHandler.java
+@@ -0,0 +1,59 @@
++package puregero.multipaper;
++
++import net.minecraft.network.protocol.game.ServerboundInteractPacket;
++import net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
++import net.minecraft.network.protocol.game.ServerboundPaddleBoatPacket;
++import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.player.Player;
++import net.minecraft.world.entity.projectile.FishingHook;
++import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.phys.Vec3;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.externalserverprotocol.PlayerActionOnEntityPacket;
++import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
++import puregero.multipaper.externalserverprotocol.PlayerTouchEntityPacket;
++
++public class MultiPaperEntityInteractHandler {
++
++    private static final Logger LOGGER = LogManager.getLogger(MultiPaperEntityInteractHandler.class.getSimpleName());
++
++    public static ExternalServerConnection getOwner(Entity entity) {
++        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
++        if (MultiPaper.isExternalPlayer(entity)) {
++            return ((ExternalPlayer) entity).externalServerConnection;
++        } else if (MultiPaper.isExternalPlayer(MultiPaperEntitiesHandler.getControllingPassenger(entity))) {
++            return ((ExternalPlayer) MultiPaperEntitiesHandler.getControllingPassenger(entity)).externalServerConnection;
++        } else if (MultiPaper.isChunkExternal(chunk) && !MultiPaper.isRealPlayer(entity) && !MultiPaper.isRealPlayer(MultiPaperEntitiesHandler.getControllingPassenger(entity))) {
++            return chunk.externalOwner.getConnection();
++        }
++
++        return null;
++    }
++
++    public static boolean handleEntityInteract(ServerPlayer player, Entity entity, ServerboundInteractPacket packet) {
++        ExternalServerConnection owner = getOwner(entity);
++        if (owner != null) {
++            owner.send(new PlayerActionOnEntityPacket(player, entity, packet));
++            return true;
++        }
++
++        return false;
++    }
++
++    public static boolean touchEntity(Player player, Entity entity) {
++        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
++
++        if (MultiPaper.isRealPlayer(entity)) {
++            return false;
++        } else if (MultiPaper.isChunkExternal(chunk) && !(entity instanceof FishingHook)) {
++            chunk.externalOwner.getConnection().send(new PlayerTouchEntityPacket(player, entity));
++
++            return true;
++        }
++
++        return false;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 8ce98e04ed1400146b69242a3a28c9689fd47e68..ff5b08a3e27643b5e3153f3f058fd0a86090b347 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -42,6 +42,8 @@ public class ExternalServerPacketSerializer {
+         addPacket(EntityUpdateWithDependenciesPacket.class, EntityUpdateWithDependenciesPacket::new);
+         addPacket(RequestEntityPacket.class, RequestEntityPacket::new);
+         addPacket(EntityRemovePacket.class, EntityRemovePacket::new);
++        addPacket(PlayerActionOnEntityPacket.class, PlayerActionOnEntityPacket::new);
++        addPacket(PlayerTouchEntityPacket.class, PlayerTouchEntityPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e974cb3cbfca212e3c972d98e4fc6ad48cfc2ded
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerActionOnEntityPacket.java
+@@ -0,0 +1,90 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import net.minecraft.network.ConnectionProtocol;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.game.ServerGamePacketListener;
++import net.minecraft.network.protocol.game.ServerboundInteractPacket;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.Entity;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class PlayerActionOnEntityPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PlayerActionOnEntityPacket.class.getSimpleName());
++
++    private final UUID uuid;
++    private final UUID entityUuid;
++    private final Packet<ServerGamePacketListener> action;
++
++    public PlayerActionOnEntityPacket(ServerPlayer player, Entity entity, Packet<ServerGamePacketListener> action) {
++        this.uuid = player.getUUID();
++        this.entityUuid = entity.getUUID();
++        this.action = action;
++    }
++
++    public PlayerActionOnEntityPacket(FriendlyByteBuf in) {
++        this.uuid = in.readUUID();
++        this.entityUuid = in.readUUID();
++
++        ByteBuf buf = Unpooled.wrappedBuffer(in.readByteArray());
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        int packetId = friendlyByteBuf.readVarInt();
++        action = (Packet<ServerGamePacketListener>) ConnectionProtocol.PLAY.createPacket(PacketFlow.SERVERBOUND, packetId, friendlyByteBuf);
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeUUID(entityUuid);
++
++        ConnectionProtocol protocol = ConnectionProtocol.getProtocolForPacket(action);
++        Integer id = protocol.getPacketId(PacketFlow.SERVERBOUND, action);
++        ByteBuf buf = Unpooled.buffer();
++        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
++        friendlyByteBuf.writeVarInt(id);
++        action.write(friendlyByteBuf);
++        out.writeByteArray(buf.array());
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            if (player == null) {
++                LOGGER.warn("Tried to run an action on a non-existent player with uuid " + uuid);
++                return;
++            }
++
++            Entity entity = ((ServerLevel) player.level).getEntity(entityUuid);
++
++            if (entity == null) {
++                LOGGER.warn(player.getScoreboardName() + " tried to run an action on a non-existent entity with uuid " + entityUuid);
++                return;
++            }
++
++            Packet<ServerGamePacketListener> newPacket;
++
++            // Refactor the entity id
++            if (action instanceof ServerboundInteractPacket serverboundInteractPacket) {
++                newPacket = new ServerboundInteractPacket(entity.getId(), serverboundInteractPacket.isUsingSecondaryAction(), serverboundInteractPacket.getAction());
++            } else {
++                LOGGER.error("Unhandled action on entity " + action);
++                return;
++            }
++
++            newPacket.handle(player.connection);
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerTouchEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerTouchEntityPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c51dbf10406a6636c11725fbcb00b6630a5f279d
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerTouchEntityPacket.java
+@@ -0,0 +1,66 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.player.Player;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class PlayerTouchEntityPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PlayerTouchEntityPacket.class.getSimpleName());
++
++    private final UUID uuid;
++    private final UUID entityUuid;
++
++    public PlayerTouchEntityPacket(Player player, Entity entity) {
++        this.uuid = player.getUUID();
++        this.entityUuid = entity.getUUID();
++    }
++
++    public PlayerTouchEntityPacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++        entityUuid = in.readUUID();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeUUID(entityUuid);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            if (player == null) {
++                LOGGER.warn("Tried to run a touch entity on a non-existent player with uuid " + uuid);
++                return;
++            }
++
++            Entity entity = ((ServerLevel) player.level).getEntity(entityUuid);
++
++            if (entity == null) {
++                Entity.RemovalReason removalReason = EntityRemovePacket.removedEntities.get(entityUuid);
++                if (removalReason != null && removalReason.shouldDestroy()) {
++                    connection.send(new EntityRemovePacket(player.level.getWorld().getName(), entityUuid));
++                    return;
++                }
++
++                LOGGER.warn(player.getScoreboardName() + " tried to touch a non-existent entity with uuid " + entityUuid + ", requesting it...");
++                connection.send(new RequestEntityPacket(((ServerLevel) player.level).uuid, entityUuid));
++                return;
++            }
++
++            entity.playerTouch(player);
++        });
++    }
++}

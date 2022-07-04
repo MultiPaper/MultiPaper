@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 13 Dec 2021 22:55:54 +1000
+Subject: [PATCH] Forward sign editing
+
+
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index f809c3ccb6447511bf465bfd401addf1f56904ab..99904f233d95ce0e25cc9a5efade3ad973905c38 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -3266,6 +3266,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+ 
+     @Override
+     public void handleSignUpdate(ServerboundSignUpdatePacket packet) {
++        if (MultipaperSignHandler.handleSignUpdate(this.player, packet)) return;
+         // Paper start - cap line length - modified clients can send longer data than normal
+         String[] lines = packet.getLines();
+         for (int i = 0; i < lines.length; ++i) {
+diff --git a/src/main/java/puregero/multipaper/MultipaperSignHandler.java b/src/main/java/puregero/multipaper/MultipaperSignHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..4520f03cc32ee2eedf47c5e575d64f161fe9daf6
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultipaperSignHandler.java
+@@ -0,0 +1,23 @@
++package puregero.multipaper;
++
++import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.level.chunk.LevelChunk;
++import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
++
++public class MultipaperSignHandler {
++
++    /**
++     * Returns true if the sign update should be cancelled
++     */
++    public static boolean handleSignUpdate(ServerPlayer player, ServerboundSignUpdatePacket packet) {
++        LevelChunk chunk = player.level.getChunkIfLoaded(packet.getPos());
++        if (MultiPaper.isChunkExternal(chunk)) {
++            chunk.externalOwner.getConnection().send(new PlayerActionPacket(player, packet));
++            return true;
++        }
++
++        return false;
++    }
++
++}

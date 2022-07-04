@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 24 Dec 2021 16:53:05 +1000
+Subject: [PATCH] Allow external players to push minecarts
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/vehicle/AbstractMinecart.java b/src/main/java/net/minecraft/world/entity/vehicle/AbstractMinecart.java
+index 3f31a3c17ecca6e93b794478129b95ecff4e1a9c..32da3f70d5031a906e1bae30ab70b8989d78bcbb 100644
+--- a/src/main/java/net/minecraft/world/entity/vehicle/AbstractMinecart.java
++++ b/src/main/java/net/minecraft/world/entity/vehicle/AbstractMinecart.java
+@@ -54,6 +54,7 @@ import org.bukkit.event.vehicle.VehicleDamageEvent;
+ import org.bukkit.event.vehicle.VehicleDestroyEvent;
+ import org.bukkit.event.vehicle.VehicleEntityCollisionEvent;
+ import org.bukkit.util.Vector;
++import puregero.multipaper.MultiPaper;
+ // CraftBukkit end
+ 
+ public abstract class AbstractMinecart extends Entity {
+@@ -481,7 +482,28 @@ public abstract class AbstractMinecart extends Entity {
+ 
+             this.firstTick = false;
+         }
++
++        getPushedByExternalPlayers(); // MultiPaper
++    }
++
++    // MultiPaper start
++    public void getPushedByExternalPlayers() {
++        List<Entity> list = this.level.getEntities(this, this.getBoundingBox(), EntitySelector.pushable(this, level.paperConfig.fixClimbingBypassingCrammingRule));
++
++        if (!list.isEmpty()) {
++            this.numCollisions = Math.max(0, this.numCollisions - this.level.paperConfig.maxCollisionsPerEntity);
++            for (int j = 0; j < list.size() && this.numCollisions < this.level.paperConfig.maxCollisionsPerEntity; ++j) {
++                Entity entity = list.get(j);
++
++                if (MultiPaper.isExternalPlayer(entity)) {
++                    this.numCollisions++;
++
++                    this.push(entity);
++                }
++            }
++        }
+     }
++    // MultiPaper end
+ 
+     protected double getMaxSpeed() {
+         return (this.isInWater() ? this.maxSpeed / 2.0D: this.maxSpeed); // CraftBukkit

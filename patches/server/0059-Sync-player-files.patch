@@ -5,7 +5,7 @@ Subject: [PATCH] Sync player files
 
 
 diff --git a/src/main/java/net/minecraft/server/PlayerAdvancements.java b/src/main/java/net/minecraft/server/PlayerAdvancements.java
-index de0513b38e5fa0138f1cee6bb633561be12449fc..5d99896a52ff1e446f19aff657227f78de51cae0 100644
+index de0513b38e5fa0138f1cee6bb633561be12449fc..4a307a82600363914908ab8ea28896a7f34553d6 100644
 --- a/src/main/java/net/minecraft/server/PlayerAdvancements.java
 +++ b/src/main/java/net/minecraft/server/PlayerAdvancements.java
 @@ -50,6 +50,8 @@ import net.minecraft.server.players.PlayerList;
@@ -24,7 +24,7 @@ index de0513b38e5fa0138f1cee6bb633561be12449fc..5d99896a52ff1e446f19aff657227f78
 -        if (this.file.isFile()) {
 +        // MultiPaper start
 +        String json = ExternalPlayer.loadedAdvancements.remove(player.getUUID());
-+        if (json == null) json = MultiPaper.readAdvancements(player.server.storageSource.levelPath.getFileName().toString(), player.getStringUUID());
++        if (json == null) json = MultiPaper.readAdvancements(player.server.storageSource.levelDirectory.path().getFileName().toString(), player.getStringUUID());
 +        if ((json != null && !json.isEmpty()) || this.file.isFile()) {
 +        // MultiPaper end
              try {
@@ -60,7 +60,7 @@ index de0513b38e5fa0138f1cee6bb633561be12449fc..5d99896a52ff1e446f19aff657227f78
          try {
 +            // MultiPaper start
 +            if (true) {
-+                MultiPaper.writeAdvancements(player.server.storageSource.levelPath.getFileName().toString(), player.getStringUUID(), PlayerAdvancements.GSON.toJson(jsonelement));
++                MultiPaper.writeAdvancements(player.server.storageSource.levelDirectory.path().getFileName().toString(), player.getStringUUID(), PlayerAdvancements.GSON.toJson(jsonelement));
 +                return;
 +            }
 +            // MultiPaper end
@@ -81,7 +81,7 @@ index 0de0acd4f197f44ce4624dce7dee806b10453280..8d18edb6174264fb92890f1b8d1ae717
          ServerStatsCounter serverstatisticmanager = (ServerStatsCounter) player.getStats(); // CraftBukkit
  
 diff --git a/src/main/java/net/minecraft/stats/ServerStatsCounter.java b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
-index c59f98ca3adfdd90cdc5999aeadbb0834efedc0f..adb8457d530397cad66ec3f05902eedd17bf5ca0 100644
+index c59f98ca3adfdd90cdc5999aeadbb0834efedc0f..f62c4e97b294b697d5a68affa25f9904f8ea7cb7 100644
 --- a/src/main/java/net/minecraft/stats/ServerStatsCounter.java
 +++ b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
 @@ -17,12 +17,9 @@ import it.unimi.dsi.fastutil.objects.ObjectIterator;
@@ -116,7 +116,7 @@ index c59f98ca3adfdd90cdc5999aeadbb0834efedc0f..adb8457d530397cad66ec3f05902eedd
 +        if (true) {
 +            try {
 +                String json = ExternalPlayer.loadedStats.remove(UUID.fromString(this.file.getName().split("\\.")[0]));
-+                if (json == null) json = MultiPaper.readStats(server.storageSource.levelPath.getFileName().toString(), this.file.getName().split("\\.")[0]);
++                if (json == null) json = MultiPaper.readStats(server.storageSource.levelDirectory.path().getFileName().toString(), this.file.getName().split("\\.")[0]);
 +                if (!json.isEmpty()) {
 +                    this.parseLocal(server.getFixerUpper(), json);
 +                }
@@ -137,7 +137,7 @@ index c59f98ca3adfdd90cdc5999aeadbb0834efedc0f..adb8457d530397cad66ec3f05902eedd
          try {
 +            // MultiPaper start
 +            if (true) {
-+                MultiPaper.writeStats(server.storageSource.levelPath.getFileName().toString(), this.file.getName().split("\\.")[0], this.toJson());
++                MultiPaper.writeStats(server.storageSource.levelDirectory.path().getFileName().toString(), this.file.getName().split("\\.")[0], this.toJson());
 +                return;
 +            }
 +            // MultiPaper end
@@ -154,7 +154,7 @@ index c59f98ca3adfdd90cdc5999aeadbb0834efedc0f..adb8457d530397cad66ec3f05902eedd
          ObjectIterator objectiterator = this.stats.object2IntEntrySet().iterator();
  
 diff --git a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
-index 601f8099f74e81c17600566b3c9b7a6dd39c9bcb..9dc105731c52c1783ded2c5e6825cbb6a1cd73f1 100644
+index 601f8099f74e81c17600566b3c9b7a6dd39c9bcb..64c581abc3b74ef25e0571e9bada5a4262e5bd6a 100644
 --- a/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
 +++ b/src/main/java/net/minecraft/world/level/storage/PlayerDataStorage.java
 @@ -17,15 +17,18 @@ import org.slf4j.Logger;
@@ -183,7 +183,7 @@ index 601f8099f74e81c17600566b3c9b7a6dd39c9bcb..9dc105731c52c1783ded2c5e6825cbb6
 +
 +            // MultiPaper start
 +            if (true) {
-+                MultiPaper.writePlayer(session.levelPath.getFileName().toString(), player.getStringUUID(), nbttagcompound);
++                MultiPaper.writePlayer(session.levelDirectory.path().getFileName().toString(), player.getStringUUID(), nbttagcompound);
 +                return;
 +            }
 +            // MultiPaper end
@@ -195,7 +195,7 @@ index 601f8099f74e81c17600566b3c9b7a6dd39c9bcb..9dc105731c52c1783ded2c5e6825cbb6
          CompoundTag nbttagcompound = null;
  
          try {
-+            nbttagcompound = MultiPaper.readPlayer(session.levelPath.getFileName().toString(), player.getStringUUID()); // MultiPaper
++            nbttagcompound = MultiPaper.readPlayer(session.levelDirectory.path().getFileName().toString(), player.getStringUUID()); // MultiPaper
 +
 +            if (false) { // MultiPaper
              File file = new File(this.playerDir, player.getStringUUID() + ".dat");
@@ -227,7 +227,7 @@ index 601f8099f74e81c17600566b3c9b7a6dd39c9bcb..9dc105731c52c1783ded2c5e6825cbb6
      // CraftBukkit start
      public CompoundTag getPlayerData(String s) {
          try {
-+            if (true) return MultiPaper.readPlayer(session.levelPath.getFileName().toString(), s); // MultiPaper
++            if (true) return MultiPaper.readPlayer(session.levelDirectory.path().getFileName().toString(), s); // MultiPaper
 +
              File file1 = new File(this.playerDir, s + ".dat");
  
@@ -253,10 +253,10 @@ index abcce6bd0b32d0188751393a6f56f2e82530912c..29b3a70be0fdc0d5440d9ef6f385faba
      }
  
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 7c35f00c7f8a8d9416ef0003564b6791e10212e4..f845234c2b503c63a7c090a93ddb90d54bd4ac8b 100644
+index 325fc5d2e104f1f6c241c06747e97806f6de2d2a..7977497dd25cf69c427dd84b1b799d5478a2689c 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -19,16 +19,21 @@ import org.bukkit.craftbukkit.CraftWorld;
+@@ -20,18 +20,23 @@ import org.bukkit.craftbukkit.CraftWorld;
  
  import javax.annotation.Nullable;
  import java.net.InetSocketAddress;
@@ -272,15 +272,18 @@ index 7c35f00c7f8a8d9416ef0003564b6791e10212e4..f845234c2b503c63a7c090a93ddb90d5
      private final InetSocketAddress address;
      private boolean sendPackets = true;
  
--    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address) {
-+    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, String advancements, String stats) {
-+        loadedAdvancements.put(uuid, advancements);
-+        loadedStats.put(uuid, stats);
-         return new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address);
-     }
+-    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, ProfilePublicKey profilePublicKey) {
++    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, ProfilePublicKey profilePublicKey, String advancements, String stats) {
++        loadedAdvancements.put(gameProfile.getId(), advancements);
++        loadedStats.put(gameProfile.getId(), stats);
+         return new ExternalPlayer(externalServerConnection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, profilePublicKey);
+-    }
++   }
  
+     public ExternalPlayer(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, ProfilePublicKey profilePublicKey) {
+         super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), gameProfile, profilePublicKey);
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 387e819045f528178beb68076046b8355aa92ebf..93527c505f6238bd6e05a7f3f13d43fbfb2f75ca 100644
+index 8314fefdaa689282cfd4351835b744f99f79d637..c726b0335298a53c7168cd088c661fb1ff4df41d 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -365,6 +365,34 @@ public class MultiPaper {
@@ -319,51 +322,53 @@ index 387e819045f528178beb68076046b8355aa92ebf..93527c505f6238bd6e05a7f3f13d43fb
          do {
              path = path.getParentFile();
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index 41898cbf342a5614fc6d08a3828a72398713cc82..1826796734cda0accc88e3545ea1e551140fe990 100644
+index 292b1a185a5337925333403bf471d40a73f4c9bc..def283b789f105a2891ae343c3eca46376f2f608 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -31,6 +31,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-     private final GameType gamemode;
+@@ -33,6 +33,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
      private final byte[] ip;
      private final short port;
+     private final @Nullable ProfilePublicKey profilePublicKey;
 +    private final String advancements;
 +    private final String stats;
  
      private PlayerCreatePacket(ServerPlayer player) {
-         this.name = player.getScoreboardName();
-@@ -44,6 +46,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         this.gamemode = player.gameMode.getGameModeForPlayer();
+         this.gameProfile = player.gameProfile;
+@@ -46,6 +48,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          this.ip = ((InetSocketAddress) player.connection.connection.address).getAddress().getAddress();
          this.port = (short) ((InetSocketAddress) player.connection.connection.address).getPort();
+         this.profilePublicKey = player.getProfilePublicKey();
 +        this.advancements = player.getAdvancements().generateJson().toString();
 +        this.stats = player.getStats().toJson();
      }
  
      public PlayerCreatePacket(FriendlyByteBuf in) {
-@@ -58,6 +62,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         gamemode = GameType.byId(in.readByte());
-         ip = in.readByteArray();
-         port = in.readShort();
+@@ -65,6 +69,9 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+         } else {
+             profilePublicKey = null;
+         }
++
 +        advancements = in.readUtf(Integer.MAX_VALUE / 6); // divide by 6 cause mojang's code doesn't allow for a full 2^31-1 max length
 +        stats = in.readUtf(Integer.MAX_VALUE / 6);
      }
  
      @Override
-@@ -73,6 +79,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         out.writeByte(gamemode.getId());
-         out.writeByteArray(ip);
-         out.writeShort(port);
+@@ -84,6 +91,9 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+         if (profilePublicKey != null) {
+             profilePublicKey.data().write(out);
+         }
++
 +        out.writeUtf(advancements, Integer.MAX_VALUE / 6); // divide by 6 cause mojang's code doesn't allow for a full 2^31-1 max length
 +        out.writeUtf(stats, Integer.MAX_VALUE / 6);
      }
  
      @Override
-@@ -92,7 +100,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -103,7 +113,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
                  e.printStackTrace();
              }
  
--            ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address);
-+            ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address, advancements, stats);
+-            ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, profilePublicKey);
++            ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, profilePublicKey, advancements, stats);
          });
      }
  

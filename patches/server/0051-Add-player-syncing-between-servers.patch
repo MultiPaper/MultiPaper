@@ -18,7 +18,7 @@ index df1528135276db420a2a6e375c0cd2270b248bf6..32bb34d14d009a6028bb4734ab3a9de6
                  metrics.addCustomChart(new Metrics.SimplePie("multipaper_version", () -> (Metrics.class.getPackage().getImplementationVersion() != null) ? Metrics.class.getPackage().getImplementationVersion() : "unknown")); // Tuinity - we have our own bstats page // Airplane // MultiPaper
                  metrics.addCustomChart(new Metrics.SimplePie("total_servers", () -> String.valueOf(MultiPaper.getConnection().getServersMap().values().stream().filter(ExternalServer::isAlive).count()))); // MultiPaper
 diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
-index 65525471d2d6ac1741cb8a78b2908bee888192f2..de0855c2ce5fdf9ab9a0cf862638f3c092ea5652 100644
+index 059d7eda8b42f14ceb8945d82b2c917a13f4fd46..eacf741f0a30bba8dabbbaa6b0e3507735500e64 100644
 --- a/src/main/java/net/minecraft/network/Connection.java
 +++ b/src/main/java/net/minecraft/network/Connection.java
 @@ -52,6 +52,8 @@ import org.slf4j.MarkerFactory;
@@ -398,10 +398,10 @@ index 20cdfdb3b9351f74e89bc45b3ab972384165659a..0de0acd4f197f44ce4624dce7dee806b
              // CraftBukkit start
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d89fe348e38d98197c97f09264a3417c873d969a
+index 0000000000000000000000000000000000000000..9a4558ecc84c3e3c9d401c5376403709c9efe38b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,88 @@
 +package puregero.multipaper;
 +
 +import com.mojang.authlib.GameProfile;
@@ -413,6 +413,7 @@ index 0000000000000000000000000000000000000000..d89fe348e38d98197c97f09264a3417c
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.server.network.ServerGamePacketListenerImpl;
++import net.minecraft.world.entity.player.ProfilePublicKey;
 +import net.minecraft.world.level.GameType;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
@@ -431,12 +432,12 @@ index 0000000000000000000000000000000000000000..d89fe348e38d98197c97f09264a3417c
 +    private final InetSocketAddress address;
 +    private boolean sendPackets = true;
 +
-+    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address) {
-+        return new ExternalPlayer(externalServerConnection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address);
++    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, ProfilePublicKey profilePublicKey) {
++        return new ExternalPlayer(externalServerConnection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, profilePublicKey);
 +    }
 +
-+    public ExternalPlayer(ExternalServerConnection externalServerConnection, String name, UUID uuid, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address) {
-+        super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), new GameProfile(uuid, name));
++    public ExternalPlayer(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, ProfilePublicKey profilePublicKey) {
++        super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), gameProfile, profilePublicKey);
 +        this.externalServerConnection = externalServerConnection;
 +        this.address = address;
 +        this.isRealPlayer = true;
@@ -521,7 +522,7 @@ index 60bb4c2da01b07dee539c2a260d2c5e02c110988..9f7ce7885f2fde34ffe4b387b0685231
  
      public Channel getChannel() {
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 7cd6e0c934944b92852f650736bfaf718f78c499..206f3b6a58755b3fea6b607c346c574cc175fc39 100644
+index 7cd6e0c934944b92852f650736bfaf718f78c499..14af2dcebc2ea0e031d3751f41edfb3e3c0f5b79 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -2,9 +2,16 @@ package puregero.multipaper;
@@ -559,7 +560,7 @@ index 7cd6e0c934944b92852f650736bfaf718f78c499..206f3b6a58755b3fea6b607c346c574c
 +                // Copied from Paper start - Configurable container update tick rate
 +                if (externalPlayer.containerMenu != externalPlayer.inventoryMenu && --externalPlayer.containerUpdateDelay <= 0) {
 +                    externalPlayer.containerMenu.broadcastChanges();
-+                    externalPlayer.containerUpdateDelay = externalPlayer.level.paperConfig.containerUpdateTickRate;
++                    externalPlayer.containerUpdateDelay = externalPlayer.level.paperConfig().tickRates.containerUpdate;
 +                }
 +                // Copied from Paper end
 +            }
@@ -765,15 +766,17 @@ index 0000000000000000000000000000000000000000..a9814bbe4fc9eff864f30b389e88cb13
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..41898cbf342a5614fc6d08a3828a72398713cc82
+index 0000000000000000000000000000000000000000..292b1a185a5337925333403bf471d40a73f4c9bc
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,124 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import com.mojang.authlib.GameProfile;
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.player.ProfilePublicKey;
 +import net.minecraft.world.level.GameType;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
@@ -782,17 +785,16 @@ index 0000000000000000000000000000000000000000..41898cbf342a5614fc6d08a3828a7239
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
++import javax.annotation.Nullable;
 +import java.net.InetAddress;
 +import java.net.InetSocketAddress;
 +import java.net.UnknownHostException;
-+import java.util.UUID;
 +
 +public class PlayerCreatePacket extends ExternalServerPacket {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(PlayerCreatePacket.class.getSimpleName());
 +
-+    private final String name;
-+    private final UUID uuid;
++    private final GameProfile gameProfile;
 +    private final String world;
 +    private final double x;
 +    private final double y;
@@ -802,11 +804,11 @@ index 0000000000000000000000000000000000000000..41898cbf342a5614fc6d08a3828a7239
 +    private final GameType gamemode;
 +    private final byte[] ip;
 +    private final short port;
++    private final @Nullable ProfilePublicKey profilePublicKey;
 +
 +    private PlayerCreatePacket(ServerPlayer player) {
-+        this.name = player.getScoreboardName();
-+        this.uuid = player.getUUID();
-+        this.world = player.getLevel().convertable.getLevelId();
++        this.gameProfile = player.gameProfile;
++        this.world = player.getLevel().getWorld().getName();
 +        this.x = player.getX();
 +        this.y = player.getY();
 +        this.z = player.getZ();
@@ -815,11 +817,11 @@ index 0000000000000000000000000000000000000000..41898cbf342a5614fc6d08a3828a7239
 +        this.gamemode = player.gameMode.getGameModeForPlayer();
 +        this.ip = ((InetSocketAddress) player.connection.connection.address).getAddress().getAddress();
 +        this.port = (short) ((InetSocketAddress) player.connection.connection.address).getPort();
++        this.profilePublicKey = player.getProfilePublicKey();
 +    }
 +
 +    public PlayerCreatePacket(FriendlyByteBuf in) {
-+        name = in.readUtf();
-+        uuid = in.readUUID();
++        gameProfile = in.readGameProfile();
 +        world = in.readUtf();
 +        x = in.readDouble();
 +        y = in.readDouble();
@@ -829,12 +831,17 @@ index 0000000000000000000000000000000000000000..41898cbf342a5614fc6d08a3828a7239
 +        gamemode = GameType.byId(in.readByte());
 +        ip = in.readByteArray();
 +        port = in.readShort();
++
++        if (in.readBoolean()) {
++            profilePublicKey = new ProfilePublicKey(new ProfilePublicKey.Data(in));
++        } else {
++            profilePublicKey = null;
++        }
 +    }
 +
 +    @Override
 +    public void write(FriendlyByteBuf out) {
-+        out.writeUtf(name);
-+        out.writeUUID(uuid);
++        out.writeGameProfile(gameProfile);
 +        out.writeUtf(world);
 +        out.writeDouble(x);
 +        out.writeDouble(y);
@@ -844,15 +851,20 @@ index 0000000000000000000000000000000000000000..41898cbf342a5614fc6d08a3828a7239
 +        out.writeByte(gamemode.getId());
 +        out.writeByteArray(ip);
 +        out.writeShort(port);
++
++        out.writeBoolean(profilePublicKey != null);
++        if (profilePublicKey != null) {
++            profilePublicKey.data().write(out);
++        }
 +    }
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        LOGGER.info("Adding player " + name + " (" + uuid + ")");
++        LOGGER.info("Adding player " + gameProfile.getName() + " (" + gameProfile.getId() + ")");
 +        MultiPaper.runSync(() -> {
-+            ServerPlayer existingPlayer = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++            ServerPlayer existingPlayer = MinecraftServer.getServer().getPlayerList().getPlayer(gameProfile.getId());
 +            if (existingPlayer != null) {
-+                LOGGER.warn("Trying to add external player " + name + " (" + uuid + "), but they're already online as a " + existingPlayer.getClass().getSimpleName() + ", kicking them");
++                LOGGER.warn("Trying to add external player " + gameProfile.getName() + " (" + gameProfile.getId() + "), but they're already online as a " + existingPlayer.getClass().getSimpleName() + ", kicking them");
 +                existingPlayer.connection.disconnect(PlayerRemovePacket.LOGGED_IN_FROM_ANOTHER_LOCATION, PlayerKickEvent.Cause.DUPLICATE_LOGIN);
 +            }
 +
@@ -863,7 +875,7 @@ index 0000000000000000000000000000000000000000..41898cbf342a5614fc6d08a3828a7239
 +                e.printStackTrace();
 +            }
 +
-+            ExternalPlayer.create(connection, name, uuid, world, x, y, z, yaw, pitch, gamemode, address);
++            ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, profilePublicKey);
 +        });
 +    }
 +

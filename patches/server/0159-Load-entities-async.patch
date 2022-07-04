@@ -5,15 +5,16 @@ Subject: [PATCH] Load entities async
 
 
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
-index 7cfb48ae549a897dbd7ce1742f3fc63b8cafe501..dfad9406bb91b555d354b9c7f0bdb6831fa7df4f 100644
+index 7cfb48ae549a897dbd7ce1742f3fc63b8cafe501..c6a56a13b7aa6e8561e82bfd389d933871ea7798 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/storage/EntityStorage.java
-@@ -9,15 +9,12 @@ import java.io.IOException;
+@@ -9,15 +9,13 @@ import java.io.IOException;
  import java.nio.file.Path;
  import java.util.List;
  import java.util.Objects;
 -import java.util.concurrent.CompletableFuture;
 -import java.util.concurrent.Executor;
++import java.util.Optional;
 +import java.util.Set;
 +import java.util.concurrent.*;
 +
@@ -28,7 +29,7 @@ index 7cfb48ae549a897dbd7ce1742f3fc63b8cafe501..dfad9406bb91b555d354b9c7f0bdb683
  import net.minecraft.util.thread.ProcessorMailbox;
  import net.minecraft.world.entity.Entity;
  import net.minecraft.world.entity.EntityType;
-@@ -25,6 +22,7 @@ import net.minecraft.world.level.ChunkPos;
+@@ -25,6 +23,7 @@ import net.minecraft.world.level.ChunkPos;
  import net.minecraft.world.level.entity.ChunkEntities;
  import net.minecraft.world.level.entity.EntityPersistentStorage;
  import org.slf4j.Logger;
@@ -36,29 +37,29 @@ index 7cfb48ae549a897dbd7ce1742f3fc63b8cafe501..dfad9406bb91b555d354b9c7f0bdb683
  import puregero.multipaper.MultiPaperEntitiesHandler;
  
  public class EntityStorage implements EntityPersistentStorage<Entity> {
-@@ -36,6 +34,7 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+@@ -36,6 +35,7 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
      private final LongSet emptyChunks = new LongOpenHashSet();
      public final ProcessorMailbox<Runnable> entityDeserializerQueue;
      protected final DataFixer fixerUpper;
-+    private final Set<CompletableFuture<CompoundTag>> loadingTasksInProgress = ConcurrentHashMap.newKeySet(); // MultiPaper
++    private final Set<CompletableFuture<Optional<CompoundTag>>> loadingTasksInProgress = ConcurrentHashMap.newKeySet(); // MultiPaper
  
      public EntityStorage(ServerLevel world, Path path, DataFixer dataFixer, boolean dsync, Executor executor) {
          this.level = world;
-@@ -44,10 +43,40 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+@@ -44,9 +44,40 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
          this.worker = new IOWorker(path, dsync, "entities");
      }
  
 +    // MultiPaper start - async entity loading
-+    private CompletableFuture<CompoundTag> loadAsync(ChunkPos pos) {
++    private CompletableFuture<Optional<CompoundTag>> loadAsync(ChunkPos pos) {
 +        String world = level.getWorld().getName();
 +        String path = "entities";
 +        int cx = pos.x;
 +        int cz = pos.z;
-+        CompletableFuture<CompoundTag> future = MultiPaper.readRegionFileAsync(world, path, cx, cz)
++        CompletableFuture<Optional<CompoundTag>> future = MultiPaper.readRegionFileAsync(world, path, cx, cz)
 +                .orTimeout(20, TimeUnit.SECONDS)
 +                .thenApplyAsync(in -> {
 +                    try {
-+                        return in == null ? null : NbtIo.read(in);
++                        return in == null ? Optional.empty() : Optional.of(NbtIo.read(in));
 +                    } catch (IOException e) {
 +                        throw new RuntimeException(e);
 +                    }
@@ -66,10 +67,11 @@ index 7cfb48ae549a897dbd7ce1742f3fc63b8cafe501..dfad9406bb91b555d354b9c7f0bdb683
 +                .exceptionallyCompose(exception -> {
 +                    if (exception instanceof TimeoutException || exception.getCause() instanceof TimeoutException) {
 +                        LOGGER.warn("Timed out reading " + world + "," + path + "," + cx + "," + cz + ", retrying...");
-+                        return loadAsync(pos);
++                        return (CompletionStage) loadAsync(pos); // Cast it away from what we want to get it to compile
 +                    }
 +                    return CompletableFuture.failedFuture(exception);
-+                });
++                })
++                .thenApply(object -> (Optional<CompoundTag>) object); // Cast it back to what we want to get it to compile
 +
 +        loadingTasksInProgress.add(future);
 +        future.whenComplete((tag, throwable) -> loadingTasksInProgress.remove(future));
@@ -81,19 +83,17 @@ index 7cfb48ae549a897dbd7ce1742f3fc63b8cafe501..dfad9406bb91b555d354b9c7f0bdb683
      @Override
      public CompletableFuture<ChunkEntities<Entity>> loadEntities(ChunkPos pos) {
 -        return this.emptyChunks.contains(pos.toLong()) ? CompletableFuture.completedFuture(emptyChunk(pos)) : this.worker.loadAsync(pos).thenApplyAsync((nbt) -> {
--            if (nbt.isEmpty()) {
 +        return this.emptyChunks.contains(pos.toLong()) ? CompletableFuture.completedFuture(emptyChunk(pos)) : loadAsync(pos).thenApplyAsync((nbt) -> { // MultiPaper - replace this.worker.loadAsync(pos) with async chunk loading
-+            if (nbt == null || nbt.isEmpty()) { // MultiPaper - empty nbt can be null
+             if (nbt.isEmpty()) {
                  // this.emptyChunks.add(pos.toLong()); // MultiPaper - don't cache empty chunks
                  return emptyChunk(pos);
-             } else {
-@@ -125,6 +154,13 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
+@@ -125,6 +156,13 @@ public class EntityStorage implements EntityPersistentStorage<Entity> {
  
      @Override
      public void flush(boolean sync) {
 +        // MultiPaper start - wait for async loading tasks
 +        while (!loadingTasksInProgress.isEmpty()) {
-+            for (CompletableFuture<CompoundTag> future : loadingTasksInProgress) {
++            for (CompletableFuture<Optional<CompoundTag>> future : loadingTasksInProgress) {
 +                level.chunkSource.mainThreadProcessor.managedBlock(future::isDone);
 +            }
 +        }

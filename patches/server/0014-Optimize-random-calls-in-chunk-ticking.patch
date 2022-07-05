@@ -46,11 +46,15 @@ index 4f2cb57232f6d18302c8bd478b56ec7e4d33f759..d13baa76d689e47f37c0829df6b86f2f
              boolean flag1 = level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) != 0L && worlddata.getGameTime() % level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) == 0L; // CraftBukkit
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index e13fcd15ab00ab4aee7fb3774db6984743680259..80cfaf870f28db1fcd5e7170520e0aca98dd4225 100644
+index e13fcd15ab00ab4aee7fb3774db6984743680259..c7b7efed3f5a1f3e76ddefaa733c77481a431b5b 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -759,6 +759,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
-     private final io.papermc.paper.util.math.ThreadUnsafeRandom randomTickRandom = new io.papermc.paper.util.math.ThreadUnsafeRandom(this.random.nextLong());
+@@ -756,9 +756,11 @@ public class ServerLevel extends Level implements WorldGenLevel {
+     }
+     // Paper start - optimise random block ticking
+     private final BlockPos.MutableBlockPos chunkTickMutablePosition = new BlockPos.MutableBlockPos();
+-    private final io.papermc.paper.util.math.ThreadUnsafeRandom randomTickRandom = new io.papermc.paper.util.math.ThreadUnsafeRandom(this.random.nextLong());
++    private final io.papermc.paper.util.math.ThreadUnsafeRandom randomTickRandom = new io.papermc.paper.util.math.ThreadUnsafeRandom(this.random.nextLong()); public net.minecraft.util.RandomSource getThreadUnsafeRandom() { return this.randomTickRandom; } // Airplane - Add getter
      // Paper end
  
 +    private int currentIceAndSnowTick = 0; protected void resetIceAndSnowTick() { this.currentIceAndSnowTick = this.randomTickRandom.nextInt(16); } // Airplane
@@ -67,22 +71,17 @@ index e13fcd15ab00ab4aee7fb3774db6984743680259..80cfaf870f28db1fcd5e7170520e0aca
              blockposition.set(this.findLightningTargetAround(this.getBlockRandomPos(j, 0, k, 15))); // Paper
              if (this.isRainingAt(blockposition)) {
                  DifficultyInstance difficultydamagescaler = this.getCurrentDifficultyAt(blockposition);
-@@ -793,7 +795,13 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -793,7 +795,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          }
  
          gameprofilerfiller.popPush("iceandsnow");
-+<<<<<<< found
-         if (!this.paperConfig().environment.disableIceAndSnow && this.random.nextInt(16) == 0) { // Paper - Disable ice and snow
-+||||||| expected
-+        if (!this.paperConfig.disableIceAndSnow && this.random.nextInt(16) == 0) { // Paper - Disable ice and snow
-+=======
-+         if (!this.paperConfig.disableIceAndSnow && (this.currentIceAndSnowTick++ & 15) == 0) { // Paper - Disable ice and snow // Airplane - optimize further random ticking
-+>>>>>>> replacement
+-        if (!this.paperConfig().environment.disableIceAndSnow && this.random.nextInt(16) == 0) { // Paper - Disable ice and snow
++        if (!this.paperConfig().environment.disableIceAndSnow && (this.currentIceAndSnowTick++ & 15) == 0) { // Paper - Disable ice and snow // Airplane - optimize further random ticking
              // Paper start - optimise chunk ticking
              this.getRandomBlockPosition(j, 0, k, 15, blockposition);
              int normalY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, blockposition.getX() & 15, blockposition.getZ() & 15) + 1;
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index c46cbbf9ac4c5661933b03bc0b2559f7ade8c798..2c5c0e0aef845a55d63d8bde5875702f14f76ba6 100644
+index c46cbbf9ac4c5661933b03bc0b2559f7ade8c798..04daa3cd51787a9856f59d3a8d17290a99ba3442 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -94,6 +94,18 @@ public class LevelChunk extends ChunkAccess {
@@ -94,7 +93,7 @@ index c46cbbf9ac4c5661933b03bc0b2559f7ade8c798..2c5c0e0aef845a55d63d8bde5875702f
 +    // shouldDoLightning compiles down to 29 bytes, which with the default of 35 byte inlining should guarantee an inline
 +    public final boolean shouldDoLightning(net.minecraft.util.RandomSource random) {
 +        if (this.lightningTick-- <= 0) {
-+            this.lightningTick = random.nextInt(100000) << 1;
++            this.lightningTick = random.nextInt(this.level.spigotConfig.thunderChance) << 1;
 +            return true;
 +        }
 +        return false;
@@ -108,7 +107,7 @@ index c46cbbf9ac4c5661933b03bc0b2559f7ade8c798..2c5c0e0aef845a55d63d8bde5875702f
          this.fluidTicks = fluidTickScheduler;
          // CraftBukkit start
          this.bukkitChunk = new org.bukkit.craftbukkit.CraftChunk(this);
-+        this.lightningTick = this.level.random.nextInt(100000) << 1; // Airplane - initialize lightning tick
++        this.lightningTick = this.level.getThreadUnsafeRandom().nextInt(this.level.spigotConfig.thunderChance) << 1; // Airplane - initialize lightning tick
      }
  
      public org.bukkit.Chunk bukkitChunk;

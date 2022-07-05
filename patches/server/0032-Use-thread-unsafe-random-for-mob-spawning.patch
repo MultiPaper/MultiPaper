@@ -4,34 +4,6 @@ Date: Tue, 22 Jun 2021 15:04:37 -0500
 Subject: [PATCH] Use thread unsafe random for mob spawning
 
 
-diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 80cfaf870f28db1fcd5e7170520e0aca98dd4225..0df3cd7772d57938c59dee5bd5efd48b7eaba96c 100644
---- a/src/main/java/net/minecraft/server/level/ServerLevel.java
-+++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -756,7 +756,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
-     }
-     // Paper start - optimise random block ticking
-     private final BlockPos.MutableBlockPos chunkTickMutablePosition = new BlockPos.MutableBlockPos();
--    private final io.papermc.paper.util.math.ThreadUnsafeRandom randomTickRandom = new io.papermc.paper.util.math.ThreadUnsafeRandom(this.random.nextLong());
-+    private final io.papermc.paper.util.math.ThreadUnsafeRandom randomTickRandom = new io.papermc.paper.util.math.ThreadUnsafeRandom(this.random.nextLong()); public net.minecraft.util.RandomSource getThreadUnsafeRandom() { return this.randomTickRandom; } // Airplane - getter
-     // Paper end
- 
-     private int currentIceAndSnowTick = 0; protected void resetIceAndSnowTick() { this.currentIceAndSnowTick = this.randomTickRandom.nextInt(16); } // Airplane
-@@ -795,13 +795,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
-         }
- 
-         gameprofilerfiller.popPush("iceandsnow");
--<<<<<<< found
--        if (!this.paperConfig().environment.disableIceAndSnow && this.random.nextInt(16) == 0) { // Paper - Disable ice and snow
--||||||| expected
--        if (!this.paperConfig.disableIceAndSnow && this.random.nextInt(16) == 0) { // Paper - Disable ice and snow
--=======
--         if (!this.paperConfig.disableIceAndSnow && (this.currentIceAndSnowTick++ & 15) == 0) { // Paper - Disable ice and snow // Airplane - optimize further random ticking
-->>>>>>> replacement
-+        if (!this.paperConfig().environment.disableIceAndSnow && (this.currentIceAndSnowTick++ & 15) == 0) { // Paper - Disable ice and snow // Airplane - optimize further random ticking
-             // Paper start - optimise chunk ticking
-             this.getRandomBlockPosition(j, 0, k, 15, blockposition);
-             int normalY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, blockposition.getX() & 15, blockposition.getZ() & 15) + 1;
 diff --git a/src/main/java/net/minecraft/world/level/NaturalSpawner.java b/src/main/java/net/minecraft/world/level/NaturalSpawner.java
 index e31a2eea9a62ab2c0bed1a97dab6bae231b8cd8b..d099f8e7c2c222f7e1d7b1e27e2478a47b89e092 100644
 --- a/src/main/java/net/minecraft/world/level/NaturalSpawner.java

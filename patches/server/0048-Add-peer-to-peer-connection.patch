@@ -139,10 +139,10 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e394f50beb1277f048d773de04fe669241cd70ee
+index 0000000000000000000000000000000000000000..c5abd55879ea5e317806e435f7be7b10489ffa12
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,123 @@
 +package puregero.multipaper;
 +
 +import io.netty.channel.Channel;
@@ -155,6 +155,7 @@ index 0000000000000000000000000000000000000000..e394f50beb1277f048d773de04fe6692
 +import net.minecraft.network.protocol.handshake.ClientIntentionPacket;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +import puregero.multipaper.externalserverprotocol.*;
 +import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
 +import puregero.multipaper.mastermessagingprotocol.MessageLengthDecoder;
@@ -181,7 +182,7 @@ index 0000000000000000000000000000000000000000..e394f50beb1277f048d773de04fe6692
 +        this.channel = channel;
 +        setupPipeline();
 +        nanoTime = System.nanoTime();
-+        this.channel.writeAndFlush(new HelloPacket(MultiPaperConfig.bungeeCordName, nanoTime, getSupportedCompressionFlags()));
++        this.channel.writeAndFlush(new HelloPacket(MultiPaperConfiguration.get().masterConnection.myName, nanoTime, getSupportedCompressionFlags()));
 +    }
 +
 +    public int getSupportedCompressionFlags() {
@@ -334,10 +335,10 @@ index 19948c5a87dd5f0da3aef064dbb6448d306395b6..63f573a93c8f46f2bc41cd6d81ae9d1e
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index a0bb0918aa07ed7da519e4dc526c6052dbf10d35..813bd23ac5c83dca7f0f4d2125bfc050521d5340 100644
+index 4ba071f3fccc37e2985743127a698ffb333764c1..8929bd0b0a0c2e60fc0fa3bf6f98e35bbb390c56 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -1,19 +1,22 @@
+@@ -1,9 +1,15 @@
  package puregero.multipaper;
  
 +import io.netty.bootstrap.Bootstrap;
@@ -352,7 +353,8 @@ index a0bb0918aa07ed7da519e4dc526c6052dbf10d35..813bd23ac5c83dca7f0f4d2125bfc050
 +import net.minecraft.server.MinecraftServer;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
- import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
+ import puregero.multipaper.config.MultiPaperConfiguration;
+@@ -11,10 +17,7 @@ import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
  import puregero.multipaper.mastermessagingprotocol.messages.masterbound.HelloMessage;
  import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundMessage;
  import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundProtocol;
@@ -364,7 +366,7 @@ index a0bb0918aa07ed7da519e4dc526c6052dbf10d35..813bd23ac5c83dca7f0f4d2125bfc050
  
  import java.util.Map;
  import java.util.Set;
-@@ -33,6 +36,7 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -34,6 +37,7 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
      private boolean channelActive = false;
      private final Set<MasterBoundMessage> unhandledRequests = ConcurrentHashMap.newKeySet();
      private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
@@ -372,7 +374,7 @@ index a0bb0918aa07ed7da519e4dc526c6052dbf10d35..813bd23ac5c83dca7f0f4d2125bfc050
  
      public MultiPaperConnection() {
          System.setProperty("multipaper.netty.threads", System.getProperty("multipaper.netty.threads", Integer.toString(Math.min(Runtime.getRuntime().availableProcessors(), 3))));
-@@ -56,6 +60,14 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -57,6 +61,14 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
          return channel;
      }
  
@@ -387,7 +389,7 @@ index a0bb0918aa07ed7da519e4dc526c6052dbf10d35..813bd23ac5c83dca7f0f4d2125bfc050
      @Override
      public void channelActive(ChannelHandlerContext ctx) {
          channel = (SocketChannel) ctx.channel();
-@@ -113,4 +125,39 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -114,4 +126,39 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
          server.setTps(message.tps);
          server.setLastAlive(System.currentTimeMillis());
      }
@@ -601,7 +603,7 @@ index 0000000000000000000000000000000000000000..8ae5d51ce27c013595462029c8237a1c
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..873e8de738302aa2b0d834ac2d7d5833a3e890cf
+index 0000000000000000000000000000000000000000..e375e2aba32cdc0a0d7ce7afa2c99fcf2d473281
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 @@ -0,0 +1,108 @@
@@ -613,7 +615,7 @@ index 0000000000000000000000000000000000000000..873e8de738302aa2b0d834ac2d7d5833
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +import puregero.multipaper.mastermessagingprotocol.MessageLengthEncoder;
 +
 +import java.net.InetSocketAddress;
@@ -664,7 +666,7 @@ index 0000000000000000000000000000000000000000..873e8de738302aa2b0d834ac2d7d5833
 +        } else if (previousConnection.nanoTime == nanoTime) {
 +            // How lucky do you have to be for nano time to be the same?
 +            LOGGER.info("A new connection to external server " + bungeecordName + " had the same nano time as a previous connection, resending with a new nano time...");
-+            HelloPacket helloPacket = new HelloPacket(MultiPaperConfig.bungeeCordName, connection.getSupportedCompressionFlags());
++            HelloPacket helloPacket = new HelloPacket(MultiPaperConfiguration.get().masterConnection.myName, connection.getSupportedCompressionFlags());
 +            if (helloPacket.nanoTime == nanoTime) {
 +                // Oh, nano time is broken, that's why
 +                throw new RuntimeException("System.nanoTime() does not work. (Returned " + helloPacket.nanoTime + ")");
@@ -679,7 +681,7 @@ index 0000000000000000000000000000000000000000..873e8de738302aa2b0d834ac2d7d5833
 +        int compressionType = 0;
 +        ChannelOutboundHandlerAdapter compressionHandler = null;
 +
-+        if (MultiPaperConfig.interServerCompressionThreshold > 0 && !(connection.getChannel().remoteAddress() instanceof InetSocketAddress address && address.getAddress().isLoopbackAddress())) {
++        if (MultiPaperConfiguration.get().peerConnection.compressionThreshold > 0 && !(connection.getChannel().remoteAddress() instanceof InetSocketAddress address && address.getAddress().isLoopbackAddress())) {
 +            if ((supportedCompressionFlags & SetCompressionPacket.ZLIB_COMPRESSION) == SetCompressionPacket.ZLIB_COMPRESSION) {
 +                compressionType = SetCompressionPacket.ZLIB_COMPRESSION;
 +                compressionHandler = SetCompressionPacket.createZlibCompressionEncoder();
@@ -690,7 +692,7 @@ index 0000000000000000000000000000000000000000..873e8de738302aa2b0d834ac2d7d5833
 +            LOGGER.info("Using compression " + compressionHandler.getClass().getSimpleName() + " with " + connection.externalServer.getName());
 +            ChannelOutboundHandlerAdapter finalCompressionHandler = compressionHandler;
 +            connection.getChannel().writeAndFlush(new SetCompressionPacket(compressionType)).addListener(future -> {
-+                if (MultiPaperConfig.interServerConsolidationDelay > 0) {
++                if (MultiPaperConfiguration.get().peerConnection.consolidationDelay > 0) {
 +                    connection.getChannel().pipeline().addFirst("consolidator", new PacketConsolidationHandler());
 +                }
 +
@@ -709,13 +711,13 @@ index 0000000000000000000000000000000000000000..873e8de738302aa2b0d834ac2d7d5833
 +    private void onConnect(ExternalServerConnection connection) {
 +        if (connection.nanoTime != nanoTime) {
 +            connection.nanoTime = nanoTime;
-+            connection.send(new HelloPacket(MultiPaperConfig.bungeeCordName, nanoTime, connection.getSupportedCompressionFlags()));
++            connection.send(new HelloPacket(MultiPaperConfiguration.get().masterConnection.myName, nanoTime, connection.getSupportedCompressionFlags()));
 +        }
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PacketConsolidationHandler.java b/src/main/java/puregero/multipaper/externalserverprotocol/PacketConsolidationHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..fcf2325fc8ca07ffdabcdc83d8655fe6916b8090
+index 0000000000000000000000000000000000000000..d79dfe5d4f078bbd7a332c099d95813a1bff628d
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PacketConsolidationHandler.java
 @@ -0,0 +1,65 @@
@@ -726,7 +728,7 @@ index 0000000000000000000000000000000000000000..fcf2325fc8ca07ffdabcdc83d8655fe6
 +import io.netty.channel.ChannelHandlerContext;
 +import io.netty.channel.ChannelPromise;
 +import io.netty.channel.DefaultChannelPromise;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.Executor;
@@ -734,7 +736,7 @@ index 0000000000000000000000000000000000000000..fcf2325fc8ca07ffdabcdc83d8655fe6
 +
 +public class PacketConsolidationHandler extends ChannelDuplexHandler {
 +    private final int MAX_BUFFER_SIZE = 2 * 1024 * 1024;
-+    private final Executor consolidationDelay = CompletableFuture.delayedExecutor(MultiPaperConfig.interServerConsolidationDelay, TimeUnit.MILLISECONDS);
++    private final Executor consolidationDelay = CompletableFuture.delayedExecutor(MultiPaperConfiguration.get().peerConnection.consolidationDelay, TimeUnit.MILLISECONDS);
 +    private CompletableFuture<Void> consolidationFuture;
 +    private ChannelPromise bufferPromise;
 +    private ByteBuf buffer;
@@ -907,7 +909,7 @@ index 0000000000000000000000000000000000000000..4cb19c0f4b62a688ae497db26fc717d3
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ZlibCompressionEncoder.java b/src/main/java/puregero/multipaper/externalserverprotocol/ZlibCompressionEncoder.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b6293db43fd446f02f01f5efcadc88e1c707864b
+index 0000000000000000000000000000000000000000..1aef3d1138a66bb60d8bffc6cafa29d47419cfe9
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ZlibCompressionEncoder.java
 @@ -0,0 +1,92 @@
@@ -917,7 +919,7 @@ index 0000000000000000000000000000000000000000..b6293db43fd446f02f01f5efcadc88e1
 +import io.netty.channel.ChannelHandlerContext;
 +import io.netty.handler.codec.MessageToByteEncoder;
 +import net.minecraft.network.FriendlyByteBuf;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.zip.Deflater;
 +
@@ -945,7 +947,7 @@ index 0000000000000000000000000000000000000000..b6293db43fd446f02f01f5efcadc88e1
 +    protected void encode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, ByteBuf byteBufDest) throws Exception {
 +        int i = byteBuf.readableBytes();
 +        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(byteBufDest);
-+        if (i < MultiPaperConfig.interServerCompressionThreshold) {
++        if (i < MultiPaperConfiguration.get().peerConnection.compressionThreshold) {
 +            friendlyByteBuf.writeVarInt(0);
 +            friendlyByteBuf.writeBytes(byteBuf);
 +        } else {

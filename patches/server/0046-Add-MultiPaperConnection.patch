@@ -17,21 +17,21 @@ index 9a4d411e7e8bcbdeaf928382f039df652187f0cf..0eda9c4213780e1b90dbe1e018ea4732
      // Airplane start
      implementation("io.papermc.paper:paper-mojangapi:1.19-R0.1-SNAPSHOT") {
 diff --git a/src/main/java/net/minecraft/server/Main.java b/src/main/java/net/minecraft/server/Main.java
-index 1a11b9110ac9e5936ccd415b963b5ce34ecf91d6..05407084ac97115d0e23bb49d5c4e576cc661f3c 100644
+index d9c045cf0161349ab0b21e8b31cdb139144a86ba..06c7eb0c23e202fc2b6f98f8a49a623dd370604e 100644
 --- a/src/main/java/net/minecraft/server/Main.java
 +++ b/src/main/java/net/minecraft/server/Main.java
-@@ -60,6 +60,7 @@ import org.slf4j.Logger;
- // CraftBukkit start
- import java.util.concurrent.atomic.AtomicReference;
- import net.minecraft.SharedConstants;
+@@ -62,6 +62,7 @@ import java.util.concurrent.atomic.AtomicReference;
+ 
+ import puregero.multipaper.config.MultiPaperConfiguration;
+ import puregero.multipaper.config.MultiPaperConfigurationLoader;
 +import puregero.multipaper.MultiPaper;
- import puregero.multipaper.MultiPaperConfig;
  
  public class Main {
-@@ -107,6 +108,7 @@ public class Main {
  
-             MultiPaperConfig.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper
-             System.setProperty("bungeecordName", MultiPaperConfig.bungeeCordName); // MultiPaper - remember this property even after config reloads
+@@ -108,6 +109,7 @@ public class Main {
+ 
+             MultiPaperConfigurationLoader.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper
+             System.setProperty("multipaper.master-connection.my-name", MultiPaperConfiguration.get().masterConnection.myName); // MultiPaper - remember this property even after config reloads
 +            MultiPaper.getConnection(); // MultiPaper - start connection
  
              Bootstrap.bootStrap();
@@ -125,10 +125,10 @@ index 0000000000000000000000000000000000000000..d9fa811b2a0b5f8402ae0e811b09ddbd
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a0bb0918aa07ed7da519e4dc526c6052dbf10d35
+index 0000000000000000000000000000000000000000..4ba071f3fccc37e2985743127a698ffb333764c1
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,117 @@
 +package puregero.multipaper;
 +
 +import io.netty.channel.Channel;
@@ -137,6 +137,7 @@ index 0000000000000000000000000000000000000000..a0bb0918aa07ed7da519e4dc526c6052
 +import io.netty.channel.socket.SocketChannel;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.HelloMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundMessage;
@@ -167,13 +168,13 @@ index 0000000000000000000000000000000000000000..a0bb0918aa07ed7da519e4dc526c6052
 +
 +    public MultiPaperConnection() {
 +        System.setProperty("multipaper.netty.threads", System.getProperty("multipaper.netty.threads", Integer.toString(Math.min(Runtime.getRuntime().availableProcessors(), 3))));
-+        myName = MultiPaperConfig.bungeeCordName;
++        myName = MultiPaperConfiguration.get().masterConnection.myName;
 +        bootstrap = new MessageBootstrap<>(new ServerBoundProtocol(), new MasterBoundProtocol(), channel -> channel.pipeline().addLast(this));
 +        connect();
 +    }
 +
 +    public void connect() {
-+        String server = MultiPaperConfig.multipaperMasterAddress;
++        String server = MultiPaperConfiguration.get().masterConnection.masterAddress;
 +        LOGGER.info("Connecting to " + server + "...");
 +        String[] serverParts = server.split(":");
 +        bootstrap.connectTo(serverParts[0], Integer.parseInt(serverParts[1])).addListener(future -> {

@@ -662,10 +662,10 @@ index f5b99aeeded1d5c2999b5fb1a0a05fe5b9fdcc6a..ce2381059ad6e54cdc35a6a3897c7a71
      }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index ec325d9fee73e64a043f3e9a9d965e87b595a1b5..ae5f006b5876b933a02ba11b75a9353848150d6c 100644
+index c145a3e278ded8e32b1541f4f042102db79c68bb..7fc7f967ff3cad2615ee2f45c5d29ea992296f07 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-@@ -41,6 +41,7 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+@@ -42,6 +42,7 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
      public final ConcurrentHashMap<ChunkKey, Consumer<DataInputStream>> chunkCallbacks = new ConcurrentHashMap<>();
      public long lastPacketSent = 0;
      public long lastPacketReceived = 0;
@@ -673,7 +673,7 @@ index ec325d9fee73e64a043f3e9a9d965e87b595a1b5..ae5f006b5876b933a02ba11b75a93538
  
      public ExternalServerConnection() {
  
-@@ -189,4 +190,15 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+@@ -190,4 +191,15 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
          RequestChunkPacket.blocker = externalServer;
          send(new RequestChunkPacket(world, cx, cz));
      }
@@ -690,10 +690,10 @@ index ec325d9fee73e64a043f3e9a9d965e87b595a1b5..ae5f006b5876b933a02ba11b75a93538
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 5edb28a81b9f352723549f448b305764c5d12868..69a038a62b6e9df6ee1abf1185021e78914dbdab 100644
+index de99872aad665aac7a506dbcf6ca703747934d80..f4d97a537f19b0b5ae38b0f366dd1b2941bb6815 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -112,6 +112,9 @@ public class MultiPaper {
+@@ -113,6 +113,9 @@ public class MultiPaper {
              ChunkHolder holder = visibleChunksToCheck.remove(visibleChunksToCheck.size() - 1);
              if (holder.getAvailableChunkNow() != null && holder.getWorld().chunkSource.chunkMap.getVisibleChunkIfPresent(holder.pos.longKey) == holder) {
                  getConnection().send(new SyncChunkSubscribersMessage(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z));
@@ -703,7 +703,7 @@ index 5edb28a81b9f352723549f448b305764c5d12868..69a038a62b6e9df6ee1abf1185021e78
                  break;
              }
          }
-@@ -302,6 +305,8 @@ public class MultiPaper {
+@@ -303,6 +306,8 @@ public class MultiPaper {
                          RequestChunkPacket.blocker = null;
                          future.complete(inputStream);
                      });
@@ -712,7 +712,7 @@ index 5edb28a81b9f352723549f448b305764c5d12868..69a038a62b6e9df6ee1abf1185021e78
                  } else {
                      throw new IllegalArgumentException("Cannot load a " + path + " chunk from an external server");
                  }
-@@ -464,6 +469,7 @@ public class MultiPaper {
+@@ -465,6 +470,7 @@ public class MultiPaper {
  
      public static void unlockChunk(LevelChunk chunk) {
          if (MultiPaper.isChunkLocal(chunk)) {
@@ -721,7 +721,7 @@ index 5edb28a81b9f352723549f448b305764c5d12868..69a038a62b6e9df6ee1abf1185021e78
              for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
                  if (blockEntity instanceof Container container) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 0da1af36a3145a0dc36c44df76eb2701c9a02132..8e2362a69a02e394bf43b36d108fb46e06583a25 100644
+index 7d069fe3862c177537404c2b7c01cb322260d49b..55f995221b079de17d708068aa22732964bf3e5b 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -12,9 +12,13 @@ import io.netty.channel.socket.SocketChannel;
@@ -738,17 +738,18 @@ index 0da1af36a3145a0dc36c44df76eb2701c9a02132..8e2362a69a02e394bf43b36d108fb46e
  import net.minecraft.world.level.chunk.ChunkAccess;
  import net.minecraft.world.level.chunk.ChunkStatus;
  import net.minecraft.world.level.chunk.LevelChunk;
-@@ -23,8 +27,7 @@ import org.apache.logging.log4j.Logger;
- import org.bukkit.Bukkit;
+@@ -24,7 +28,10 @@ import org.bukkit.Bukkit;
  import org.bukkit.World;
  import org.bukkit.craftbukkit.CraftWorld;
--import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
--import puregero.multipaper.externalserverprotocol.SendTickListPacket;
-+import puregero.multipaper.externalserverprotocol.*;
+ import puregero.multipaper.config.MultiPaperConfiguration;
++import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
++import puregero.multipaper.externalserverprotocol.EntityUpdateWithDependenciesPacket;
+ import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
++import puregero.multipaper.externalserverprotocol.SendEntitiesPacket;
+ import puregero.multipaper.externalserverprotocol.SendTickListPacket;
  import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
  import puregero.multipaper.mastermessagingprotocol.messages.masterbound.*;
- import puregero.multipaper.mastermessagingprotocol.messages.serverbound.*;
-@@ -100,6 +103,9 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -101,6 +108,9 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
                  level.chunkSource.chunkMap.updatingChunks.getUpdatingValuesCopy().forEach(chunkHolder -> {
                      channel.write(new SubscribeChunkMessage(level.getWorld().getName(), chunkHolder.pos.x, chunkHolder.pos.z));
                  });
@@ -758,7 +759,7 @@ index 0da1af36a3145a0dc36c44df76eb2701c9a02132..8e2362a69a02e394bf43b36d108fb46e
              }
          }
  
-@@ -208,6 +214,7 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -209,6 +219,7 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
          if (chunk != null) {
              if (chunk instanceof LevelChunk levelChunk) {
                  if (levelChunk.externalOwner != null && levelChunk.externalOwner.isMe() && server != null && !server.isMe()) {
@@ -766,7 +767,7 @@ index 0da1af36a3145a0dc36c44df76eb2701c9a02132..8e2362a69a02e394bf43b36d108fb46e
                      server.getConnection().send(new SendTickListPacket(levelChunk));
                  }
                  if (server != null && server.isMe()) {
-@@ -332,4 +339,62 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -333,4 +344,62 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
              }
          });
      }
@@ -831,10 +832,10 @@ index 0da1af36a3145a0dc36c44df76eb2701c9a02132..8e2362a69a02e394bf43b36d108fb46e
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3778c271195ebe178e2f9ec5a9d6671360f24436
+index 0000000000000000000000000000000000000000..d8682a3aab0934ae4fcfa967306c5425fa6ecfb7
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,359 @@
+@@ -0,0 +1,360 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -862,6 +863,7 @@ index 0000000000000000000000000000000000000000..3778c271195ebe178e2f9ec5a9d66713
 +import org.apache.commons.lang.ArrayUtils;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +import puregero.multipaper.externalserverprotocol.*;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.UnsubscribeEntitiesMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WillSaveEntitiesLaterMessage;
@@ -945,7 +947,7 @@ index 0000000000000000000000000000000000000000..3778c271195ebe178e2f9ec5a9d66713
 +
 +    public static void onChunkMove(Entity entity, BlockPos to, BlockPos from) {
 +        if (from.equals(BlockPos.ZERO)) return; // They just spawned
-+        if (!entity.shouldBeSaved() && !(entity.isVehicle() && entity.hasExactlyOnePlayerPassenger()) || (MultiPaperConfig.reducePlayerPositionUpdatesInUnloadedChunks && MultiPaper.isRealPlayer(entity))) return; // Entity shouldn't be synced (eg players)
++        if (!entity.shouldBeSaved() && !(entity.isVehicle() && entity.hasExactlyOnePlayerPassenger()) || (MultiPaperConfiguration.get().optimizations.reducePlayerPositionUpdatesInUnloadedChunks && MultiPaper.isRealPlayer(entity))) return; // Entity shouldn't be synced (eg players)
 +
 +        LevelChunk chunkFrom = entity.level.getChunkIfLoaded(from);
 +        LevelChunk chunkTo = entity.level.getChunkIfLoaded(to);
@@ -1182,7 +1184,7 @@ index 0000000000000000000000000000000000000000..3778c271195ebe178e2f9ec5a9d66713
 +            return;
 +        }
 +
-+        if (MultiPaper.isRealPlayer(entity) && !(MultiPaperConfig.reducePlayerPositionUpdatesInUnloadedChunks && packet instanceof ClientboundMoveEntityPacket)) {
++        if (MultiPaper.isRealPlayer(entity) && !(MultiPaperConfiguration.get().optimizations.reducePlayerPositionUpdatesInUnloadedChunks && packet instanceof ClientboundMoveEntityPacket)) {
 +            MultiPaper.broadcastPacketToExternalServers(new EntityUpdatePacket(entity, packet));
 +            return;
 +        }
@@ -1783,7 +1785,7 @@ index a7d4b19f36565a91039a03d30d509c28a538df17..dfba8fecd88b9fbcbb82cfff3430a833
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..60d5fb99ce8ec68feec402edbc5240577a1d46e1
+index 0000000000000000000000000000000000000000..6a2495c6f9449cc7158b6ab8a41234d7a21054ed
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java
 @@ -0,0 +1,75 @@
@@ -1800,7 +1802,7 @@ index 0000000000000000000000000000000000000000..60d5fb99ce8ec68feec402edbc524057
 +import org.bukkit.craftbukkit.scheduler.CraftScheduler;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.ConcurrentModificationException;
 +
@@ -1850,7 +1852,7 @@ index 0000000000000000000000000000000000000000..60d5fb99ce8ec68feec402edbc524057
 +        } else {
 +            try {
 +                connection.send(new SendEntitiesPacket(level.getWorld().getName(), cx, cz, SendEntitiesPacket.getEntities(level, new ChunkPos(cx, cz), player -> {
-+                    if (MultiPaperConfig.reducePlayerPositionUpdatesInUnloadedChunks) {
++                    if (MultiPaperConfiguration.get().optimizations.reducePlayerPositionUpdatesInUnloadedChunks) {
 +                        // This player is now in a loaded chunk, ensure its position is up to date
 +                        connection.send(new EntityUpdatePacket(player, new ClientboundTeleportEntityPacket(player)));
 +                    }

@@ -213,10 +213,18 @@ index a6c70decad1a496595944a5dd2aeeb387757fef3..9b41635c5cfaef8305ab11936bae5e15
 +    // MultiPaper end
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 05e6927e995b8686f83cf13e20ea2efa9838d71d..387e819045f528178beb68076046b8355aa92ebf 100644
+index d008db0a5a737557bfe2cbd6af44759ca185e54f..3f4b7596eff0e63eb2c7f1d470faf67fbb2b6eb2 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -40,6 +40,8 @@ import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBo
+@@ -27,6 +27,7 @@ import org.bukkit.craftbukkit.entity.CraftEntity;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
+ import org.bukkit.entity.HumanEntity;
+ import org.bukkit.event.inventory.InventoryCloseEvent;
++import puregero.multipaper.config.MultiPaperConfiguration;
+ import puregero.multipaper.externalserverprotocol.*;
+ import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
+ import puregero.multipaper.externalserverprotocol.PlayerCreatePacket;
+@@ -40,6 +41,8 @@ import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBo
  import java.io.*;
  import java.net.InetSocketAddress;
  import java.net.SocketAddress;
@@ -225,12 +233,12 @@ index 05e6927e995b8686f83cf13e20ea2efa9838d71d..387e819045f528178beb68076046b835
  import java.util.*;
  import java.util.concurrent.CompletableFuture;
  import java.util.concurrent.ConcurrentHashMap;
-@@ -345,6 +347,24 @@ public class MultiPaper {
+@@ -345,6 +348,24 @@ public class MultiPaper {
          getConnection().send(new WriteLevelMessage(world, buffer.toByteArray()), message -> { /* do nothing */ });
      }
  
 +    public static String readJson(String name) throws IOException {
-+        if (MultiPaperConfig.syncJsonFiles) {
++        if (MultiPaperConfiguration.get().syncSettings.syncJsonFiles) {
 +            return getConnection().sendAndAwaitReply(new ReadJsonMessage(name), DataMessageReply.class).thenApply(message -> new String(message.data, StandardCharsets.UTF_8)).join();
 +        } else if (new File(name).isFile()) {
 +            return Files.readString(new File(name).toPath());
@@ -240,7 +248,7 @@ index 05e6927e995b8686f83cf13e20ea2efa9838d71d..387e819045f528178beb68076046b835
 +    }
 +
 +    public static void writeJson(String name, String json) throws IOException {
-+        if (MultiPaperConfig.syncJsonFiles) {
++        if (MultiPaperConfiguration.get().syncSettings.syncJsonFiles) {
 +            getConnection().send(new WriteJsonMessage(name, json.getBytes(StandardCharsets.UTF_8)), message -> { /* do nothing */ });
 +        } else {
 +            Files.writeString(new File(name).toPath(), json);
@@ -252,7 +260,7 @@ index 05e6927e995b8686f83cf13e20ea2efa9838d71d..387e819045f528178beb68076046b835
              path = path.getParentFile();
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/BanIpPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/BanIpPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..96e8562f1bf996cc1e6c8a7656d97b4a2cbc9447
+index 0000000000000000000000000000000000000000..91cdb0cd0516447321b65536ac113c46a010fa13
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/BanIpPacket.java
 @@ -0,0 +1,79 @@
@@ -263,7 +271,7 @@ index 0000000000000000000000000000000000000000..96e8562f1bf996cc1e6c8a7656d97b4a
 +import net.minecraft.server.players.IpBanListEntry;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.Date;
 +
@@ -285,7 +293,7 @@ index 0000000000000000000000000000000000000000..96e8562f1bf996cc1e6c8a7656d97b4a
 +    }
 +
 +    public static void broadcast(String ip, Date created, Date expires, String reason, String source) {
-+        if (!handlingPacket && MultiPaperConfig.syncJsonFiles) {
++        if (!handlingPacket && MultiPaperConfiguration.get().syncSettings.syncJsonFiles) {
 +            MultiPaper.broadcastPacketToExternalServers(new BanIpPacket(ip, created, expires, reason, source));
 +        }
 +    }
@@ -337,7 +345,7 @@ index 0000000000000000000000000000000000000000..96e8562f1bf996cc1e6c8a7656d97b4a
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/BanPlayerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/BanPlayerPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2bccf3d30b5c88fca7459f870a54cfca934897a2
+index 0000000000000000000000000000000000000000..4039b345c9014d9c744978f2322941562bd3d974
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/BanPlayerPacket.java
 @@ -0,0 +1,89 @@
@@ -349,7 +357,7 @@ index 0000000000000000000000000000000000000000..2bccf3d30b5c88fca7459f870a54cfca
 +import net.minecraft.server.players.UserBanListEntry;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.Date;
 +import java.util.UUID;
@@ -374,7 +382,7 @@ index 0000000000000000000000000000000000000000..2bccf3d30b5c88fca7459f870a54cfca
 +    }
 +
 +    public static void broadcast(String name, UUID uuid, Date created, Date expires, String reason, String source) {
-+        if (!handlingPacket && MultiPaperConfig.syncJsonFiles) {
++        if (!handlingPacket && MultiPaperConfiguration.get().syncSettings.syncJsonFiles) {
 +            MultiPaper.broadcastPacketToExternalServers(new BanPlayerPacket(name, uuid, created, expires, reason, source));
 +        }
 +    }
@@ -432,7 +440,7 @@ index 0000000000000000000000000000000000000000..2bccf3d30b5c88fca7459f870a54cfca
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/DeopPlayerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/DeopPlayerPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f0024d2c901c9a6f42005d12bda22fed0e04e122
+index 0000000000000000000000000000000000000000..53aec9530ccdd8e5e460c40907bfdcb3a4b0edca
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/DeopPlayerPacket.java
 @@ -0,0 +1,62 @@
@@ -445,7 +453,7 @@ index 0000000000000000000000000000000000000000..f0024d2c901c9a6f42005d12bda22fed
 +import org.bukkit.entity.Player;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.UUID;
 +
@@ -461,7 +469,7 @@ index 0000000000000000000000000000000000000000..f0024d2c901c9a6f42005d12bda22fed
 +    }
 +
 +    public static void broadcast(String name, UUID uuid) {
-+        if (!handlingPacket && MultiPaperConfig.syncJsonFiles) {
++        if (!handlingPacket && MultiPaperConfiguration.get().syncSettings.syncJsonFiles) {
 +            MultiPaper.broadcastPacketToExternalServers(new DeopPlayerPacket(name, uuid));
 +        }
 +    }
@@ -519,7 +527,7 @@ index 191294b08434bd4ea0a7ea29d040b782125eb7e9..6159ec1952424b652919bffc5c6e01a0
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/OpPlayerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/OpPlayerPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..215e3dfcd7ea32f2c2f6db3b0fa606235ff57f1b
+index 0000000000000000000000000000000000000000..6593c8555aa73c8dca5f287eca80444e2b45e7ab
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/OpPlayerPacket.java
 @@ -0,0 +1,73 @@
@@ -533,7 +541,7 @@ index 0000000000000000000000000000000000000000..215e3dfcd7ea32f2c2f6db3b0fa60623
 +import org.bukkit.entity.Player;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.UUID;
 +
@@ -553,7 +561,7 @@ index 0000000000000000000000000000000000000000..215e3dfcd7ea32f2c2f6db3b0fa60623
 +    }
 +
 +    public static void broadcast(String name, UUID uuid, int level, boolean bypassPlayerLimit) {
-+        if (!handlingPacket && MultiPaperConfig.syncJsonFiles) {
++        if (!handlingPacket && MultiPaperConfiguration.get().syncSettings.syncJsonFiles) {
 +            MultiPaper.broadcastPacketToExternalServers(new OpPlayerPacket(name, uuid, level, bypassPlayerLimit));
 +        }
 +    }
@@ -598,7 +606,7 @@ index 0000000000000000000000000000000000000000..215e3dfcd7ea32f2c2f6db3b0fa60623
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PardonIpPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PardonIpPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..bf8bc6d85f4f5e578f4ff65df7dab6887089df07
+index 0000000000000000000000000000000000000000..837982422ac389917d1c69fadaf7cf3d511156d1
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PardonIpPacket.java
 @@ -0,0 +1,44 @@
@@ -608,7 +616,7 @@ index 0000000000000000000000000000000000000000..bf8bc6d85f4f5e578f4ff65df7dab688
 +import net.minecraft.server.MinecraftServer;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +public class PardonIpPacket extends ExternalServerPacket {
 +
@@ -620,7 +628,7 @@ index 0000000000000000000000000000000000000000..bf8bc6d85f4f5e578f4ff65df7dab688
 +    }
 +
 +    public static void broadcast(String ip) {
-+        if (!handlingPacket && MultiPaperConfig.syncJsonFiles) {
++        if (!handlingPacket && MultiPaperConfiguration.get().syncSettings.syncJsonFiles) {
 +            MultiPaper.broadcastPacketToExternalServers(new PardonIpPacket(ip));
 +        }
 +    }
@@ -648,7 +656,7 @@ index 0000000000000000000000000000000000000000..bf8bc6d85f4f5e578f4ff65df7dab688
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PardonPlayerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PardonPlayerPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0d9e5c985e44913d6139399da924108fc43e8b32
+index 0000000000000000000000000000000000000000..e159507d220a67cef7a1cf43c30bd0bd4702189b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PardonPlayerPacket.java
 @@ -0,0 +1,55 @@
@@ -659,7 +667,7 @@ index 0000000000000000000000000000000000000000..0d9e5c985e44913d6139399da924108f
 +import net.minecraft.server.MinecraftServer;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.UUID;
 +
@@ -675,7 +683,7 @@ index 0000000000000000000000000000000000000000..0d9e5c985e44913d6139399da924108f
 +    }
 +
 +    public static void broadcast(String name, UUID uuid) {
-+        if (!handlingPacket && MultiPaperConfig.syncJsonFiles) {
++        if (!handlingPacket && MultiPaperConfiguration.get().syncSettings.syncJsonFiles) {
 +            MultiPaper.broadcastPacketToExternalServers(new PardonPlayerPacket(name, uuid));
 +        }
 +    }
@@ -709,7 +717,7 @@ index 0000000000000000000000000000000000000000..0d9e5c985e44913d6139399da924108f
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RemoveWhiteListedPlayerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RemoveWhiteListedPlayerPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b512ef0cf8d4ed82bb263a24311da16cb83d8c41
+index 0000000000000000000000000000000000000000..fdf2b90ec025d08c0d066ed3583ca179eb00643a
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RemoveWhiteListedPlayerPacket.java
 @@ -0,0 +1,55 @@
@@ -720,7 +728,7 @@ index 0000000000000000000000000000000000000000..b512ef0cf8d4ed82bb263a24311da16c
 +import net.minecraft.server.MinecraftServer;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.UUID;
 +
@@ -736,7 +744,7 @@ index 0000000000000000000000000000000000000000..b512ef0cf8d4ed82bb263a24311da16c
 +    }
 +
 +    public static void broadcast(String name, UUID uuid) {
-+        if (!handlingPacket && MultiPaperConfig.syncJsonFiles) {
++        if (!handlingPacket && MultiPaperConfiguration.get().syncSettings.syncJsonFiles) {
 +            MultiPaper.broadcastPacketToExternalServers(new RemoveWhiteListedPlayerPacket(name, uuid));
 +        }
 +    }
@@ -770,7 +778,7 @@ index 0000000000000000000000000000000000000000..b512ef0cf8d4ed82bb263a24311da16c
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/WhiteListPlayerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/WhiteListPlayerPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d5b254358e70b8dbb615f0c7211646824fd5c8e7
+index 0000000000000000000000000000000000000000..6c5096ca9d856926b8a41e52849ee1dd031fca47
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/WhiteListPlayerPacket.java
 @@ -0,0 +1,56 @@
@@ -782,7 +790,7 @@ index 0000000000000000000000000000000000000000..d5b254358e70b8dbb615f0c721164682
 +import net.minecraft.server.players.UserWhiteListEntry;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.UUID;
 +
@@ -798,7 +806,7 @@ index 0000000000000000000000000000000000000000..d5b254358e70b8dbb615f0c721164682
 +    }
 +
 +    public static void broadcast(String name, UUID uuid) {
-+        if (!handlingPacket && MultiPaperConfig.syncJsonFiles) {
++        if (!handlingPacket && MultiPaperConfiguration.get().syncSettings.syncJsonFiles) {
 +            MultiPaper.broadcastPacketToExternalServers(new WhiteListPlayerPacket(name, uuid));
 +        }
 +    }

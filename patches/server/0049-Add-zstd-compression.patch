@@ -17,7 +17,7 @@ index 0eda9c4213780e1b90dbe1e018ea47320030c503..c1153c106cdde5d26971348c30fcf3f3
      // Pufferfish start
      implementation("org.yaml:snakeyaml:1.28")
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index e394f50beb1277f048d773de04fe669241cd70ee..cd8a6d7f27e03c667e5e92e30e0bf5fe476138f5 100644
+index c5abd55879ea5e317806e435f7be7b10489ffa12..972ce9b9a6e681c329fdc31165c2dc5c3166be32 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -4,6 +4,7 @@ import io.netty.channel.Channel;
@@ -28,7 +28,7 @@ index e394f50beb1277f048d773de04fe669241cd70ee..cd8a6d7f27e03c667e5e92e30e0bf5fe
  import io.netty.util.internal.SystemPropertyUtil;
  import net.minecraft.network.*;
  import net.minecraft.network.protocol.PacketFlow;
-@@ -41,6 +42,9 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+@@ -42,6 +43,9 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
  
      public int getSupportedCompressionFlags() {
          int supportedCompressionFlags = SetCompressionPacket.ZLIB_COMPRESSION;
@@ -39,7 +39,7 @@ index e394f50beb1277f048d773de04fe669241cd70ee..cd8a6d7f27e03c667e5e92e30e0bf5fe
      }
  
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
-index 873e8de738302aa2b0d834ac2d7d5833a3e890cf..e3d8c72f4321147f00ab78794f653d29f9b43708 100644
+index e375e2aba32cdc0a0d7ce7afa2c99fcf2d473281..32dd77d1c17d8408ee5c80005c607faa6b1e06b5 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 @@ -1,6 +1,7 @@
@@ -53,7 +53,7 @@ index 873e8de738302aa2b0d834ac2d7d5833a3e890cf..e3d8c72f4321147f00ab78794f653d29
 @@ -73,7 +74,10 @@ public class HelloPacket extends ExternalServerPacket {
          ChannelOutboundHandlerAdapter compressionHandler = null;
  
-         if (MultiPaperConfig.interServerCompressionThreshold > 0 && !(connection.getChannel().remoteAddress() instanceof InetSocketAddress address && address.getAddress().isLoopbackAddress())) {
+         if (MultiPaperConfiguration.get().peerConnection.compressionThreshold > 0 && !(connection.getChannel().remoteAddress() instanceof InetSocketAddress address && address.getAddress().isLoopbackAddress())) {
 -            if ((supportedCompressionFlags & SetCompressionPacket.ZLIB_COMPRESSION) == SetCompressionPacket.ZLIB_COMPRESSION) {
 +            if ((supportedCompressionFlags & SetCompressionPacket.ZSTD_COMPRESSION) == SetCompressionPacket.ZSTD_COMPRESSION && Zstd.isAvailable()) {
 +                compressionType = SetCompressionPacket.ZSTD_COMPRESSION;
@@ -135,7 +135,7 @@ index 0000000000000000000000000000000000000000..059c862e6b521f42b979f5297d9970db
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ZstdCompressionEncoder.java b/src/main/java/puregero/multipaper/externalserverprotocol/ZstdCompressionEncoder.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..443b2854b0234e4a233d0935ea9d276e60c52ef7
+index 0000000000000000000000000000000000000000..5d403cf567493d5b289b9a6eb3cc3266707ff999
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ZstdCompressionEncoder.java
 @@ -0,0 +1,32 @@
@@ -146,7 +146,7 @@ index 0000000000000000000000000000000000000000..443b2854b0234e4a233d0935ea9d276e
 +import io.netty.channel.ChannelHandlerContext;
 +import io.netty.handler.codec.MessageToByteEncoder;
 +import net.minecraft.network.FriendlyByteBuf;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.nio.ByteBuffer;
 +
@@ -157,7 +157,7 @@ index 0000000000000000000000000000000000000000..443b2854b0234e4a233d0935ea9d276e
 +    protected void encode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, ByteBuf byteBufDest) throws Exception {
 +        int i = byteBuf.readableBytes();
 +        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(byteBufDest);
-+        if (i < MultiPaperConfig.interServerCompressionThreshold) {
++        if (i < MultiPaperConfiguration.get().peerConnection.compressionThreshold) {
 +            friendlyByteBuf.writeVarInt(0);
 +            friendlyByteBuf.writeBytes(byteBuf);
 +        } else {

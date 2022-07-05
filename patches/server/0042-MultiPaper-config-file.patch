@@ -4,24 +4,64 @@ Date: Fri, 4 Mar 2022 20:33:33 +1000
 Subject: [PATCH] MultiPaper config file
 
 
+diff --git a/src/main/java/io/papermc/paper/configuration/ConfigurationPart.java b/src/main/java/io/papermc/paper/configuration/ConfigurationPart.java
+index 7a4a7a654fe2516ed894a68f2657344df9d70f4c..1a3f39379359f7d26bcf72f692247fd46e79bf0d 100644
+--- a/src/main/java/io/papermc/paper/configuration/ConfigurationPart.java
++++ b/src/main/java/io/papermc/paper/configuration/ConfigurationPart.java
+@@ -1,6 +1,6 @@
+ package io.papermc.paper.configuration;
+ 
+-abstract class ConfigurationPart {
++public abstract class ConfigurationPart {
+ 
+     public static abstract class Post extends ConfigurationPart {
+ 
+diff --git a/src/main/java/io/papermc/paper/configuration/InnerClassFieldDiscoverer.java b/src/main/java/io/papermc/paper/configuration/InnerClassFieldDiscoverer.java
+index a0aa1f1a7adf986d500a2135aa42e138aa3c4f08..8f2c9337bfb6568abe3d5c958bb4500b7572d43b 100644
+--- a/src/main/java/io/papermc/paper/configuration/InnerClassFieldDiscoverer.java
++++ b/src/main/java/io/papermc/paper/configuration/InnerClassFieldDiscoverer.java
+@@ -17,7 +17,7 @@ import java.util.Map;
+ 
+ import static io.leangen.geantyref.GenericTypeReflector.erase;
+ 
+-final class InnerClassFieldDiscoverer implements FieldDiscoverer<Map<Field, Object>> {
++public final class InnerClassFieldDiscoverer implements FieldDiscoverer<Map<Field, Object>> { // MultiPaper - make public
+ 
+     private final Map<Class<?>, Object> instanceMap = new HashMap<>();
+     private final Map<Class<?>, Object> overrides;
+@@ -55,9 +55,9 @@ final class InnerClassFieldDiscoverer implements FieldDiscoverer<Map<Field, Obje
+         }
+     }, "Object must be a unique ConfigurationPart");
+ 
+-    InnerClassFieldDiscoverer(Map<Class<?>, Object> overrides) {
++    public InnerClassFieldDiscoverer(Map<Class<?>, Object> overrides) {
+         this.overrides = overrides;
+-    }
++    } // MultiPaper - make public
+ 
+     @Override
+     public @Nullable <V> InstanceFactory<Map<Field, Object>> discover(AnnotatedType target, FieldCollector<Map<Field, Object>, V> collector) throws SerializationException {
 diff --git a/src/main/java/net/minecraft/server/Main.java b/src/main/java/net/minecraft/server/Main.java
-index 0a843e0afbcb1af8e2641515eb244b791b819b8c..1a11b9110ac9e5936ccd415b963b5ce34ecf91d6 100644
+index 0a843e0afbcb1af8e2641515eb244b791b819b8c..d9c045cf0161349ab0b21e8b31cdb139144a86ba 100644
 --- a/src/main/java/net/minecraft/server/Main.java
 +++ b/src/main/java/net/minecraft/server/Main.java
-@@ -60,6 +60,7 @@ import org.slf4j.Logger;
+@@ -59,7 +59,9 @@ import org.slf4j.Logger;
+ 
  // CraftBukkit start
  import java.util.concurrent.atomic.AtomicReference;
- import net.minecraft.SharedConstants;
-+import puregero.multipaper.MultiPaperConfig;
+-import net.minecraft.SharedConstants;
++
++import puregero.multipaper.config.MultiPaperConfiguration;
++import puregero.multipaper.config.MultiPaperConfigurationLoader;
  
  public class Main {
  
-@@ -104,6 +105,9 @@ public class Main {
+@@ -104,6 +106,9 @@ public class Main {
                  JvmProfiler.INSTANCE.start(Environment.SERVER);
              }
  
-+            MultiPaperConfig.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper
-+            System.setProperty("bungeecordName", MultiPaperConfig.bungeeCordName); // MultiPaper - remember this property even after config reloads
++            MultiPaperConfigurationLoader.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper
++            System.setProperty("multipaper.master-connection.my-name", MultiPaperConfiguration.get().masterConnection.myName); // MultiPaper - remember this property even after config reloads
 +
              Bootstrap.bootStrap();
              Bootstrap.validate();
@@ -65,248 +105,266 @@ index 1b9e91b20dd9a9375a0a2a6a4d7a0bcdce9e7b1a..e1e51af894f4d6bbe9b1114c6d69b7ab
                  // Paper start
                  acceptsAll(asList("server-name"), "Name of the server")
                          .withRequiredArg()
-diff --git a/src/main/java/puregero/multipaper/MultiPaperConfig.java b/src/main/java/puregero/multipaper/MultiPaperConfig.java
+diff --git a/src/main/java/puregero/multipaper/config/ExceptionableConsumer.java b/src/main/java/puregero/multipaper/config/ExceptionableConsumer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0992ec8687432089c1357c79a7084f250ee8bb27
+index 0000000000000000000000000000000000000000..7cdf20efd4f220f55d7b86abce19e84f4512191e
 --- /dev/null
-+++ b/src/main/java/puregero/multipaper/MultiPaperConfig.java
-@@ -0,0 +1,237 @@
-+package puregero.multipaper;
++++ b/src/main/java/puregero/multipaper/config/ExceptionableConsumer.java
+@@ -0,0 +1,8 @@
++package puregero.multipaper.config;
 +
-+import com.google.common.base.Throwables;
-+import org.bukkit.Bukkit;
-+import org.bukkit.configuration.InvalidConfigurationException;
-+import org.bukkit.configuration.file.YamlConfiguration;
++@FunctionalInterface
++public interface ExceptionableConsumer<T> {
 +
-+import java.io.File;
-+import java.io.IOException;
-+import java.lang.reflect.InvocationTargetException;
-+import java.lang.reflect.Method;
-+import java.lang.reflect.Modifier;
-+import java.util.Arrays;
++    void accept(T t) throws Exception;
++
++}
+diff --git a/src/main/java/puregero/multipaper/config/MultiPaperConfiguration.java b/src/main/java/puregero/multipaper/config/MultiPaperConfiguration.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..0db97301d74801e3630c131c65a4a5b49323e8ec
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/config/MultiPaperConfiguration.java
+@@ -0,0 +1,87 @@
++package puregero.multipaper.config;
++
++import io.papermc.paper.configuration.ConfigurationPart;
++import org.spongepowered.configurate.objectmapping.meta.Comment;
++
 +import java.util.List;
-+import java.util.logging.Level;
 +
-+public class MultiPaperConfig {
++@SuppressWarnings({ "InnerClassMayBeStatic" })
++public class MultiPaperConfiguration extends ConfigurationPart {
 +
-+    private static File CONFIG_FILE;
-+    private static final String HEADER = """
++    public static final String HEADER = """
 +            This is the main configuration file for MultiPaper.
 +            There's quite alot to configure. Read the docs for more information.
 +
 +            Docs: https://github.com/PureGero/MultiPaper/blob/main/MULTIPAPER_YAML.md\s
 +            """;
-+    /*========================================================================*/
-+    public static YamlConfiguration config;
-+    private static boolean dirty = false;
 +
-+    public static void init(File configFile) {
-+        CONFIG_FILE = configFile;
-+        config = new YamlConfiguration();
-+        try {
-+            config.load(CONFIG_FILE);
-+        } catch (IOException ex) {
-+        } catch (InvalidConfigurationException ex) {
-+            Bukkit.getLogger().log(Level.SEVERE, "Could not load multipaper.yml, please correct your syntax errors", ex);
-+            throw Throwables.propagate(ex);
-+        }
-+        config.options().header(HEADER);
-+        config.options().copyDefaults(true);
++    private static MultiPaperConfiguration instance;
 +
-+        readConfig(MultiPaperConfig.class, null);
++    public static MultiPaperConfiguration get() {
++        return instance;
 +    }
 +
-+    static void readConfig(Class<?> clazz, Object instance) {
-+        for (Method method : clazz.getDeclaredMethods()) {
-+            if (Modifier.isPrivate(method.getModifiers())) {
-+                if (method.getParameterTypes().length == 0 && method.getReturnType() == Void.TYPE) {
-+                    try {
-+                        method.setAccessible(true);
-+                        method.invoke(instance);
-+                    } catch (InvocationTargetException ex) {
-+                        throw Throwables.propagate(ex.getCause());
-+                    } catch (Exception ex) {
-+                        Bukkit.getLogger().log(Level.SEVERE, "Error invoking " + method, ex);
-+                    }
++    static void set(MultiPaperConfiguration instance) {
++        MultiPaperConfiguration.instance = instance;
++    }
++
++    public MasterConnection masterConnection;
++
++    public class MasterConnection extends ConfigurationPart  {
++        public boolean advertiseToBuiltInProxy = true;
++
++        // One day we'll get comments in yaml files
++        // @Comment("""
++        //
++        // Set the address used to connect to the master database here.
++        // """)
++        public String masterAddress = "localhost:35353";
++
++        // One day we'll get comments in yaml files
++        // @Comment("""
++        //
++        // Give this server a name. This can be the same name you used for this server in
++        // BungeeCord or Velocity, or you can come up with a random name. Each server must
++        // have a unique name.
++        // """)
++        public String myName = "server" + Double.toString(Math.random()).substring(2, 7);
++    }
++
++    public PeerConnection peerConnection;
++
++    public class PeerConnection extends ConfigurationPart {
++        public int compressionThreshold = 0;
++        public int consolidationDelay = 0;
++    }
++
++    public Optimizations optimizations;
++
++    public class Optimizations extends ConfigurationPart  {
++        public boolean disableSafetyRedstoneChunkLock = false;
++        public boolean dontSaveJustForLightingUpdates = false;
++        public boolean reducePlayerPositionUpdatesInUnloadedChunks = false;
++        public int ticksPerInactiveEntityTracking = 1;
++        public boolean useEventBasedIo = true;
++    }
++
++    public SyncSettings syncSettings;
++
++    public class SyncSettings extends ConfigurationPart  {
++        public boolean syncJsonFiles = true;
++        public boolean syncPermissions = false;
++        public boolean syncScoreboards = true;
++        public boolean useLocalPlayerCountForServerIsFullKick = false;
++
++        public Files files;
++
++        public class Files extends ConfigurationPart {
++            public List<String> filesToNotSync = List.of("plugins/bStats");
++            public List<String> filesToOnlyUploadOnServerStop = List.of("plugins/MyPluginDirectory/my_big_database.db");
++            public List<String> filesToSyncInRealTime = List.of("plugins/MyPluginDirectory/userdata");
++            public List<String> filesToSyncOnStartup = List.of("myconfigfile.yml", "plugins/MyPlugin.jar");
++            public boolean logFileSyncs = true;
++        }
++    }
++
++
++}
+diff --git a/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java b/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..dab1e0cefcc1ec904b7f30148370c790c079ead0
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java
+@@ -0,0 +1,148 @@
++package puregero.multipaper.config;
++
++import io.papermc.paper.configuration.ConfigurationLoaders;
++import io.papermc.paper.configuration.ConfigurationPart;
++import io.papermc.paper.configuration.InnerClassFieldDiscoverer;
++import io.papermc.paper.configuration.constraint.Constraint;
++import io.papermc.paper.configuration.constraint.Constraints;
++import org.spongepowered.configurate.BasicConfigurationNode;
++import org.spongepowered.configurate.CommentedConfigurationNode;
++import org.spongepowered.configurate.ConfigurateException;
++import org.spongepowered.configurate.ConfigurationNode;
++import org.spongepowered.configurate.ConfigurationOptions;
++import org.spongepowered.configurate.objectmapping.ObjectMapper;
++import org.spongepowered.configurate.serialize.SerializationException;
++import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
++
++import java.io.File;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.util.Collections;
++import java.util.Map;
++import java.util.function.UnaryOperator;
++
++import static io.leangen.geantyref.GenericTypeReflector.erase;
++
++public class MultiPaperConfigurationLoader {
++
++    public static void init(File file) {
++        try {
++            YamlConfigurationLoader.Builder loaderBuilder = ConfigurationLoaders.naturallySorted();
++            loaderBuilder.defaultOptions(options -> options.header(MultiPaperConfiguration.HEADER));
++
++            Path configFile = file.toPath();
++            YamlConfigurationLoader loader = loaderBuilder
++                    .defaultOptions(applyObjectMapperFactory(createObjectMapper().build()))
++                    .path(configFile)
++                    .build();
++            ConfigurationNode node;
++            if (Files.exists(configFile)) {
++                node = loader.load();
++            } else {
++                node = CommentedConfigurationNode.root(loader.defaultOptions());
++            }
++
++            String before = node.toString();
++            setFromProperties(node);
++
++            MultiPaperConfiguration instance = node.require(MultiPaperConfiguration.class);
++            transformLegacyConfig(node, instance);
++
++            for (Object key : node.childrenMap().keySet()) {
++                node.removeChild(key);
++            }
++
++            node.set(instance);
++
++            if (!node.toString().equals(before)) {
++                loader.save(node);
++            }
++
++            MultiPaperConfiguration.set(instance);
++        } catch (ConfigurateException e) {
++            throw new RuntimeException("Could not load multipaper.yml", e);
++        }
++    }
++
++    private static void setFromProperties(ConfigurationNode node) {
++        for (Map.Entry<Object, Object> property : System.getProperties().entrySet()) {
++            if (property.getKey().toString().startsWith("multipaper.")) {
++                String key = property.getKey().toString().substring("multipaper.".length());
++                try {
++                    node.node((Object[]) key.split("\\.")).set(property.getValue());
++                } catch (SerializationException e) {
++                    e.printStackTrace();
 +                }
 +            }
 +        }
-+        upgradeConfig();
-+        if (dirty) {
-+            saveConfig();
++    }
++
++    private static ObjectMapper.Factory.Builder createObjectMapper() {
++        return ObjectMapper.factoryBuilder()
++                .addConstraint(Constraint.class, new Constraint.Factory())
++                .addConstraint(Constraints.Min.class, Number.class, new Constraints.Min.Factory())
++                .addDiscoverer(new InnerClassFieldDiscoverer(Collections.emptyMap()));
++    }
++
++    private static UnaryOperator<ConfigurationOptions> applyObjectMapperFactory(final ObjectMapper.Factory factory) {
++        return options -> options.serializers(builder -> builder
++                .register(type -> ConfigurationPart.class.isAssignableFrom(erase(type)), factory.asTypeSerializer())
++                .registerAnnotatedObjects(factory));
++    }
++
++    private static void transformLegacyConfig(ConfigurationNode node, MultiPaperConfiguration config) {
++        getAndRemove(node, "bungeecordName", value -> config.masterConnection.myName = value.getString());
++        getAndRemove(node, "multipaperMasterAddress", value -> config.masterConnection.masterAddress = value.getString());
++        getAndRemove(node, "syncJsonFiles", value -> config.syncSettings.syncJsonFiles = value.getBoolean());
++        getAndRemove(node, "advertiseToBuiltInProxy", value -> config.masterConnection.advertiseToBuiltInProxy = value.getBoolean());
++        getAndRemove(node, "syncScoreboards", value -> config.syncSettings.syncScoreboards = value.getBoolean());
++        getAndRemove(node, "logFileSyncing", value -> config.syncSettings.files.logFileSyncs = value.getBoolean());
++        getAndRemove(node, "filesToSyncOnStartup", value -> config.syncSettings.files.filesToSyncOnStartup = value.getList(String.class));
++        getAndRemove(node, "filesToSyncInRealTime", value -> config.syncSettings.files.filesToSyncInRealTime = value.getList(String.class));
++        getAndRemove(node, "filesToOnlyUploadOnServerStop", value -> config.syncSettings.files.filesToOnlyUploadOnServerStop = value.getList(String.class));
++        getAndRemove(node, "filesToNotSync", value -> config.syncSettings.files.filesToNotSync = value.getList(String.class));
++        getAndRemove(node, "ticksPerInactiveEntityTracking", value -> config.optimizations.ticksPerInactiveEntityTracking = value.getInt());
++        getAndRemove(node, "optimizations.ticksPerInactiveEntityTracking", value -> config.optimizations.ticksPerInactiveEntityTracking = value.getInt());
++        getAndRemove(node, "interServerCompressionThreshold", value -> config.peerConnection.compressionThreshold = value.getInt());
++        getAndRemove(node, "interServerConsolidationDelay", value -> config.peerConnection.consolidationDelay = value.getInt());
++        getAndRemove(node, "useLocalPlayerCountForServerIsFullKick", value -> config.syncSettings.useLocalPlayerCountForServerIsFullKick = value.getBoolean());
++        getAndRemove(node, "syncPermissions", value -> config.syncSettings.syncPermissions = value.getBoolean());
++        getAndRemove(node, "optimizations.reducePlayerPositionUpdatesInUnloadedChunks", value -> config.optimizations.reducePlayerPositionUpdatesInUnloadedChunks = value.getBoolean());
++        getAndRemove(node, "optimizations.dontSaveLightingUpdates", value -> config.optimizations.dontSaveJustForLightingUpdates = value.getBoolean());
++        getAndRemove(node, "optimizations.useFutureBasedIO", value -> config.optimizations.useEventBasedIo = value.getBoolean());
++        getAndRemove(node, "optimizations.disableRedstoneSafetySync", value -> config.optimizations.disableSafetyRedstoneChunkLock = value.getBoolean());
++    }
++
++    private static void getAndRemove(ConfigurationNode node, String key, ExceptionableConsumer<ConfigurationNode> consumer) {
++        if (System.getProperty(key) != null) {
++            try {
++                BasicConfigurationNode systemNode = BasicConfigurationNode.root();
++                systemNode.set(System.getProperty(key));
++                consumer.accept(systemNode);
++                return;
++            } catch (Exception e) {
++                e.printStackTrace();
++            }
++        }
++
++        String[] parts = key.split("\\.");
++
++        for (int i = 0; i < parts.length; i++) {
++            if (node.isMap() && node.childrenMap().containsKey(parts[i])) {
++                if (i == parts.length - 1) {
++                    try {
++                        consumer.accept(node.childrenMap().get(parts[i]));
++                        node.removeChild(parts[i]);
++                    } catch (Exception e) {
++                        e.printStackTrace();
++                    }
++                } else {
++                    node = node.childrenMap().get(parts[i]);
++                }
++            } else {
++                return;
++            }
 +        }
 +    }
 +
-+    private static void upgradeConfig() {
-+        upgradeOption("ticksPerInactiveEntityTracking", "optimizations.ticksPerInactiveEntityTracking");
-+    }
-+
-+    private static void upgradeOption(String from, String to) {
-+        if (System.getProperty(from) != null && System.getProperty(to) == null) {
-+            System.setProperty(to, System.getProperty(from));
-+        }
-+
-+        if (config.contains(from)) {
-+            config.set(to, config.get(from));
-+            config.set(from, null);
-+            dirty = true;
-+        }
-+    }
-+
-+    static void saveConfig() {
-+        try {
-+            config.save(CONFIG_FILE);
-+        } catch (IOException ex) {
-+            Bukkit.getLogger().log(Level.SEVERE, "Could not save " + CONFIG_FILE, ex);
-+        }
-+    }
-+
-+    private static boolean getBoolean(String path, boolean def) {
-+        if (System.getProperty(path) != null) {
-+            return Boolean.getBoolean(path);
-+        }
-+        if (!config.isBoolean(path)) {
-+            dirty = true;
-+            config.set(path, def);
-+        }
-+        return config.getBoolean(path);
-+    }
-+
-+    private static double getDouble(String path, double def) {
-+        if (System.getProperty(path) != null) {
-+            return Double.parseDouble(System.getProperty(path));
-+        }
-+        if (!config.isDouble(path)) {
-+            dirty = true;
-+            config.set(path, def);
-+        }
-+        return config.getDouble(path);
-+    }
-+
-+    private static int getInt(String path, int def) {
-+        if (System.getProperty(path) != null) {
-+            return Integer.getInteger(path);
-+        }
-+        if (!config.isInt(path)) {
-+            dirty = true;
-+            config.set(path, def);
-+        }
-+        return config.getInt(path);
-+    }
-+
-+    private static <T> List<?> getList(String path, T def) {
-+        if (!config.isList(path)) {
-+            dirty = true;
-+            config.set(path, def);
-+        }
-+        return config.getList(path);
-+    }
-+
-+    private static String getString(String path, String def) {
-+        if (System.getProperty(path) != null) {
-+            return System.getProperty(path);
-+        }
-+        if (!config.isString(path)) {
-+            dirty = true;
-+            config.set(path, def);
-+        }
-+        return config.getString(path);
-+    }
-+
-+    public static String bungeeCordName;
-+    private static void bungeeCordName() {
-+        bungeeCordName = getString("bungeecordName", "server" + Double.toString(Math.random()).substring(2, 7));
-+    }
-+
-+    public static String multipaperMasterAddress;
-+    private static void multipaperMasterAddress() {
-+        multipaperMasterAddress = getString("multipaperMasterAddress", "localhost:35353");
-+    }
-+
-+    public static boolean syncJsonFiles;
-+    private static void syncJsonFiles() {
-+        syncJsonFiles = getBoolean("syncJsonFiles", true);
-+    }
-+
-+    public static boolean advertiseToBuiltInProxy;
-+    private static void advertiseToBuiltInProxy() {
-+        advertiseToBuiltInProxy = getBoolean("advertiseToBuiltInProxy", true);
-+    }
-+
-+    public static boolean syncScoreboards;
-+    private static void syncScoreboards() {
-+        syncScoreboards = getBoolean("syncScoreboards", true);
-+    }
-+
-+    public static boolean logFileSyncing;
-+    private static void logFileSyncing() {
-+        logFileSyncing = getBoolean("logFileSyncing", true);
-+    }
-+
-+    public static List<String> filesToSyncOnStartup;
-+    private static void filesToSyncOnStartup() {
-+        filesToSyncOnStartup = getList("filesToSyncOnStartup", Arrays.asList("myconfigfile.yml", "plugins/MyPlugin.jar")).stream().map(Object::toString).toList();
-+    }
-+
-+    public static List<String> filesToSyncInRealTime;
-+    private static void filesToSyncInRealTime() {
-+        filesToSyncInRealTime = getList("filesToSyncInRealTime", Arrays.asList("plugins/MyPluginDirectory")).stream().map(Object::toString).toList();
-+    }
-+
-+    public static List<String> filesToOnlyUploadOnServerStop;
-+    private static void filesToOnlyUploadOnServerStop() {
-+        filesToOnlyUploadOnServerStop = getList("filesToOnlyUploadOnServerStop", Arrays.asList("plugins/MyPluginDirectory/my_big_database.db")).stream().map(Object::toString).toList();
-+    }
-+
-+    public static List<String> filesToNotSync;
-+    private static void filesToNotSync() {
-+        filesToNotSync = getList("filesToNotSync", Arrays.asList("plugins/bStats")).stream().map(Object::toString).toList();
-+    }
-+
-+    public static int ticksPerInactiveEntityTracking;
-+    private static void ticksPerInactiveEntityTracking() {
-+        ticksPerInactiveEntityTracking = getInt("optimizations.ticksPerInactiveEntityTracking", 1);
-+    }
-+
-+    public static int interServerCompressionThreshold;
-+    private static void interServerCompressionThreshold() {
-+        interServerCompressionThreshold = getInt("interServerCompressionThreshold", 0);
-+    }
-+
-+    public static int interServerConsolidationDelay;
-+    private static void interServerConsolidationDelay() {
-+        interServerConsolidationDelay = getInt("interServerConsolidationDelay", 0);
-+    }
-+
-+    public static boolean useLocalPlayerCountForServerIsFullKick;
-+    private static void useLocalPlayerCountForServerIsFullKick() {
-+        useLocalPlayerCountForServerIsFullKick = getBoolean("useLocalPlayerCountForServerIsFullKick", false);
-+    }
-+
-+    public static boolean syncPermissions;
-+    private static void syncPermissions() {
-+        syncPermissions = getBoolean("syncPermissions", false);
-+    }
-+
-+    public static boolean reducePlayerPositionUpdatesInUnloadedChunks;
-+    private static void reducePlayerPositionUpdatesInUnloadedChunks() {
-+        reducePlayerPositionUpdatesInUnloadedChunks = getBoolean("optimizations.reducePlayerPositionUpdatesInUnloadedChunks", false);
-+    }
-+
-+    public static boolean dontSaveLightingUpdates;
-+    private static void dontSaveLightingUpdates() {
-+        dontSaveLightingUpdates = getBoolean("optimizations.dontSaveLightingUpdates", false);
-+    }
-+
-+    public static boolean useFutureBasedIO;
-+    private static void useFutureBasedIO() {
-+        useFutureBasedIO = getBoolean("optimizations.useFutureBasedIO", true);
-+    }
-+
-+    public static boolean disableRedstoneSafetySync;
-+    private static void disableRedstoneSafetySync() {
-+        disableRedstoneSafetySync = getBoolean("optimizations.disableRedstoneSafetySync", false);
-+    }
 +}
 diff --git a/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java b/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java
 new file mode 100644

@@ -5,7 +5,7 @@ Subject: [PATCH] Sync scoreboards
 
 
 diff --git a/src/main/java/net/minecraft/server/ServerScoreboard.java b/src/main/java/net/minecraft/server/ServerScoreboard.java
-index 3a4a0727ad44322e3ba85512cd077808dab080b7..ae2562028241fed8e9bbfbee6a905120caadf033 100644
+index 3a4a0727ad44322e3ba85512cd077808dab080b7..85c7894ab8d9a4168aeec38322dc290dadd61e8a 100644
 --- a/src/main/java/net/minecraft/server/ServerScoreboard.java
 +++ b/src/main/java/net/minecraft/server/ServerScoreboard.java
 @@ -19,6 +19,11 @@ import net.minecraft.world.scores.PlayerTeam;
@@ -15,7 +15,7 @@ index 3a4a0727ad44322e3ba85512cd077808dab080b7..ae2562028241fed8e9bbfbee6a905120
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.scoreboard.CraftScoreboard;
 +import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.MultiPaperConfig;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +import puregero.multipaper.externalserverprotocol.ScoreboardUpdatePacket;
  
  public class ServerScoreboard extends Scoreboard {
@@ -35,7 +35,7 @@ index 3a4a0727ad44322e3ba85512cd077808dab080b7..ae2562028241fed8e9bbfbee6a905120
          }
 +
 +        // MultiPaper start - Only sync the main scoreboard for now
-+        if (mainScoreboard && MultiPaperConfig.syncScoreboards && !ScoreboardUpdatePacket.updating) {
++        if (mainScoreboard && MultiPaperConfiguration.get().syncSettings.syncScoreboards && !ScoreboardUpdatePacket.updating) {
 +            if (packet instanceof ClientboundSetObjectivePacket setObjectivePacket) {
 +                Objective objective = getObjective(setObjectivePacket.getObjectiveName());
 +                MultiPaper.broadcastPacketToExternalServers(new ScoreboardUpdatePacket(null, objective != null ? objective.getCriteria() : null, packet));
@@ -60,7 +60,7 @@ index 4ed467b90f451f6ddca8a4b685731bbeba438df3..a8d059d460925713183fe0a8ccde1ebd
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
-index 69c407e19909cebb97f8fa04a593c7f89b3c7147..adf277ffc30f3a61cac797b918eef233b7eab660 100644
+index 1da0d84762fcc0566d47974db3d927735ff592f7..2441eb28b97f930d4ec798c5b35954b497aae877 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 @@ -3,6 +3,12 @@ package puregero.multipaper.externalserverprotocol;
@@ -76,7 +76,7 @@ index 69c407e19909cebb97f8fa04a593c7f89b3c7147..adf277ffc30f3a61cac797b918eef233
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
  import org.bukkit.Bukkit;
-@@ -13,6 +19,9 @@ import puregero.multipaper.MultiPaperConfig;
+@@ -13,6 +19,9 @@ import puregero.multipaper.config.MultiPaperConfiguration;
  import puregero.multipaper.mastermessagingprotocol.MessageLengthEncoder;
  
  import java.net.InetSocketAddress;
@@ -91,7 +91,7 @@ index 69c407e19909cebb97f8fa04a593c7f89b3c7147..adf277ffc30f3a61cac797b918eef233
              }
          });
 +
-+        if (MultiPaperConfig.syncScoreboards) {
++        if (MultiPaperConfiguration.get().syncSettings.syncScoreboards) {
 +            MultiPaper.runSync(() -> {
 +                // Only send scoreboards if we haven't just loaded
 +                if (MinecraftServer.getServer().getTickCount() > 5) {

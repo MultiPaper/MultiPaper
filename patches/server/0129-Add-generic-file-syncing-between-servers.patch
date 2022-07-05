@@ -18,27 +18,23 @@ index c1153c106cdde5d26971348c30fcf3f3be264806..d60d2e61581c4f0fe73d59af3c18e2c8
      implementation("org.yaml:snakeyaml:1.28")
      implementation ("me.carleslc.Simple-YAML:Simple-Yaml:1.7.2") { // Airplane - more config
 diff --git a/src/main/java/net/minecraft/server/Main.java b/src/main/java/net/minecraft/server/Main.java
-index 05407084ac97115d0e23bb49d5c4e576cc661f3c..5ed2dbb01a30f51d6c1e1fd9d0c505c8b7b0d3f7 100644
+index 06c7eb0c23e202fc2b6f98f8a49a623dd370604e..0b7df3fb22622ce8b543aaa0111b71a292656866 100644
 --- a/src/main/java/net/minecraft/server/Main.java
 +++ b/src/main/java/net/minecraft/server/Main.java
-@@ -62,6 +62,7 @@ import java.util.concurrent.atomic.AtomicReference;
- import net.minecraft.SharedConstants;
+@@ -63,6 +63,7 @@ import java.util.concurrent.atomic.AtomicReference;
+ import puregero.multipaper.config.MultiPaperConfiguration;
+ import puregero.multipaper.config.MultiPaperConfigurationLoader;
  import puregero.multipaper.MultiPaper;
- import puregero.multipaper.MultiPaperConfig;
 +import puregero.multipaper.MultiPaperFileSyncer;
  
  public class Main {
  
-@@ -106,9 +107,11 @@ public class Main {
-                 JvmProfiler.INSTANCE.start(Environment.SERVER);
-             }
- 
--            MultiPaperConfig.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper
-+            MultiPaperConfig.init((File) optionset.valueOf("multipaper-settings")); // MultiPa
-             System.setProperty("bungeecordName", MultiPaperConfig.bungeeCordName); // MultiPaper - remember this property even after config reloads
+@@ -110,6 +111,8 @@ public class Main {
+             MultiPaperConfigurationLoader.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper
+             System.setProperty("multipaper.master-connection.my-name", MultiPaperConfiguration.get().masterConnection.myName); // MultiPaper - remember this property even after config reloads
              MultiPaper.getConnection(); // MultiPaper - start connection
 +            MultiPaperFileSyncer.init(); // MultiPaper
-+            MultiPaperConfig.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper - reload the config incase it was changed during the sync
++            MultiPaperConfigurationLoader.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper - reload the config incase it was changed during the sync
  
              Bootstrap.bootStrap();
              Bootstrap.validate();
@@ -64,12 +60,12 @@ index 8f8b99e72c058100894162aebda202bcdbc3812c..7f5aa8f9cf6a32a7b2438d0d57b25f24
          Util.shutdownExecutors(); // Paper
          LOGGER.info("Closing Server");
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index fd0ffcca8203d2af0efa5eba089c76f383af1769..b99469459a2f4268792217c06c1fc33cd2b67b43 100644
+index 72db026272905240180c0050f8f7b75e50f389fa..c3218e9ed564b95da802938afc61e40f38b9de39 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -29,10 +29,13 @@ import org.bukkit.World;
- import org.bukkit.craftbukkit.CraftWorld;
- import puregero.multipaper.externalserverprotocol.*;
+@@ -34,10 +34,13 @@ import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
+ import puregero.multipaper.externalserverprotocol.SendEntitiesPacket;
+ import puregero.multipaper.externalserverprotocol.SendTickListPacket;
  import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
 +import puregero.multipaper.mastermessagingprotocol.datastream.InboundDataStream;
  import puregero.multipaper.mastermessagingprotocol.messages.masterbound.*;
@@ -81,7 +77,7 @@ index fd0ffcca8203d2af0efa5eba089c76f383af1769..b99469459a2f4268792217c06c1fc33c
  import java.util.HashSet;
  import java.util.Map;
  import java.util.Set;
-@@ -415,4 +418,44 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -420,4 +423,44 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
      public void handle(ShutdownMessage message) {
          Bukkit.shutdown();
      }
@@ -117,8 +113,8 @@ index fd0ffcca8203d2af0efa5eba089c76f383af1769..b99469459a2f4268792217c06c1fc33c
 +                    }
 +                }
 +
-+                if (MultiPaperConfig.logFileSyncing) {
-+                    LOGGER.info("Downloaded synced file " + file.getPath() + " (" + file.length() / 1024 + "KB)");
++                if (MultiPaperConfiguration.get().syncSettings.files.logFileSyncs) {
++                    LOGGER.info("Downloaded synced file " + file.getPath() + " (" + (file.length() + 1023) / 1024 + "KB)");
 +                }
 +            });
 +        } catch (IOException e) {
@@ -128,15 +124,16 @@ index fd0ffcca8203d2af0efa5eba089c76f383af1769..b99469459a2f4268792217c06c1fc33c
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..92cb33418fd65e344f9a309a7b9b144923f695f2
+index 0000000000000000000000000000000000000000..9860e8dce38414c776c56f640f15e2d2eaa8f6b2
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperFileSyncer.java
-@@ -0,0 +1,301 @@
+@@ -0,0 +1,302 @@
 +package puregero.multipaper;
 +
 +import io.methvin.watcher.DirectoryWatcher;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +import puregero.multipaper.mastermessagingprotocol.datastream.InboundDataStream;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.DownloadFileMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.RequestFilesToSyncMessage;
@@ -214,8 +211,8 @@ index 0000000000000000000000000000000000000000..92cb33418fd65e344f9a309a7b9b1449
 +            byte[] data = Files.readAllBytes(file.toPath());
 +
 +            return MultiPaper.getConnection().sendAndAwaitReply(new UploadFileMessage(immediatelySyncToOtherServers, file.getPath(), file.lastModified(), data), BooleanMessageReply.class).thenAccept(message -> {
-+                if (MultiPaperConfig.logFileSyncing) {
-+                    LOGGER.info("Uploaded " + file.getPath() + " (" + data.length / 1024 + "KB)");
++                if (MultiPaperConfiguration.get().syncSettings.files.logFileSyncs) {
++                    LOGGER.info("Uploaded " + file.getPath() + " (" + (data.length + 1023) / 1024 + "KB)");
 +                }
 +            });
 +        } catch (IOException e) {
@@ -263,20 +260,20 @@ index 0000000000000000000000000000000000000000..92cb33418fd65e344f9a309a7b9b1449
 +        boolean shouldWrite = false;
 +        boolean immediatelySyncToOtherServers = false;
 +
-+        for (String toSync : MultiPaperConfig.filesToSyncInRealTime) {
++        for (String toSync : MultiPaperConfiguration.get().syncSettings.files.filesToSyncInRealTime) {
 +            if (file.getPath().startsWith(toSync)) {
 +                shouldWrite = true;
 +                immediatelySyncToOtherServers = true;
 +            }
 +        }
 +
-+        for (String toSync : MultiPaperConfig.filesToSyncOnStartup) {
++        for (String toSync : MultiPaperConfiguration.get().syncSettings.files.filesToSyncOnStartup) {
 +            if (file.getPath().startsWith(toSync)) {
 +                shouldWrite = true;
 +            }
 +        }
 +
-+        for (String toNotSync : MultiPaperConfig.filesToNotSync) {
++        for (String toNotSync : MultiPaperConfiguration.get().syncSettings.files.filesToNotSync) {
 +            if (file.getPath().startsWith(toNotSync)) {
 +                shouldWrite = false;
 +            }
@@ -289,7 +286,7 @@ index 0000000000000000000000000000000000000000..92cb33418fd65e344f9a309a7b9b1449
 +                }
 +            }
 +
-+            for (String toNotSync : MultiPaperConfig.filesToOnlyUploadOnServerStop) {
++            for (String toNotSync : MultiPaperConfiguration.get().syncSettings.files.filesToOnlyUploadOnServerStop) {
 +                if (file.getPath().startsWith(toNotSync)) {
 +                    writeOnServerStop.add(file);
 +                    return;
@@ -322,19 +319,19 @@ index 0000000000000000000000000000000000000000..92cb33418fd65e344f9a309a7b9b1449
 +    private void registerRecursively(Path path, WatchService watchService) throws IOException {
 +        boolean listen = false;
 +
-+        for (String toSync : MultiPaperConfig.filesToSyncInRealTime) {
++        for (String toSync : MultiPaperConfiguration.get().syncSettings.files.filesToSyncInRealTime) {
 +            if (toSync.contains(getPathWithoutDotSlash(path.toFile()))) {
 +                listen = true;
 +            }
 +        }
 +
-+        for (String toSync : MultiPaperConfig.filesToSyncOnStartup) {
++        for (String toSync : MultiPaperConfiguration.get().syncSettings.files.filesToSyncOnStartup) {
 +            if (toSync.contains(getPathWithoutDotSlash(path.toFile()))) {
 +                listen = true;
 +            }
 +        }
 +
-+        for (String toNotSync : MultiPaperConfig.filesToNotSync) {
++        for (String toNotSync : MultiPaperConfiguration.get().syncSettings.files.filesToNotSync) {
 +            if ((getPathWithoutDotSlash(path.toFile()) + "/").contains(toNotSync)) {
 +                listen = false;
 +            }
@@ -387,8 +384,8 @@ index 0000000000000000000000000000000000000000..92cb33418fd65e344f9a309a7b9b1449
 +                                    if (!file.setLastModified(message.lastModified)) {
 +                                        LOGGER.warn("Failed to setLastModified on file " + file);
 +                                    }
-+                                    if (MultiPaperConfig.logFileSyncing) {
-+                                        LOGGER.info("Downloaded " + file.getPath() + " (" + file.length() / 1024 + "KB)");
++                                    if (MultiPaperConfiguration.get().syncSettings.files.logFileSyncs) {
++                                        LOGGER.info("Downloaded " + file.getPath() + " (" + (file.length() + 1023) / 1024 + "KB)");
 +                                    }
 +                                    fileDownloadedFuture.complete(null);
 +                                });
@@ -400,11 +397,11 @@ index 0000000000000000000000000000000000000000..92cb33418fd65e344f9a309a7b9b1449
 +            }
 +        }
 +
-+        for (String path : MultiPaperConfig.filesToSyncInRealTime) {
++        for (String path : MultiPaperConfiguration.get().syncSettings.files.filesToSyncInRealTime) {
 +            future = uploadFileIfNeededRecursively(new File(path), future, paths, true);
 +        }
 +
-+        for (String path : MultiPaperConfig.filesToSyncOnStartup) {
++        for (String path : MultiPaperConfiguration.get().syncSettings.files.filesToSyncOnStartup) {
 +            future = uploadFileIfNeededRecursively(new File(path), future, paths, false);
 +        }
 +
@@ -417,7 +414,7 @@ index 0000000000000000000000000000000000000000..92cb33418fd65e344f9a309a7b9b1449
 +                future = uploadFileIfNeededRecursively(child, future, paths, immediatelySyncToOtherServers);
 +            }
 +        } else if (syncFile(file) && !paths.contains(getPathWithoutDotSlash(file)) ) {
-+            for (String toNotSync : MultiPaperConfig.filesToNotSync) {
++            for (String toNotSync : MultiPaperConfiguration.get().syncSettings.files.filesToNotSync) {
 +                if (getPathWithoutDotSlash(file).startsWith(toNotSync)) {
 +                    return future;
 +                }

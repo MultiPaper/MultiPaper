@@ -1,0 +1,100 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 18 Mar 2022 01:43:33 +1000
+Subject: [PATCH] Add ability to pardon floodgate players
+
+
+diff --git a/src/main/java/net/minecraft/commands/synchronization/ArgumentTypeInfos.java b/src/main/java/net/minecraft/commands/synchronization/ArgumentTypeInfos.java
+index c95bde602b8dca8e91a6c2c73411a8e4694ad2af..0242e34e6b32651ca0220571d74d34f498773471 100644
+--- a/src/main/java/net/minecraft/commands/synchronization/ArgumentTypeInfos.java
++++ b/src/main/java/net/minecraft/commands/synchronization/ArgumentTypeInfos.java
+@@ -59,6 +59,7 @@ import net.minecraft.commands.synchronization.brigadier.StringArgumentSerializer
+ import net.minecraft.core.Registry;
+ import net.minecraft.gametest.framework.TestClassNameArgument;
+ import net.minecraft.gametest.framework.TestFunctionArgument;
++import puregero.multipaper.BanListGameProfileArgument;
+ 
+ public class ArgumentTypeInfos {
+     private static final Map<Class<?>, ArgumentTypeInfo<?, ?>> BY_CLASS = Maps.newHashMap();
+@@ -77,6 +78,7 @@ public class ArgumentTypeInfos {
+         register(registry, "brigadier:string", StringArgumentType.class, new StringArgumentSerializer());
+         register(registry, "entity", EntityArgument.class, new EntityArgument.Info());
+         register(registry, "game_profile", GameProfileArgument.class, SingletonArgumentInfo.contextFree(GameProfileArgument::gameProfile));
++        BY_CLASS.put(BanListGameProfileArgument.class, BY_CLASS.get(GameProfileArgument.class)); // MultiPaper - Add our own GameProfileArgument implementation
+         register(registry, "block_pos", BlockPosArgument.class, SingletonArgumentInfo.contextFree(BlockPosArgument::blockPos));
+         register(registry, "column_pos", ColumnPosArgument.class, SingletonArgumentInfo.contextFree(ColumnPosArgument::columnPos));
+         register(registry, "vec3", Vec3Argument.class, SingletonArgumentInfo.contextFree(Vec3Argument::vec3));
+diff --git a/src/main/java/net/minecraft/server/commands/PardonCommand.java b/src/main/java/net/minecraft/server/commands/PardonCommand.java
+index f1605ec163f6d178df1b8203ff16fbe97cd53475..f55e7bdb5fb61304e27d6674cc3ccc21edb51e88 100644
+--- a/src/main/java/net/minecraft/server/commands/PardonCommand.java
++++ b/src/main/java/net/minecraft/server/commands/PardonCommand.java
+@@ -2,16 +2,22 @@ package net.minecraft.server.commands;
+ 
+ import com.mojang.authlib.GameProfile;
+ import com.mojang.brigadier.CommandDispatcher;
++import com.mojang.brigadier.StringReader;
+ import com.mojang.brigadier.exceptions.CommandSyntaxException;
+ import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
+ import java.util.Collection;
++import java.util.Collections;
++
+ import net.minecraft.commands.CommandSourceStack;
+ import net.minecraft.commands.Commands;
+ import net.minecraft.commands.SharedSuggestionProvider;
+ import net.minecraft.commands.arguments.GameProfileArgument;
+ import net.minecraft.network.chat.Component;
+ import net.minecraft.network.chat.ComponentUtils;
++import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.players.UserBanList;
++import net.minecraft.server.players.UserBanListEntry;
++import puregero.multipaper.BanListGameProfileArgument;
+ 
+ public class PardonCommand {
+     private static final SimpleCommandExceptionType ERROR_NOT_BANNED = new SimpleCommandExceptionType(Component.translatable("commands.pardon.failed"));
+@@ -19,7 +25,7 @@ public class PardonCommand {
+     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+         dispatcher.register(Commands.literal("pardon").requires((source) -> {
+             return source.hasPermission(3);
+-        }).then(Commands.argument("targets", GameProfileArgument.gameProfile()).suggests((context, builder) -> {
++        }).then(Commands.argument("targets", new BanListGameProfileArgument()).suggests((context, builder) -> { // MultiPaper - also get gameprofiles from the ban list
+             return SharedSuggestionProvider.suggest(context.getSource().getServer().getPlayerList().getBans().getUserList(), builder);
+         }).executes((context) -> {
+             return pardonPlayers(context.getSource(), GameProfileArgument.getGameProfiles(context, "targets"));
+diff --git a/src/main/java/puregero/multipaper/BanListGameProfileArgument.java b/src/main/java/puregero/multipaper/BanListGameProfileArgument.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..1479db797347b1bffe09411ebba0df97c722c943
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/BanListGameProfileArgument.java
+@@ -0,0 +1,32 @@
++package puregero.multipaper;
++
++import com.mojang.brigadier.StringReader;
++import com.mojang.brigadier.exceptions.CommandSyntaxException;
++import net.minecraft.commands.arguments.GameProfileArgument;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.players.UserBanListEntry;
++
++import java.util.Collections;
++
++public class BanListGameProfileArgument extends GameProfileArgument {
++    @Override
++    public GameProfileArgument.Result parse(StringReader stringReader) throws CommandSyntaxException {
++        int cursor = stringReader.getCursor();
++
++        while(stringReader.canRead() && stringReader.peek() != ' ') {
++            stringReader.skip();
++        }
++
++        String username = stringReader.getString().substring(cursor, stringReader.getCursor());
++
++        for (UserBanListEntry entry : MinecraftServer.getServer().getPlayerList().getBans().getEntries()) {
++            if (entry.getUser() != null && entry.getUser().getName() != null && entry.getUser().getName().equalsIgnoreCase(username)) {
++                return (source) -> Collections.singleton(entry.getUser());
++            }
++        }
++
++        stringReader.setCursor(cursor);
++
++        return super.parse(stringReader);
++    }
++}

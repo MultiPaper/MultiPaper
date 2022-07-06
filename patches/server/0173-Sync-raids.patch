@@ -1,0 +1,229 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 7 Jul 2022 01:20:51 +1000
+Subject: [PATCH] Sync raids
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/raid/Raid.java b/src/main/java/net/minecraft/world/entity/raid/Raid.java
+index 6a0a1731fd6804eb69d3641213712d31bce085b2..5c4a97b267049311aa719dcb5ba28380006846dc 100644
+--- a/src/main/java/net/minecraft/world/entity/raid/Raid.java
++++ b/src/main/java/net/minecraft/world/entity/raid/Raid.java
+@@ -58,6 +58,8 @@ import net.minecraft.world.level.block.entity.BannerPatterns;
+ import net.minecraft.world.level.block.entity.BlockEntityType;
+ import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.phys.Vec3;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.RaidUpdatePacket;
+ 
+ public class Raid {
+ 
+@@ -267,6 +269,7 @@ public class Raid {
+         this.active = false;
+         this.raidEvent.removeAllPlayers();
+         this.status = Raid.RaidStatus.STOPPED;
++        RaidUpdatePacket.broadcastUpdate(this);
+     }
+ 
+     public void tick() {
+@@ -274,7 +277,7 @@ public class Raid {
+             if (this.status == Raid.RaidStatus.ONGOING) {
+                 boolean flag = this.active;
+ 
+-                this.active = this.level.hasChunkAt(this.center);
++                this.active = MultiPaper.isChunkLocal(this.level.getChunkIfLoaded(this.center)); // MultiPaper - only tick local raids
+                 if (this.level.getDifficulty() == Difficulty.PEACEFUL) {
+                     org.bukkit.craftbukkit.event.CraftEventFactory.callRaidStopEvent(this, org.bukkit.event.raid.RaidStopEvent.Reason.PEACE); // CraftBukkit
+                     this.stop();
+diff --git a/src/main/java/net/minecraft/world/entity/raid/Raids.java b/src/main/java/net/minecraft/world/entity/raid/Raids.java
+index fa8fcdfea51a35e4a482d3d7b18159099da62706..d597d4238ba39ba4af3891261a5e78ddd587ec68 100644
+--- a/src/main/java/net/minecraft/world/entity/raid/Raids.java
++++ b/src/main/java/net/minecraft/world/entity/raid/Raids.java
+@@ -4,7 +4,10 @@ import com.google.common.collect.Maps;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map;
++import java.util.Optional;
+ import javax.annotation.Nullable;
++
++import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
+ import net.minecraft.advancements.CriteriaTriggers;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
+@@ -19,16 +22,19 @@ import net.minecraft.tags.PoiTypeTags;
+ import net.minecraft.world.effect.MobEffects;
+ import net.minecraft.world.entity.ai.village.poi.PoiManager;
+ import net.minecraft.world.entity.ai.village.poi.PoiRecord;
++import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.GameRules;
+ import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
+ import net.minecraft.world.level.dimension.DimensionType;
+ import net.minecraft.world.level.saveddata.SavedData;
+ import net.minecraft.world.phys.Vec3;
++import puregero.multipaper.externalserverprotocol.RaidUpdatePacket;
+ 
+ public class Raids extends SavedData {
+ 
+     private static final String RAID_FILE_ID = "raids";
+     public final Map<Integer, Raid> raidMap = Maps.newHashMap();
++    public final Long2IntOpenHashMap chunkToRaidIdMap = new Long2IntOpenHashMap(); // MultiPaper
+     private final ServerLevel level;
+     private int nextAvailableID;
+     private int tick;
+@@ -43,6 +49,16 @@ public class Raids extends SavedData {
+         return (Raid) this.raidMap.get(id);
+     }
+ 
++    // MultiPaper start
++    public Optional<Raid> getActiveRaid(ChunkPos chunkPos) {
++        return Optional
++                .of(chunkToRaidIdMap.getOrDefault(chunkPos.toLong(), 0))
++                .filter(id -> id != 0)
++                .map(this::get)
++                .filter(raid -> !raid.isStopped());
++    }
++    // MultiPaper end
++
+     public void tick() {
+         ++this.tick;
+         Iterator iterator = this.raidMap.values().iterator();
+@@ -136,6 +152,8 @@ public class Raids extends SavedData {
+                     }
+ 
+                     if (!this.raidMap.containsKey(raid.getId())) {
++                        RaidUpdatePacket.broadcastUpdate(raid); // MultiPaper
++                        this.chunkToRaidIdMap.put(ChunkPos.asLong(raid.getCenter()), raid.getId()); // MultiPaper
+                         this.raidMap.put(raid.getId(), raid);
+                     }
+                     // CraftBukkit end
+@@ -154,6 +172,12 @@ public class Raids extends SavedData {
+     }
+ 
+     private Raid getOrCreateRaid(ServerLevel world, BlockPos pos) {
++        // MultiPaper start - Don't overlap multiple raids on the same chunk
++        Optional<Raid> optionalRaid = this.getActiveRaid(new ChunkPos(pos));
++        if (optionalRaid.isPresent()) {
++            return optionalRaid.get();
++        }
++        // MultiPaper end - Don't overlap multiple raids on the same chunk
+         Raid raid = world.getRaidAt(pos);
+ 
+         return raid != null ? raid : new Raid(this.getUniqueId(), world, pos);
+@@ -171,6 +195,7 @@ public class Raids extends SavedData {
+             Raid raid = new Raid(world, nbttagcompound1);
+ 
+             persistentraid.raidMap.put(raid.getId(), raid);
++            if (!raid.isStopped()) persistentraid.chunkToRaidIdMap.put(ChunkPos.asLong(raid.getCenter()), raid.getId()); // MultiPaper
+         }
+ 
+         return persistentraid;
+@@ -200,6 +225,7 @@ public class Raids extends SavedData {
+     }
+ 
+     private int getUniqueId() {
++        if (true) return new java.util.Random().nextInt(); // MultiPaper - 1 in 4 billion chance of two ids being the same, while not having to sync the next available id across servers
+         return ++this.nextAvailableID;
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 165eacd4021c80fd8cc08a438dc146fa49f93e6f..791c4ed3a8126917e859d36609c3b66ea98ef49b 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -499,6 +499,7 @@ public class MultiPaper {
+             chunk.level.entityManager.getEntities(chunk.getPos()).forEach(MultiPaperEntitiesHandler::onEntityUnlock);
+             broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new SendEntitiesPacket(chunk));
+             broadcastPacketToExternalServers(chunk.externalSubscribers, () -> new SendTickListPacket(chunk));
++            chunk.level.getRaids().getActiveRaid(chunk.getPos()).ifPresent(RaidUpdatePacket::broadcastUpdate);
+             for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+                 if (blockEntity instanceof Container container) {
+                     List<HumanEntity> viewers = container.getViewers();
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index c944a4d0612fa0ed9e7ed28911bdc6acc919ab23..e56fa9d1357fe33877b3a0db495dff2ec4efd29c 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -70,6 +70,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(EntityTeleportPacket.class, EntityTeleportPacket::new);
+         addPacket(ProjectileHitEntityPacket.class, ProjectileHitEntityPacket::new);
+         addPacket(PlayerUseBlockPacket.class, PlayerUseBlockPacket::new);
++        addPacket(RaidUpdatePacket.class, RaidUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RaidUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RaidUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..a96663d8abf9088e8caedf45311125ae533a8e99
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/RaidUpdatePacket.java
+@@ -0,0 +1,73 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.raid.Raid;
++import net.minecraft.world.level.ChunkPos;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.World;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.IOException;
++
++public class RaidUpdatePacket extends ExternalServerPacket {
++    private final String world;
++    private final byte[] data;
++
++    public RaidUpdatePacket(Raid raid) {
++        this.world = raid.getLevel().getWorld().getName();
++
++        CompoundTag tag = new CompoundTag();
++
++        raid.save(tag);
++
++        try {
++            this.data = MultiPaper.nbtToBytes(tag);
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
++    }
++
++    public RaidUpdatePacket(FriendlyByteBuf in) {
++        this.world = in.readUtf();
++        this.data = in.readByteArray();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeByteArray(data);
++    }
++
++    public static void broadcastUpdate(Raid raid) {
++        MultiPaper.broadcastPacketToExternalServers(new RaidUpdatePacket(raid));
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            try {
++                World bukkitWorld = Bukkit.getWorld(world);
++
++                if (bukkitWorld instanceof CraftWorld craftWorld) {
++                    ServerLevel level = craftWorld.getHandle();
++                    CompoundTag tag = MultiPaper.nbtFromBytes(data);
++
++                    Raid raid = new Raid(level, tag);
++                    level.getRaids().raidMap.put(raid.getId(), raid);
++
++                    if (!raid.isStopped()) {
++                        level.getRaids().chunkToRaidIdMap.put(ChunkPos.asLong(raid.getCenter()), raid.getId());
++                    }
++                }
++            } catch (IOException e) {
++                e.printStackTrace();
++            }
++        });
++    }
++}

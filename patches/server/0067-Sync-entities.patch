@@ -832,10 +832,10 @@ index 7d069fe3862c177537404c2b7c01cb322260d49b..55f995221b079de17d708068aa227329
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d8682a3aab0934ae4fcfa967306c5425fa6ecfb7
+index 0000000000000000000000000000000000000000..9c3db110ad592ca7ed5ce26816e4ae655d9f1fa0
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,360 @@
+@@ -0,0 +1,354 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -881,6 +881,8 @@ index 0000000000000000000000000000000000000000..d8682a3aab0934ae4fcfa967306c5425
 +        if (entity instanceof AbstractMinecart) {
 +            // Because Minecarts are special and the passenger doesn't 'technically' control them
 +            return entity.getFirstPassenger();
++        } else if (entity instanceof FireworkRocketEntity fireworkRocket && fireworkRocket.attachedToEntity != null && fireworkRocket.attachedToEntity.isAlive()) {
++            return fireworkRocket.attachedToEntity;
 +        }
 +        return entity.getControllingPassenger();
 +    }
@@ -899,16 +901,8 @@ index 0000000000000000000000000000000000000000..d8682a3aab0934ae4fcfa967306c5425
 +        }
 +
 +        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
-+        if (entity instanceof FireworkRocketEntity fireworkRocket
-+                && fireworkRocket.attachedToEntity instanceof ServerPlayer
-+                && !MultiPaper.isRealPlayer(fireworkRocket.attachedToEntity)
-+                && fireworkRocket.attachedToEntity.level == fireworkRocket.level
-+                && fireworkRocket.position().distanceToSqr(fireworkRocket.attachedToEntity.position()) < 32 * 32) {
-+            // Let the server that owns the player with the fireworkRocket tick it (as long as they probably have this chunk loaded)
-+            return false;
-+        } else if (!MultiPaper.isChunkLocal(chunk)
-+                && !(entity instanceof FishingHook)
-+                && !(entity instanceof FireworkRocketEntity fireworkRocket && MultiPaper.isRealPlayer(fireworkRocket.attachedToEntity))) {
++        if (!MultiPaper.isChunkLocal(chunk)
++                && !(entity instanceof FishingHook)) {
 +            if (entity instanceof ArmorStand armorStand) {
 +                boolean temp = armorStand.canTick;
 +                armorStand.canTick = false;

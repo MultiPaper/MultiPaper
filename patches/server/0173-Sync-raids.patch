@@ -5,7 +5,7 @@ Subject: [PATCH] Sync raids
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/raid/Raid.java b/src/main/java/net/minecraft/world/entity/raid/Raid.java
-index 6a0a1731fd6804eb69d3641213712d31bce085b2..f872b99fc595e79304812ad91e902f2223779fd8 100644
+index 6a0a1731fd6804eb69d3641213712d31bce085b2..452e4cd6d9c7bdfa6017bfc6abaac46f6274afb5 100644
 --- a/src/main/java/net/minecraft/world/entity/raid/Raid.java
 +++ b/src/main/java/net/minecraft/world/entity/raid/Raid.java
 @@ -58,6 +58,9 @@ import net.minecraft.world.level.block.entity.BannerPatterns;
@@ -18,7 +18,34 @@ index 6a0a1731fd6804eb69d3641213712d31bce085b2..f872b99fc595e79304812ad91e902f22
  
  public class Raid {
  
-@@ -267,6 +270,7 @@ public class Raid {
+@@ -103,7 +106,7 @@ public class Raid {
+     private int postRaidTicks;
+     private int raidCooldownTicks;
+     private final RandomSource random;
+-    public final int numGroups;
++    public int numGroups; // MultiPaper - make non-final
+     private Raid.RaidStatus status;
+     private int celebrationTicks;
+     private Optional<BlockPos> waveSpawnPos;
+@@ -123,11 +126,17 @@ public class Raid {
+     }
+ 
+     public Raid(ServerLevel world, CompoundTag nbt) {
++        // MultiPaper start - Add dedicated load method
+         this.raidEvent = new ServerBossEvent(Raid.RAID_NAME_COMPONENT, BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.NOTCHED_10);
+         this.random = RandomSource.create();
+         this.waveSpawnPos = Optional.empty();
+         this.level = world;
+         this.id = nbt.getInt("Id");
++        load(world, nbt);
++    }
++
++    public void load(ServerLevel world, CompoundTag nbt) {
++        // MultiPaper end - Add dedicated load method
+         this.started = nbt.getBoolean("Started");
+         this.active = nbt.getBoolean("Active");
+         this.ticksActive = nbt.getLong("TicksActive");
+@@ -267,6 +276,7 @@ public class Raid {
          this.active = false;
          this.raidEvent.removeAllPlayers();
          this.status = Raid.RaidStatus.STOPPED;
@@ -26,7 +53,7 @@ index 6a0a1731fd6804eb69d3641213712d31bce085b2..f872b99fc595e79304812ad91e902f22
      }
  
      public void tick() {
-@@ -274,7 +278,7 @@ public class Raid {
+@@ -274,7 +284,7 @@ public class Raid {
              if (this.status == Raid.RaidStatus.ONGOING) {
                  boolean flag = this.active;
  
@@ -35,7 +62,7 @@ index 6a0a1731fd6804eb69d3641213712d31bce085b2..f872b99fc595e79304812ad91e902f22
                  if (this.level.getDifficulty() == Difficulty.PEACEFUL) {
                      org.bukkit.craftbukkit.event.CraftEventFactory.callRaidStopEvent(this, org.bukkit.event.raid.RaidStopEvent.Reason.PEACE); // CraftBukkit
                      this.stop();
-@@ -604,6 +608,7 @@ public class Raid {
+@@ -604,6 +614,7 @@ public class Raid {
          this.updateBossbar();
          this.setDirty();
          org.bukkit.craftbukkit.event.CraftEventFactory.callRaidSpawnWaveEvent(this, leader, raiders); // CraftBukkit
@@ -43,7 +70,7 @@ index 6a0a1731fd6804eb69d3641213712d31bce085b2..f872b99fc595e79304812ad91e902f22
      }
  
      public void joinRaid(int wave, Raider raider, @Nullable BlockPos pos, boolean existing) {
-@@ -751,6 +756,7 @@ public class Raid {
+@@ -751,6 +762,7 @@ public class Raid {
  
          this.updateBossbar();
          this.setDirty();
@@ -248,10 +275,10 @@ index 0000000000000000000000000000000000000000..c2d520ec453eba7637bf9f929b523587
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RaidUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RaidUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a96663d8abf9088e8caedf45311125ae533a8e99
+index 0000000000000000000000000000000000000000..ac2c296aa4d7711345d70d9d65175b339c450a84
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RaidUpdatePacket.java
-@@ -0,0 +1,73 @@
+@@ -0,0 +1,78 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -259,8 +286,6 @@ index 0000000000000000000000000000000000000000..a96663d8abf9088e8caedf45311125ae
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.raid.Raid;
 +import net.minecraft.world.level.ChunkPos;
-+import org.apache.logging.log4j.LogManager;
-+import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
 +import org.bukkit.World;
 +import org.bukkit.craftbukkit.CraftWorld;
@@ -311,8 +336,15 @@ index 0000000000000000000000000000000000000000..a96663d8abf9088e8caedf45311125ae
 +                if (bukkitWorld instanceof CraftWorld craftWorld) {
 +                    ServerLevel level = craftWorld.getHandle();
 +                    CompoundTag tag = MultiPaper.nbtFromBytes(data);
++                    int id = tag.getInt("Id");
 +
-+                    Raid raid = new Raid(level, tag);
++                    Raid raid = level.getRaids().raidMap.get(id);
++                    if (raid == null) {
++                        raid = new Raid(level, tag);
++                    } else {
++                        raid.load(level, tag);
++                    }
++
 +                    level.getRaids().raidMap.put(raid.getId(), raid);
 +
 +                    if (!raid.isStopped()) {

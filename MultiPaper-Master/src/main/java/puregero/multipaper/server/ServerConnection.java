@@ -388,4 +388,9 @@ public class ServerConnection extends MasterBoundMessageHandler {
     public void handle(WriteUidMessage message) {
         WriteUidHandler.handle(this, message);
     }
+
+    @Override
+    public void handle(RequestEntityIdBlock message) {
+        RequestEntityIdBlockHandler.handle(this, message);
+    }
 }

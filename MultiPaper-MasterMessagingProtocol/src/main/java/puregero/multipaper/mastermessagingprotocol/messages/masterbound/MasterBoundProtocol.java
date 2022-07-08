@@ -23,6 +23,7 @@ public class MasterBoundProtocol extends Protocol<MasterBoundMessage> {
         addMessage(ReadStatsMessage.class, ReadStatsMessage::new);
         addMessage(ReadUidMessage.class, ReadUidMessage::new);
         addMessage(RequestChunkOwnershipMessage.class, RequestChunkOwnershipMessage::new);
+        addMessage(RequestEntityIdBlock.class, RequestEntityIdBlock::new);
         addMessage(RequestFilesToSyncMessage.class, RequestFilesToSyncMessage::new);
         addMessage(SetPortMessage.class, SetPortMessage::new);
         addMessage(StartMessage.class, StartMessage::new);

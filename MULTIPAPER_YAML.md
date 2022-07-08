@@ -71,6 +71,10 @@ disable the delay.
 
 ## sync-settings
 
+`sync-entity-ids`  
+Whether to sync entity ids between servers. This may be useful for plugins
+that fake packets containing data for certain entity ids.
+
 `sync-json-files`  
 Whether or not to sync the `ops.json`, `whitelist.json`, `banned-players.json`,
 and `banned-ips.json` between servers.

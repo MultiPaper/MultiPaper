@@ -27,7 +27,7 @@ index 08c8d3e3962aa2648326ad67cb7b1252b2764ed6..76a38fc15802ada2170ee3e14cc9e889
  
      public ServerPlayer(MinecraftServer server, ServerLevel world, GameProfile profile, @Nullable ProfilePublicKey publicKey) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 30182b746444141a31c9e571ed502f614b71bf8f..ead4b92c7a0461dece0a17692c00848bdb6ebd74 100644
+index 30182b746444141a31c9e571ed502f614b71bf8f..7a9843f7d00c823454a3472dc69652ff3b879ec4 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -152,6 +152,8 @@ import puregero.multipaper.ExternalPlayer;
@@ -87,22 +87,6 @@ index 30182b746444141a31c9e571ed502f614b71bf8f..ead4b92c7a0461dece0a17692c00848b
              ListTag nbttaglist = nbt.getList("Pos", 6);
              ListTag nbttaglist1 = nbt.getList("Motion", 6);
              ListTag nbttaglist2 = nbt.getList("Rotation", 5);
-@@ -2418,6 +2435,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
-             if (nbt.hasUUID("UUID")) {
-                 this.uuid = nbt.getUUID("UUID");
-                 this.stringUUID = this.uuid.toString();
-+                MultiPaperEntityIdManager.getId(this, this.uuid); // MultiPaper
-             }
- 
-             if (Double.isFinite(this.getX()) && Double.isFinite(this.getY()) && Double.isFinite(this.getZ())) {
-@@ -3689,6 +3707,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
-     public void setUUID(UUID uuid) {
-         this.uuid = uuid;
-         this.stringUUID = this.uuid.toString();
-+        MultiPaperEntityIdManager.getId(this, this.uuid); // MultiPaper
-     }
- 
-     @Override
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 index 1e782c487fc1fc6b66c0f12f351cb81e62eb7338..33fc9e56ef7b3b0e045d4a62a2665e50987b165b 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
@@ -143,24 +127,20 @@ index 1e782c487fc1fc6b66c0f12f351cb81e62eb7338..33fc9e56ef7b3b0e045d4a62a2665e50
          this.isRealPlayer = true;
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntityIdManager.java b/src/main/java/puregero/multipaper/MultiPaperEntityIdManager.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3aa01506aebd0ab6bc9f149fe86cb5573afda4bf
+index 0000000000000000000000000000000000000000..a7d863e6ccbcff3ccc3ef73e7335ffdd97a09907
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntityIdManager.java
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,88 @@
 +package puregero.multipaper;
 +
-+import net.minecraft.world.entity.Entity;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.config.MultiPaperConfiguration;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.RequestEntityIdBlock;
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.IntegerPairMessageReply;
 +
-+import java.util.Map;
 +import java.util.Objects;
-+import java.util.UUID;
 +import java.util.concurrent.CompletableFuture;
-+import java.util.concurrent.ConcurrentHashMap;
 +import java.util.concurrent.atomic.AtomicInteger;
 +
 +/**
@@ -185,7 +165,6 @@ index 0000000000000000000000000000000000000000..3aa01506aebd0ab6bc9f149fe86cb557
 +    private static Block nextEntityIdBlock = null;
 +    private static long nextBlockRequestSentTime = 0;
 +    private static CompletableFuture<Void> nextBlockRequest = CompletableFuture.completedFuture(null);
-+    private static final Map<UUID, Integer> idsToOverride = new ConcurrentHashMap<>();
 +
 +    private static synchronized void getNextBlock(Block oldBlock) {
 +        if (!Objects.equals(entityIdBlock, oldBlock)) {
@@ -232,19 +211,6 @@ index 0000000000000000000000000000000000000000..3aa01506aebd0ab6bc9f149fe86cb557
 +        } else {
 +            return LOCAL_ENTITY_COUNTER.getAndIncrement();
 +        }
-+    }
-+
-+    public static void getId(Entity entity, UUID uuid) {
-+        if (MultiPaperConfiguration.get().syncSettings.syncEntityIds) {
-+            Integer id = idsToOverride.remove(uuid);
-+            if (id != null) {
-+                entity.setId(id);
-+            }
-+        }
-+    }
-+
-+    public static void setId(UUID uuid, int id) {
-+        idsToOverride.put(uuid, id);
 +    }
 +
 +    private record Block(int min, int max) {

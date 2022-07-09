@@ -45,7 +45,7 @@ index 852db8c90dfee57d1ea9060b1a1128dbe68f5f53..d10bce4b6069b25fb63115f437169412
                  return;
              }
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 645985d63337503d645c9016489fa7b8c7be0b4d..d0fad0110a77119b85d21476e149ad181aee1732 100644
+index 0c8a4c37701a7b52e38b4224b79b43e2998d455a..ce59dbf322b0fbb03f1755dc745b0ff52bad9be2 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -51,6 +51,7 @@ import net.minecraft.network.chat.HoverEvent;
@@ -78,20 +78,21 @@ index 645985d63337503d645c9016489fa7b8c7be0b4d..d0fad0110a77119b85d21476e149ad18
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource {
-@@ -2683,6 +2688,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2683,6 +2688,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                  }).forEach((entity2) -> {
                      CriteriaTriggers.START_RIDING_TRIGGER.trigger((ServerPlayer) entity2);
                  });
 +                // MultiPaper start - inform the player's server that they are now riding an entity and hand them the entity's data
-+                if (MultiPaperEntitiesHandler.getControllingPassenger(vehicle) == this && MultiPaper.isChunkLocal(level.getChunkIfLoaded(vehicle.blockPosition)) && this instanceof ExternalPlayer player) {
-+                    player.externalServerConnection.send(new EntityUpdateNBTPacket(vehicle));
-+                    player.externalServerConnection.send(new EntityUpdateWithDependenciesPacket(vehicle, vehicle.getPassengers(), new ClientboundSetPassengersPacket(vehicle)));
++                Entity rootVehicle = this.getRootVehicle();
++                if (MultiPaperEntitiesHandler.getControllingPassenger(rootVehicle) == this && MultiPaper.isChunkLocal(level.getChunkIfLoaded(rootVehicle.blockPosition)) && this instanceof ExternalPlayer player) {
++                    player.externalServerConnection.send(new EntityUpdateNBTPacket(rootVehicle));
++                    EntityUpdateWithDependenciesPacket.sendPassengersRecursive(player.externalServerConnection, rootVehicle);
 +                }
 +                // MultiPaper end - inform the player's server that they are now riding an entity and hand them the entity's data
                  return true;
              }
          }
-@@ -2714,6 +2725,14 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2714,6 +2726,14 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
              this.vehicle = null;
              if (!entity.removePassenger(this, suppressCancellation)) this.vehicle = entity; // CraftBukkit // Paper
@@ -99,8 +100,8 @@ index 645985d63337503d645c9016489fa7b8c7be0b4d..d0fad0110a77119b85d21476e149ad18
 +            // MultiPaper start - inform the vehicle's server that the player is no longer riding the entity and hand them the entity's data
 +            LevelChunk chunk = level.getChunkIfLoaded(entity.blockPosition);
 +            if (vehicle == null && MultiPaper.isRealPlayer(this) && MultiPaper.isChunkExternal(chunk)) {
-+                chunk.externalOwner.getConnection().send(new EntityUpdateNBTPacket(entity));
-+                chunk.externalOwner.getConnection().send(new EntityUpdateWithDependenciesPacket(entity, entity.getPassengers(), new ClientboundSetPassengersPacket(entity)));
++                chunk.externalOwner.getConnection().send(new EntityUpdateNBTPacket(entity.getRootVehicle()));
++                EntityUpdateWithDependenciesPacket.sendPassengersRecursive(chunk.externalOwner.getConnection(), entity.getRootVehicle());
 +            }
 +            // MultiPaper end - inform the vehicle's server that the player is no longer riding the entity and hand them the entity's data
          }

@@ -720,7 +720,7 @@ index c2b32b4e653dd1967df4cdc0950907b1e1e926f5..27d3933629c88a679af552a8eb0e8ba5
              for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
                  if (blockEntity instanceof Container container) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 7d069fe3862c177537404c2b7c01cb322260d49b..55f995221b079de17d708068aa22732964bf3e5b 100644
+index 7d069fe3862c177537404c2b7c01cb322260d49b..068544262a0fb95919a6980bda2ac29ad5845cda 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -12,9 +12,13 @@ import io.netty.channel.socket.SocketChannel;
@@ -788,9 +788,9 @@ index 7d069fe3862c177537404c2b7c01cb322260d49b..55f995221b079de17d708068aa227329
 +            ChunkAccess chunk = MultiPaper.getChunkAccess(message.world, message.cx, message.cz);
 +            if (chunk instanceof LevelChunk levelChunk) {
 +                for (Entity entity : levelChunk.level.entityManager.getEntities(chunk.getPos())) {
-+                    if (MultiPaper.isRealPlayer(entity) && entity.getVehicle() != null) {
-+                        server.getConnection().send(new EntityUpdateNBTPacket(entity.getVehicle()));
-+                        server.getConnection().send(new EntityUpdateWithDependenciesPacket(entity.getVehicle(), entity.getVehicle().getPassengers(), new ClientboundSetPassengersPacket(entity.getVehicle())));
++                    if (MultiPaper.isRealPlayer(entity) && entity.getRootVehicle() != entity) {
++                        server.getConnection().send(new EntityUpdateNBTPacket(entity.getRootVehicle()));
++                        EntityUpdateWithDependenciesPacket.sendPassengersRecursive(server.getConnection(), entity.getRootVehicle());
 +                    }
 +                }
 +            }
@@ -831,10 +831,10 @@ index 7d069fe3862c177537404c2b7c01cb322260d49b..55f995221b079de17d708068aa227329
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3b7032fb4716e596c46a387a64a4a2bbcb67fe54
+index 0000000000000000000000000000000000000000..8a43cf61215c9bb9239e7e1a4de3516196a4dd65
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,366 @@
+@@ -0,0 +1,368 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -982,10 +982,12 @@ index 0000000000000000000000000000000000000000..3b7032fb4716e596c46a387a64a4a2bb
 +                            // Ensure the player's position is up to date
 +                            MultiPaper.runSync(() -> toServer.getConnection().send(new EntityUpdatePacket(entity, new ClientboundTeleportEntityPacket(entity))));
 +                        } else {
-+                            MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity));
-+                            if (entity.isVehicle() && entity.hasExactlyOnePlayerPassenger()) {
-+                                MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateWithDependenciesPacket(entity, entity.getPassengers(), new ClientboundSetPassengersPacket(entity)));
-+                            }
++                            MultiPaper.runSync(() -> {
++                                toServer.getConnection().send(new EntityUpdateNBTPacket(entity));
++                                if (entity.isVehicle()) {
++                                    EntityUpdateWithDependenciesPacket.sendPassengersRecursive(toServer.getConnection(), entity);
++                                }
++                            });
 +                        }
 +                    });
 +                }
@@ -1537,10 +1539,10 @@ index 0000000000000000000000000000000000000000..2ff68d25f4dd3c917f9bc074802f74c3
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..65ab90524dd61bf14d7a7ca1f84ca316b383ce8e
+index 0000000000000000000000000000000000000000..eba6a5dcf4e6a5fd6acbb974ea54634570025e26
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
-@@ -0,0 +1,133 @@
+@@ -0,0 +1,150 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1549,6 +1551,7 @@ index 0000000000000000000000000000000000000000..65ab90524dd61bf14d7a7ca1f84ca316
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.network.protocol.Packet;
 +import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
 +import org.apache.logging.log4j.LogManager;
@@ -1564,6 +1567,9 @@ index 0000000000000000000000000000000000000000..65ab90524dd61bf14d7a7ca1f84ca316
 +import java.util.Collection;
 +import java.util.Objects;
 +import java.util.UUID;
++import java.util.function.BiConsumer;
++import java.util.function.BiFunction;
++import java.util.function.Consumer;
 +
 +public class EntityUpdateWithDependenciesPacket extends ExternalServerPacket {
 +
@@ -1673,6 +1679,19 @@ index 0000000000000000000000000000000000000000..65ab90524dd61bf14d7a7ca1f84ca316
 +            MultiPaperEntitiesHandler.handleEntityWithDependenicesUpdate(entity, entities, packet);
 +        }
 +    }
++
++    public static void sendPassengersRecursive(ExternalServerConnection connection, Entity vehicle) {
++        sendPassengersRecursive(connection::send, vehicle);
++    }
++
++    public static void sendPassengersRecursive(Consumer<ExternalServerPacket> sendPacketFuction, Entity vehicle) {
++        if (vehicle.isVehicle()) {
++            sendPacketFuction.accept(new EntityUpdateWithDependenciesPacket(vehicle, vehicle.getPassengers(), new ClientboundSetPassengersPacket(vehicle)));
++            for (Entity passenger : vehicle.getPassengers()) {
++                sendPassengersRecursive(sendPacketFuction, passenger);
++            }
++        }
++    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 index c41679ee4e55cc5765d30acb4289be79291a9624..8ce98e04ed1400146b69242a3a28c9689fd47e68 100644
@@ -1727,7 +1746,7 @@ index 2e51741d76d2d209accb673f8043ed99010125a3..fd2a81936f4fb19534d165ea96f88cc6
      }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index a7d4b19f36565a91039a03d30d509c28a538df17..dfba8fecd88b9fbcbb82cfff3430a833e63e2046 100644
+index a7d4b19f36565a91039a03d30d509c28a538df17..9cc8d3ba68974234fb9d139525099ff432998c0d 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 @@ -3,10 +3,15 @@ package puregero.multipaper.externalserverprotocol;
@@ -1776,13 +1795,13 @@ index a7d4b19f36565a91039a03d30d509c28a538df17..dfba8fecd88b9fbcbb82cfff3430a833
 +            )), connections);
 +        }
 +
-+        if (player.getVehicle() != null) {
-+            LevelChunk levelChunk = player.getVehicle().level.getChunkAt(player.getVehicle().blockPosition());
++        if (player.getRootVehicle() != player) {
++            LevelChunk levelChunk = player.getRootVehicle().level.getChunkAt(player.getRootVehicle().blockPosition());
 +            if (levelChunk != null) {
 +                ExternalServerConnection[] subscribedServers = Arrays.stream(connections).filter(e -> levelChunk.externalEntitiesSubscribers.contains(e.externalServer)).toArray(ExternalServerConnection[]::new);
 +                if (subscribedServers.length > 0) {
-+                    send(new EntityUpdateNBTPacket(player.getVehicle()), subscribedServers);
-+                    send(new EntityUpdateWithDependenciesPacket(player.getVehicle(), player.getVehicle().getPassengers(), new ClientboundSetPassengersPacket(player.getVehicle())), subscribedServers);
++                    send(new EntityUpdateNBTPacket(player.getRootVehicle()), subscribedServers);
++                    EntityUpdateWithDependenciesPacket.sendPassengersRecursive(packet -> send(packet, subscribedServers), player.getRootVehicle());
 +                }
 +            }
 +        }
@@ -1871,10 +1890,10 @@ index 0000000000000000000000000000000000000000..6a2495c6f9449cc7158b6ab8a41234d7
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e4c047bb0cf665baeabed982d1e310076e49dfd4
+index 0000000000000000000000000000000000000000..4f27d37e3fbdf1570f907d1eb5eaa24ea6d638c5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,86 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
@@ -1933,14 +1952,12 @@ index 0000000000000000000000000000000000000000..e4c047bb0cf665baeabed982d1e31007
 +                }
 +
 +                // Send the vehicle the entity is in
-+                while (entity.getVehicle() != null && !entity.shouldBeSaved()) {
-+                    entity = entity.getVehicle();
-+                }
++                entity = entity.getRootVehicle();
 +
 +                connection.send(new EntityUpdateNBTPacket(entity));
 +
 +                if (!entity.getPassengers().isEmpty()) {
-+                    connection.send(new EntityUpdateWithDependenciesPacket(entity, entity.getPassengers(), new ClientboundSetPassengersPacket(entity)));
++                    EntityUpdateWithDependenciesPacket.sendPassengersRecursive(connection, entity);
 +                }
 +            } else {
 +                LOGGER.warn(connection.externalServer.getName() + " requested entity " + uuid + ", but that entity doesn't exist");

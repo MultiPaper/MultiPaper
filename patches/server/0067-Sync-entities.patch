@@ -298,7 +298,7 @@ index 8d18edb6174264fb92890f1b8d1ae71705ad3caf..111f40b8510813e3f32cc28c5a433389
                      serversToCreatePlayerOn.add(externalServer.getConnection());
                  } else if (subscribedToSoruce) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index dd41c1e91170571321212509be1d49f118ebec05..0c8a4c37701a7b52e38b4224b79b43e2998d455a 100644
+index dd41c1e91170571321212509be1d49f118ebec05..4b393f9637a937f9f34a021b8851ed10bf92fc0a 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -146,7 +146,10 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -337,6 +337,15 @@ index dd41c1e91170571321212509be1d49f118ebec05..0c8a4c37701a7b52e38b4224b79b43e2
      }
  
      protected abstract void readAdditionalSaveData(CompoundTag nbt);
+@@ -3883,7 +3888,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+         return true;
+     }
+ 
+-    private Stream<Entity> getIndirectPassengersStream() {
++    public Stream<Entity> getIndirectPassengersStream() { // MultiPaper - Make public
+         if (this.passengers.isEmpty()) { return Stream.of(); } // Paper
+         return this.passengers.stream().flatMap(Entity::getSelfAndPassengers);
+     }
 @@ -4320,6 +4325,10 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              int j = Mth.floor(y);
              int k = Mth.floor(z);
@@ -831,7 +840,7 @@ index 7d069fe3862c177537404c2b7c01cb322260d49b..068544262a0fb95919a6980bda2ac29a
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b1f28c0f929641572d0f4b0dd29e8a0ef2ab2b21
+index 0000000000000000000000000000000000000000..df4e7327f07ced41cd53e1afdafa448d6240f23c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 @@ -0,0 +1,368 @@
@@ -1162,7 +1171,7 @@ index 0000000000000000000000000000000000000000..b1f28c0f929641572d0f4b0dd29e8a0e
 +    }
 +
 +    public static void onEntityUpdate(Entity entity, Packet<?> packet, LevelChunk chunk) {
-+        if (!entity.shouldBeSaved() && !(entity instanceof ServerPlayer) && (entity.getPassengers().isEmpty() || entity.getPassengers().stream().noneMatch(e -> e instanceof ServerPlayer))) return;
++        if (!entity.shouldBeSaved() && !(entity instanceof ServerPlayer) && (entity.getPassengers().isEmpty() || entity.getIndirectPassengersStream().noneMatch(e -> e instanceof ServerPlayer))) return;
 +
 +        if (packet instanceof ClientboundSetEquipmentPacket && entity instanceof ServerPlayer) {
 +            // This is handled with inventories for players

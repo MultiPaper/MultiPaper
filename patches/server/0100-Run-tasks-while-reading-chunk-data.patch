@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 13 Feb 2022 14:02:25 +1000
+Subject: [PATCH] Run tasks while reading chunk data
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index 2349472a95841fc57fa9d77026b85e54a1ce15e6..eff7e862fa2831301663f1d18eb9b86086bebed1 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -1,6 +1,7 @@
+ package net.minecraft.server.level;
+ 
+ import co.aikar.timings.Timing; // Paper
++import com.destroystokyo.paper.io.PaperFileIOThread;
+ import com.google.common.collect.ImmutableList;
+ import com.google.common.collect.ImmutableList.Builder;
+ import com.google.common.collect.Iterables;
+@@ -1722,9 +1723,17 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+     @Override
+     public CompoundTag readSync(ChunkPos chunkcoordintpair) throws IOException {
+         if (Thread.currentThread() != com.destroystokyo.paper.io.PaperFileIOThread.Holder.INSTANCE) {
+-            CompoundTag ret = com.destroystokyo.paper.io.PaperFileIOThread.Holder.INSTANCE
+-                .loadChunkDataAsyncFuture(this.level, chunkcoordintpair.x, chunkcoordintpair.z, com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread(),
+-                    false, true, true).join().chunkData;
++            // MultiPaper start - don't block the main thread, run tasks in the meantime
++            CompletableFuture<PaperFileIOThread.ChunkData> completablefuture = com.destroystokyo.paper.io.PaperFileIOThread.Holder.INSTANCE
++                    .loadChunkDataAsyncFuture(this.level, chunkcoordintpair.x, chunkcoordintpair.z, com.destroystokyo.paper.io.IOUtil.getPriorityForCurrentThread(),
++                            false, true, true);
++
++            if (!completablefuture.isDone()) {
++                level.chunkSource.mainThreadProcessor.managedBlock(completablefuture::isDone);
++            }
++
++            CompoundTag ret = completablefuture.join().chunkData;
++            // MultiPaper end
+ 
+             if (ret == com.destroystokyo.paper.io.PaperFileIOThread.FAILURE_VALUE) {
+                 throw new IOException("See logs for further detail");

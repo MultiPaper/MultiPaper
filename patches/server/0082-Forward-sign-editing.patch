@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 13 Dec 2021 22:55:54 +1000
+Subject: [PATCH] Forward sign editing
+
+
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index f3e37e320590e2e0ebc0d92d9f6214440eab6476..bbc0fa9f5e478bbdbd1998dc59e057616047f05a 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -233,6 +233,7 @@ import puregero.multipaper.MultiPaperAckBlockChangesHandler;
+ import puregero.multipaper.MultiPaperEntityInteractHandler;
+ import puregero.multipaper.MultiPaperInventoryHandler;
+ import puregero.multipaper.MultiPaperPlayerHandler;
++import puregero.multipaper.MultiPaperSignHandler;
+ import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
+ // CraftBukkit end
+ 
+@@ -3271,6 +3272,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+ 
+     @Override
+     public void handleSignUpdate(ServerboundSignUpdatePacket packet) {
++        if (MultiPaperSignHandler.handleSignUpdate(this.player, packet)) return;
+         // Paper start - cap line length - modified clients can send longer data than normal
+         String[] lines = packet.getLines();
+         for (int i = 0; i < lines.length; ++i) {
+diff --git a/src/main/java/puregero/multipaper/MultiPaperSignHandler.java b/src/main/java/puregero/multipaper/MultiPaperSignHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..d22f5f6b1ab0e88f06e60b56c423e1520c8f2106
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperSignHandler.java
+@@ -0,0 +1,23 @@
++package puregero.multipaper;
++
++import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.level.chunk.LevelChunk;
++import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
++
++public class MultiPaperSignHandler {
++
++    /**
++     * Returns true if the sign update should be cancelled
++     */
++    public static boolean handleSignUpdate(ServerPlayer player, ServerboundSignUpdatePacket packet) {
++        LevelChunk chunk = player.level.getChunkIfLoaded(packet.getPos());
++        if (MultiPaper.isChunkExternal(chunk)) {
++            chunk.externalOwner.getConnection().send(new PlayerActionPacket(player, packet));
++            return true;
++        }
++
++        return false;
++    }
++
++}

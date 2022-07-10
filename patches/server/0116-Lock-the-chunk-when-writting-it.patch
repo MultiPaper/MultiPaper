@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 16 Jan 2022 11:51:16 +1000
+Subject: [PATCH] Lock the chunk when writting it
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index eff7e862fa2831301663f1d18eb9b86086bebed1..27f2c43f5365350a2c8910198d41e630b380fd5d 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -1544,6 +1544,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+             asyncSaveData = ChunkSerializer.getAsyncSaveData(this.level, chunk);
+         }
+ 
++        MultiPaper.willSaveChunk(level, chunk);
+         this.level.asyncChunkTaskManager.scheduleChunkSave(chunkPos.x, chunkPos.z, com.destroystokyo.paper.io.PrioritizedTaskQueue.NORMAL_PRIORITY,
+             asyncSaveData, chunk);
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 2147e688a7ec074e4348e451903998dc4395129e..45f54607203d2a36ce5f5fb78b7d1108eea598a9 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -509,6 +509,10 @@ public class MultiPaper {
+         chunk.hasExternalLockRequest = false;
+     }
+ 
++    public static void willSaveChunk(ServerLevel level, ChunkAccess chunk) {
++        getConnection().send(new WillSaveChunkLaterMessage(level.getWorld().getName(), chunk.locX, chunk.locZ));
++    }
++
+     public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
+         if (compoundTag == null) {
+             return new byte[0];

@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 20 Mar 2022 23:32:19 +1000
+Subject: [PATCH] Add a timeout when saving chunks
+
+This allows the server to exit cleanly instead of hanging forever
+waiting for chunks to never finish loading.
+
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index c3eb30841511087e876365b9034707dfb3178f70..b785fa9330d2c553e7a32d7d0153cf773dec3cf5 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -45,6 +45,7 @@ import java.util.Set;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.Executor;
+ import java.util.concurrent.RejectedExecutionException;
++import java.util.concurrent.TimeUnit;
+ import java.util.concurrent.atomic.AtomicReference;
+ import java.util.function.BooleanSupplier;
+ import java.util.function.Consumer;
+@@ -264,6 +265,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+     private final ServerFunctionManager functionManager;
+     private final FrameTimer frameTimer;
+     private boolean enforceWhitelist;
++    public CompletableFuture<Void> saveTimeout = new CompletableFuture<>(); // MultiPaper
+     private float averageTickTime;
+     public final Executor executor;
+     @Nullable
+@@ -949,6 +951,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         }
+ 
+         MinecraftServer.LOGGER.info("Saving worlds");
++        saveTimeout = saveTimeout.completeOnTimeout(null, 30, TimeUnit.SECONDS); // MultiPaper
+         Iterator iterator = this.getAllLevels().iterator();
+ 
+         ServerLevel worldserver;
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index 95de6bb8ceeaea16faaea32c918116fc0da7588c..24319811c75d2a78b338b3946c2dbebd00f85959 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -973,16 +973,20 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+                 mutableboolean.setFalse();
+                 list.stream().map((playerchunk) -> {
+                     CompletableFuture completablefuture;
++                    CompletableFuture timeoutable; // MultiPaper - add timeout
+ 
+                     do {
+                         completablefuture = playerchunk.getChunkToSave();
+                         BlockableEventLoop iasynctaskhandler = this.mainThreadExecutor;
+ 
+                         Objects.requireNonNull(completablefuture);
+-                        iasynctaskhandler.managedBlock(completablefuture::isDone);
++                        timeoutable = CompletableFuture.anyOf(completablefuture, level.getServer().saveTimeout); // MultiPaper - add timeout
++                        iasynctaskhandler.managedBlock(timeoutable::isDone); // MultiPaper - add timeout
+                     } while (completablefuture != playerchunk.getChunkToSave());
+ 
+-                    return (ChunkAccess) completablefuture.join();
++                    if (!completablefuture.isDone()) LOGGER.warn("Timed out while waiting for chunk " + playerchunk.getWorld().getWorld().getName() + playerchunk.getPos() + " to finish loading, skipping saving it.");  // MultiPaper - add timeout
++
++                    return (ChunkAccess) timeoutable.join();  // MultiPaper - add timeout
+                 }).filter((ichunkaccess) -> {
+                     return ichunkaccess instanceof ImposterProtoChunk || ichunkaccess instanceof LevelChunk;
+                 }).filter(this::save).forEach((ichunkaccess) -> {

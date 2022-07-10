@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 5 Jan 2022 16:43:52 +1000
+Subject: [PATCH] Send server port to the master server
+
+
+diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+index f9551d7f620ec8d92a77414b8de3b286ca6d188e..52d0b64f70d786327f8af1d1ad086a01891a3701 100644
+--- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -263,6 +263,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+             this.setPort(dedicatedserverproperties.serverPort);
+         }
+         bindAddress = new java.net.InetSocketAddress(inetaddress, this.getPort());
++        MultiPaper.setPort(this.getPort()); // MultiPaper
+         }
+         // Paper end
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 26f5084dce0ee6b514b0da6310751c7c4de12e15..2147e688a7ec074e4348e451903998dc4395129e 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -593,4 +593,8 @@ public class MultiPaper {
+     public static void broadcastPlayerAction(ServerPlayer player, ServerboundSetCarriedItemPacket packet) {
+         broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
+     }
++
++    public static void setPort(int port) {
++        getConnection().setPort(port);
++    }
+ }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 068544262a0fb95919a6980bda2ac29ad5845cda..f8c4b82c66d5d01c70d6274d795fa041cc237a25 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -59,6 +59,7 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+     private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
+     public String secret;
+     public Map<String, byte[]> dataCache = Maps.newHashMap();
++    public int port = -1;
+ 
+     public MultiPaperConnection() {
+         System.setProperty("multipaper.netty.threads", System.getProperty("multipaper.netty.threads", Integer.toString(Math.min(Runtime.getRuntime().availableProcessors(), 3))));
+@@ -96,6 +97,10 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+         LOGGER.info("Connected to " + channel.remoteAddress());
+         channel.write(new HelloMessage(myName));
+ 
++        if (port >= 0) {
++            channel.write(new SetPortMessage(port));
++        }
++
+         for (MasterBoundMessage unhandledRequest : unhandledRequests) {
+             channel.write(unhandledRequest);
+         }
+@@ -168,6 +173,14 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+         return serversMap;
+     }
+ 
++    public void setPort(int port) {
++        if (!MultiPaperConfiguration.get().masterConnection.advertiseToBuiltInProxy) {
++            return;
++        }
++        this.port = port;
++        send(new SetPortMessage(port));
++    }
++
+     @Override
+     public void handle(ServerInfoUpdateMessage message) {
+         ExternalServer server = serversMap.computeIfAbsent(message.name, key -> new ExternalServer(key, key.equals(myName)));

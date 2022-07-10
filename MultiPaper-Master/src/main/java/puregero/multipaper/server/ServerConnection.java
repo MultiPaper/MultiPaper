@@ -26,6 +26,7 @@ public class ServerConnection extends MasterBoundMessageHandler {
     private double tps;
     private int port = -1;
     private String host;
+    private UUID uuid;
 
     /**
      * This connection map may include dead servers! Check if a server is alive
@@ -103,10 +104,23 @@ public class ServerConnection extends MasterBoundMessageHandler {
     public void handle(HelloMessage message) {
         name = message.name;
         host = ((InetSocketAddress) getAddress()).getAddress().getHostAddress();
+        uuid = message.serverUuid;
 
         synchronized (connections) {
             connections.add(this);
-            connectionMap.put(name, this);
+            ServerConnection oldConnectionWithSameName = connectionMap.put(name, this);
+
+            if ("false".equalsIgnoreCase(System.getProperty("allow.multiple.connections", "false"))
+                    && oldConnectionWithSameName != null
+                    && !oldConnectionWithSameName.uuid.equals(uuid)
+                    && connections.contains(oldConnectionWithSameName)) {
+                System.out.println("# -------------------------------------------------------------------------- #");
+                System.out.println("  WARNING: Two servers have connected with the same name!");
+                System.out.println("  1. " + oldConnectionWithSameName.getBungeeCordName() + ": " + oldConnectionWithSameName.getHost() + " (" + oldConnectionWithSameName.uuid + ")");
+                System.out.println("  2. " + this.getBungeeCordName() + ": " + this.getHost() + " (" + this.uuid + ")");
+                System.out.println("  If this is expected, add -Dallow.multiple.connections to your command line");
+                System.out.println("# -------------------------------------------------------------------------- #");
+            }
         }
 
         System.out.println("Connection from " + getAddress() + " (" + name + ")");

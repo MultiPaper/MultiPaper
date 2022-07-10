@@ -5,7 +5,7 @@ Subject: [PATCH] Add support for proxy protocol
 
 
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 7fc7f967ff3cad2615ee2f45c5d29ea992296f07..2db24b2869557f7ffdcbfaf4dd802008a17d2cf6 100644
+index 7fc7f967ff3cad2615ee2f45c5d29ea992296f07..f70a5cb955ef9682a60cd7816ed93e381ca6a59e 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -1,10 +1,12 @@
@@ -21,11 +21,25 @@ index 7fc7f967ff3cad2615ee2f45c5d29ea992296f07..2db24b2869557f7ffdcbfaf4dd802008
  import io.netty.util.internal.SystemPropertyUtil;
  import net.minecraft.network.*;
  import net.minecraft.network.protocol.Packet;
-@@ -69,6 +71,17 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+@@ -26,6 +28,7 @@ import java.io.IOException;
+ import java.util.*;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.TimeUnit;
+ import java.util.function.Consumer;
+ 
+ public class ExternalServerConnection extends ChannelInitializer<SocketChannel> implements Closeable {
+@@ -69,6 +72,23 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
      }
  
      public void sendMinecraftHandshake(String address, String secret, int port) {
 +        // MultiPaper start - Add support for Proxy Protocol
++        if (io.papermc.paper.configuration.GlobalConfiguration.get() == null) {
++            // Paper config hasn't been loaded yet, try again 100ms later
++            CompletableFuture.delayedExecutor(100, TimeUnit.MILLISECONDS).execute(() -> sendMinecraftHandshake(address, secret, port));
++            return;
++        }
++
 +        ChannelFuture future2 = channel.newSucceededFuture();
 +
 +        if (io.papermc.paper.configuration.GlobalConfiguration.get().proxies.proxyProtocol) {
@@ -39,7 +53,7 @@ index 7fc7f967ff3cad2615ee2f45c5d29ea992296f07..2db24b2869557f7ffdcbfaf4dd802008
          channel.pipeline()
                  .addLast("prepender", new MessageLengthEncoder())
                  .addLast("encoder", new PacketEncoder(PacketFlow.SERVERBOUND));
-@@ -81,6 +94,8 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+@@ -81,6 +101,8 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
                          future.cause().printStackTrace();
                      }
                  });

@@ -41,7 +41,7 @@ index 059d7eda8b42f14ceb8945d82b2c917a13f4fd46..eacf741f0a30bba8dabbbaa6b0e35077
              this.channel.close(); // We can't wait as this may be called from an event loop.
              this.disconnectedReason = disconnectReason;
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index a35423853164c2f34169e10e5ee7da2ca27e71b1..32dffbcf1943c000d0e8927caab3a4aef9027eec 100644
+index 907ee57aa5ce1a0c9b5b14b77053c9024c3eb0dd..125c3dbe6dd827f9eb1f36db27f3bc74908e1255 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -1437,6 +1437,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
@@ -138,7 +138,7 @@ index 353463084d90eb684717e65c56da52cd25a1e375..ad6798934ed30dafadefff93a6dd5a6c
              this.updateEffectVisibility();
              return event; // Paper
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index d42e220347cb39d7f0e04f9f47403bb1914e164d..ed8ffbd4a2c70d89041844a16e2f991bea9ff4e7 100644
+index e6213b6924f611bfb85e43fe5a4c4582639b7abc..698f87388a6428c35322d8df2082f267362c0277 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -30,6 +30,8 @@ import java.util.function.UnaryOperator;
@@ -723,10 +723,10 @@ index 0000000000000000000000000000000000000000..28784d2cb62328bb087bd22485696ae0
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a9814bbe4fc9eff864f30b389e88cb1375704de0
+index 0000000000000000000000000000000000000000..efd9401d58b481f916fa497961753bd95fc2166f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,42 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
@@ -761,7 +761,12 @@ index 0000000000000000000000000000000000000000..a9814bbe4fc9eff864f30b389e88cb13
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        MultiPaper.runSync(() -> MinecraftServer.getServer().getPlayerList().getPlayer(uuid).gameMode.changeGameModeForPlayer(gamemode));
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++            if (player != null) {
++                player.gameMode.changeGameModeForPlayer(gamemode);
++            }
++        });
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java

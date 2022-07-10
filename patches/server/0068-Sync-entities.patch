@@ -36,7 +36,7 @@ index 1d88edfd09a909044f6e3175af652914b4d06311..4b70e69630446271eedad98a9f087ed1
          /*
          this.lock.readLock().lock();
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 6ce2ffe897a91d6534ddb9fa7819e2680ad0ed6e..2349472a95841fc57fa9d77026b85e54a1ce15e6 100644
+index 6ce2ffe897a91d6534ddb9fa7819e2680ad0ed6e..1990855a1c1dd0bcfe6bfe902fe838756b128713 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -63,11 +63,7 @@ import net.minecraft.core.Registry;
@@ -60,6 +60,15 @@ index 6ce2ffe897a91d6534ddb9fa7819e2680ad0ed6e..2349472a95841fc57fa9d77026b85e54
  
  public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
  
+@@ -2290,7 +2287,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+ 
+     public class TrackedEntity {
+ 
+-        final ServerEntity serverEntity;
++        public final ServerEntity serverEntity; // MultiPaper - make public
+         final Entity entity;
+         private final int range;
+         SectionPos lastSectionPos;
 @@ -2350,10 +2347,21 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
          public void broadcast(Packet<?> packet) {
              Iterator iterator = this.seenBy.iterator();
@@ -84,7 +93,7 @@ index 6ce2ffe897a91d6534ddb9fa7819e2680ad0ed6e..2349472a95841fc57fa9d77026b85e54
  
          }
 diff --git a/src/main/java/net/minecraft/server/level/ServerEntity.java b/src/main/java/net/minecraft/server/level/ServerEntity.java
-index c9cb38a2401614210257c89fbb8dc97332b40957..cca7d39fc54e89e09c1505743f61e2bf4c09ceef 100644
+index c9cb38a2401614210257c89fbb8dc97332b40957..1e5e5de5f57d9b160fd6f8932dec5cf2bd707ee4 100644
 --- a/src/main/java/net/minecraft/server/level/ServerEntity.java
 +++ b/src/main/java/net/minecraft/server/level/ServerEntity.java
 @@ -34,6 +34,7 @@ import net.minecraft.world.entity.decoration.ItemFrame;
@@ -103,6 +112,15 @@ index c9cb38a2401614210257c89fbb8dc97332b40957..cca7d39fc54e89e09c1505743f61e2bf
  // CraftBukkit end
  
  public class ServerEntity {
+@@ -60,7 +62,7 @@ public class ServerEntity {
+     private int yHeadRotp;
+     private Vec3 ap;
+     private int tickCount;
+-    private int teleportDelay;
++    public int teleportDelay; // MultiPaper - make public
+     private List<Entity> lastPassengers;
+     private boolean wasRiding;
+     private boolean wasOnGround;
 @@ -92,6 +94,16 @@ public class ServerEntity {
              this.broadcastAndSend(new ClientboundSetPassengersPacket(this.entity)); // CraftBukkit
          }
@@ -1316,10 +1334,10 @@ index 0000000000000000000000000000000000000000..219d4f75fb195fe936b5fa647829e753
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9e411127484733e2022f3f8b1cd7ed24400df0e8
+index 0000000000000000000000000000000000000000..2ae3ce2c386b1ddb3fd716f1a0783a66dffbc6ae
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,125 @@
+@@ -0,0 +1,128 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1425,6 +1443,9 @@ index 0000000000000000000000000000000000000000..9e411127484733e2022f3f8b1cd7ed24
 +            new Exception("Tried to update the nbt of player " + player.getScoreboardName() + " to " + tag).printStackTrace();
 +        } else {
 +            entity.load(tag);
++            if (entity.tracker != null) {
++                entity.tracker.serverEntity.teleportDelay = 10000;
++            }
 +        }
 +
 +        if (tag.contains("Passengers", 9)) {

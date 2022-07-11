@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 11 Jul 2022 21:44:33 +1000
+Subject: [PATCH] Handle multi-server chunk generation
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+index 332fb585654789f60c85e9cd71320fbde784d07b..2e83b69d9488d2e77b64c21dc0806f2c054f93cf 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
++++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+@@ -469,7 +469,17 @@ public class ChunkHolder {
+ 
+             this.updateChunkToSave(completablefuture1, "schedule " + targetStatus);
+             this.futures.set(i, completablefuture1);
+-            completablefuture1.thenAccept(this::setAvailableChunkNow);
++            // MultiPaper start - Check if we haven't been overwritten before completing
++            completablefuture1.thenCompose(either -> {
++                if (this.futures.get(i) != completablefuture1) {
++                    // Our future has been removed, try again with the overwritten future
++                    return getOrScheduleFuture(targetStatus, chunkStorage);
++                } else {
++                    setAvailableChunkNow(either);
++                    return CompletableFuture.completedFuture(either);
++                }
++            });
++            // MultiPaper end
+             return completablefuture1;
+         } else {
+             return completablefuture == null ? ChunkHolder.UNLOADED_CHUNK_FUTURE : completablefuture;
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index d7888717ff18f643f819d9c69816030ce7267b73..e63489a04f231ab90592d8f8129a608e6eac318e 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -112,6 +112,7 @@ import org.bukkit.entity.Player;
+ // CraftBukkit end
+ import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet; // Paper
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperChunkGenerationLock;
+ import puregero.multipaper.MultiPaperChunkHandler;
+ import puregero.multipaper.MultiPaperEntitiesHandler;
+ 
+@@ -1287,9 +1288,12 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+             this.worldgenMailbox.tell(ChunkTaskPriorityQueueSorter.message(holder, runnable));
+         };
+ 
++        if (!completablefuture.isDone()) return completablefuture.thenCompose(either -> schedule(holder, requiredStatus)); // MultiPaper - Ensure we're using the latest chunk data
++
+         return completablefuture.thenComposeAsync((either) -> {
+             return (CompletionStage) either.map((list) -> {
+                 try {
++                    return MultiPaperChunkGenerationLock.lockChunk(holder, () -> { // MultiPaper - Prevent double generation of the same chunk
+                     CompletableFuture<Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>> completablefuture1 = requiredStatus.generate(executor, this.level, this.generator, this.structureTemplateManager, this.lightEngine, (ichunkaccess) -> {
+                         return this.protoChunkToFullChunk(holder);
+                     }, list, false);
+@@ -1298,6 +1302,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+ 
+                     this.progressListener.onStatusChange(chunkcoordintpair, requiredStatus);
+                     return completablefuture1;
++                    }); // MultiPaper
+                 } catch (Exception exception) {
+                     exception.getStackTrace();
+                     CrashReport crashreport = CrashReport.forThrowable(exception, "Exception generating new chunk");
+diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkGenerationLock.java b/src/main/java/puregero/multipaper/MultiPaperChunkGenerationLock.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..304c813bf61540c42af726ef9ea772a2e73a512e
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperChunkGenerationLock.java
+@@ -0,0 +1,20 @@
++package puregero.multipaper;
++
++import net.minecraft.server.level.ChunkHolder;
++
++import java.util.Map;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.function.Supplier;
++
++public class MultiPaperChunkGenerationLock {
++
++    private static final Map<ChunkKey, CompletableFuture<?>> locks = new ConcurrentHashMap<>();
++
++    public static <V> CompletableFuture<V> lockChunk(ChunkHolder holder, Supplier<CompletableFuture<V>> supplier) {
++        return (CompletableFuture<V>) locks.compute(new ChunkKey(holder.getWorld().getWorld().getName(), holder.getPos().x, holder.getPos().z), (key, value) ->
++            value == null ? supplier.get() : value.thenCompose(result -> supplier.get())
++        );
++    }
++
++}

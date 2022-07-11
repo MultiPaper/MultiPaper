@@ -395,7 +395,7 @@ index dd41c1e91170571321212509be1d49f118ebec05..4b393f9637a937f9f34a021b8851ed10
  
      @Override
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index 5b92f38360c96c12cffc99b5eea56191badbafb3..ea09760a260348050fbfa1c957c9a399c6aed42e 100644
+index 5b92f38360c96c12cffc99b5eea56191badbafb3..8a0962a702404bed1a5eefb45c7d643265844957 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 @@ -140,6 +140,7 @@ import org.bukkit.event.entity.EntityRegainHealthEvent;
@@ -405,14 +405,6 @@ index 5b92f38360c96c12cffc99b5eea56191badbafb3..ea09760a260348050fbfa1c957c9a399
 +import puregero.multipaper.MultiPaper;
  // CraftBukkit end
  
- 
-@@ -2631,6 +2632,7 @@ public abstract class LivingEntity extends Entity {
-             vec3d = new Vec3(this.getX(), d0, this.getZ());
-         }
- 
-+        if (MultiPaper.isChunkLocal(level.getChunkIfLoaded(vehicle.blockPosition()))) // MultiPaper
-         this.dismountTo(vec3d.x, vec3d.y, vec3d.z);
-     }
  
 diff --git a/src/main/java/net/minecraft/world/entity/Mob.java b/src/main/java/net/minecraft/world/entity/Mob.java
 index 6f05c6aeb8ce053ed2a4951b4c204946c3dd27ce..5a825c52bbd0af62377f7e8b13f46a5a49880753 100644
@@ -1569,10 +1561,10 @@ index 0000000000000000000000000000000000000000..2ff68d25f4dd3c917f9bc074802f74c3
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..eba6a5dcf4e6a5fd6acbb974ea54634570025e26
+index 0000000000000000000000000000000000000000..2b735d5518a9282062bcefae1dbde6633123def9
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
-@@ -0,0 +1,150 @@
+@@ -0,0 +1,148 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1715,11 +1707,9 @@ index 0000000000000000000000000000000000000000..eba6a5dcf4e6a5fd6acbb974ea546345
 +    }
 +
 +    public static void sendPassengersRecursive(Consumer<ExternalServerPacket> sendPacketFuction, Entity vehicle) {
-+        if (vehicle.isVehicle()) {
-+            sendPacketFuction.accept(new EntityUpdateWithDependenciesPacket(vehicle, vehicle.getPassengers(), new ClientboundSetPassengersPacket(vehicle)));
-+            for (Entity passenger : vehicle.getPassengers()) {
-+                sendPassengersRecursive(sendPacketFuction, passenger);
-+            }
++        sendPacketFuction.accept(new EntityUpdateWithDependenciesPacket(vehicle, vehicle.getPassengers(), new ClientboundSetPassengersPacket(vehicle)));
++        for (Entity passenger : vehicle.getPassengers()) {
++            sendPassengersRecursive(sendPacketFuction, passenger);
 +        }
 +    }
 +}

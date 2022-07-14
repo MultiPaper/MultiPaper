@@ -166,7 +166,7 @@ Some other things to look out for:
 [![Clojars Project](https://img.shields.io/clojars/v/com.github.puregero/multipaper-api.svg)](https://clojars.org/com.github.puregero/multipaper-api)
 
 If you want your plugin to still support regular Spigot and Paper servers, we
-recommend using [MultiLib](https://github.com/PureGero/MultiLib) instead.
+recommend using [MultiLib](https://github.com/MultiPaper/MultiLib) instead.
 
 Add the following into your build.gradle:
 

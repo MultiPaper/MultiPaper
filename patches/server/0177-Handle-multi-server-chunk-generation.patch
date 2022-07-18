@@ -62,10 +62,10 @@ index d7888717ff18f643f819d9c69816030ce7267b73..e63489a04f231ab90592d8f8129a608e
                      CrashReport crashreport = CrashReport.forThrowable(exception, "Exception generating new chunk");
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkGenerationLock.java b/src/main/java/puregero/multipaper/MultiPaperChunkGenerationLock.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..304c813bf61540c42af726ef9ea772a2e73a512e
+index 0000000000000000000000000000000000000000..de32c517349e54075506d643c2a027c6ebacbcf8
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkGenerationLock.java
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,23 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.server.level.ChunkHolder;
@@ -80,9 +80,12 @@ index 0000000000000000000000000000000000000000..304c813bf61540c42af726ef9ea772a2
 +    private static final Map<ChunkKey, CompletableFuture<?>> locks = new ConcurrentHashMap<>();
 +
 +    public static <V> CompletableFuture<V> lockChunk(ChunkHolder holder, Supplier<CompletableFuture<V>> supplier) {
-+        return (CompletableFuture<V>) locks.compute(new ChunkKey(holder.getWorld().getWorld().getName(), holder.getPos().x, holder.getPos().z), (key, value) ->
++        ChunkKey chunkKey = new ChunkKey(holder.getWorld().getWorld().getName(), holder.getPos().x, holder.getPos().z);
++        CompletableFuture<V> future = (CompletableFuture<V>) locks.compute(chunkKey, (key, value) ->
 +            value == null ? supplier.get() : value.thenCompose(result -> supplier.get())
 +        );
++        future.whenComplete((value, throwable) -> locks.remove(chunkKey, future));
++        return future;
 +    }
 +
 +}

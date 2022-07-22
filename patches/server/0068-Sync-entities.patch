@@ -700,7 +700,7 @@ index c145a3e278ded8e32b1541f4f042102db79c68bb..7fc7f967ff3cad2615ee2f45c5d29ea9
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 7d35f8ed70e1b6137db5ba794d0c12c700b949dc..a71dbdc0bf8dbc7358d229996354cd2440f51c17 100644
+index 5784cc905e1770f8668adaf38c7064a6909d4854..609777f10ede0d3ec605fa78c3dd45c5d0af9302 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -112,6 +112,9 @@ public class MultiPaper {
@@ -1320,7 +1320,7 @@ index 0000000000000000000000000000000000000000..219d4f75fb195fe936b5fa647829e753
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2ae3ce2c386b1ddb3fd716f1a0783a66dffbc6ae
+index 0000000000000000000000000000000000000000..2b9772a0a9fa60794d27cdcb632e6d26f0dd32e5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 @@ -0,0 +1,128 @@
@@ -1404,7 +1404,7 @@ index 0000000000000000000000000000000000000000..2ae3ce2c386b1ddb3fd716f1a0783a66
 +        });
 +    }
 +
-+    public Entity loadEntity(ServerLevel level, CompoundTag tag, UUID uuid) {
++    public static Entity loadEntity(ServerLevel level, CompoundTag tag, UUID uuid) {
 +        Entity.RemovalReason removalReason = EntityRemovePacket.removedEntities.get(uuid);
 +        if (removalReason != null && removalReason.shouldDestroy()) {
 +            // We've already removed this entity. This is likely a race condition, so don't recreate the entity.
@@ -1996,10 +1996,10 @@ index 0000000000000000000000000000000000000000..4f27d37e3fbdf1570f907d1eb5eaa24e
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c013641feb70076697d7336239411abd79fb5be8
+index 0000000000000000000000000000000000000000..73c009e391073b672f49c797d0b50076becbdf22
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,145 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.SharedConstants;
@@ -2131,19 +2131,10 @@ index 0000000000000000000000000000000000000000..c013641feb70076697d7336239411abd
 +                    CompoundTag tag = MultiPaper.nbtFromBytes(data);
 +                    ListTag entities = tag == null ? new ListTag() : tag.getList("Entities", Tag.TAG_COMPOUND);
 +                    MultiPaper.runSync(() -> {
-+                        // Remove existing entities in this chunk
-+                        for (Entity entity : level.entityManager.getEntities(new ChunkPos(cx, cz))) {
-+                            if (entity.shouldBeSaved()) {
-+                                entity.getPassengersAndSelf().forEach(e -> {
-+                                    e.setRemoved(Entity.RemovalReason.UNLOADED_TO_CHUNK);
-+                                    e.setLevelCallback(EntityInLevelCallback.NULL);
-+                                });
-+                            }
++                        for (Tag entityTag : entities) {
++                            CompoundTag entityTagCompound = (CompoundTag) entityTag;
++                            EntityUpdateNBTPacket.loadEntity(level, entityTagCompound, entityTagCompound.getUUID("UUID"));
 +                        }
-+                        // Add our entities to be loaded
-+                        List<Entity> list = EntityType.loadEntitiesRecursive(entities, level).collect(Collectors.toList());
-+                        level.entityManager.chunkLoadStatuses.put(pos.longKey, PersistentEntitySectionManager.ChunkLoadStatus.PENDING);
-+                        level.entityManager.loadingInbox.add(new ChunkEntities<>(pos, list));
 +                    });
 +                } else {
 +                    LOGGER.warn("Unsolicited entities for " + world + "," + cx + "," + cz);

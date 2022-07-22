@@ -36,7 +36,7 @@ index 1d88edfd09a909044f6e3175af652914b4d06311..4b70e69630446271eedad98a9f087ed1
          /*
          this.lock.readLock().lock();
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 638e8abfa3e1e754a7cdba2a0fa1c08c2a00c0ae..f7a930de60a25818d6f09ad2a20394b6f95990ec 100644
+index 59ac7a15035f51420b7befa71d99a93cc56c23be..5eeacd47e39a982a4cce837d98dac59a08ec0ccf 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -63,11 +63,7 @@ import net.minecraft.core.Registry;
@@ -239,7 +239,7 @@ index c859ed395f7c92c9b3bfb65882bcc1fa8e089c3d..a0eb7d63af2f9d4adff3ebb38961a727
          this.clientViewDistance = packet.viewDistance;
          // CraftBukkit end
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index d42cc7b7c5f74429bd1b4a3735e9e6aa89ac6324..940db9d3cde518321f9ecc19419741fb48fd73d0 100644
+index 318ce37fc4b33c20f3981f68f5b9760cb9bfdf21..8ab8a337595f435bc6305f5af5e2870173c159c2 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -231,6 +231,7 @@ import puregero.multipaper.ExternalPlayer;
@@ -247,10 +247,10 @@ index d42cc7b7c5f74429bd1b4a3735e9e6aa89ac6324..940db9d3cde518321f9ecc19419741fb
  import puregero.multipaper.MultiPaperAckBlockChangesHandler;
  import puregero.multipaper.MultiPaperInventoryHandler;
 +import puregero.multipaper.MultiPaperPlayerHandler;
+ import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
  import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
  // CraftBukkit end
- 
-@@ -3364,6 +3365,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -3365,6 +3366,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
      @Override
      public void handlePlayerAbilities(ServerboundPlayerAbilitiesPacket packet) {
          PacketUtils.ensureRunningOnSameThread(packet, this, this.player.getLevel());
@@ -258,7 +258,7 @@ index d42cc7b7c5f74429bd1b4a3735e9e6aa89ac6324..940db9d3cde518321f9ecc19419741fb
          // CraftBukkit start
          if (this.player.getAbilities().mayfly && this.player.getAbilities().flying != packet.isFlying()) {
              PlayerToggleFlightEvent event = new PlayerToggleFlightEvent(this.player.getBukkitEntity(), packet.isFlying());
-@@ -3387,6 +3389,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
+@@ -3388,6 +3390,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
              return;
          }
          // Paper end - do not accept invalid information
@@ -445,7 +445,7 @@ index f5886a88fd98ede5e85a91eccccb05ac33eb40e2..1aabff9fc9c5f0c1155423da484bb27f
          int i = 1;
          BlockPos blockposition1 = pos.above();
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index c1c18b90b7aeec205e05e6946930f62ae77f58af..751fd13db3f4b7e84e3aa2ecbe4ea4351ec8bea8 100644
+index b64e907d84cb20bbaed05bd332349cb741e010c6..88c74eb1e24c3874baa5c49b0f66295b5830ba9f 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 @@ -86,6 +86,7 @@ public class LevelChunk extends ChunkAccess {
@@ -700,10 +700,10 @@ index c145a3e278ded8e32b1541f4f042102db79c68bb..7fc7f967ff3cad2615ee2f45c5d29ea9
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index ed628374aa6ab2fffa369a86db3adf61a4eacfdc..3bba4c46ae11da9fbecca3015e7a9c635cb53b15 100644
+index 7d35f8ed70e1b6137db5ba794d0c12c700b949dc..a71dbdc0bf8dbc7358d229996354cd2440f51c17 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -113,6 +113,9 @@ public class MultiPaper {
+@@ -112,6 +112,9 @@ public class MultiPaper {
              ChunkHolder holder = visibleChunksToCheck.remove(visibleChunksToCheck.size() - 1);
              if (holder.getAvailableChunkNow() != null && holder.getWorld().chunkSource.chunkMap.getVisibleChunkIfPresent(holder.pos.longKey) == holder) {
                  getConnection().send(new SyncChunkSubscribersMessage(holder.getWorld().getWorld().getName(), holder.pos.x, holder.pos.z));
@@ -713,7 +713,7 @@ index ed628374aa6ab2fffa369a86db3adf61a4eacfdc..3bba4c46ae11da9fbecca3015e7a9c63
                  break;
              }
          }
-@@ -305,6 +308,8 @@ public class MultiPaper {
+@@ -306,6 +309,8 @@ public class MultiPaper {
                          RequestChunkPacket.blocker = null;
                          future.complete(inputStream);
                      });
@@ -722,7 +722,7 @@ index ed628374aa6ab2fffa369a86db3adf61a4eacfdc..3bba4c46ae11da9fbecca3015e7a9c63
                  } else {
                      throw new IllegalArgumentException("Cannot load a " + path + " chunk from an external server");
                  }
-@@ -462,6 +467,7 @@ public class MultiPaper {
+@@ -463,6 +468,7 @@ public class MultiPaper {
  
      public static void unlockChunk(LevelChunk chunk) {
          if (MultiPaper.isChunkLocal(chunk)) {
@@ -1218,7 +1218,7 @@ index 0000000000000000000000000000000000000000..20fdfeed809da8f74741de96076f0847
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java b/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a69c0ab8a07a32020946489acf97b9bd1e22778d
+index 0000000000000000000000000000000000000000..1b826e5e3194728467fdeb4cf0d87a250caec461
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperPlayerHandler.java
 @@ -0,0 +1,21 @@
@@ -1233,13 +1233,13 @@ index 0000000000000000000000000000000000000000..a69c0ab8a07a32020946489acf97b9bd
 +public class MultiPaperPlayerHandler {
 +    public static void handlePlayerAbilities(ServerPlayer player, ServerboundPlayerAbilitiesPacket packet) {
 +        if (MultiPaper.isRealPlayer(player)) {
-+            MultiPaper.broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
++            MultiPaper.broadcastPacketToExternalServers(player, new PlayerActionPacket(player, packet));
 +        }
 +    }
 +
 +    public static void handleClientInformation(ServerPlayer player, ServerboundClientInformationPacket packet) {
 +        if (MultiPaper.isRealPlayer(player)) {
-+            MultiPaper.broadcastPacketToExternalServers(new PlayerActionPacket(player, packet));
++            MultiPaper.broadcastPacketToExternalServers(player, new PlayerActionPacket(player, packet));
 +        }
 +    }
 +}

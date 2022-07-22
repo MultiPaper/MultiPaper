@@ -159,7 +159,7 @@ index 353463084d90eb684717e65c56da52cd25a1e375..ad6798934ed30dafadefff93a6dd5a6c
              this.updateEffectVisibility();
              return event; // Paper
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index e6213b6924f611bfb85e43fe5a4c4582639b7abc..698f87388a6428c35322d8df2082f267362c0277 100644
+index 0960025c64fe2e8c055fcbf6e695ff90c1f41cd9..c4626a612ff03e4a39153409ebef7ee1781b8e91 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -30,6 +30,8 @@ import java.util.function.UnaryOperator;
@@ -543,13 +543,14 @@ index 411dd31f7467769fbe0868c46244a219e1530b35..7dc391159a2a6d116fd3d1ea34d7b766
  
      public Channel getChannel() {
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 7cd6e0c934944b92852f650736bfaf718f78c499..14af2dcebc2ea0e031d3751f41edfb3e3c0f5b79 100644
+index e09ad91c4c33e1dce449a765bcce33cbe3bdcc95..794f96048974381edd428ed69a550e818de63c5f 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -2,9 +2,16 @@ package puregero.multipaper;
+@@ -1,9 +1,17 @@
+ package puregero.multipaper;
  
  import net.minecraft.server.MinecraftServer;
- import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
 +import org.bukkit.craftbukkit.entity.CraftEntity;
  import puregero.multipaper.externalserverprotocol.ExternalServerPacket;
@@ -563,7 +564,7 @@ index 7cd6e0c934944b92852f650736bfaf718f78c499..14af2dcebc2ea0e031d3751f41edfb3e
  
  import java.net.InetSocketAddress;
  import java.net.SocketAddress;
-@@ -15,6 +22,7 @@ import java.util.function.Consumer;
+@@ -14,6 +22,7 @@ import java.util.function.Consumer;
  import java.util.function.Supplier;
  
  public class MultiPaper {
@@ -571,7 +572,7 @@ index 7cd6e0c934944b92852f650736bfaf718f78c499..14af2dcebc2ea0e031d3751f41edfb3e
      private static MultiPaperConnection multiPaperConnection = null;
  
      public static MultiPaperConnection getConnection() {
-@@ -25,10 +33,35 @@ public class MultiPaper {
+@@ -24,10 +33,35 @@ public class MultiPaper {
          return multiPaperConnection;
      }
  
@@ -607,10 +608,16 @@ index 7cd6e0c934944b92852f650736bfaf718f78c499..14af2dcebc2ea0e031d3751f41edfb3e
      public static void onStart(SocketAddress bindAddress) {
          getConnection().send(new StartMessage(
                  System.getProperty("server.address", ((InetSocketAddress) bindAddress).getAddress().getHostAddress()),
-@@ -80,4 +113,39 @@ public class MultiPaper {
-     public static void broadcastPacketToExternalServers(ServerPlayer player, ExternalServerPacket packet) {
-         broadcastPacketToExternalServers(player.getLevel().getWorld().getName(), packet);
+@@ -75,4 +109,45 @@ public class MultiPaper {
+             }
+         });
      }
++
++    public static void broadcastPacketToExternalServers(ServerPlayer player, ExternalServerPacket packet) {
++        if (player instanceof ExternalPlayer || player.didMultiPaperJoin) {
++            broadcastPacketToExternalServers(player.getLevel().getWorld().getName(), packet);
++        }
++    }
 +
 +    public static void onPlayerJoin(ServerPlayer player) {
 +        player.didMultiPaperJoin = true;
@@ -744,22 +751,26 @@ index 0000000000000000000000000000000000000000..28784d2cb62328bb087bd22485696ae0
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..efd9401d58b481f916fa497961753bd95fc2166f
+index 0000000000000000000000000000000000000000..d6d16bfeec41efd36c15812249d40ba32db87f23
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeGamemodePacket.java
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,50 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.level.GameType;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
 +import java.util.UUID;
 +
 +public class PlayerChangeGamemodePacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PlayerChangeGamemodePacket.class.getSimpleName());
 +
 +    private final UUID uuid;
 +    private final GameType gamemode;
@@ -784,9 +795,13 @@ index 0000000000000000000000000000000000000000..efd9401d58b481f916fa497961753bd9
 +    public void handle(ExternalServerConnection connection) {
 +        MultiPaper.runSync(() -> {
 +            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
-+            if (player != null) {
-+                player.gameMode.changeGameModeForPlayer(gamemode);
++
++            if (player == null) {
++                LOGGER.warn("Could not find player " + uuid);
++                return;
 +            }
++
++            player.gameMode.changeGameModeForPlayer(gamemode);
 +        });
 +    }
 +}

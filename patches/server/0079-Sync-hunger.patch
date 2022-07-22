@@ -108,22 +108,25 @@ index 5a0f9ef4c99c26b5f2ef0782046344bc0e3b7d55..268cd98c8908195be93e6513dea8e72e
          MultiPaperEnderChestHandler.sendFullEnderChestUpdate(player, connections);
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerFoodUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerFoodUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..216f3d4bc0f0eebac1ad80ed31cab4e5bd557ac3
+index 0000000000000000000000000000000000000000..203eda1d3e28b4e49c16a8e643585851c3d00ef9
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerFoodUpdatePacket.java
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,54 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.player.Player;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
 +import java.util.UUID;
 +
 +public class PlayerFoodUpdatePacket extends ExternalServerPacket {
++    private static final Logger LOGGER = LogManager.getLogger(PlayerFoodUpdatePacket.class.getSimpleName());
 +
 +    private final UUID uuid;
 +    private final int foodLevel;
@@ -153,10 +156,13 @@ index 0000000000000000000000000000000000000000..216f3d4bc0f0eebac1ad80ed31cab4e5
 +        MultiPaper.runSync(() -> {
 +            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
 +
-+            if (player != null) {
-+                player.getFoodData().foodLevel = foodLevel;
-+                player.getFoodData().saturationLevel = saturationLevel;
++            if (player == null) {
++                LOGGER.warn("Could not find player " + uuid);
++                return;
 +            }
++
++            player.getFoodData().foodLevel = foodLevel;
++            player.getFoodData().saturationLevel = saturationLevel;
 +        });
 +    }
 +}

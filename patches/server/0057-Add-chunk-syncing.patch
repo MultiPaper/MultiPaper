@@ -862,7 +862,7 @@ index 83736cca003bf96271153700a89fcee3c43a63ff..c145a3e278ded8e32b1541f4f042102d
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 08181a1dd846b98d59b6b21861c908d1da86e99b..2e5c7c98ff6db1ae7d25d43c63b53901485f2863 100644
+index 136a7bb726afef1ee199b066eec8ebecf7ef13b1..23cb905d1e680aa3f064df88fe46194b2b6fd013 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,29 +1,60 @@
@@ -1759,10 +1759,10 @@ index 361232ab565973d262cfb6ecc54fd823e28d799e..191294b08434bd4ea0a7ea29d040b782
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..12db028e25b8548a9737e8cc9c370d8a52b4a78d
+index 0000000000000000000000000000000000000000..0bf0efa705158b1df1b073cf23669fb018ded4b9
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,149 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import com.mojang.datafixers.util.Either;
@@ -1839,17 +1839,24 @@ index 0000000000000000000000000000000000000000..12db028e25b8548a9737e8cc9c370d8a
 +
 +        CompletableFuture<Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>> future = holder.getLastAvailableChunkFuture();
 +
++        CompletableFuture<Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>> futureToWaitOn = future;
 +        if (blocker == connection.externalServer) {
 +            ChunkAccess access = holder.getAvailableChunkNow();
 +            if (access != null) {
-+                future = CompletableFuture.completedFuture(Either.left(holder.getAvailableChunkNow()));
++                futureToWaitOn = CompletableFuture.completedFuture(Either.left(holder.getAvailableChunkNow()));
 +            } else {
 +                connection.send(new SendChunkPacket(world, cx, cz, null));
 +                return;
 +            }
 +        }
 +
-+        future.thenAccept(either -> {
++        futureToWaitOn.thenAccept(either -> {
++            if (future != holder.getLastAvailableChunkFuture()) {
++                // The future has been updated, try again
++                handle(connection);
++                return;
++            }
++
 +            if (either.left().isEmpty()) {
 +                LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we don't have it loaded.");
 +                connection.send(new SendChunkPacket(world, cx, cz, null));
@@ -1859,7 +1866,6 @@ index 0000000000000000000000000000000000000000..12db028e25b8548a9737e8cc9c370d8a
 +            CompletableFuture<Void> lightFuture = ((ThreadedLevelLightEngine) level.getLightEngine()).theLightEngine.getChunkFuture(holder.getPos());
 +
 +            if (!lightFuture.isDone()) {
-+                LOGGER.info("Waiting for lighting of chunk {},{},{} before sending it to {}", world, cx, cz, connection.externalServer.getName());
 +                lightFuture.thenRunAsync(() -> handle(connection));
 +                return;
 +            }

@@ -387,17 +387,26 @@ index 15aefc866074f9d6985be3ff3deb4afe8d3b0025..67e1bb2da6bbfa46e61e6199042dcbe7
  
      @Override
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index b6a7e8e26b95c93b164ef002a99399d8a1a763a5..53b9d7aa50fd2e77210549221886cb478192b04f 100644
+index b6a7e8e26b95c93b164ef002a99399d8a1a763a5..f350b1191405d748c7c3a15bc36c10d185e8ea09 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-@@ -140,6 +140,7 @@ import org.bukkit.event.entity.EntityRegainHealthEvent;
+@@ -140,6 +140,8 @@ import org.bukkit.event.entity.EntityRegainHealthEvent;
  import org.bukkit.event.entity.EntityResurrectEvent;
  import org.bukkit.event.entity.EntityTeleportEvent;
  import org.bukkit.event.player.PlayerItemConsumeEvent;
 +import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.EntityUpdatePacket;
  // CraftBukkit end
  
  
+@@ -3204,6 +3206,7 @@ public abstract class LivingEntity extends Entity {
+ 
+     // Paper start - prevent oversized data
+     public static ItemStack sanitizeItemStack(final ItemStack itemStack, final boolean copyItemStack) {
++        if (EntityUpdatePacket.threadsWritingUpdatePackets.contains(Thread.currentThread().getId())) return itemStack; // MultiPaper - don't run when we're sending internal packets
+         if (itemStack.isEmpty() || !itemStack.hasTag()) {
+             return itemStack;
+         }
 diff --git a/src/main/java/net/minecraft/world/entity/Mob.java b/src/main/java/net/minecraft/world/entity/Mob.java
 index 6f05c6aeb8ce053ed2a4951b4c204946c3dd27ce..5a825c52bbd0af62377f7e8b13f46a5a49880753 100644
 --- a/src/main/java/net/minecraft/world/entity/Mob.java
@@ -1454,10 +1463,10 @@ index 0000000000000000000000000000000000000000..2b9772a0a9fa60794d27cdcb632e6d26
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2ff68d25f4dd3c917f9bc074802f74c338eb0f90
+index 0000000000000000000000000000000000000000..c2c2ecca45978957981ca421dbe7d6bed4def0a7
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,102 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1478,11 +1487,16 @@ index 0000000000000000000000000000000000000000..2ff68d25f4dd3c917f9bc074802f74c3
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperEntitiesHandler;
 +
++import java.util.Set;
 +import java.util.UUID;
++import java.util.concurrent.ConcurrentHashMap;
 +
 +public class EntityUpdatePacket extends ExternalServerPacket {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(EntityUpdatePacket.class.getSimpleName());
++
++    // If anyone has a better idea for locking only certain threads rather than creating a set of the thread ids that need locking, plz contribute
++    public static Set<Long> threadsWritingUpdatePackets = ConcurrentHashMap.newKeySet();
 +
 +    private final UUID world;
 +    private final UUID uuid;
@@ -1514,7 +1528,9 @@ index 0000000000000000000000000000000000000000..2ff68d25f4dd3c917f9bc074802f74c3
 +        ByteBuf buf = Unpooled.buffer();
 +        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
 +        friendlyByteBuf.writeVarInt(id);
++        threadsWritingUpdatePackets.add(Thread.currentThread().getId());
 +        packet.write(friendlyByteBuf);
++        threadsWritingUpdatePackets.remove(Thread.currentThread().getId());
 +        out.writeByteArray(buf.array());
 +    }
 +

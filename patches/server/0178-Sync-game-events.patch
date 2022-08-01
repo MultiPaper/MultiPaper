@@ -25,18 +25,49 @@ index df9ca25dd8e512423c2bd7a23fe92291d45859aa..663019a975486d5b4a9e9a7d1e25fdc7
          }
  
 diff --git a/src/main/java/net/minecraft/world/entity/animal/allay/Allay.java b/src/main/java/net/minecraft/world/entity/animal/allay/Allay.java
-index 83c5f1460b8b002574947d5a67d3bfdb96ca0547..300a243db3b441594f492fd5b9456f618ad0509c 100644
+index 83c5f1460b8b002574947d5a67d3bfdb96ca0547..c8e43c0b00651b24a0872342b5e88521ad6a380b 100644
 --- a/src/main/java/net/minecraft/world/entity/animal/allay/Allay.java
 +++ b/src/main/java/net/minecraft/world/entity/animal/allay/Allay.java
-@@ -560,6 +560,8 @@ public class Allay extends PathfinderMob implements InventoryCarrier {
+@@ -67,6 +67,7 @@ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.Vec3;
+ import org.jetbrains.annotations.Nullable;
+ import org.slf4j.Logger;
++import puregero.multipaper.MultiPaperGameEventHandler;
+ 
+ public class Allay extends PathfinderMob implements InventoryCarrier {
+     private static final Logger LOGGER = LogUtils.getLogger();
+@@ -532,7 +533,7 @@ public class Allay extends PathfinderMob implements InventoryCarrier {
+         this.level.addParticle(ParticleTypes.HEART, this.getRandomX(1.0D), this.getRandomY() + 0.5D, this.getRandomZ(1.0D), d, e, f);
+     }
+ 
+-    class AllayVibrationListenerConfig implements VibrationListener.VibrationListenerConfig {
++    class AllayVibrationListenerConfig implements VibrationListener.VibrationListenerConfig, MultiPaperGameEventHandler.SourceContainer { // MultiPaper - get allay
+         @Override
+         public boolean shouldListen(ServerLevel world, GameEventListener listener, BlockPos pos, GameEvent event, GameEvent.Context emitter) {
+             if (Allay.this.getLevel() == world && !Allay.this.isRemoved() && !Allay.this.isNoAi()) {
+@@ -560,9 +561,13 @@ public class Allay extends PathfinderMob implements InventoryCarrier {
          public TagKey<GameEvent> getListenableEvents() {
              return GameEventTags.ALLAY_CAN_LISTEN;
          }
 +
 +        @Override public VibrationListener getVibrationListener() { return dynamicVibrationListener.getListener(); } // MultiPaper - add getter
++
++        @Override public Object getSource() { return Allay.this; } // MultiPaper - get allay
      }
  
-     class JukeboxListener implements GameEventListener {
+-    class JukeboxListener implements GameEventListener {
++    class JukeboxListener implements GameEventListener, MultiPaperGameEventHandler.SourceContainer { // MultiPaper - get allay
+         private final PositionSource listenerSource;
+         private final int listenerRadius;
+ 
+@@ -593,5 +598,7 @@ public class Allay extends PathfinderMob implements InventoryCarrier {
+                 return false;
+             }
+         }
++
++        @Override public Object getSource() { return Allay.this; } // MultiPaper - get allay
+     }
+ }
 diff --git a/src/main/java/net/minecraft/world/entity/monster/warden/Warden.java b/src/main/java/net/minecraft/world/entity/monster/warden/Warden.java
 index 27bd70dc30c8472e5a80f3273f9233a0392f831d..2ab710af5d9727b4c8a062e31b5def5cafd47ee6 100644
 --- a/src/main/java/net/minecraft/world/entity/monster/warden/Warden.java
@@ -168,10 +199,10 @@ index 382257ce8b3f2b5361ce8a8e05e514ad5561c0b1..5b4e31e9576d0549e9dacdeef7a53d01
                      MCUtil.scheduleTask(1, () -> handleBlockUpdate(world, packet, depth + 1));
 diff --git a/src/main/java/puregero/multipaper/MultiPaperGameEventHandler.java b/src/main/java/puregero/multipaper/MultiPaperGameEventHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..00a3782bb34cf898602d730396931a6bdc960d0b
+index 0000000000000000000000000000000000000000..5de0f032fc3398d7e5eaf81b87bad843d693945f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperGameEventHandler.java
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,77 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Either;
@@ -193,11 +224,17 @@ index 0000000000000000000000000000000000000000..00a3782bb34cf898602d730396931a6b
 +
 +    private static final Logger LOGGER = LogManager.getLogger(MultiPaperGameEventHandler.class.getSimpleName());
 +
++    public interface SourceContainer {
++        Object getSource();
++    }
++
 +    public static Either<Entity, BlockEntity> getEntity(Object object) {
 +        if (object instanceof Entity entity) {
 +            return Either.left(entity);
 +        } else if (object instanceof BlockEntity blockEntity) {
 +            return Either.right(blockEntity);
++        } else if (object instanceof SourceContainer sourceContainer) {
++            return getEntity(sourceContainer.getSource());
 +        } else if (object instanceof VibrationListener vibrationListener) {
 +            return getEntity(vibrationListener.config);
 +        } else {
@@ -257,10 +294,10 @@ index 7e66c45201552404f10bb861410338086ac8f6c7..51813983a750b40a481765e2fa44c3c3
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/GameEventPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/GameEventPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..29f3637231d8d147d5e928430e5008fe17657a78
+index 0000000000000000000000000000000000000000..427f149dc4d3db9311c481ab318e6db51967ab4c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/GameEventPacket.java
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,132 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import com.mojang.datafixers.util.Either;
@@ -269,6 +306,7 @@ index 0000000000000000000000000000000000000000..29f3637231d8d147d5e928430e5008fe
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.entity.animal.allay.Allay;
 +import net.minecraft.world.level.block.Block;
 +import net.minecraft.world.level.block.entity.BlockEntity;
 +import net.minecraft.world.level.block.state.BlockState;
@@ -347,10 +385,19 @@ index 0000000000000000000000000000000000000000..29f3637231d8d147d5e928430e5008fe
 +                return;
 +            }
 +
-+            GameEventListener gameEventListener = getGameEventListener(entity);
-+
-+            gameEventListener.handleGameEvent(level, new GameEvent.Message(gameEvent, sourcePos, GameEvent.Context.of(sourceUuid.map(level::getEntity).orElse(null), affectedState.orElse(null)), gameEventListener, getPos(entity)));
++            if (entity instanceof Allay allay) {
++                allay.updateDynamicGameEventListener(
++                        (dynamicGameEventListener, serverLevel) -> handleGameEvent(dynamicGameEventListener.getListener(), level, entity)
++                );
++            } else {
++                GameEventListener gameEventListener = getGameEventListener(entity);
++                handleGameEvent(gameEventListener, level, entity);
++            }
 +        });
++    }
++
++    private void handleGameEvent(GameEventListener gameEventListener, ServerLevel level, Object entity) {
++        gameEventListener.handleGameEvent(level, new GameEvent.Message(gameEvent, sourcePos, GameEvent.Context.of(sourceUuid.map(level::getEntity).orElse(null), affectedState.orElse(null)), gameEventListener, getPos(entity)));
 +    }
 +
 +    private GameEventListener getGameEventListener(Object entity) {

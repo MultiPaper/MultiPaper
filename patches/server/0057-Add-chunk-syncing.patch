@@ -67,10 +67,25 @@ index 35377576ed182814051c11f902e02e8e921e84e3..970ed3671b7c6bf901a4ee7bf39887d9
  
      @Nullable
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
-index 11cd31691307749e925930c4b6e10e3f3b4fad25..ae957d932fb9f9df54ac53475778b38ce5394420 100644
+index 11cd31691307749e925930c4b6e10e3f3b4fad25..d9a5591767b958ddcf1e589760518accd013377b 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
-@@ -18,6 +18,7 @@ import net.minecraft.Util;
+@@ -2,12 +2,14 @@ package net.minecraft.server.level;
+ 
+ import com.mojang.datafixers.util.Either;
+ import com.mojang.datafixers.util.Pair;
++import it.unimi.dsi.fastutil.objects.ObjectLinkedOpenHashSet;
+ import it.unimi.dsi.fastutil.shorts.ShortOpenHashSet;
+ import it.unimi.dsi.fastutil.shorts.ShortSet;
+ import java.util.ArrayList;
+ import java.util.BitSet;
+ import java.util.List;
+ import java.util.Optional;
++import java.util.Set;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.Executor;
+ import java.util.concurrent.atomic.AtomicReferenceArray;
+@@ -18,6 +20,7 @@ import net.minecraft.Util;
  import net.minecraft.core.BlockPos;
  import net.minecraft.core.SectionPos;
  import net.minecraft.network.protocol.Packet;
@@ -78,7 +93,7 @@ index 11cd31691307749e925930c4b6e10e3f3b4fad25..ae957d932fb9f9df54ac53475778b38c
  import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
  import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
  import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
-@@ -40,6 +41,9 @@ import net.minecraft.world.level.lighting.LevelLightEngine;
+@@ -40,6 +43,9 @@ import net.minecraft.world.level.lighting.LevelLightEngine;
  import net.minecraft.server.MinecraftServer;
  // CraftBukkit end
  
@@ -88,27 +103,126 @@ index 11cd31691307749e925930c4b6e10e3f3b4fad25..ae957d932fb9f9df54ac53475778b38c
  public class ChunkHolder {
  
      public static final Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure> UNLOADED_CHUNK = Either.right(ChunkHolder.ChunkLoadingFailure.UNLOADED);
-@@ -401,11 +405,19 @@ public class ChunkHolder {
+@@ -62,6 +68,10 @@ public class ChunkHolder {
+     private int ticketLevel;
+     public volatile int queueLevel; // Paper - private->public, make volatile since this is concurrently accessed
+     public final ChunkPos pos;
++    public boolean addChangesToPlayersOnly = false; // MultiPaper
++    private boolean broadcastingToOtherServersOnly = false; // MultiPaper
++    private boolean broadcastingToPlayersOnly = false; // MultiPaper
++    private @Nullable Set<BlockPos> blocksToBroadcastToPlayers = null; // MultiPaper
+     private boolean hasChangedSections;
+     private final ShortSet[] changedBlocksPerSection;
+     private final BitSet blockChangedLightSectionFilter;
+@@ -279,6 +289,7 @@ public class ChunkHolder {
+ 
+     public void blockChanged(BlockPos pos) {
+         if (!pos.isInsideBuildHeightAndWorldBoundsHorizontal(levelHeightAccessor)) return; // Paper - SPIGOT-6086 for all invalid locations; avoid acquiring locks
++        if (addChangesToPlayersOnly && !MultiPaper.isChunkLocal(getWorld().getChunkIfLoaded(pos))) { broadcastBlockToPlayersLater(pos); return; } // MultiPaper
+         LevelChunk chunk = this.getSendingChunk(); // Paper - no-tick view distance
+ 
+         if (chunk != null) {
+@@ -291,6 +302,8 @@ public class ChunkHolder {
+             }
+ 
+             this.changedBlocksPerSection[i].add(SectionPos.sectionRelativePos(pos));
++
++            if (blocksToBroadcastToPlayers != null && !blocksToBroadcastToPlayers.isEmpty()) blocksToBroadcastToPlayers.remove(pos); // MultiPaper
+         }
+     }
+ 
+@@ -335,8 +348,45 @@ public class ChunkHolder {
+         this.chunkMap.needsChangeBroadcasting.add(this);
+     }
+     // Paper end - optimise chunk tick iteration
++    
++    // MultiPaper start
++    public void broadcastChangesToOtherServers(LevelChunk chunk) {
++        if (chunk.externalSubscribers.isEmpty()) return; // No point running this if no one's listening
++        broadcastingToOtherServersOnly = true;
++        broadcastChanges(chunk);
++        broadcastingToOtherServersOnly = false;
++    }
++
++    private void broadcastBlockToPlayersLater(BlockPos blockPos) {
++        if (blocksToBroadcastToPlayers == null) {
++            blocksToBroadcastToPlayers = new ObjectLinkedOpenHashSet<>();
++        }
++
++        if (blockPos instanceof BlockPos.MutableBlockPos) {
++            // Let's make it not mutable...
++            blockPos = new BlockPos(blockPos);
++        }
++
++        this.addToBroadcastMap();
++        blocksToBroadcastToPlayers.add(blockPos);
++    }
++    // MultiPaper end
+ 
+     public void broadcastChanges(LevelChunk chunk) {
++        // MultiPaper start
++        if (!broadcastingToOtherServersOnly && blocksToBroadcastToPlayers != null && !blocksToBroadcastToPlayers.isEmpty()) {
++            // Send blocks to players that shouldn't be sent to other servers as they've already been sent to other servers
++            broadcastingToPlayersOnly = true;
++            blocksToBroadcastToPlayers.forEach(blockPos -> {
++                BlockState blockState = chunk.getLevel().getBlockState(blockPos);
++                this.broadcast(new ClientboundBlockUpdatePacket(blockPos, blockState), false);
++                this.broadcastBlockEntityIfNeeded(chunk.getLevel(), blockPos, blockState);
++            });
++            broadcastingToPlayersOnly = false;
++            blocksToBroadcastToPlayers.clear();
++        }
++        // MultiPaper end
++
+         if (this.needsBroadcastChanges()) { // Paper - moved into above, other logic needs to call
+             Level world = chunk.getLevel();
+             int i = 0;
+@@ -348,6 +398,7 @@ public class ChunkHolder {
+             }
+ 
+             this.resendLight |= i >= 64;
++            if (!broadcastingToOtherServersOnly) // MultiPaper
+             if (!this.skyChangedLightSectionFilter.isEmpty() || !this.blockChangedLightSectionFilter.isEmpty()) {
+                 this.broadcast(new ClientboundLightUpdatePacket(chunk.getPos(), this.lightEngine, this.skyChangedLightSectionFilter, this.blockChangedLightSectionFilter, true), !this.resendLight);
+                 this.skyChangedLightSectionFilter.clear();
+@@ -365,6 +416,7 @@ public class ChunkHolder {
+                         BlockPos blockposition = sectionposition.relativeToBlockPos(shortset.iterator().nextShort());
+                         BlockState iblockdata = world.getBlockState(blockposition);
+ 
++                        if (broadcastingToOtherServersOnly) broadcastBlockToPlayersLater(blockposition); // MultiPaper
+                         this.broadcast(new ClientboundBlockUpdatePacket(blockposition, iblockdata), false);
+                         this.broadcastBlockEntityIfNeeded(world, blockposition, iblockdata);
+                     } else {
+@@ -373,6 +425,7 @@ public class ChunkHolder {
+ 
+                         this.broadcast(packetplayoutmultiblockchange, false);
+                         packetplayoutmultiblockchange.runUpdates((blockposition1, iblockdata1) -> {
++                            if (broadcastingToOtherServersOnly) broadcastBlockToPlayersLater(blockposition1); // MultiPaper
+                             this.broadcastBlockEntityIfNeeded(world, blockposition1, iblockdata1);
+                         });
+                     }
+@@ -401,11 +454,20 @@ public class ChunkHolder {
              if (packet != null) {
                  this.broadcast(packet, false);
              }
 +
-+            MultiPaperChunkHandler.onBlockUpdate(this, ClientboundBlockEntityDataPacket.create(tileentity, BlockEntity::saveWithFullMetadata)); // MultiPaper - sync the full block with external servers
++            if(!broadcastingToPlayersOnly) MultiPaperChunkHandler.onBlockUpdate(this, ClientboundBlockEntityDataPacket.create(tileentity, BlockEntity::saveWithFullMetadata)); // MultiPaper - sync the full block with external servers
          }
  
      }
  
      public void broadcast(Packet<?> packet, boolean onlyOnWatchDistanceEdge) {
 +        // MultiPaper start - Sync blocks with external servers
-+        if (!(packet instanceof ClientboundBlockEntityDataPacket)) { // We handle block entities separately
++        if (!broadcastingToPlayersOnly && !(packet instanceof ClientboundBlockEntityDataPacket)) { // We handle block entities separately
 +            MultiPaperChunkHandler.onBlockUpdate(this, packet);
 +        }
++        if (broadcastingToOtherServersOnly) return; // MultiPaper
 +        // MultiPaper end
 +
          // Paper start - per player view distance
          // there can be potential desync with player's last mapped section and the view distance map, so use the
          // view distance map here.
-@@ -717,6 +729,7 @@ public class ChunkHolder {
+@@ -717,6 +779,7 @@ public class ChunkHolder {
              // Paper start - entity ticking chunk set
              LevelChunk chunkIfCached = this.getFullChunkNowUnchecked();
              if (chunkIfCached != null) {
@@ -116,7 +230,7 @@ index 11cd31691307749e925930c4b6e10e3f3b4fad25..ae957d932fb9f9df54ac53475778b38c
                  this.chunkMap.level.getChunkSource().entityTickingChunks.remove(chunkIfCached);
              }
              // Paper end - entity ticking chunk set
-@@ -845,6 +858,40 @@ public class ChunkHolder {
+@@ -845,6 +908,40 @@ public class ChunkHolder {
          return list;
      }
  
@@ -1193,10 +1307,10 @@ index 136a7bb726afef1ee199b066eec8ebecf7ef13b1..23cb905d1e680aa3f064df88fe46194b
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..5f5f5cb704d2ad001fc773ee71b806289a1410f6
+index 0000000000000000000000000000000000000000..382257ce8b3f2b5361ce8a8e05e514ad5561c0b1
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,264 @@
+@@ -0,0 +1,258 @@
 +package puregero.multipaper;
 +
 +import ca.spottedleaf.starlight.common.light.SWMRNibbleArray;
@@ -1213,7 +1327,6 @@ index 0000000000000000000000000000000000000000..5f5f5cb704d2ad001fc773ee71b80628
 +import net.minecraft.world.level.Level;
 +import net.minecraft.world.level.LightLayer;
 +import net.minecraft.world.level.block.entity.BlockEntity;
-+import net.minecraft.world.level.block.piston.PistonMovingBlockEntity;
 +import net.minecraft.world.level.block.state.BlockState;
 +import net.minecraft.world.level.chunk.ChunkAccess;
 +import net.minecraft.world.level.chunk.ImposterProtoChunk;
@@ -1348,9 +1461,9 @@ index 0000000000000000000000000000000000000000..5f5f5cb704d2ad001fc773ee71b80628
 +            }
 +        }
 +
-+        if (holder != null && tempChunk instanceof LevelChunk levelChunk) {
-+            // Clear pre-existing block changes
-+            holder.broadcastChanges(levelChunk);
++        if (holder != null) {
++            // Only send changes we make below to players, not other servers
++            holder.addChangesToPlayersOnly = true;
 +        }
 +
 +        // Set blockUpdateChunk here so that we can broadcast changes beforehand
@@ -1368,18 +1481,14 @@ index 0000000000000000000000000000000000000000..5f5f5cb704d2ad001fc773ee71b80628
 +                BlockEntity existingBlockEntity = blockUpdateChunk.getBlockEntity(update.getPos());
 +                if (existingBlockEntity != null && existingBlockEntity.minecraftKey.toString().equals(update.getTag().getString("id"))) {
 +                    existingBlockEntity.load(update.getTag());
-+                    if (!(existingBlockEntity instanceof PistonMovingBlockEntity)) {
-+                        holder.blockChanged(update.getPos());
-+                    }
++                    holder.blockChanged(update.getPos());
 +                } else if (!blockUpdateChunk.getBlockState(update.getPos()).hasBlockEntity() && depth < 1) {
 +                    MCUtil.scheduleTask(1, () -> handleBlockUpdate(world, packet, depth + 1));
 +                } else {
 +                    blockUpdateChunk.removeBlockEntity(update.getPos());
 +                    blockUpdateChunk.setBlockEntityNbt(update.getTag());
 +                    blockUpdateChunk.getBlockEntity(update.getPos());
-+                    if (!(existingBlockEntity instanceof PistonMovingBlockEntity)) {
-+                        holder.blockChanged(update.getPos());
-+                    }
++                    holder.blockChanged(update.getPos());
 +                }
 +            }
 +        } else if (blockUpdateChunk != null) {
@@ -1403,9 +1512,8 @@ index 0000000000000000000000000000000000000000..5f5f5cb704d2ad001fc773ee71b80628
 +            }
 +        }
 +
-+        if (holder != null && blockUpdateChunk instanceof LevelChunk levelChunk) {
-+            // Send block changes
-+            holder.broadcastChanges(levelChunk);
++        if (holder != null) {
++            holder.addChangesToPlayersOnly = false;
 +        }
 +
 +        blockUpdateChunk = null;

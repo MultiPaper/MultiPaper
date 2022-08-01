@@ -140,7 +140,7 @@ index e45f54534bbf054eaf0008546ff459d4c11ddd50..f2af1a52a4a36846f9db623ba8ad47c9
  
      public static record ReceivingEvent(GameEvent gameEvent, float distance, Vec3 pos, @Nullable UUID uuid, @Nullable UUID projectileOwnerUuid, @Nullable Entity entity) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 778929c8a7258c5d82a4a4bb36a1de738b9c1b93..d73850acb417985e62a8bf2a7b6f233c3256b10e 100644
+index a517ca77b3f8dc915c2ad1e1074037a9a67a2738..0428f7d8702c8f1e837a9a95d31dc501374880bf 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -102,6 +102,8 @@ public class MultiPaper {
@@ -153,19 +153,19 @@ index 778929c8a7258c5d82a4a4bb36a1de738b9c1b93..d73850acb417985e62a8bf2a7b6f233c
  
              player.syncExperience();
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-index 5f5f5cb704d2ad001fc773ee71b806289a1410f6..0d80f21ee0c3d0cd108f66bbaa2f483c3cb3db37 100644
+index 382257ce8b3f2b5361ce8a8e05e514ad5561c0b1..5b4e31e9576d0549e9dacdeef7a53d012b00c86c 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -168,7 +168,9 @@ public class MultiPaperChunkHandler {
+@@ -167,7 +167,9 @@ public class MultiPaperChunkHandler {
              } else if (packet instanceof ClientboundBlockEntityDataPacket update) {
                  BlockEntity existingBlockEntity = blockUpdateChunk.getBlockEntity(update.getPos());
                  if (existingBlockEntity != null && existingBlockEntity.minecraftKey.toString().equals(update.getTag().getString("id"))) {
 +                    ((LevelChunk) blockUpdateChunk).removeGameEventListener(existingBlockEntity, level);
                      existingBlockEntity.load(update.getTag());
 +                    ((LevelChunk) blockUpdateChunk).addGameEventListener(existingBlockEntity, level);
-                     if (!(existingBlockEntity instanceof PistonMovingBlockEntity)) {
-                         holder.blockChanged(update.getPos());
-                     }
+                     holder.blockChanged(update.getPos());
+                 } else if (!blockUpdateChunk.getBlockState(update.getPos()).hasBlockEntity() && depth < 1) {
+                     MCUtil.scheduleTask(1, () -> handleBlockUpdate(world, packet, depth + 1));
 diff --git a/src/main/java/puregero/multipaper/MultiPaperGameEventHandler.java b/src/main/java/puregero/multipaper/MultiPaperGameEventHandler.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..00a3782bb34cf898602d730396931a6bdc960d0b

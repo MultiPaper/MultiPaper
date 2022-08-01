@@ -26,20 +26,20 @@ index e22ce79e6578d0777a197fe0058269b4ae79067b..df1528135276db420a2a6e375c0cd227
                  metrics.addCustomChart(new Metrics.DrilldownPie("java_version", () -> {
                      Map<String, Map<String, Integer>> map = new HashMap<>();
 diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
-index b65a3626d2e0817cd1e223ec3b10e82fa0339663..059d7eda8b42f14ceb8945d82b2c917a13f4fd46 100644
+index 868d4913f63b3f4752f7f1cdcd81e118e482c474..3ac757dbf930782a89aa43728a6821e4225176d3 100644
 --- a/src/main/java/net/minecraft/network/Connection.java
 +++ b/src/main/java/net/minecraft/network/Connection.java
-@@ -555,7 +555,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -564,7 +564,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
          // Paper end
-         if (this.packetListener instanceof ServerLoginPacketListenerImpl) {
-             if ( ((ServerLoginPacketListenerImpl) this.packetListener).state != ServerLoginPacketListenerImpl.State.READY_TO_ACCEPT // Paper
--                     || (joinAttemptsThisTick++ < MAX_PER_TICK)) { // Paper - limit the number of joins which can be processed each tick
-+                     || (joinAttemptsThisTick++ < io.papermc.paper.configuration.GlobalConfiguration.get().misc.maxJoinsPerTick)) { // Paper - limit the number of joins which can be processed each tick // MultiPaper - reference paper config directly, not intermediate values
-             ((ServerLoginPacketListenerImpl) this.packetListener).tick();
+         if (this.packetListener instanceof net.minecraft.server.network.ServerLoginPacketListenerImpl) {
+             if ( ((net.minecraft.server.network.ServerLoginPacketListenerImpl) this.packetListener).state != net.minecraft.server.network.ServerLoginPacketListenerImpl.State.READY_TO_ACCEPT // Paper
+-                || (joinAttemptsThisTick++ < MAX_PER_TICK)) { // Paper - limit the number of joins which can be processed each tick
++                || (joinAttemptsThisTick++ < io.papermc.paper.configuration.GlobalConfiguration.get().misc.maxJoinsPerTick)) { // Paper - limit the number of joins which can be processed each tick // MultiPaper - reference paper config directly, not intermediate values
+                 ((net.minecraft.server.network.ServerLoginPacketListenerImpl) this.packetListener).tick();
              } // Paper
          }
 diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
-index 4bd7681f5792eba735c5321b75a4ce352c9aa12b..f9551d7f620ec8d92a77414b8de3b286ca6d188e 100644
+index bad71d27be50afbf4e268f1ae3e3c6c8adf3ba11..1f77ea047bb67e3d2f8d81f0d3df1382aa01d972 100644
 --- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
 +++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
 @@ -67,6 +67,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
@@ -60,10 +60,10 @@ index 4bd7681f5792eba735c5321b75a4ce352c9aa12b..f9551d7f620ec8d92a77414b8de3b286
          // this.setPlayerList(new DedicatedPlayerList(this, this.registryHolder, this.playerDataStorage)); // Spigot - moved up
          server.loadPlugins();
 diff --git a/src/main/java/net/minecraft/server/network/ServerConnectionListener.java b/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
-index c2d7f0ca042882e1bf76f150e9c9be9044ef887c..8ac6350d122a1393fac7d6c18f51c7f5a93f3ea8 100644
+index abcc3266d18f34d160eac87fdea153dce24c60b8..f83c03e8096109fae5722cdd15c10d7db02950f8 100644
 --- a/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
 +++ b/src/main/java/net/minecraft/server/network/ServerConnectionListener.java
-@@ -63,7 +63,7 @@ public class ServerConnectionListener {
+@@ -64,7 +64,7 @@ public class ServerConnectionListener {
      private final List<ChannelFuture> channels = Collections.synchronizedList(Lists.newArrayList());
      final List<Connection> connections = Collections.synchronizedList(Lists.newArrayList());
      // Paper start - prevent blocking on adding a new network manager while the server is ticking
@@ -72,7 +72,7 @@ index c2d7f0ca042882e1bf76f150e9c9be9044ef887c..8ac6350d122a1393fac7d6c18f51c7f5
      private static final boolean disableFlushConsolidation = Boolean.getBoolean("Paper.disableFlushConsolidate"); // Paper
      private final void addPending() {
          Connection manager = null;
-@@ -159,7 +159,7 @@ public class ServerConnectionListener {
+@@ -160,7 +160,7 @@ public class ServerConnectionListener {
                      ((Connection) object).setListener(new ServerHandshakePacketListenerImpl(ServerConnectionListener.this.server, (Connection) object));
                      io.papermc.paper.network.ChannelInitializeListenerHolder.callListeners(channel); // Paper
                  }

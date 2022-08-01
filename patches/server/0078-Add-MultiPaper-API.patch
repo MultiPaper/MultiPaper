@@ -85,10 +85,10 @@ index ad3814ad69c7bcaa6f2fb27c92e4eabb6a5a38d9..f0975dda6e17e2cafcbcd6cbf04fc3b0
      public List<World> getWorlds() {
          return new ArrayList<World>(this.worlds.values());
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-index e65b8a45a7c105b6e3d5e72a892e2724225dc8ff..0958731c3c375009c178c3685ee7983503a6896b 100644
+index 7cb6e8b400e041bcd4318dd49bf0ef8774c1675d..0fb1f8136709db5550b8b670a540e2b41a57f1df 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
-@@ -524,6 +524,20 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+@@ -540,6 +540,20 @@ public class CraftWorld extends CraftRegionAccessor implements World {
          return this.isChunkLoaded(x, z);
      }
  
@@ -143,7 +143,7 @@ index bfe9dc935c87e01fb435d8b46ce413b84ca74856..406ecd4ae219c83b09afb3fd1ad0b880
      public boolean isEmpty() {
          return this.getNMS().isAir();
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
-index b80cc0938b2b3928f4450f1314a9fbd7ea9c116b..bae95e8e0a22bde5ba221739935dadb58c2471c3 100644
+index 6549ade8e19807c523e5a1dc68b66585aad438b1..87cb6f7c4f699fbbf27c23b46e7edf695cddb8c4 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
 @@ -187,6 +187,7 @@ import org.bukkit.plugin.Plugin;
@@ -176,7 +176,7 @@ index b80cc0938b2b3928f4450f1314a9fbd7ea9c116b..bae95e8e0a22bde5ba221739935dadb5
      public int getFireTicks() {
          return entity.remainingFireTicks;
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index c530802df59ee38b111e92ebd77df96aa91a8fb6..2e6d40cd9f8afa355fcd5f7bf55e051c333f0b29 100644
+index 8718281a15fd013e8a0bdca1a365a37a5e20add7..a77d90e39a9113997e588104d1dc3718fa0f6764 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 @@ -24,6 +24,7 @@ import java.util.Optional;
@@ -187,15 +187,9 @@ index c530802df59ee38b111e92ebd77df96aa91a8fb6..2e6d40cd9f8afa355fcd5f7bf55e051c
  import java.util.logging.Level;
  import java.util.logging.Logger;
  import javax.annotation.Nullable;
-@@ -31,37 +32,13 @@ import net.minecraft.advancements.AdvancementProgress;
- import net.minecraft.core.BlockPos;
- import net.minecraft.core.SectionPos; // Paper
- import net.minecraft.nbt.CompoundTag;
-+import net.minecraft.nbt.StringTag;
- import net.minecraft.network.FriendlyByteBuf;
- import net.minecraft.network.chat.ChatSender;
+@@ -35,33 +36,7 @@ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.network.chat.ChatMessageContent;
  import net.minecraft.network.chat.Component;
-+import net.minecraft.network.chat.MessageSignature;
  import net.minecraft.network.chat.PlayerChatMessage;
 -import net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket;
 -import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
@@ -228,14 +222,14 @@ index c530802df59ee38b111e92ebd77df96aa91a8fb6..2e6d40cd9f8afa355fcd5f7bf55e051c
  import net.minecraft.resources.ResourceLocation;
  import net.minecraft.server.PlayerAdvancements;
  import net.minecraft.server.level.ChunkMap;
-@@ -149,13 +126,18 @@ import org.bukkit.scoreboard.Scoreboard;
+@@ -149,13 +124,18 @@ import org.bukkit.scoreboard.Scoreboard;
  import org.jetbrains.annotations.NotNull;
  
  import net.md_5.bungee.api.chat.BaseComponent; // Spigot
 +import puregero.multipaper.ExternalPlayer;
  import puregero.multipaper.MultiPaper;
-+import puregero.multipaper.externalserverprotocol.PlayerActionPacket;
 +import puregero.multipaper.externalserverprotocol.PlayerDataUpdatePacket;
++import puregero.multipaper.externalserverprotocol.PlayerSayChatPacket;
  
  @DelegateDeserialization(CraftOfflinePlayer.class)
  public class CraftPlayer extends CraftHumanEntity implements Player {
@@ -247,7 +241,7 @@ index c530802df59ee38b111e92ebd77df96aa91a8fb6..2e6d40cd9f8afa355fcd5f7bf55e051c
      private final ConversationTracker conversationTracker = new ConversationTracker();
      private final Set<String> channels = new HashSet<String>();
      private final Map<UUID, Set<WeakReference<Plugin>>> hiddenEntities = new HashMap<>();
-@@ -1143,6 +1125,16 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1171,6 +1151,16 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
              net.minecraft.util.Mth.floor(loc.getZ()) >> 4), 28, 3); // Load area high priority
          return super.teleportAsync(loc, cause);
      }
@@ -264,7 +258,7 @@ index c530802df59ee38b111e92ebd77df96aa91a8fb6..2e6d40cd9f8afa355fcd5f7bf55e051c
      // Paper end
  
      @Override
-@@ -1356,6 +1348,60 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1384,6 +1374,60 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
          }
      }
  
@@ -312,7 +306,7 @@ index c530802df59ee38b111e92ebd77df96aa91a8fb6..2e6d40cd9f8afa355fcd5f7bf55e051c
 +
 +    @Override
 +    public void chatOnOtherServers(@NotNull String msg) {
-+        MultiPaper.broadcastPacketToExternalServers(getHandle(), new PlayerActionPacket(getHandle(), new ServerboundChatPacket(msg, MessageSignature.unsigned(), false)));
++        MultiPaper.broadcastPacketToExternalServers(getHandle(), new PlayerSayChatPacket(getHandle(), msg));
 +    }
 +
 +    @Override
@@ -325,7 +319,7 @@ index c530802df59ee38b111e92ebd77df96aa91a8fb6..2e6d40cd9f8afa355fcd5f7bf55e051c
      @Override
      public Location getBedLocation() {
          Preconditions.checkState(isSleeping(), "Not sleeping");
-@@ -1906,6 +1952,13 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1934,6 +1978,13 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
                  handle.keepLevel = data.getBoolean("keepLevel");
              }
          }
@@ -339,7 +333,7 @@ index c530802df59ee38b111e92ebd77df96aa91a8fb6..2e6d40cd9f8afa355fcd5f7bf55e051c
      }
  
      public void setExtraData(CompoundTag nbttagcompound) {
-@@ -1935,6 +1988,12 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+@@ -1963,6 +2014,12 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
          paper.putLong("LastLogin", handle.loginTime);
          paper.putLong("LastSeen", System.currentTimeMillis());
          // Paper end
@@ -448,15 +442,16 @@ index 0000000000000000000000000000000000000000..7d4aa601f90e5646fc3a19b13bf7fba3
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index c1de5fe02bac4b0581fedb3e5fbf2416c34f6f29..7f6b475c43c89759739fd37cb6f4685ee72ed5aa 100644
+index c1de5fe02bac4b0581fedb3e5fbf2416c34f6f29..a551d89fbf2aea534bb654d529cd27cc448e3b52 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -49,6 +49,8 @@ public class ExternalServerPacketSerializer {
+@@ -49,6 +49,9 @@ public class ExternalServerPacketSerializer {
          addPacket(AddItemToEntityContainerPacket.class, AddItemToEntityContainerPacket::new);
          addPacket(AddItemToContainerPacket.class, AddItemToContainerPacket::new);
          addPacket(MobSetNavigationGoalPacket.class, MobSetNavigationGoalPacket::new);
 +        addPacket(PlayerDataUpdatePacket.class, PlayerDataUpdatePacket::new);
 +        addPacket(PluginNotificationPacket.class, PluginNotificationPacket::new);
++        addPacket(PlayerSayChatPacket.class, PlayerSayChatPacket::new);
      }
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
@@ -618,6 +613,67 @@ index 0000000000000000000000000000000000000000..2eb0f073863339d410d360a19b39092f
 +                    }
 +                }
 +            }
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSayChatPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSayChatPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..220b4d37444d7bc584ca8e78a545d25ccc6ceb74
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerSayChatPacket.java
+@@ -0,0 +1,55 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
++import net.minecraft.network.ConnectionProtocol;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.Packet;
++import net.minecraft.network.protocol.PacketFlow;
++import net.minecraft.network.protocol.game.ServerGamePacketListener;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class PlayerSayChatPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PlayerSayChatPacket.class.getSimpleName());
++
++    private final UUID uuid;
++    private final String message;
++
++    public PlayerSayChatPacket(ServerPlayer player, String message) {
++        this.uuid = player.getUUID();
++        this.message = message;
++    }
++
++    public PlayerSayChatPacket(FriendlyByteBuf in) {
++        this.uuid = in.readUUID();
++        this.message = in.readUtf();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(this.uuid);
++        out.writeUtf(this.message);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            if (player == null) {
++                LOGGER.warn("Tried to run an action on a non-existent player with uuid " + uuid);
++                return;
++            }
++
++            player.getBukkitEntity().chat(message);
 +        });
 +    }
 +}

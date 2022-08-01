@@ -5,10 +5,10 @@ Subject: [PATCH] Destroy blocks on external servers
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 5457fc25cde31a5c0eeffe7caa7682d712688eea..d8d6ccad61fbe44b0f173b1b14e1ab64ca590833 100644
+index 8fef14fdef4b4566cbd58795fd2f619f99aa8882..521ca2f0ddb14d7bd8573cc31f155f1c26eed27b 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-@@ -231,6 +231,7 @@ public class ServerPlayer extends Player {
+@@ -232,6 +232,7 @@ public class ServerPlayer extends Player {
      private int containerCounter;
      @Nullable public ExternalServer openContainer; // MultiPaper
      public int latency;
@@ -17,7 +17,7 @@ index 5457fc25cde31a5c0eeffe7caa7682d712688eea..d8d6ccad61fbe44b0f173b1b14e1ab64
      public int containerUpdateDelay; // Paper // MultiPaper - make public
      public long loginTime; // Paper
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
-index 9378e83a67a70dbb1fb4f05b33f1e553d008e62b..06cc50cf9d4b0114e904ddccbcf719afd127c4f9 100644
+index 5a60f5dc202c44b06ca34e9a19d45cb715f74fd3..7f1da30e1160dc3f76768e4c71d6fe6854a2ec76 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayerGameMode.java
 @@ -44,6 +44,9 @@ import org.bukkit.event.Event;
@@ -30,7 +30,7 @@ index 9378e83a67a70dbb1fb4f05b33f1e553d008e62b..06cc50cf9d4b0114e904ddccbcf719af
  // CraftBukkit end
  
  public class ServerPlayerGameMode {
-@@ -329,6 +332,14 @@ public class ServerPlayerGameMode {
+@@ -325,6 +328,14 @@ public class ServerPlayerGameMode {
      }
  
      public void destroyAndAck(BlockPos pos, int sequence, String reason) {
@@ -45,7 +45,7 @@ index 9378e83a67a70dbb1fb4f05b33f1e553d008e62b..06cc50cf9d4b0114e904ddccbcf719af
          if (this.destroyBlock(pos)) {
              this.debugLogging(pos, true, sequence, reason);
          } else {
-@@ -339,6 +350,12 @@ public class ServerPlayerGameMode {
+@@ -335,6 +346,12 @@ public class ServerPlayerGameMode {
      }
  
      public boolean destroyBlock(BlockPos pos) {
@@ -59,17 +59,17 @@ index 9378e83a67a70dbb1fb4f05b33f1e553d008e62b..06cc50cf9d4b0114e904ddccbcf719af
          // CraftBukkit start - fire BlockBreakEvent
          org.bukkit.block.Block bblock = CraftBlock.at(level, pos);
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 4133910ff22f5a778b95a1ae08c224838d09800f..91d34a5fa7a1b2e7bae4d193b90779ca898e8768 100644
+index 640505d18c2f4d0ecd568ba9e8c38f277edee740..4a2eaed3228c74fd86edc5fcb5782ca4071d0166 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -1844,6 +1844,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Ser
-                 }
-                 // Paper end - Don't allow digging in unloaded chunks
+@@ -1917,6 +1917,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+                 this.player.gameMode.captureSentBlockEntities = true;
+                 // Paper end - send block entities after prediction
                  this.player.gameMode.handleBlockBreakAction(blockposition, packetplayinblockdig_enumplayerdigtype, packet.getDirection(), this.player.level.getMaxBuildHeight(), packet.getSequence());
 +                if (this.player.destroyAndAckHandledByExternalServer) this.player.destroyAndAckHandledByExternalServer = false; else // MultiPaper
                  this.player.connection.ackBlockChangesUpTo(packet.getSequence());
-                 return;
-             default:
+                 // Paper start - send block entities after prediction
+                 this.player.gameMode.captureSentBlockEntities = false;
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/DestroyAndAckPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/DestroyAndAckPacket.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..2a0ac229fc0f61cf84bdf58f3f4e9570d78e7fbe
@@ -193,10 +193,10 @@ index 0000000000000000000000000000000000000000..80dce0ee6c0877605c2ab2ae25de12bf
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 6a6cbea1f60390506a737caa75b94afe11c7412b..9c556b08f65e573f9763b8839c3764e436fce357 100644
+index 32e3e4badf08e111455e1e88a59ea07fb61280c5..59fe342c1c9549491abb6734401a7de52b9657b9 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -65,6 +65,8 @@ public class ExternalServerPacketSerializer {
+@@ -66,6 +66,8 @@ public class ExternalServerPacketSerializer {
          addPacket(DifficultyUpdatePacket.class, DifficultyUpdatePacket::new);
          addPacket(ScoreboardUpdatePacket.class, ScoreboardUpdatePacket::new);
          addPacket(WhitelistTogglePacket.class, WhitelistTogglePacket::new);

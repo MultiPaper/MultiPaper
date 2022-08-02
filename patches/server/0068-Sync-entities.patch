@@ -851,10 +851,10 @@ index e48f88005c65c6a558c3a39d6e6c973f0be12d21..fcde336f86e296136b830dab96f4283b
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..20fdfeed809da8f74741de96076f0847ef8e82b5
+index 0000000000000000000000000000000000000000..fe0b89d30769161df18820231af7b1c39eca1f17
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,370 @@
+@@ -0,0 +1,367 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -1084,18 +1084,14 @@ index 0000000000000000000000000000000000000000..20fdfeed809da8f74741de96076f0847
 +                }
 +            }
 +        } else if (packet instanceof ClientboundAnimatePacket animatePacket) {
-+            ChunkMap.TrackedEntity trackedEntity = ((ServerLevel) entity.level).chunkSource.chunkMap.entityMap.get(entity.getId());
++            ChunkMap.TrackedEntity trackedEntity = entity.tracker;
 +            if (trackedEntity != null) {
 +                trackedEntity.broadcast(new ClientboundAnimatePacket(entity, animatePacket.getAction()));
-+            } else {
-+                LOGGER.warn(entity + " has no TrackedEntity!");
 +            }
 +        } else if (packet instanceof ClientboundEntityEventPacket entityEventPacket) {
-+            ChunkMap.TrackedEntity trackedEntity = ((ServerLevel) entity.level).chunkSource.chunkMap.entityMap.get(entity.getId());
++            ChunkMap.TrackedEntity trackedEntity = entity.tracker;
 +            if (trackedEntity != null) {
 +                trackedEntity.broadcast(new ClientboundEntityEventPacket(entity, entityEventPacket.getEventId()));
-+            } else {
-+                LOGGER.warn(entity + " has no TrackedEntity!");
 +            }
 +        } else if (packet instanceof ClientboundSetEquipmentPacket setEquipmentPacket) {
 +            for (Pair<EquipmentSlot, ItemStack> pair : setEquipmentPacket.getSlots()) {
@@ -1173,6 +1169,7 @@ index 0000000000000000000000000000000000000000..20fdfeed809da8f74741de96076f0847
 +    public static void onEntityRemove(Entity entity, Entity.RemovalReason reason) {
 +        if (!shouldSyncEntity(entity) && MultiPaperEntitiesHandler.getControllingPassenger(entity) == entity && !entity.isPassenger() && !(entity instanceof Player && reason == Entity.RemovalReason.KILLED)) return;
 +        if (removingEntity) return;
++        if (entity instanceof ExternalPlayer) return;
 +        if (reason == Entity.RemovalReason.UNLOADED_TO_CHUNK || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER) return;
 +
 +        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());

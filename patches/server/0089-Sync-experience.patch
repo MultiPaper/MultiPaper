@@ -5,7 +5,7 @@ Subject: [PATCH] Sync experience
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index d2dd07f91e6b278819b68038899a315187fb4cb9..b843aa6a00623b1c7f1b6c70914325f7337c0d8f 100644
+index a954b837474d3c60994fd57c15c85bf9a7376a4b..3e8c056f415dfe5451e129d84ce6218b279bf260 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -171,10 +171,7 @@ import org.bukkit.event.player.PlayerTeleportEvent;
@@ -33,7 +33,7 @@ index d2dd07f91e6b278819b68038899a315187fb4cb9..b843aa6a00623b1c7f1b6c70914325f7
 +            lastExperienceProgress = experienceProgress;
 +            lastTotalExperience = totalExperience;
 +            lastExperienceLevel = experienceLevel;
-+            MultiPaper.broadcastPacketToExternalServers(new PlayerExperienceUpdatePacket(this, experienceProgress, totalExperience, experienceLevel));
++            MultiPaper.broadcastPacketToExternalServers(this, new PlayerExperienceUpdatePacket(this, experienceProgress, totalExperience, experienceLevel));
 +        }
 +    }
 +    // MultiPaper end
@@ -68,21 +68,25 @@ index 789a1f14e50353a95442544feea4f683377c0532..1c9f855621805acb92d297bad31c38eb
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e558a400216b4386d9f3dbeaeb9d9d25bf7645ec
+index 0000000000000000000000000000000000000000..cb0f815c026ce2547a64cacef28e646d2ce44c81
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,58 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
 +import java.util.UUID;
 +
 +public class PlayerExperienceUpdatePacket extends ExternalServerPacket {
++    private static final Logger LOGGER = LogManager.getLogger(PlayerExperienceUpdatePacket.class.getSimpleName());
++
 +    private final UUID uuid;
 +    private final float progress;
 +    private final int total;
@@ -114,6 +118,11 @@ index 0000000000000000000000000000000000000000..e558a400216b4386d9f3dbeaeb9d9d25
 +    public void handle(ExternalServerConnection connection) {
 +        MultiPaper.runSync(() -> {
 +            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            if (player == null) {
++                LOGGER.warn("Could not find player " + uuid);
++                return;
++            }
 +
 +            player.experienceProgress = player.lastExperienceProgress = progress;
 +            player.totalExperience = player.lastTotalExperience = total;

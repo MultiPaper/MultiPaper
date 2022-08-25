@@ -5,10 +5,19 @@ Subject: [PATCH] Open certain block menus on the player's local server
 
 
 diff --git a/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java b/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
-index fd74cc9c0dab84b176f7da3fbbbdbc8fd3a7e26d..56e61d655893d217a4249e2e40f6824ffcda009b 100644
+index fd74cc9c0dab84b176f7da3fbbbdbc8fd3a7e26d..41223522f4c109edc3c01849506f23cd617d9dde 100644
 --- a/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
 +++ b/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
-@@ -41,13 +41,7 @@ import net.minecraft.world.level.EmptyBlockGetter;
+@@ -24,6 +24,8 @@ import net.minecraft.tags.FluidTags;
+ import net.minecraft.tags.TagKey;
+ import net.minecraft.util.Mth;
+ import net.minecraft.util.RandomSource;
++import net.minecraft.world.CompoundContainer;
++import net.minecraft.world.Container;
+ import net.minecraft.world.InteractionHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.MenuProvider;
+@@ -41,17 +43,12 @@ import net.minecraft.world.level.EmptyBlockGetter;
  import net.minecraft.world.level.Level;
  import net.minecraft.world.level.LevelAccessor;
  import net.minecraft.world.level.LevelReader;
@@ -23,16 +32,24 @@ index fd74cc9c0dab84b176f7da3fbbbdbc8fd3a7e26d..56e61d655893d217a4249e2e40f6824f
  import net.minecraft.world.level.block.entity.BlockEntity;
  import net.minecraft.world.level.block.entity.BlockEntityTicker;
  import net.minecraft.world.level.block.entity.BlockEntityType;
-@@ -69,6 +63,8 @@ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.level.block.state.properties.Property;
++import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.level.material.Fluid;
+ import net.minecraft.world.level.material.FluidState;
+ import net.minecraft.world.level.material.Fluids;
+@@ -69,6 +66,11 @@ import net.minecraft.world.phys.Vec3;
  import net.minecraft.world.phys.shapes.CollisionContext;
  import net.minecraft.world.phys.shapes.Shapes;
  import net.minecraft.world.phys.shapes.VoxelShape;
 +import puregero.multipaper.ExternalPlayer;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperContainerHandler;
 +import puregero.multipaper.externalserverprotocol.PlayerUseBlockPacket;
++import puregero.multipaper.externalserverprotocol.PullItemFromContainerPacket;
  
  public abstract class BlockBehaviour {
  
-@@ -1030,6 +1026,23 @@ public abstract class BlockBehaviour {
+@@ -1030,6 +1032,36 @@ public abstract class BlockBehaviour {
          }
  
          public InteractionResult use(Level world, Player player, InteractionHand hand, BlockHitResult hit) {
@@ -51,6 +68,19 @@ index fd74cc9c0dab84b176f7da3fbbbdbc8fd3a7e26d..56e61d655893d217a4249e2e40f6824f
 +            )) {
 +                externalPlayer.externalServerConnection.send(new PlayerUseBlockPacket(player, hit.getBlockPos()));
 +                return InteractionResult.CONSUME;
++            }
++            // MultiPaper end
++            // MultiPaper start - Open double chests on the double chests' primary server
++            if (this.getBlock() instanceof ChestBlock chestBlock) {
++                Container chestContainer = ChestBlock.getContainer(chestBlock, this.asState(), world, hit.getBlockPos(), true);
++                if (chestContainer instanceof CompoundContainer compoundContainer) {
++                    BlockEntity primaryChestEntity = MultiPaperContainerHandler.getPrimaryChest(compoundContainer);
++                    LevelChunk chunk = primaryChestEntity.getLevel().getChunkIfLoaded(primaryChestEntity.getBlockPos());
++                    if (MultiPaper.isChunkExternal(chunk)) {
++                        chunk.externalOwner.getConnection().send(new PlayerUseBlockPacket(player, hit.getBlockPos()));
++                        return InteractionResult.CONSUME;
++                    }
++                }
 +            }
 +            // MultiPaper end
              return this.getBlock().use(this.asState(), world, hit.getBlockPos(), player, hand, hit);

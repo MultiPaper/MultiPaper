@@ -357,7 +357,7 @@ index d13baa76d689e47f37c0829df6b86f2f4dbc66c3..6622ebced58101f012e25e7f7d78f680
                      chunk1.incrementInhabitedTime(j);
                      if (flag2 && (!gg.pufferfish.pufferfish.PufferfishConfig.enableAsyncMobSpawning || _pufferfish_spawnCountsReady.get()) && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair) && this.chunkMap.anyPlayerCloseEnoughForSpawning(holder, chunkcoordintpair, true)) { // Spigot // Paper - optimise anyPlayerCloseEnoughForSpawning & optimise chunk tick iteration
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 726540dbd230789da277c6cea23b503329aa65ea..8b92d36cee50d65defba6be7b9a8096122db343f 100644
+index b481738e414aeccf2b15707cc00099ab425d46e4..08df3832e415c24743983041bb50a9f15cbd7abb 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
 @@ -170,6 +170,8 @@ import org.bukkit.event.world.GenericGameEvent;
@@ -434,7 +434,7 @@ index 210b0cdd4831421c8f43c3d823ac8e962b56bbbc..d4e77e15b20ae94d37b08ef39ca70bd3
      }
      // Paper end
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index e13f6ce456177a5ec3000da4c60d7e9d15f45449..3690bfddb6555fdb3f6743578e5200851ad28301 100644
+index e13f6ce456177a5ec3000da4c60d7e9d15f45449..66626cfba2823895d8809c150b126f482073afdf 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
 @@ -101,6 +101,7 @@ import org.bukkit.craftbukkit.util.CraftNamespacedKey;
@@ -445,6 +445,15 @@ index e13f6ce456177a5ec3000da4c60d7e9d15f45449..3690bfddb6555fdb3f6743578e520085
  // CraftBukkit end
  
  public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -330,7 +331,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+                 }
+             };
+         } else {
+-            this.worldBorder = new WorldBorder();
++            this.worldBorder = new WorldBorder(true); // Multipaper - Synchronize WorldBorder
+         }
+ 
+         this.thread = Thread.currentThread();
 @@ -982,6 +983,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
                  toRemove.add(tickingblockentity); // Paper - use removeAll
                  // Spigot end
@@ -569,7 +578,7 @@ index 7c59d44a3bafdc65f453d77ff3e25cffb742ad6c..f9413d8041700bab8ac175ae225d6010
      }
  
 diff --git a/src/main/java/net/minecraft/world/level/border/WorldBorder.java b/src/main/java/net/minecraft/world/level/border/WorldBorder.java
-index 7a12a4da4864306ec6589ca81368e84718825047..d7d99d46c0614331960657bbf11f979c60ab0dd3 100644
+index 7a12a4da4864306ec6589ca81368e84718825047..f2f0cceac8ec038c1aba010b49bda4477dff5287 100644
 --- a/src/main/java/net/minecraft/world/level/border/WorldBorder.java
 +++ b/src/main/java/net/minecraft/world/level/border/WorldBorder.java
 @@ -14,6 +14,7 @@ import net.minecraft.world.phys.AABB;
@@ -580,29 +589,38 @@ index 7a12a4da4864306ec6589ca81368e84718825047..d7d99d46c0614331960657bbf11f979c
  
  public class WorldBorder {
  
-@@ -31,7 +32,7 @@ public class WorldBorder {
+@@ -30,8 +31,16 @@ public class WorldBorder {
+     private WorldBorder.BorderExtent extent = new WorldBorder.StaticBorderExtent(5.9999968E7D);
      public static final WorldBorder.Settings DEFAULT_SETTINGS = new WorldBorder.Settings(0.0D, 0.0D, 0.2D, 5.0D, 5, 15, 5.9999968E7D, 0L, 0.0D);
      public net.minecraft.server.level.ServerLevel world; // CraftBukkit
++    private boolean useMPP = false;
  
 -    public WorldBorder() {}
-+    public WorldBorder() { listeners.add(new MultiPaperWorldBorderHandler()); } // MultiPaper - Add our own world border listener
++    public WorldBorder() { useMPP = false; }  // MultiPaper - Synchronize WorldBorder
++
++    // MultiPaper Start - Add our own world border listener
++    public WorldBorder(boolean useMultiPaper) {
++        useMPP = useMultiPaper;
++        listeners.add(new MultiPaperWorldBorderHandler());
++    }
++    // MultiPaper End
  
      public boolean isWithinBounds(BlockPos pos) {
          return (double) (pos.getX() + 1) > this.getMinX() && (double) pos.getX() < this.getMaxX() && (double) (pos.getZ() + 1) > this.getMinZ() && (double) pos.getZ() < this.getMaxZ();
-@@ -304,6 +305,7 @@ public class WorldBorder {
+@@ -304,6 +313,7 @@ public class WorldBorder {
      }
  
      public void applySettings(WorldBorder.Settings properties) {
-+        MultiPaperWorldBorderHandler.updatingWorldBorder = true; // MultiPaper
++        if (useMPP) MultiPaperWorldBorderHandler.updatingWorldBorder = true; // MultiPaper
          this.setCenter(properties.getCenterX(), properties.getCenterZ());
          this.setDamagePerBlock(properties.getDamagePerBlock());
          this.setDamageSafeZone(properties.getSafeZone());
-@@ -314,7 +316,7 @@ public class WorldBorder {
+@@ -314,7 +324,7 @@ public class WorldBorder {
          } else {
              this.setSize(properties.getSize());
          }
 -
-+        MultiPaperWorldBorderHandler.updatingWorldBorder = false; // MultiPaper
++        if (useMPP) MultiPaperWorldBorderHandler.updatingWorldBorder = false; // MultiPaper
      }
  
      private class StaticBorderExtent implements WorldBorder.BorderExtent {
@@ -776,7 +794,7 @@ index 2bc0384728f89b7c64a8beec78a1b77dc063d37b..27444fe2f9987bfe1417a3b712ffabd3
              ListTag listTag = new ListTag();
              final java.util.Map<net.minecraft.world.entity.EntityType<?>, Integer> savedEntityCounts = new java.util.HashMap<>(); // Paper
 diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java
-index 6704ae5c2ee01f8b319f4d425fe08c16d7b1b212..1c952b961ac35efe56c46bd740d19afde6d9f9b3 100644
+index fc3442b4c7e1f22080fe6bf36d4fade162d6709e..5a1f8c3407e053e25f9b6de5c23d37e3239c9ceb 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFile.java
 @@ -893,6 +893,7 @@ public class RegionFile implements AutoCloseable {
@@ -880,6 +898,19 @@ index 4161bea782f45753ce74c4c9091d110aebb53b21..277484f22fd5d0c97418457ed0b8cf8b
  
      public static <T> ScheduledTick<T> probe(T type, BlockPos pos) {
          return new ScheduledTick<>(type, pos, 0L, TickPriority.NORMAL, 0L);
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 8967e821a6fd0cff79ad9734b4b39ee16a73659a..8eeb8dde5a40f790181cea8943ae9c265d40db87 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -1358,7 +1358,7 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public WorldBorder createWorldBorder() {
+-        return new CraftWorldBorder(new net.minecraft.world.level.border.WorldBorder());
++        return new CraftWorldBorder(new net.minecraft.world.level.border.WorldBorder(true)); // MultiPaper - Synchronize WorldBorder
+     }
+ 
+     @Override
 diff --git a/src/main/java/puregero/multipaper/ChunkKey.java b/src/main/java/puregero/multipaper/ChunkKey.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8dbe4a2f3d

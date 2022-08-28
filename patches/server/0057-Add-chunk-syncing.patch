@@ -444,6 +444,15 @@ index e13f6ce456177a5ec3000da4c60d7e9d15f45449..3690bfddb6555fdb3f6743578e520085
  // CraftBukkit end
  
  public abstract class Level implements LevelAccessor, AutoCloseable {
+ @@ -330,7 +331,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+                 }
+             };
+         } else {
+-            this.worldBorder = new WorldBorder();
++            this.worldBorder = new WorldBorder(true); // Multipaper - Synchronize WorldBorder
+         }
+ 
+         this.thread = Thread.currentThread();
 @@ -982,6 +983,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
                  toRemove.add(tickingblockentity); // Paper - use removeAll
                  // Spigot end
@@ -582,17 +591,25 @@ index 7a12a4da4864306ec6589ca81368e84718825047..d7d99d46c0614331960657bbf11f979c
 @@ -31,7 +32,7 @@ public class WorldBorder {
      public static final WorldBorder.Settings DEFAULT_SETTINGS = new WorldBorder.Settings(0.0D, 0.0D, 0.2D, 5.0D, 5, 15, 5.9999968E7D, 0L, 0.0D);
      public net.minecraft.server.level.ServerLevel world; // CraftBukkit
++    private boolean useMPP = false;
  
 -    public WorldBorder() {}
-+    public WorldBorder() { listeners.add(new MultiPaperWorldBorderHandler()); } // MultiPaper - Add our own world border listener
++    public WorldBorder() { useMPP = false; }  // MultiPaper - Synchronize WorldBorder
++
++    // MultiPaper Start - Add our own world border listener
++    public WorldBorder(boolean useMultiPaper) {
++        useMPP = useMultiPaper;
++        listeners.add(new MultiPaperWorldBorderHandler());
++    }
++    // MultiPaper End
  
      public boolean isWithinBounds(BlockPos pos) {
          return (double) (pos.getX() + 1) > this.getMinX() && (double) pos.getX() < this.getMaxX() && (double) (pos.getZ() + 1) > this.getMinZ() && (double) pos.getZ() < this.getMaxZ();
-@@ -304,6 +305,7 @@ public class WorldBorder {
+@@ -304,6 +313,7 @@ public class WorldBorder {
      }
  
      public void applySettings(WorldBorder.Settings properties) {
-+        MultiPaperWorldBorderHandler.updatingWorldBorder = true; // MultiPaper
++        if (useMPP) MultiPaperWorldBorderHandler.updatingWorldBorder = true; // MultiPaper
          this.setCenter(properties.getCenterX(), properties.getCenterZ());
          this.setDamagePerBlock(properties.getDamagePerBlock());
          this.setDamageSafeZone(properties.getSafeZone());
@@ -601,7 +618,7 @@ index 7a12a4da4864306ec6589ca81368e84718825047..d7d99d46c0614331960657bbf11f979c
              this.setSize(properties.getSize());
          }
 -
-+        MultiPaperWorldBorderHandler.updatingWorldBorder = false; // MultiPaper
++        if (useMPP) MultiPaperWorldBorderHandler.updatingWorldBorder = false; // MultiPaper
      }
  
      private class StaticBorderExtent implements WorldBorder.BorderExtent {
@@ -879,6 +896,19 @@ index 4161bea782f45753ce74c4c9091d110aebb53b21..277484f22fd5d0c97418457ed0b8cf8b
  
      public static <T> ScheduledTick<T> probe(T type, BlockPos pos) {
          return new ScheduledTick<>(type, pos, 0L, TickPriority.NORMAL, 0L);
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 8967e821a6fd0cff79ad9734b4b39ee16a73659a..8eeb8dde5a40f790181cea8943ae9c265d40db87 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -1358,7 +1358,7 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public WorldBorder createWorldBorder() {
+-        return new CraftWorldBorder(new net.minecraft.world.level.border.WorldBorder());
++        return new CraftWorldBorder(new net.minecraft.world.level.border.WorldBorder(true)); // MultiPaper - Synchronize WorldBorder
+     }
+ 
+     @Override
 diff --git a/src/main/java/puregero/multipaper/ChunkKey.java b/src/main/java/puregero/multipaper/ChunkKey.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8dbe4a2f3d

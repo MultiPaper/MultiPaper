@@ -95,7 +95,7 @@ index 88c74eb1e24c3874baa5c49b0f66295b5830ba9f..247426f85c876d8d487e5a4c199d6bf7
                      this.removeBlockEntity(blockposition);
                  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 39e192b169732eaed6d0f9a4f51d8a90bfc5586d..6f6d38ddd93a93d5ce883460c9bea719ad2626f9 100644
+index 80d5f643aee93e6a32506e48f945e2ed93c01ed2..9f1fb218803f14dafd0c7b961667b3849c55e809 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -151,6 +151,8 @@ public class MultiPaper {
@@ -257,7 +257,7 @@ index 0000000000000000000000000000000000000000..73d9c7d88cbf170d3b8d224b8bac5c92
 +
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
-index 95a3823f5d13c29628adfc73a185d43cac573e15..5fc9bca35b0f385bd629606cde5872225117bba5 100644
+index 95a3823f5d13c29628adfc73a185d43cac573e15..5024e2996aece59f812ece288d4d8a2480f64e3d 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
 @@ -6,9 +6,11 @@ import net.minecraft.nbt.Tag;
@@ -272,12 +272,16 @@ index 95a3823f5d13c29628adfc73a185d43cac573e15..5fc9bca35b0f385bd629606cde587222
  import net.minecraft.world.ticks.LevelChunkTicks;
  import net.minecraft.world.ticks.ProtoChunkTicks;
  import org.apache.logging.log4j.LogManager;
-@@ -72,7 +74,23 @@ public class SendTickListPacket extends ExternalServerPacket {
+@@ -70,9 +72,26 @@ public class SendTickListPacket extends ExternalServerPacket {
+     @Override
+     public void handle(ExternalServerConnection connection) {
          MultiPaper.runSync(() -> {
-             ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
+-            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++            CraftWorld bukkitWorld = ((CraftWorld) Bukkit.getWorld(world));
++            ServerLevel level = bukkitWorld != null ? bukkitWorld.getHandle() : null;
              ChunkAccess chunk = MultiPaper.getChunkAccess(world, cx, cz);
 -            if (chunk instanceof LevelChunk levelChunk) {
-+            if (level.getChunkIfLoaded(cx, cz) != null) {
++            if (level != null && level.getChunkIfLoaded(cx, cz) != null) {
 +                long now = level.getLevelData().getGameTime();
 +
 +                LevelChunkTicks<Block> blockTicks = LevelChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> Registry.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());

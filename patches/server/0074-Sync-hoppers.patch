@@ -4,19 +4,42 @@ Date: Sat, 4 Dec 2021 18:34:35 +1000
 Subject: [PATCH] Sync hoppers
 
 
+diff --git a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
+index 7538703dabe7773ebf4750642fef4b876e83c232..7802754877859161f5d59f65802a0d7afe9e41cb 100644
+--- a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
++++ b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
+@@ -27,7 +27,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
+ import co.aikar.timings.Timing; // Paper
+ 
+ public abstract class BlockEntity {
+-    static boolean IGNORE_TILE_UPDATES = false; // Paper
++    public static boolean IGNORE_TILE_UPDATES = false; // Paper // MultiPaper - set public
+ 
+     public Timing tickTimer = MinecraftTimings.getTileEntityTimings(this); // Paper
+     // CraftBukkit start - data containers
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-index 4398ca9b53340fbb926f2ca14fc3af9c747bdb1d..9de538478654a3e80133d4e01efc5c683ffc9562 100644
+index 4398ca9b53340fbb926f2ca14fc3af9c747bdb1d..7d55b3d06afac9b7669ea803bcb138e0a9213978 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-@@ -37,6 +37,7 @@ import org.bukkit.entity.HumanEntity;
+@@ -28,6 +28,7 @@ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.ChestBlock;
+ import net.minecraft.world.level.block.HopperBlock;
+ import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.shapes.BooleanOp;
+ import net.minecraft.world.phys.shapes.Shapes;
+@@ -37,6 +38,9 @@ import org.bukkit.entity.HumanEntity;
  import org.bukkit.event.inventory.InventoryMoveItemEvent;
  import org.bukkit.event.inventory.InventoryPickupItemEvent;
  import org.bukkit.inventory.Inventory;
++import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperContainerHandler;
++import puregero.multipaper.externalserverprotocol.PullItemFromContainerPacket;
  // CraftBukkit end
  
  public class HopperBlockEntity extends RandomizableContainerBlockEntity implements Hopper {
-@@ -251,7 +252,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -251,7 +255,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
                          origItemStack.setCount(origCount - moved + remaining);
                      }
                      hopper.setItem(i, origItemStack);
@@ -25,7 +48,28 @@ index 4398ca9b53340fbb926f2ca14fc3af9c747bdb1d..9de538478654a3e80133d4e01efc5c68
                      return true;
                  }
                  origItemStack.setCount(origCount);
-@@ -611,6 +612,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -280,6 +284,20 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+             }
+         }
+ 
++        // MultiPaper start - logic for pulling from double chests that span multiple servers
++        if (iinventory instanceof CompoundContainer compoundContainer) {
++            BlockEntity primaryChest = MultiPaperContainerHandler.getPrimaryChest(compoundContainer);
++            LevelChunk chunk = primaryChest.getLevel().getChunkIfLoaded(primaryChest.getBlockPos());
++            if (MultiPaper.isChunkExternal(chunk)) {
++                chunk.externalOwner.getConnection().send(new PullItemFromContainerPacket(primaryChest, i, origItemStack, ihopper));
++                if (level.paperConfig().hopper.cooldownWhenFull) {
++                    cooldownHopper(ihopper);
++                }
++                return true;
++            }
++        }
++        // MultiPaper end
++
+         final ItemStack itemstack2 = addItem(iinventory, ihopper, itemstack, null);
+         final int remaining = itemstack2.getCount();
+         if (remaining != moved) {
+@@ -611,6 +629,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
  
      private static ItemStack tryMoveInItem(@Nullable Container from, Container to, ItemStack stack, int slot, @Nullable Direction side) {
          ItemStack itemstack1 = to.getItem(slot);
@@ -33,7 +77,7 @@ index 4398ca9b53340fbb926f2ca14fc3af9c747bdb1d..9de538478654a3e80133d4e01efc5c68
  
          if (HopperBlockEntity.canPlaceItemInContainer(to, stack, slot, side)) {
              boolean flag = false;
-@@ -657,6 +659,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -657,6 +676,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
                      }
                  }
  
@@ -43,10 +87,10 @@ index 4398ca9b53340fbb926f2ca14fc3af9c747bdb1d..9de538478654a3e80133d4e01efc5c68
          }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperContainerHandler.java b/src/main/java/puregero/multipaper/MultiPaperContainerHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0aeeaeef5b05f493505dd1509f7c2582beabaa96
+index 0000000000000000000000000000000000000000..4e66170d1b83e82f4a9b195e525b9da54711bc57
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperContainerHandler.java
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,67 @@
 +package puregero.multipaper;
 +
 +import net.minecraft.world.CompoundContainer;
@@ -60,6 +104,21 @@ index 0000000000000000000000000000000000000000..0aeeaeef5b05f493505dd1509f7c2582
 +import puregero.multipaper.externalserverprotocol.AddItemToEntityContainerPacket;
 +
 +public class MultiPaperContainerHandler {
++    public static BlockEntity getPrimaryChest(CompoundContainer compoundContainer) {
++        BlockEntity chest1 = (BlockEntity) compoundContainer.container1;
++        BlockEntity chest2 = (BlockEntity) compoundContainer.container2;
++
++        if (chest1.getBlockPos().getX() > chest2.getBlockPos().getX()) {
++            return chest1;
++        } else if (chest2.getBlockPos().getX() > chest1.getBlockPos().getX()) {
++            return chest2;
++        } else if (chest1.getBlockPos().getZ() > chest2.getBlockPos().getZ()) {
++            return chest1;
++        } else {
++            return chest2;
++        }
++    }
++
 +    public static boolean increaseItemExternal(Container to, int slot, ItemStack stack, int count) {
 +        if (to instanceof Entity entity) {
 +            LevelChunk chunk = entity.getLevel().getChunkIfLoaded(entity.blockPosition());
@@ -81,8 +140,8 @@ index 0000000000000000000000000000000000000000..0aeeaeef5b05f493505dd1509f7c2582
 +
 +        BlockEntity block;
 +
-+        if (to instanceof CompoundContainer) {
-+            block = (BlockEntity) ((CompoundContainer) to).container1;
++        if (to instanceof CompoundContainer compoundContainer) {
++            block = getPrimaryChest(compoundContainer);
 +        } else {
 +            block = (BlockEntity) to;
 +        }
@@ -101,10 +160,10 @@ index 0000000000000000000000000000000000000000..0aeeaeef5b05f493505dd1509f7c2582
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ae6f4392e2a2633486ddb7381adb4d52437ebc24
+index 0000000000000000000000000000000000000000..77e8fd3417e25ed9f12e865413c635aad9f580a8
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/AddItemToContainerPacket.java
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,86 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.core.BlockPos;
@@ -136,8 +195,12 @@ index 0000000000000000000000000000000000000000..ae6f4392e2a2633486ddb7381adb4d52
 +    private final ItemStack itemStack;
 +
 +    public AddItemToContainerPacket(BlockEntity blockEntity, int slot, ItemStack itemStack) {
-+        this.world = ((ServerLevel) blockEntity.getLevel()).convertable.getLevelId();
-+        this.pos = blockEntity.getBlockPos();
++        this((ServerLevel) blockEntity.getLevel(), blockEntity.getBlockPos(), slot, itemStack);
++    }
++
++    public AddItemToContainerPacket(ServerLevel serverLevel, BlockPos blockPos, int slot, ItemStack itemStack) {
++        this.world = serverLevel.convertable.getLevelId();
++        this.pos = blockPos;
 +        this.slot = slot;
 +        this.itemStack = itemStack;
 +    }
@@ -276,15 +339,116 @@ index 0000000000000000000000000000000000000000..6a9eccfbb3b5f2eaab003b65f6263404
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-index 019b98edfa8d7f0120099ffc4aad0134cab9094a..c5159b724bb5bb96493386f861a96e8f8373547a 100644
+index 019b98edfa8d7f0120099ffc4aad0134cab9094a..a8d65f014702b229e9500f881231f71ff761ee3f 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
-@@ -46,6 +46,8 @@ public class ExternalServerPacketSerializer {
+@@ -46,6 +46,9 @@ public class ExternalServerPacketSerializer {
          addPacket(PlayerTouchEntityPacket.class, PlayerTouchEntityPacket::new);
          addPacket(HurtEntityPacket.class, HurtEntityPacket::new);
          addPacket(PlayerResetAttackStrengthPacket.class, PlayerResetAttackStrengthPacket::new);
 +        addPacket(AddItemToEntityContainerPacket.class, AddItemToEntityContainerPacket::new);
 +        addPacket(AddItemToContainerPacket.class, AddItemToContainerPacket::new);
++        addPacket(PullItemFromContainerPacket.class, PullItemFromContainerPacket::new);
      }
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PullItemFromContainerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PullItemFromContainerPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..646d8e026fee287ec7bb54b2cda97f1006f21419
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PullItemFromContainerPacket.java
+@@ -0,0 +1,94 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.Container;
++import net.minecraft.world.item.ItemStack;
++import net.minecraft.world.level.block.entity.BlockEntity;
++import net.minecraft.world.level.block.entity.Hopper;
++import net.minecraft.world.level.block.entity.HopperBlockEntity;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.io.IOException;
++
++public class PullItemFromContainerPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PullItemFromContainerPacket.class.getSimpleName());
++
++    private final String world;
++    private final BlockPos source;
++    private final int slot;
++    private final ItemStack itemStack;
++    private final BlockPos destination;
++
++    public PullItemFromContainerPacket(BlockEntity blockEntity, int slot, ItemStack itemStack, Hopper destinationHopper) {
++        this.world = ((ServerLevel) blockEntity.getLevel()).convertable.getLevelId();
++        this.source = blockEntity.getBlockPos();
++        this.slot = slot;
++        this.itemStack = itemStack;
++        this.destination = destinationHopper.getBlockPosition();
++    }
++
++    public PullItemFromContainerPacket(FriendlyByteBuf in) {
++        this.world = in.readUtf();
++        this.source = in.readBlockPos();
++        this.slot = in.readByte();
++
++        try {
++            this.itemStack = ItemStack.of(MultiPaper.nbtFromBytes(in.readByteArray()));
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
++
++        this.destination = in.readBlockPos();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(this.world);
++        out.writeBlockPos(this.source);
++        out.writeByte(this.slot);
++
++        try {
++            out.writeByteArray(MultiPaper.nbtToBytes(this.itemStack.save(new CompoundTag())));
++        } catch (IOException e) {
++            throw new RuntimeException(e);
++        }
++
++        out.writeBlockPos(this.destination);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerLevel level = ((CraftWorld) Bukkit.getWorld(this.world)).getHandle();
++            Container container = HopperBlockEntity.getContainerAt(level, this.source);
++
++            if (container == null) {
++                LOGGER.warn("Tried to take a " + this.itemStack + " in slot " + this.slot + " in a non-existent container at " + this.world + " " + this.source);
++            } else if (!ItemStack.isSameItemSameTags(this.itemStack, container.getItem(this.slot))) {
++                LOGGER.warn("Tried to take a " + this.itemStack + " in slot " + this.slot + " from container at " + this.world + " " + this.source + ", but it is a " + container.getItem(this.slot));
++            } else {
++                ItemStack origItemStack = container.getItem(this.slot);
++                int count = Math.min(this.itemStack.getCount(), origItemStack.getCount());
++                ItemStack pulledItemStack = origItemStack.cloneItemStack(true);
++                pulledItemStack.setCount(count);
++                origItemStack.setCount(origItemStack.getCount() - count);
++
++                HopperBlockEntity.IGNORE_TILE_UPDATES = true;
++                container.setItem(this.slot, origItemStack);
++                HopperBlockEntity.IGNORE_TILE_UPDATES = false;
++                container.setChanged();
++
++                connection.send(new AddItemToContainerPacket(level, this.destination, 0, pulledItemStack));
++            }
++        });
++    }
++}

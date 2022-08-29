@@ -308,7 +308,7 @@ index d5fb4a90539f09a16cd90d841e2d311bdbf8051d..ee069b1b1ddaf6aa86af83cc25b421b2
                      serversToCreatePlayerOn.add(externalServer.getConnection());
                  } else if (subscribedToSoruce) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 15aefc866074f9d6985be3ff3deb4afe8d3b0025..67e1bb2da6bbfa46e61e6199042dcbe791827dd6 100644
+index 15aefc866074f9d6985be3ff3deb4afe8d3b0025..1586f4e5af7914473671fc350356415c592fb448 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -146,7 +146,10 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -347,6 +347,24 @@ index 15aefc866074f9d6985be3ff3deb4afe8d3b0025..67e1bb2da6bbfa46e61e6199042dcbe7
      }
  
      protected abstract void readAdditionalSaveData(CompoundTag nbt);
+@@ -2749,7 +2754,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+             // Spigot start
+             org.spigotmc.event.entity.EntityMountEvent event = new org.spigotmc.event.entity.EntityMountEvent(entity.getBukkitEntity(), this.getBukkitEntity());
+             // Suppress during worldgen
+-            if (this.valid) {
++            if (this.valid && !MultiPaperEntitiesHandler.modifyingPassengers) { // MultiPaper - don't call EntityMountEvent if we're syncing the passengers from another server
+                 Bukkit.getPluginManager().callEvent(event);
+             }
+             if (event.isCancelled()) {
+@@ -2803,7 +2808,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+             // Spigot start
+             org.spigotmc.event.entity.EntityDismountEvent event = new org.spigotmc.event.entity.EntityDismountEvent(entity.getBukkitEntity(), this.getBukkitEntity(), !suppressCancellation); // Paper
+             // Suppress during worldgen
+-            if (this.valid) {
++            if (this.valid && !MultiPaperEntitiesHandler.modifyingPassengers) { // MultiPaper - don't call EntityDismountEvent if we're syncing the passengers from another server
+                 Bukkit.getPluginManager().callEvent(event);
+             }
+             if (event.isCancelled()) {
 @@ -3888,7 +3893,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          return true;
      }
@@ -851,10 +869,10 @@ index e48f88005c65c6a558c3a39d6e6c973f0be12d21..fcde336f86e296136b830dab96f4283b
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..fe0b89d30769161df18820231af7b1c39eca1f17
+index 0000000000000000000000000000000000000000..c2c9e05f2d7a675582d809d9cae0c3617b2d7510
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,367 @@
+@@ -0,0 +1,370 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -895,6 +913,7 @@ index 0000000000000000000000000000000000000000..fe0b89d30769161df18820231af7b1c3
 +    private static final Logger LOGGER = LogManager.getLogger(MultiPaperEntitiesHandler.class.getSimpleName());
 +    public static boolean removingEntity = false;
 +    public static boolean takingItem = false;
++    public static boolean modifyingPassengers = false;
 +
 +    public static Entity getControllingPassenger(Entity entity) {
 +        Entity controller = entity;
@@ -1117,6 +1136,7 @@ index 0000000000000000000000000000000000000000..fe0b89d30769161df18820231af7b1c3
 +
 +    public static void handleEntityWithDependenicesUpdate(Entity entity, Entity[] entities, Packet<?> packet) {
 +        if (packet instanceof ClientboundSetPassengersPacket setPassengersPacket) {
++            modifyingPassengers = true;
 +            for (Entity riding : entity.getPassengers()) {
 +                if (!ArrayUtils.contains(entities, riding)) {
 +                    riding.stopRiding();
@@ -1127,6 +1147,7 @@ index 0000000000000000000000000000000000000000..fe0b89d30769161df18820231af7b1c3
 +                    passenger.startRiding(entity, true);
 +                }
 +            }
++            modifyingPassengers = false;
 +        } else if (packet instanceof ClientboundSetEntityLinkPacket setEntityLinkPacket) {
 +            if (entities.length == 0) {
 +                ((Mob) entity).setLeashedTo(null, true);

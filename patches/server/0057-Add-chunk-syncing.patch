@@ -272,7 +272,7 @@ index 11cd31691307749e925930c4b6e10e3f3b4fad25..d9a5591767b958ddcf1e589760518acc
      public interface LevelChangeListener {
  
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 07b155fc3c0c70e03a881c0ccb1b734a775212c9..d9147721493ad0f54a5c6ff98c56d4c47054444b 100644
+index a04b684b8364e9e9858d40a52dda1278d5272bd6..69a643032f348ab47db8e326a44a8daefcc87c39 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -112,6 +112,7 @@ import org.bukkit.entity.Player;
@@ -360,16 +360,15 @@ diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/mai
 index b481738e414aeccf2b15707cc00099ab425d46e4..08df3832e415c24743983041bb50a9f15cbd7abb 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -170,6 +170,8 @@ import org.bukkit.event.world.GenericGameEvent;
- import org.bukkit.event.world.TimeSkipEvent;
+@@ -171,6 +171,7 @@ import org.bukkit.event.world.TimeSkipEvent;
  // CraftBukkit end
  import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
-+import puregero.multipaper.MultiPaper;
+ import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet; // Paper
 +import puregero.multipaper.MultiPaperChunkHandler;
  
  public class ServerLevel extends Level implements WorldGenLevel {
  
-@@ -496,8 +498,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -499,8 +500,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
          // CraftBukkit end
          this.players = Lists.newArrayList();
          this.entityTickList = new EntityTickList();
@@ -380,7 +379,7 @@ index b481738e414aeccf2b15707cc00099ab425d46e4..08df3832e415c24743983041bb50a9f1
          this.navigatingMobs = new ObjectOpenHashSet();
          this.blockEvents = new ObjectLinkedOpenHashSet();
          this.blockEventsToReschedule = new ArrayList(64);
-@@ -2340,6 +2342,11 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2343,6 +2344,11 @@ public class ServerLevel extends Level implements WorldGenLevel {
                  return;
              }
              // CraftBukkit end
@@ -1761,7 +1760,7 @@ index a9ecd0c2f8554970544e505d0099b8dc01644753..5a421eb43c3c16ab8ccf88174e5b0a64
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperWorldBorderHandler.java b/src/main/java/puregero/multipaper/MultiPaperWorldBorderHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a7e61bd1b1b495ecbfeee4c0d5bc34e384bb9089
+index 0000000000000000000000000000000000000000..229506e75000777a5c3c686533eac47ef17b30d4
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperWorldBorderHandler.java
 @@ -0,0 +1,78 @@
@@ -1785,27 +1784,27 @@ index 0000000000000000000000000000000000000000..a7e61bd1b1b495ecbfeee4c0d5bc34e3
 +
 +    @Override
 +    public void onBorderSizeSet(@NotNull WorldBorder border, double size) {
-+        onWorldBorderChange(new ClientboundSetBorderSizePacket(border), border.world);
++        onWorldBorderChange(border, new ClientboundSetBorderSizePacket(border));
 +    }
 +
 +    @Override
 +    public void onBorderSizeLerping(@NotNull WorldBorder border, double fromSize, double toSize, long time) {
-+        onWorldBorderChange(new ClientboundSetBorderLerpSizePacket(border), border.world);
++        onWorldBorderChange(border, new ClientboundSetBorderLerpSizePacket(border));
 +    }
 +
 +    @Override
 +    public void onBorderCenterSet(@NotNull WorldBorder border, double centerX, double centerZ) {
-+        onWorldBorderChange(new ClientboundSetBorderCenterPacket(border), border.world);
++        onWorldBorderChange(border, new ClientboundSetBorderCenterPacket(border));
 +    }
 +
 +    @Override
 +    public void onBorderSetWarningTime(@NotNull WorldBorder border, int warningTime) {
-+        onWorldBorderChange(new ClientboundSetBorderWarningDelayPacket(border), border.world);
++        onWorldBorderChange(border, new ClientboundSetBorderWarningDelayPacket(border));
 +    }
 +
 +    @Override
 +    public void onBorderSetWarningBlocks(@NotNull WorldBorder border, int warningBlockDistance) {
-+        onWorldBorderChange(new ClientboundSetBorderWarningDistancePacket(border), border.world);
++        onWorldBorderChange(border, new ClientboundSetBorderWarningDistancePacket(border));
 +    }
 +
 +    @Override
@@ -1814,12 +1813,12 @@ index 0000000000000000000000000000000000000000..a7e61bd1b1b495ecbfeee4c0d5bc34e3
 +    @Override
 +    public void onBorderSetDamageSafeZOne(@NotNull WorldBorder border, double safeZoneRadius) {}
 +
-+    private void onWorldBorderChange(Packet<?> packet, ServerLevel level) {
-+        if (!updatingWorldBorder) {
-+            MultiPaper.broadcastPacketToExternalServers(level.getWorld().getName(), new SendUpdatePacket(level.uuid, packet));
++    private void onWorldBorderChange(WorldBorder border, Packet<?> packet) {
++        if (!updatingWorldBorder && border.world != null && border.world.getWorldBorder() == border) {
++            MultiPaper.broadcastPacketToExternalServers(border.world.getWorld().getName(), new SendUpdatePacket(border.world.uuid, packet));
 +
 +            // Save the level.dat
-+            level.saveIncrementally(true);
++            border.world.saveIncrementally(true);
 +        }
 +    }
 +

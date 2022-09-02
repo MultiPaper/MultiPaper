@@ -1,6 +1,6 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mohammed jasem alaajel <xrambad@gmail.com>
-Date: Fri, 2 Sep 2022 22:33:38 +0400
+Date: Sat, 3 Sep 2022 00:21:58 +0400
 Subject: [PATCH] add mpdebugbossbar command
 
 
@@ -28,3 +28,132 @@ index 75c47d4c51e41cce641d79b5cd3d0bb4eccd5cff..9ebfe24803c926b8c1b23bd2626e4280
      }
      // MultiPaper end
  
+diff --git a/src/main/java/puregero/multipaper/commands/MPDebugBossBarCommand.java b/src/main/java/puregero/multipaper/commands/MPDebugBossBarCommand.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..95c076fe04f10e74bc8fcc6b51dd9b6e16a8552f
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/commands/MPDebugBossBarCommand.java
+@@ -0,0 +1,123 @@
++package puregero.multipaper.commands;
++
++import net.kyori.adventure.bossbar.BossBar;
++import net.kyori.adventure.text.Component;
++import net.kyori.adventure.text.format.NamedTextColor;
++import net.kyori.adventure.text.format.TextColor;
++import org.bukkit.*;
++import org.bukkit.command.Command;
++import org.bukkit.command.CommandSender;
++import org.bukkit.craftbukkit.CraftChunk;
++import org.bukkit.craftbukkit.scheduler.CraftScheduler;
++import org.bukkit.entity.Player;
++import org.bukkit.scheduler.BukkitTask;
++import org.jetbrains.annotations.NotNull;
++import puregero.multipaper.ExternalServer;
++
++import java.text.DecimalFormat;
++import java.util.HashMap;
++import java.util.Map;
++
++public class MPDebugBossBarCommand extends Command implements Runnable {
++    private final HashMap<Player, BossBar> debugEnabled = new HashMap<>();
++    private BukkitTask task = null;
++
++    private final DecimalFormat formatter = new DecimalFormat("#0.00");
++
++    public MPDebugBossBarCommand(String command) {
++        super(command);
++        setPermission("multipaper.command.mpdebugbossbar");
++    }
++
++    @Override
++    public boolean execute(@NotNull CommandSender sender, @NotNull String commandLabel, String[] args) {
++        if (!testPermission(sender)) return false;
++
++        if (!(sender instanceof Player player)) {
++            sender.sendMessage(ChatColor.RED + "Only players can execute this command.");
++            return false;
++        }
++
++        if (debugEnabled.containsKey(player)) {
++            player.hideBossBar(debugEnabled.remove(player));
++            player.sendMessage("MultiPaper debug bossbar disabled");
++            return false;
++        }
++
++        BossBar bossBar = BossBar.bossBar(Component.text("loading..."), 0.0f, BossBar.Color.GREEN, BossBar.Overlay.NOTCHED_20);
++        debugEnabled.put(player, bossBar);
++        player.showBossBar(bossBar);
++
++        sender.sendMessage("MultiPaper debug bossbar enabled");
++
++        if (task == null) {
++            run();
++        }
++
++        return true;
++    }
++
++    @Override
++    public void run() {
++        task = null;
++
++        for (Map.Entry<Player, BossBar> playerBossBarEntry : this.debugEnabled.entrySet()) {
++            Player player = playerBossBarEntry.getKey();
++            if (!player.isOnline()) {
++                this.debugEnabled.remove(player.getPlayer());
++                continue;
++            }
++
++            run(player, playerBossBarEntry.getValue());
++        }
++
++        if (!debugEnabled.isEmpty()) {
++            task = ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(this, 5, "MultiPaper bossbar debug");
++        }
++    }
++
++    private void run(Player player, BossBar bossBar) {
++        Chunk chunk = player.getChunk();
++
++        if (chunk != null) {
++            ExternalServer owner = ((CraftChunk) chunk).getHandle().externalOwner;
++            final boolean isOwnerNull = owner == null;
++
++            Component component = Component.text("Server: ").color(NamedTextColor.GRAY)
++                    .append(Component.text((isOwnerNull ? "null" : owner.getName())).color(isOwnerNull ? NamedTextColor.WHITE : (owner.isMe() ? NamedTextColor.AQUA : NamedTextColor.RED)))
++                    .append(Component.text(" TPS: ").color(NamedTextColor.GRAY).append(Component.text((formatter.format(isOwnerNull ? 0.0 : (Math.min(owner.getTps(), 20.00))))).color(getTpsColor(!isOwnerNull ? owner.getTps() : null))))
++                    .append(Component.text(" MSPT: ").color(NamedTextColor.GRAY).append(Component.text((isOwnerNull ? 0 : owner.getAverageTickTime()) + "ms").color(getTpsColor(!isOwnerNull ? owner.getTps() : null))));
++
++            bossBar.name(component).color(getTpsBossBarColor(!isOwnerNull ? owner.getTps() : null)).progress(getBarTpsProgress(!isOwnerNull ? owner.getTps() : null));
++        }
++    }
++
++
++    private float getBarTpsProgress(Double tps) {
++        return (float) Math.max(Math.min(tps / 20.0, 1.0), 0.0);
++    }
++
++    private BossBar.Color getTpsBossBarColor(Double tps) {
++        if (tps == null) {
++            return BossBar.Color.WHITE;
++        } else if (tps >= 19.9) {
++            return BossBar.Color.GREEN;
++        } else if (tps >= 17.5) {
++            return BossBar.Color.YELLOW;
++        } else {
++            return BossBar.Color.RED;
++        }
++    }
++
++    private TextColor getTpsColor(Double tps) {
++        if (tps == null) {
++            return NamedTextColor.DARK_GRAY;
++        } else if (tps >= 19.9) {
++            return NamedTextColor.GREEN;
++        } else if (tps >= 17.5) {
++            return NamedTextColor.YELLOW;
++        } else {
++            return NamedTextColor.RED;
++        }
++    }
++}

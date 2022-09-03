@@ -30,10 +30,10 @@ index 75c47d4c51e41cce641d79b5cd3d0bb4eccd5cff..05e32a08779cf0929d345383fead4893
  
 diff --git a/src/main/java/puregero/multipaper/commands/MPTPSCommand.java b/src/main/java/puregero/multipaper/commands/MPTPSCommand.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..97161de6b6ca4d68f369a28f54e416fa95d341e9
+index 0000000000000000000000000000000000000000..1cdbd0a1164d0a543ef9f6b3ff87907779a4639a
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/commands/MPTPSCommand.java
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,156 @@
 +package puregero.multipaper.commands;
 +
 +import net.kyori.adventure.bossbar.BossBar;
@@ -47,6 +47,7 @@ index 0000000000000000000000000000000000000000..97161de6b6ca4d68f369a28f54e416fa
 +import org.bukkit.command.Command;
 +import org.bukkit.command.CommandSender;
 +import org.bukkit.craftbukkit.CraftChunk;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
 +import org.bukkit.craftbukkit.scheduler.CraftScheduler;
 +import org.bukkit.entity.Player;
 +import org.bukkit.scheduler.BukkitTask;
@@ -125,17 +126,26 @@ index 0000000000000000000000000000000000000000..97161de6b6ca4d68f369a28f54e416fa
 +            final boolean isOwnerNull = owner == null;
 +
 +            int localPlayers = 0;
++            int externalPlayers = 0;
++            boolean noLocalLoop = false;
 +            if (!isOwnerNull && owner.isMe()) {
 +                localPlayers = MinecraftServer.getServer().getPlayerList().localPlayers.size();
-+            } else {
-+                for (ServerPlayer serverPlayer : MinecraftServer.getServer().getPlayerList().players) {
-+                    if (isOwnerNull) {
-+                        break;
-+                    }
-+                    if (owner.isMe() && MultiPaper.isRealPlayer(serverPlayer)|| serverPlayer instanceof ExternalPlayer externalPlayer && externalPlayer.externalServerConnection == owner.getConnection()) {
-+                        localPlayers++;
-+                    }
++                noLocalLoop = true;
++            }
++            for (ServerPlayer serverPlayer : MinecraftServer.getServer().getPlayerList().players) {
++                if (isOwnerNull) {
++                    break;
 +                }
++                if (!noLocalLoop && (owner.isMe() && MultiPaper.isRealPlayer(serverPlayer)
++                        || serverPlayer instanceof ExternalPlayer externalPlayer && externalPlayer.externalServerConnection == owner.getConnection())) {
++                    localPlayers++;
++                }
++                if (MultiPaper.isExternalPlayer(serverPlayer) &&
++                        serverPlayer.getBukkitEntity().getChunk() instanceof CraftChunk craftChunk
++                        && craftChunk.getHandle().externalOwner == owner) {
++                    externalPlayers++;
++                }
++
 +            }
 +            final int totalPlayers = MinecraftServer.getServer().getPlayerList().players.size();
 +
@@ -144,6 +154,7 @@ index 0000000000000000000000000000000000000000..97161de6b6ca4d68f369a28f54e416fa
 +                    .append(Component.text(" TPS: ").color(NamedTextColor.YELLOW).append(Component.text((formatter.format(isOwnerNull ? 0.0 : (Math.min(owner.getTps(), 20.00))))).color(getTpsColor(!isOwnerNull ? owner.getTps() : null))))
 +                    .append(Component.text(" MSPT: ").color(NamedTextColor.YELLOW).append(Component.text((isOwnerNull ? 0 : owner.getAverageTickTime()) + "ms").color(getTpsColor(!isOwnerNull ? owner.getTps() : null))))
 +                    .append(Component.text(" Local players: ").color(NamedTextColor.YELLOW).append(Component.text(localPlayers).color(NamedTextColor.WHITE)))
++                    .append(Component.text(" External players: ").color(NamedTextColor.YELLOW).append(Component.text(externalPlayers).color(NamedTextColor.WHITE)))
 +                    .append(Component.text(" Total players: ").color(NamedTextColor.YELLOW).append(Component.text(totalPlayers).color(NamedTextColor.WHITE)));
 +
 +            bossBar.name(component).color(getTpsBossBarColor(!isOwnerNull ? owner.getTps() : null)).progress(getBarTpsProgress(!isOwnerNull ? owner.getTps() : 0.0));

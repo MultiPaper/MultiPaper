@@ -1,11 +1,11 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: mohammed jasem alaajel <xrambad@gmail.com>
 Date: Sat, 3 Sep 2022 00:21:58 +0400
-Subject: [PATCH] add mpdebugbossbar command
+Subject: [PATCH] add new debug command mptps
 
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
-index 75c47d4c51e41cce641d79b5cd3d0bb4eccd5cff..9ebfe24803c926b8c1b23bd2626e4280a55c0c10 100644
+index 75c47d4c51e41cce641d79b5cd3d0bb4eccd5cff..05e32a08779cf0929d345383fead48936a8d80ee 100644
 --- a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
 +++ b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
 @@ -4,10 +4,7 @@ import java.util.Map;
@@ -24,22 +24,25 @@ index 75c47d4c51e41cce641d79b5cd3d0bb4eccd5cff..9ebfe24803c926b8c1b23bd2626e4280
          register("multipaper", new ServersCommand("servers"));
          register("multipaper", new MPMapCommand("mpmap"));
          register("multipaper", new SListCommand("slist"));
-+        register("multipaper", new MPDebugBossBarCommand("mpdebugbossbar"));
++        register("multipaper", new MPTPSCommand("mptps"));
      }
      // MultiPaper end
  
-diff --git a/src/main/java/puregero/multipaper/commands/MPDebugBossBarCommand.java b/src/main/java/puregero/multipaper/commands/MPDebugBossBarCommand.java
+diff --git a/src/main/java/puregero/multipaper/commands/MPTPSCommand.java b/src/main/java/puregero/multipaper/commands/MPTPSCommand.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..95c076fe04f10e74bc8fcc6b51dd9b6e16a8552f
+index 0000000000000000000000000000000000000000..6c172719f932c36c65c19b0b8374ca085f3cf6ed
 --- /dev/null
-+++ b/src/main/java/puregero/multipaper/commands/MPDebugBossBarCommand.java
-@@ -0,0 +1,123 @@
++++ b/src/main/java/puregero/multipaper/commands/MPTPSCommand.java
+@@ -0,0 +1,133 @@
 +package puregero.multipaper.commands;
 +
 +import net.kyori.adventure.bossbar.BossBar;
 +import net.kyori.adventure.text.Component;
 +import net.kyori.adventure.text.format.NamedTextColor;
 +import net.kyori.adventure.text.format.TextColor;
++import net.minecraft.core.HolderSet;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
 +import org.bukkit.*;
 +import org.bukkit.command.Command;
 +import org.bukkit.command.CommandSender;
@@ -48,21 +51,23 @@ index 0000000000000000000000000000000000000000..95c076fe04f10e74bc8fcc6b51dd9b6e
 +import org.bukkit.entity.Player;
 +import org.bukkit.scheduler.BukkitTask;
 +import org.jetbrains.annotations.NotNull;
++import puregero.multipaper.ExternalPlayer;
 +import puregero.multipaper.ExternalServer;
++import puregero.multipaper.MultiPaper;
 +
 +import java.text.DecimalFormat;
 +import java.util.HashMap;
 +import java.util.Map;
 +
-+public class MPDebugBossBarCommand extends Command implements Runnable {
++public class MPTPSCommand extends Command implements Runnable {
 +    private final HashMap<Player, BossBar> debugEnabled = new HashMap<>();
 +    private BukkitTask task = null;
 +
 +    private final DecimalFormat formatter = new DecimalFormat("#0.00");
 +
-+    public MPDebugBossBarCommand(String command) {
++    public MPTPSCommand(String command) {
 +        super(command);
-+        setPermission("multipaper.command.mpdebugbossbar");
++        setPermission("multipaper.command.mptps");
 +    }
 +
 +    @Override
@@ -76,7 +81,7 @@ index 0000000000000000000000000000000000000000..95c076fe04f10e74bc8fcc6b51dd9b6e
 +
 +        if (debugEnabled.containsKey(player)) {
 +            player.hideBossBar(debugEnabled.remove(player));
-+            player.sendMessage("MultiPaper debug bossbar disabled");
++            player.sendMessage("MultiPaper TPS bossbar disabled");
 +            return false;
 +        }
 +
@@ -84,7 +89,7 @@ index 0000000000000000000000000000000000000000..95c076fe04f10e74bc8fcc6b51dd9b6e
 +        debugEnabled.put(player, bossBar);
 +        player.showBossBar(bossBar);
 +
-+        sender.sendMessage("MultiPaper debug bossbar enabled");
++        sender.sendMessage("MultiPaper TPS bossbar enabled");
 +
 +        if (task == null) {
 +            run();
@@ -108,7 +113,7 @@ index 0000000000000000000000000000000000000000..95c076fe04f10e74bc8fcc6b51dd9b6e
 +        }
 +
 +        if (!debugEnabled.isEmpty()) {
-+            task = ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(this, 5, "MultiPaper bossbar debug");
++            task = ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(this, 5, "MultiPaper tps BossBar");
 +        }
 +    }
 +
@@ -119,12 +124,17 @@ index 0000000000000000000000000000000000000000..95c076fe04f10e74bc8fcc6b51dd9b6e
 +            ExternalServer owner = ((CraftChunk) chunk).getHandle().externalOwner;
 +            final boolean isOwnerNull = owner == null;
 +
-+            Component component = Component.text("Server: ").color(NamedTextColor.GRAY)
-+                    .append(Component.text((isOwnerNull ? "null" : owner.getName())).color(isOwnerNull ? NamedTextColor.WHITE : (owner.isMe() ? NamedTextColor.AQUA : NamedTextColor.RED)))
-+                    .append(Component.text(" TPS: ").color(NamedTextColor.GRAY).append(Component.text((formatter.format(isOwnerNull ? 0.0 : (Math.min(owner.getTps(), 20.00))))).color(getTpsColor(!isOwnerNull ? owner.getTps() : null))))
-+                    .append(Component.text(" MSPT: ").color(NamedTextColor.GRAY).append(Component.text((isOwnerNull ? 0 : owner.getAverageTickTime()) + "ms").color(getTpsColor(!isOwnerNull ? owner.getTps() : null))));
++            final int localPlayers = MinecraftServer.getServer().getPlayerList().localPlayers.size();
++            final int totalPlayers = MinecraftServer.getServer().getPlayerList().players.size();
 +
-+            bossBar.name(component).color(getTpsBossBarColor(!isOwnerNull ? owner.getTps() : null)).progress(getBarTpsProgress(!isOwnerNull ? owner.getTps() : null));
++            Component component = Component.text("Server: ").color(NamedTextColor.YELLOW)
++                    .append(Component.text((isOwnerNull ? "null" : owner.getName())).color(isOwnerNull ? NamedTextColor.WHITE : (owner.isMe() ? NamedTextColor.AQUA : NamedTextColor.RED)))
++                    .append(Component.text(" TPS: ").color(NamedTextColor.YELLOW).append(Component.text((formatter.format(isOwnerNull ? 0.0 : (Math.min(owner.getTps(), 20.00))))).color(getTpsColor(!isOwnerNull ? owner.getTps() : null))))
++                    .append(Component.text(" MSPT: ").color(NamedTextColor.YELLOW).append(Component.text((isOwnerNull ? 0 : owner.getAverageTickTime()) + "ms").color(getTpsColor(!isOwnerNull ? owner.getTps() : null))))
++                    .append(Component.text(" Local players: ").color(NamedTextColor.YELLOW).append(Component.text(localPlayers).color(NamedTextColor.WHITE)))
++                    .append(Component.text(" Total players: ").color(NamedTextColor.YELLOW).append(Component.text(totalPlayers).color(NamedTextColor.WHITE)));
++
++            bossBar.name(component).color(getTpsBossBarColor(!isOwnerNull ? owner.getTps() : null)).progress(getBarTpsProgress(!isOwnerNull ? owner.getTps() : 0.0));
 +        }
 +    }
 +

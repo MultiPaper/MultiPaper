@@ -71,12 +71,12 @@ paperweight {
             serverOutputDir.set(layout.projectDirectory.dir("MultiPaper-Server"))
         }
     }
-
+    
     tasks.register("paperRefLatest") {
         // Update the paperRef in gradle.properties to be the latest commit
         val tempDir = layout.cacheDir("paperRefLatest");
         val file = "gradle.properties";
-
+        
         doFirst {
             data class GithubCommit(
                     val sha: String

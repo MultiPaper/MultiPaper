@@ -3,6 +3,7 @@ import io.papermc.paperweight.util.constants.*
 
 plugins {
     java
+    `maven-publish`
     id("com.github.johnrengelman.shadow") version "7.1.2"
     id("io.papermc.paperweight.patcher") version "1.3.8"
 }
@@ -70,12 +71,12 @@ paperweight {
             serverOutputDir.set(layout.projectDirectory.dir("MultiPaper-Server"))
         }
     }
-    
+
     tasks.register("paperRefLatest") {
         // Update the paperRef in gradle.properties to be the latest commit
         val tempDir = layout.cacheDir("paperRefLatest");
         val file = "gradle.properties";
-        
+
         doFirst {
             data class GithubCommit(
                     val sha: String
@@ -99,6 +100,31 @@ paperweight {
                 from(tempDir.file("gradle.properties"))
                 into(project.file(file).parent)
             }
+        }
+    }
+}
+
+tasks.generateDevelopmentBundle {
+    apiCoordinates.set("puregero.multipaper:MultiPaper-API")
+    mojangApiCoordinates.set("io.papermc.paper:paper-mojangapi")
+    libraryRepositories.set(
+        listOf(
+            "https://repo.maven.apache.org/maven2/", // maven central
+            "https://oss.sonatype.org/content/groups/public/",
+            "https://papermc.io/repo/repository/maven-public/",
+            "https://ci.emc.gs/nexus/content/groups/aikar/",
+            "https://repo.aikar.co/content/groups/aikar",
+            "https://repo.md-5.net/content/repositories/releases/",
+            "https://hub.spigotmc.org/nexus/content/groups/public/",
+            "https://jitpack.io"
+        )
+    )
+}
+
+publishing {
+    publications.create<MavenPublication>("devBundle") {
+        artifact(tasks.generateDevelopmentBundle) {
+            artifactId = "dev-bundle"
         }
     }
 }

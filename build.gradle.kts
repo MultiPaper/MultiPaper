@@ -107,6 +107,7 @@ paperweight {
 tasks.generateDevelopmentBundle {
     apiCoordinates.set("puregero.multipaper:MultiPaper-API")
     mojangApiCoordinates.set("io.papermc.paper:paper-mojangapi")
+    serverCoordinates.set("puregero.multipaper:MultiPaper-Server")
     libraryRepositories.set(
         listOf(
             "https://repo.maven.apache.org/maven2/", // maven central

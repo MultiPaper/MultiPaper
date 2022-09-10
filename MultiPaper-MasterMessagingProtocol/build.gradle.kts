@@ -1,5 +1,6 @@
 plugins {
-    `java`
+    java
+    `maven-publish`
 }
 
 repositories {
@@ -10,4 +11,10 @@ repositories {
 
 dependencies {
     compileOnly("io.netty:netty-all:4.1.75.Final")
+}
+
+publishing {
+    publications.create<MavenPublication>("messagingProtocol") {
+        artifact(tasks.jar)
+    }
 }

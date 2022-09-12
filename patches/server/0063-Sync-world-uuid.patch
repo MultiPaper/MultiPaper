@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 25 Nov 2021 17:47:43 +1000
+Subject: [PATCH] Sync world uuid
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java b/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
+index 738100ffa60647790f0921cf31d5bbc2714e27dd..6632c54a8373d6c328400591af15b1aa89a3a8c9 100644
+--- a/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
++++ b/src/main/java/org/bukkit/craftbukkit/util/WorldUUID.java
+@@ -1,14 +1,10 @@
+ package org.bukkit.craftbukkit.util;
+ 
+-import java.io.DataInputStream;
+-import java.io.DataOutputStream;
+-import java.io.File;
+-import java.io.FileInputStream;
+-import java.io.FileOutputStream;
+-import java.io.IOException;
++import java.io.*;
+ import java.util.UUID;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public final class WorldUUID {
+ 
+@@ -18,6 +14,40 @@ public final class WorldUUID {
+     }
+ 
+     public static UUID getUUID(File baseDir) {
++    // MultiPaper start
++        DataInputStream dis = null;
++        try {
++            dis = MultiPaper.readUid(baseDir.getName());
++            if (dis != null) {
++                return new UUID(dis.readLong(), dis.readLong());
++            }
++        } catch (IOException ex) {
++            LOGGER.warn("Failed to read " + baseDir.getName() + "'s uid.dat, generating new random UUID", ex);
++        } finally {
++            if (dis != null) {
++                try {
++                    dis.close();
++                } catch (IOException ex) {
++                    // NOOP
++                }
++            }
++        }
++
++        UUID uuid = UUID.randomUUID();
++        try {
++            ByteArrayOutputStream baos = new ByteArrayOutputStream();
++            DataOutputStream dos = new DataOutputStream(baos);
++            dos.writeLong(uuid.getMostSignificantBits());
++            dos.writeLong(uuid.getLeastSignificantBits());
++            MultiPaper.writeUid(baseDir.getName(), baos.toByteArray());
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++        return uuid;
++    }
++
++    public static UUID _getUUID(File baseDir) {
++    // MultiPaper end
+         File file1 = new File(baseDir, "uid.dat");
+         if (file1.exists()) {
+             DataInputStream dis = null;
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index c8b34360710b2478bbe11a7e4d2ebe367b55e5ca..454723d0ee062a1b283c07563eb106169db27b68 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -396,6 +396,14 @@ public class MultiPaper {
+         getConnection().send(new WriteStatsMessage(world, uuid, json.getBytes(StandardCharsets.UTF_8)), message -> { /* do nothing */ });
+     }
+ 
++    public static DataInputStream readUid(String world) throws IOException {
++        return getConnection().sendAndAwaitReply(new ReadUidMessage(world), DataMessageReply.class).thenApply(message -> new DataInputStream(new ByteArrayInputStream(message.data))).join();
++    }
++
++    public static void writeUid(String world, byte[] data) throws IOException {
++        getConnection().send(new WriteUidMessage(world, data), message -> { /* do nothing */ });
++    }
++
+     private static String getWorld(File path) {
+         do {
+             path = path.getParentFile();

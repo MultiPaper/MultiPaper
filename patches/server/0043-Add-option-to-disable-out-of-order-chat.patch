@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kevin Raneri <kevin.raneri@gmail.com>
+Date: Sat, 30 Jul 2022 22:12:43 -0500
+Subject: [PATCH] Add option to disable out-of-order chat
+
+
+diff --git a/src/main/java/gg/pufferfish/pufferfish/PufferfishConfig.java b/src/main/java/gg/pufferfish/pufferfish/PufferfishConfig.java
+index 276f501ea89a177807dbe5d742d1b0881bed0f2c..52b9e0705f743bb3d03f97adc0dac9f276caed38 100644
+--- a/src/main/java/gg/pufferfish/pufferfish/PufferfishConfig.java
++++ b/src/main/java/gg/pufferfish/pufferfish/PufferfishConfig.java
+@@ -225,5 +225,11 @@ public class PufferfishConfig {
+         setComment("dab", "Optimizes entity brains when", "they're far away from the player");
+     }
+ 
++	public static boolean disableOutOfOrderChat;
++	private static void miscSettings() {
++		disableOutOfOrderChat = getBoolean("misc.disable-out-of-order-chat", false);
++		setComment("misc", "Settings for things that don't belong elsewhere");
++	}
++
+ 
+ }
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 0de9bbcb4060d0c51d9ca1ca9ba5fc777318246b..cc55cb14f2d0f656213be25a1e428132871ac5dd 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -2364,6 +2364,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+     }
+ 
+     private boolean updateChatOrder(Instant timestamp) {
++        if (gg.pufferfish.pufferfish.PufferfishConfig.disableOutOfOrderChat) return true;
+         Instant instant1;
+ 
+         do {

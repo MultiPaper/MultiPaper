@@ -1,0 +1,83 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 10 Jul 2022 21:13:49 +1000
+Subject: [PATCH] Acknowledge block changes for external players
+
+
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index fe4e8cc42408c9a3f3b70662b7547eae2c379bc6..e41f3566020e676969f85bc50bdc2046412cb01a 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -245,6 +245,7 @@ import org.bukkit.inventory.InventoryView;
+ import org.bukkit.inventory.SmithingInventory;
+ import puregero.multipaper.ExternalPlayer;
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperAckBlockChangesHandler;
+ import puregero.multipaper.externalserverprotocol.PlayerRemovePacket;
+ // CraftBukkit end
+ 
+@@ -259,7 +260,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+     private final MinecraftServer server;
+     public ServerPlayer player;
+     private int tickCount;
+-    private int ackBlockChangesUpTo = -1;
++    public int ackBlockChangesUpTo = -1; // MultiPaper - make public
+     private long keepAliveTime = Util.getMillis();
+     private boolean keepAlivePending;
+     private long keepAliveChallenge;
+@@ -2148,6 +2149,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+             throw new IllegalArgumentException("Expected packet sequence nr >= 0");
+         } else {
+             this.ackBlockChangesUpTo = Math.max(sequence, this.ackBlockChangesUpTo);
++            MultiPaperAckBlockChangesHandler.onAckNeeded(this.player); // MultiPaper
+         }
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 8ddfec76b83ecd5b538e36e271f24b24918bb04c..4b9dc25d738491949f33c36997b4d49dd496a0f1 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -134,6 +134,8 @@ public class MultiPaper {
+                 }
+             });
+         });
++
++        MultiPaperAckBlockChangesHandler.tick();
+     }
+ 
+     public static void sendTickTime(long time, double tps) {
+diff --git a/src/main/java/puregero/multipaper/MultiPaperAckBlockChangesHandler.java b/src/main/java/puregero/multipaper/MultiPaperAckBlockChangesHandler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c71c4e08696dc749f47b477df43d74d3d148c26b
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperAckBlockChangesHandler.java
+@@ -0,0 +1,29 @@
++package puregero.multipaper;
++
++import it.unimi.dsi.fastutil.objects.ObjectLinkedOpenHashSet;
++import net.minecraft.network.protocol.game.ClientboundBlockChangedAckPacket;
++import net.minecraft.server.level.ServerPlayer;
++
++import java.util.Set;
++
++public class MultiPaperAckBlockChangesHandler {
++    private final static Set<ExternalPlayer> ackBlockChangesQueue = new ObjectLinkedOpenHashSet<>(); // Linked set for faster iteration
++
++    public static void tick() {
++        if (!ackBlockChangesQueue.isEmpty()) {
++            for (ExternalPlayer player : ackBlockChangesQueue) {
++                if (player.connection.ackBlockChangesUpTo > -1) {
++                    player.connection.send(new ClientboundBlockChangedAckPacket(player.connection.ackBlockChangesUpTo));
++                    player.connection.ackBlockChangesUpTo = -1;
++                }
++            }
++            ackBlockChangesQueue.clear();
++        }
++    }
++
++    public static void onAckNeeded(ServerPlayer player) {
++        if (player instanceof ExternalPlayer externalPlayer) {
++            ackBlockChangesQueue.add(externalPlayer);
++        }
++    }
++}

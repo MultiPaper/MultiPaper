@@ -5,14 +5,14 @@ Subject: [PATCH] Ignore lookups if closed
 
 
 diff --git a/src/main/java/org/bukkit/plugin/java/PluginClassLoader.java b/src/main/java/org/bukkit/plugin/java/PluginClassLoader.java
-index 379b49f13a8c676125e17ad9207884a5d6cb5b7b..4c84e3a5c983b7f8fe5515fff6fcfa64106150d2 100644
+index d697a0d48ddcd60e6fb3a37c83c629e2b1b102ee..03308aa834937154c86256d4f209c63d8e7bf516 100644
 --- a/src/main/java/org/bukkit/plugin/java/PluginClassLoader.java
 +++ b/src/main/java/org/bukkit/plugin/java/PluginClassLoader.java
 @@ -46,6 +46,8 @@ public final class PluginClassLoader extends URLClassLoader { // Spigot
      private final Set<String> seenIllegalAccess = Collections.newSetFromMap(new ConcurrentHashMap<>());
      private java.util.logging.Logger logger; // Paper - add field
  
-+    private boolean closed = false; // Airplane
++    private boolean closed = false; // Pufferfish
 +
      static {
          ClassLoader.registerAsParallelCapable();
@@ -22,15 +22,23 @@ index 379b49f13a8c676125e17ad9207884a5d6cb5b7b..4c84e3a5c983b7f8fe5515fff6fcfa64
          Class<?> result = classes.get(name);
  
 -        if (result == null) {
-+        if (result == null && !this.closed) { // Airplane
++        if (result == null && !this.closed) { // Pufferfish
              String path = name.replace('.', '/').concat(".class");
              JarEntry entry = jar.getJarEntry(path);
  
-@@ -214,6 +216,7 @@ public final class PluginClassLoader extends URLClassLoader { // Spigot
+@@ -206,6 +208,7 @@ public final class PluginClassLoader extends URLClassLoader { // Spigot
+             classes.put(name, result);
+         }
+ 
++        if (result == null) throw new ClassNotFoundException(name); // Pufferfish
+         return result;
+     }
+ 
+@@ -214,6 +217,7 @@ public final class PluginClassLoader extends URLClassLoader { // Spigot
          try {
              super.close();
          } finally {
-+            this.closed = true; // Airplane
++            this.closed = true; // Pufferfish
              jar.close();
          }
      }

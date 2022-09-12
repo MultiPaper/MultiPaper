@@ -1,0 +1,268 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 9 Jul 2022 01:07:31 +1000
+Subject: [PATCH] Sync entity ids
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 910d34227d598f6e5d0253ca8dfb0c37c3a323c8..9b37b3608c431e653fda35cc7357616b85ebb7b2 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -244,7 +244,7 @@ public class ServerPlayer extends Player {
+     // Paper start - mob spawning rework
+     public static final int MOBCATEGORY_TOTAL_ENUMS = net.minecraft.world.entity.MobCategory.values().length;
+     public final int[] mobCounts = new int[MOBCATEGORY_TOTAL_ENUMS]; // Paper
+-    public final com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> cachedSingleMobDistanceMap;
++    public com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> cachedSingleMobDistanceMap; // MultiPaper - make not final
+     // Paper end
+ 
+     // CraftBukkit start
+@@ -266,7 +266,7 @@ public class ServerPlayer extends Player {
+     public PlayerNaturallySpawnCreaturesEvent playerNaturallySpawnedEvent; // Paper
+ 
+     public double lastEntitySpawnRadiusSquared; // Paper - optimise isOutsideRange, this field is in blocks
+-    public final com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> cachedSingleHashSet; // Paper
++    public com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> cachedSingleHashSet; // Paper // MultiPaper - make not final
+     public org.bukkit.event.player.PlayerQuitEvent.QuitReason quitReason = null; // Paper - there are a lot of changes to do if we change all methods leading to the event
+ 
+     public ServerPlayer(MinecraftServer server, ServerLevel world, GameProfile profile, @Nullable ProfilePublicKey publicKey) {
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 8acf98946c8bd2f7f3dafd84769e19439b597175..6877f6ada42781917a51339714d1fb6aaf6763f3 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -155,6 +155,8 @@ import puregero.multipaper.ExternalServer;
+ import puregero.multipaper.ExternalServerConnection;
+ import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperEntitiesHandler;
++import puregero.multipaper.MultiPaperEntityIdManager;
++import puregero.multipaper.config.MultiPaperConfiguration;
+ import puregero.multipaper.externalserverprotocol.EntityRemovePacket;
+ import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
+ import puregero.multipaper.externalserverprotocol.EntityUpdateWithDependenciesPacket;
+@@ -578,7 +580,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+     // Paper end
+ 
+     public Entity(EntityType<?> type, Level world) {
+-        this.id = Entity.ENTITY_COUNTER.incrementAndGet();
++        this.id = MultiPaperEntityIdManager.next(); // MultiPaper - sync entity ids
+         this.passengers = ImmutableList.of();
+         this.deltaMovement = Vec3.ZERO;
+         this.bb = Entity.INITIAL_AABB;
+@@ -2255,6 +2257,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+ 
+     public CompoundTag saveWithoutId(CompoundTag nbt) {
+         try {
++            if (this.isSyncing && MultiPaperConfiguration.get().syncSettings.syncEntityIds) nbt.putInt("EntityId", this.getId()); // MultiPaper
+             if (this.vehicle != null) {
+                 nbt.put("Pos", this.newDoubleList(this.vehicle.getX(), this.getY(), this.vehicle.getZ()));
+             } else {
+@@ -2358,9 +2361,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+                     Entity entity = (Entity) iterator.next();
+                     CompoundTag nbttagcompound1 = new CompoundTag();
+ 
++                    if (this.isSyncing) entity.isSyncing = true; // MultiPaper
+                     if (entity.saveAsPassenger(nbttagcompound1)) {
+                         nbttaglist.add(nbttagcompound1);
+                     }
++                    if (this.isSyncing) entity.isSyncing = false; // MultiPaper
+                 }
+ 
+                 if (!nbttaglist.isEmpty()) {
+@@ -2407,6 +2412,18 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+ 
+     public void load(CompoundTag nbt) {
+         try {
++            // MultiPaper start
++            if (nbt.contains("EntityId") && MultiPaperConfiguration.get().syncSettings.syncEntityIds) {
++                int entityId = nbt.getInt("EntityId");
++                if (getId() != entityId) {
++                    if (level != null && level.getEntity(getId()) != null) {
++                        new Exception("Failed to sync entity id for " + this + ". This entity has already been added to the world!").printStackTrace();
++                    } else {
++                        setId(entityId);
++                    }
++                }
++            }
++            // MultiPaper end
+             ListTag nbttaglist = nbt.getList("Pos", 6);
+             ListTag nbttaglist1 = nbt.getList("Motion", 6);
+             ListTag nbttaglist2 = nbt.getList("Rotation", 5);
+diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
+index 68b41d5e46d20626545a15ab120ee2ad99b5dd80..59d9976175d98a17dad4d23afe43f2842fb20b11 100644
+--- a/src/main/java/puregero/multipaper/ExternalPlayer.java
++++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
+@@ -21,6 +21,7 @@ import org.bukkit.Bukkit;
+ import org.bukkit.craftbukkit.CraftServer;
+ import org.bukkit.craftbukkit.CraftWorld;
+ import org.bukkit.craftbukkit.event.CraftEventFactory;
++import puregero.multipaper.config.MultiPaperConfiguration;
+ import puregero.multipaper.externalserverprotocol.EntityUpdatePacket;
+ import puregero.multipaper.externalserverprotocol.HurtEntityPacket;
+ 
+@@ -40,14 +41,22 @@ public class ExternalPlayer extends ServerPlayer {
+     private boolean sendPackets = true;
+     public boolean updatingData = false;
+ 
+-    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, ProfilePublicKey profilePublicKey, String advancements, String stats) {
++    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, ProfilePublicKey profilePublicKey, String advancements, String stats, int entityId) {
+         loadedAdvancements.put(gameProfile.getId(), advancements);
+         loadedStats.put(gameProfile.getId(), stats);
+-        return new ExternalPlayer(externalServerConnection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, profilePublicKey);
++        return new ExternalPlayer(externalServerConnection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, profilePublicKey, entityId);
+    }
+ 
+-    public ExternalPlayer(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, ProfilePublicKey profilePublicKey) {
++    public ExternalPlayer(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, ProfilePublicKey profilePublicKey, int entityId) {
+         super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), gameProfile, profilePublicKey);
++
++        if (MultiPaperConfiguration.get().syncSettings.syncEntityIds) {
++            setId(entityId);
++            // Update cache hast sets with our new entity id
++            this.cachedSingleHashSet = new com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<>(this);
++            this.cachedSingleMobDistanceMap = new com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<>(this);
++        }
++
+         this.externalServerConnection = externalServerConnection;
+         this.address = address;
+         this.isRealPlayer = true;
+diff --git a/src/main/java/puregero/multipaper/MultiPaperEntityIdManager.java b/src/main/java/puregero/multipaper/MultiPaperEntityIdManager.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..a7d863e6ccbcff3ccc3ef73e7335ffdd97a09907
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperEntityIdManager.java
+@@ -0,0 +1,88 @@
++package puregero.multipaper;
++
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.config.MultiPaperConfiguration;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.RequestEntityIdBlock;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.IntegerPairMessageReply;
++
++import java.util.Objects;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.atomic.AtomicInteger;
++
++/**
++ * Synchronise the entity ids between servers.
++ *
++ * Requirements: No two servers can assign the same entity id. A server must be
++ * able to assign a new entity id instantly without waiting for an I/O
++ * operation or anything.
++ *
++ * This solution: Allocate blocks of entity ids to servers. Eg, server1 gets
++ * block [0, 1024), server2 gets block [1024, 2048), etc. The server will be
++ * able to instantly assign an entity id from this block. An extra block will
++ * be cached on each server so that it can go into use immediately if the
++ * current block runs out of ids. If the cache is emptied, an async request
++ * will be made to assign a new block of entity ids to refill the cache in
++ * time for the next requirement for a new block.
++ */
++public class MultiPaperEntityIdManager {
++    private static final Logger LOGGER = LogManager.getLogger(MultiPaperEntityIdManager.class.getSimpleName());
++    private static AtomicInteger LOCAL_ENTITY_COUNTER = new AtomicInteger(1);
++    private static Block entityIdBlock = null;
++    private static Block nextEntityIdBlock = null;
++    private static long nextBlockRequestSentTime = 0;
++    private static CompletableFuture<Void> nextBlockRequest = CompletableFuture.completedFuture(null);
++
++    private static synchronized void getNextBlock(Block oldBlock) {
++        if (!Objects.equals(entityIdBlock, oldBlock)) {
++            // The block has already been changed by another thread, abort
++            return;
++        }
++
++        if (!nextBlockRequest.isDone()) {
++            // Wait for an ongoing request for the next block
++            LOGGER.warn("Waiting for more entity ids from the master. (The request for more entity ids was sent " + (System.currentTimeMillis() - nextBlockRequestSentTime) + "ms ago)");
++            nextBlockRequest.join();
++        }
++
++        if (nextEntityIdBlock == null) {
++            // There is no next block, request it. This is expected if the server has just started up.
++            requestNextBlock().join();
++        }
++
++        LOCAL_ENTITY_COUNTER = new AtomicInteger(nextEntityIdBlock.min);
++
++        entityIdBlock = nextEntityIdBlock;
++        nextEntityIdBlock = null;
++
++        // Begin the I/O request for the next block so that there's always one ready in the cache.
++        requestNextBlock();
++    }
++
++    private static CompletableFuture<Void> requestNextBlock() {
++        nextBlockRequestSentTime = System.currentTimeMillis();
++        return nextBlockRequest = MultiPaper.getConnection().sendAndAwaitReply(new RequestEntityIdBlock(), IntegerPairMessageReply.class).thenAccept(reply -> {
++            nextEntityIdBlock = new Block(reply.x, reply.y);
++        });
++    }
++
++    public static int next() {
++        if (MultiPaperConfiguration.get().syncSettings.syncEntityIds) {
++            Block block = entityIdBlock;
++            int id = LOCAL_ENTITY_COUNTER.getAndIncrement();
++            if (block == null || !block.isInBounds(id)) { // Check the max id before the min id due to concurrent variable modification
++                getNextBlock(block);
++                return next();
++            }
++            return id;
++        } else {
++            return LOCAL_ENTITY_COUNTER.getAndIncrement();
++        }
++    }
++
++    private record Block(int min, int max) {
++        public boolean isInBounds(int i) {
++            return i >= min && i < max;
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+index 0ab2419ee822a0f199dfc408d740de45e8d5a148..e4bc6f2a4757905e304dbfe0d9bc669d878d0054 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+@@ -46,6 +46,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+     private final String stats;
+     private final ConcurrentHashMap<String, String> data;
+     private final ConcurrentHashMap<String, String> persistentData;
++    private final int entityId;
+ 
+     private PlayerCreatePacket(ServerPlayer player) {
+         this.gameProfile = player.gameProfile;
+@@ -63,6 +64,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+         this.stats = player.getStats().toJson();
+         this.data = player.getBukkitEntity().data;
+         this.persistentData = player.getBukkitEntity().persistentData;
++        this.entityId = player.getId();
+     }
+ 
+     public PlayerCreatePacket(FriendlyByteBuf in) {
+@@ -97,6 +99,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+         for (int i = 0; i < persistentDataLength; i++) {
+             persistentData.put(in.readUtf(), in.readUtf());
+         }
++
++        entityId = in.readVarInt();
+     }
+ 
+     @Override
+@@ -133,6 +137,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+             out.writeUtf(entry.getKey());
+             out.writeUtf(entry.getValue());
+         }
++
++        out.writeVarInt(entityId);
+     }
+ 
+     @Override
+@@ -152,7 +158,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+                 e.printStackTrace();
+             }
+ 
+-            ExternalPlayer player = ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, profilePublicKey, advancements, stats);
++            ExternalPlayer player = ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, profilePublicKey, advancements, stats, entityId);
+             player.getBukkitEntity().data = data;
+             player.getBukkitEntity().persistentData = persistentData;
+         });

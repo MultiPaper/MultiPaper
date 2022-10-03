@@ -5,7 +5,7 @@ Subject: [PATCH] Don't suck from external minecarts and boats
 
 
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-index 7d55b3d06afac9b7669ea803bcb138e0a9213978..4f3b7b506679f292105fa9eced4a8f73fcfcc69f 100644
+index 7d55b3d06afac9b7669ea803bcb138e0a9213978..869ee544b01668f1cfe37a003b4759fcbd3a7874 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 @@ -40,6 +40,7 @@ import org.bukkit.event.inventory.InventoryPickupItemEvent;
@@ -16,12 +16,17 @@ index 7d55b3d06afac9b7669ea803bcb138e0a9213978..4f3b7b506679f292105fa9eced4a8f73
  import puregero.multipaper.externalserverprotocol.PullItemFromContainerPacket;
  // CraftBukkit end
  
-@@ -499,7 +500,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -499,7 +500,12 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
      public static boolean suckInItems(Level world, Hopper hopper) {
          Container iinventory = HopperBlockEntity.getSourceContainer(world, hopper);
  
 -        if (iinventory != null) {
-+        if (iinventory != null && !(iinventory instanceof Entity entity && MultiPaperEntityInteractHandler.getOwner(entity) != null)) { // MultiPaper - don't suck from external minecarts and boats
++        // MultiPaper start - don't suck from external minecarts and boats
++        if (iinventory != null
++                && !(iinventory instanceof Entity entity && MultiPaperEntityInteractHandler.getOwner(entity) != null)
++                && !(iinventory instanceof CompoundContainer compoundContainer && !MultiPaper.isChunkLocal(world.getChunkIfLoaded(MultiPaperContainerHandler.getPrimaryChest(compoundContainer).getBlockPos())))
++                && !(iinventory instanceof BlockEntity blockEntity && !MultiPaper.isChunkLocal(world.getChunkIfLoaded(blockEntity.getBlockPos())))) {
++        // Multipaper end
              Direction enumdirection = Direction.DOWN;
  
              // Paper start - optimize hoppers and remove streams

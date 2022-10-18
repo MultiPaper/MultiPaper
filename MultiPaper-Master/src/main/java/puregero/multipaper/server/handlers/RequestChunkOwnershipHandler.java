@@ -20,7 +20,7 @@ public class RequestChunkOwnershipHandler {
 
         System.out.println(connection.getBungeeCordName() + " is requesting " + Arrays.toString(message.chunks) + " " + hasAtLeastOneChunkLocked);
 
-        if (hasAtLeastOneChunkLocked) {
+        if (hasAtLeastOneChunkLocked || message.force) {
             for (ChunkKey key : message.chunks) {
                 ChunkSubscriptionManager.lock(connection, key.world, key.x, key.z, true);
             }

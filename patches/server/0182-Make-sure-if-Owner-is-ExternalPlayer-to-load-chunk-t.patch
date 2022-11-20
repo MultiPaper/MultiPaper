@@ -6,12 +6,14 @@ Subject: [PATCH] Make sure if Owner is ExternalPlayer to load chunk that
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java b/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java
-index 7dc8cc93e8da37e1096c3263c1c8fc55bbf60401..3bf0506134743bf7d98c6b86c5bc222c3090e191 100644
+index 7dc8cc93e8da37e1096c3263c1c8fc55bbf60401..e05153a699f7022e004b7169f290a9b8be09b138 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java
 +++ b/src/main/java/net/minecraft/world/entity/ai/goal/FollowOwnerGoal.java
-@@ -17,6 +17,9 @@ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
+@@ -16,7 +16,11 @@ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
+ // CraftBukkit start
  import org.bukkit.Location;
  import org.bukkit.craftbukkit.entity.CraftEntity;
++import org.bukkit.entity.Player;
  import org.bukkit.event.entity.EntityTeleportEvent;
 +// MultiPaper start
 +import puregero.multipaper.ExternalPlayer;
@@ -19,12 +21,16 @@ index 7dc8cc93e8da37e1096c3263c1c8fc55bbf60401..3bf0506134743bf7d98c6b86c5bc222c
  // CraftBukkit end
  
  public class FollowOwnerGoal extends Goal {
-@@ -143,6 +146,8 @@ public class FollowOwnerGoal extends Goal {
+@@ -143,6 +147,12 @@ public class FollowOwnerGoal extends Goal {
      }
  
      private boolean canTeleportTo(BlockPos pos) {
-+        if (owner instanceof ExternalPlayer externalPlayer) externalPlayer.getBukkitEntity().getChunk(); // MultiPaper
-+
++        // MultiPaper start
++        if (owner instanceof ExternalPlayer externalPlayer) {
++            Player player = externalPlayer.getBukkitEntity();
++            player.getWorld().getChunkAtAsync(player.getLocation());
++        }
++        // MultiPaper end
          BlockPathTypes pathtype = WalkNodeEvaluator.getBlockPathTypeStatic(this.level, pos.mutable());
  
          if (pathtype != BlockPathTypes.WALKABLE) {

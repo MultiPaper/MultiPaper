@@ -5,7 +5,7 @@ Subject: [PATCH] Add generic file syncing between servers
 
 
 diff --git a/build.gradle.kts b/build.gradle.kts
-index e8a37141d9020a760def17978a603ab112abb205..310cbf7d2d9d09440b2b26615a82adb2f4da1ca6 100644
+index 536c2851cfeea7a7e8494b57b36e965a2e478e19..ddaac25a3274a5973260cc37bb001af6afb08ac2 100644
 --- a/build.gradle.kts
 +++ b/build.gradle.kts
 @@ -57,6 +57,8 @@ dependencies {
@@ -18,7 +18,7 @@ index e8a37141d9020a760def17978a603ab112abb205..310cbf7d2d9d09440b2b26615a82adb2
      implementation("com.github.technove:Flare:2c4a2114a0") // Airplane - flare
  
 diff --git a/src/main/java/net/minecraft/server/Main.java b/src/main/java/net/minecraft/server/Main.java
-index 4201e0debe2e4918dd926dba325717a6bd35ed2b..af6a2eaf51b34a326c4cbec4b8e0fb84fd4dc172 100644
+index 4201e0debe2e4918dd926dba325717a6bd35ed2b..1095e0549de22085cd1385320dfc1da1d1c2224c 100644
 --- a/src/main/java/net/minecraft/server/Main.java
 +++ b/src/main/java/net/minecraft/server/Main.java
 @@ -68,6 +68,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
@@ -38,8 +38,46 @@ index 4201e0debe2e4918dd926dba325717a6bd35ed2b..af6a2eaf51b34a326c4cbec4b8e0fb84
  
              Bootstrap.bootStrap();
              Bootstrap.validate();
+@@ -160,6 +163,7 @@ public class Main {
+             // Spigot End
+             if (!eula.hasAgreedToEULA() && !eulaAgreed) { // Spigot
+                 Main.LOGGER.info("You need to agree to the EULA in order to run the server. Go to eula.txt for more info.");
++                System.exit(0); // MultiPaper
+                 return;
+             }
+ 
+@@ -184,11 +188,13 @@ public class Main {
+             if (worldinfo != null) {
+                 if (worldinfo.requiresManualConversion()) {
+                     Main.LOGGER.info("This world must be opened in an older version (like 1.6.4) to be safely converted");
++                    System.exit(0); // MultiPaper
+                     return;
+                 }
+ 
+                 if (!worldinfo.isCompatible()) {
+                     Main.LOGGER.info("This world was created by an incompatible version.");
++                    System.exit(0); // MultiPaper
+                     return;
+                 }
+             }
+@@ -264,6 +270,7 @@ public class Main {
+                 }).get();
+             } catch (Exception exception) {
+                 Main.LOGGER.warn("Failed to load datapacks, can't proceed with server load. You can either fix your datapacks or reset to vanilla with --safeMode", exception);
++                System.exit(0); // MultiPaper
+                 return;
+             }
+ 
+@@ -319,6 +326,7 @@ public class Main {
+             */ // CraftBukkit end
+         } catch (Exception exception1) {
+             Main.LOGGER.error(LogUtils.FATAL_MARKER, "Failed to start the minecraft server", exception1);
++            System.exit(0); // MultiPaper
+         }
+ 
+     }
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index b256de7e1ed206458568cf84c59bd431eaa29a7b..d6e2843688a7748ffd29390a7331e1b6abb11ad5 100644
+index 6e6f9fd95925b0b73bb576cede1cf5e16b44afd8..e4dfd13f3ea66bc836b36b6840e47e96cf574aa3 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -183,6 +183,7 @@ import org.bukkit.event.server.ServerLoadEvent;

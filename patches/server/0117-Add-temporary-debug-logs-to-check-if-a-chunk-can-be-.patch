@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 18 Jan 2022 11:15:07 +1000
+Subject: [PATCH] Add temporary debug logs to check if a chunk can be not fully
+ loaded
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+index 8719a8dd2ad945f3440e4667f861d17783e7def1..59a882de7d5ce10f6bef14092b886b8c0aae0bb5 100644
+--- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
++++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+@@ -197,6 +197,9 @@ public class ServerChunkCache extends ChunkSource {
+         // try to fire sync
+         int chunkStatusTicketLevel = 33 + ChunkStatus.getDistance(status);
+         ChunkHolder playerChunk = this.chunkMap.getUpdatingChunkIfPresent(io.papermc.paper.util.CoordinateUtils.getChunkKey(chunkX, chunkZ));
++        if (playerChunk == null && this.chunkMap.getVisibleChunkIfPresent(io.papermc.paper.util.CoordinateUtils.getChunkKey(chunkX, chunkZ)) != null) {
++            LOGGER.warn("Trying to load chunk asynchronously but it's a visible chunk " + chunkX + "," + chunkZ);
++        }
+         if (playerChunk != null) {
+             ChunkStatus holderStatus = playerChunk.getChunkHolderStatus();
+             ChunkAccess immediate = playerChunk.getAvailableChunkNow();
+@@ -770,6 +773,14 @@ public class ServerChunkCache extends ChunkSource {
+                 // Paper end - optimise chunk tick iteration
+                 ChunkPos chunkcoordintpair = chunk1.getPos();
+ 
++                if (!chunk1.loaded) {
++                    LOGGER.warn(chunk1 + " isn't loaded!");
++                }
++
++                if (getVisibleChunkIfPresent(chunk1.getPos().longKey) == null) {
++                    LOGGER.warn(chunk1 + " isn't in the visible chunks!");
++                }
++
+                 // MultiPaper start - Don't tick this chunk if we don't own it
+                 boolean isTicking = chunkMap.getDistanceManager().inEntityTickingRange(chunkcoordintpair.longKey);
+                 if (isTicking && !holder.newChunkHolder.hasExternalLockRequest) MultiPaper.lockChunk(holder.newChunkHolder);

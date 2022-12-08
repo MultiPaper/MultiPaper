@@ -1,0 +1,235 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 7 Jul 2022 22:36:29 +1000
+Subject: [PATCH] Sync pois
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
+index c141e4f17dc7178dc24374bd9c11f4bca2c77e79..717141e7efdcbccda11a235d4765b7c74879dfc9 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
++++ b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiManager.java
+@@ -35,6 +35,7 @@ import net.minecraft.world.level.chunk.ChunkStatus;
+ import net.minecraft.world.level.chunk.LevelChunkSection;
+ import net.minecraft.world.level.chunk.storage.SectionStorage;
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.SetPoiPacket;
+ 
+ public class PoiManager extends SectionStorage<PoiSection> {
+     public static final int MAX_VILLAGE_DISTANCE = 6;
+@@ -65,12 +66,14 @@ public class PoiManager extends SectionStorage<PoiSection> {
+ 
+     public void add(BlockPos pos, Holder<PoiType> type) {
+         this.getOrCreate(SectionPos.asLong(pos)).add(pos, type);
++        SetPoiPacket.broadcastUpdate(world, pos); // MultiPaper
+     }
+ 
+     public void remove(BlockPos pos) {
+         this.getOrLoad(SectionPos.asLong(pos)).ifPresent((poiSet) -> {
+             poiSet.remove(pos);
+         });
++        SetPoiPacket.broadcastUpdate(world, pos); // MultiPaper
+     }
+ 
+     public long getCountInRange(Predicate<Holder<PoiType>> typePredicate, BlockPos pos, int radius, PoiManager.Occupancy occupationStatus) {
+@@ -164,6 +167,7 @@ public class PoiManager extends SectionStorage<PoiSection> {
+         return Optional.ofNullable(closest).map(poi -> {
+             // Paper end - re-route to faster logic
+             poi.acquireTicket();
++            SetPoiPacket.broadcastUpdate(world, poi.getPos()); // MultiPaper
+             return poi.getPos();
+         });
+     }
+@@ -187,11 +191,13 @@ public class PoiManager extends SectionStorage<PoiSection> {
+     }
+ 
+     public boolean release(BlockPos pos) {
+-        return this.getOrLoad(SectionPos.asLong(pos)).map((poiSet) -> {
++        boolean result = this.getOrLoad(SectionPos.asLong(pos)).map((poiSet) -> { // MultiPaper - add temp "result" variable
+             return poiSet.release(pos);
+         }).orElseThrow(() -> {
+             return Util.pauseInIde(new IllegalStateException("POI never registered at " + pos));
+         });
++        SetPoiPacket.broadcastUpdate(world, pos); // MultiPaper
++        return result; // MultiPaper - add temp "result" variable
+     }
+ 
+     public boolean exists(BlockPos pos, Predicate<Holder<PoiType>> predicate) {
+@@ -236,6 +242,7 @@ public class PoiManager extends SectionStorage<PoiSection> {
+ 
+     @Override
+     public void setDirty(long pos) {
++        if (!SetPoiPacket.shouldSavePoi()) return; // MultiPaper - don't save if modified by another server
+         // Paper start - rewrite chunk system
+         int chunkX = io.papermc.paper.util.CoordinateUtils.getChunkSectionX(pos);
+         int chunkZ = io.papermc.paper.util.CoordinateUtils.getChunkSectionZ(pos);
+@@ -291,7 +298,7 @@ public class PoiManager extends SectionStorage<PoiSection> {
+     }
+ 
+     @Override
+-    protected PoiSection getOrCreate(long pos) {
++    public PoiSection getOrCreate(long pos) { // MultiPaper - make public
+         int chunkX = io.papermc.paper.util.CoordinateUtils.getChunkSectionX(pos);
+         int chunkY = io.papermc.paper.util.CoordinateUtils.getChunkSectionY(pos);
+         int chunkZ = io.papermc.paper.util.CoordinateUtils.getChunkSectionZ(pos);
+diff --git a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiRecord.java b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiRecord.java
+index 227d50d4e4ce7f8450ec67bc896be15a9d15bb54..247101fe23c2ffecaa91575167574e07515b5c75 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiRecord.java
++++ b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiRecord.java
+@@ -45,6 +45,12 @@ public class PoiRecord {
+         return this.freeTickets;
+     }
+ 
++    // MultiPaper start
++    public void setFreeTickets(int freeTickets) {
++        this.freeTickets = freeTickets;
++    }
++    // MultiPaper end
++
+     protected boolean acquireTicket() {
+         if (this.freeTickets <= 0) {
+             return false;
+diff --git a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiSection.java b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiSection.java
+index 8241320f5f01d0b093024ca27f6d8bdbac487ab3..1ffbe160b13cab9e4cf19387a037ab4862dcdc59 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiSection.java
++++ b/src/main/java/net/minecraft/world/entity/ai/village/poi/PoiSection.java
+@@ -134,7 +134,7 @@ public class PoiSection {
+         return this.getPoiRecord(pos).map(PoiRecord::getPoiType);
+     }
+ 
+-    private Optional<PoiRecord> getPoiRecord(BlockPos pos) {
++    public Optional<PoiRecord> getPoiRecord(BlockPos pos) { // MultiPaper - make public
+         return Optional.ofNullable(this.records.get(SectionPos.sectionRelativePos(pos)));
+     }
+ 
+diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/SectionStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/SectionStorage.java
+index d783072bc964e45c308197e6f79874eb4a09f871..761f1f1471d7384b6b9207554f298613ce6d550b 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/storage/SectionStorage.java
++++ b/src/main/java/net/minecraft/world/level/chunk/storage/SectionStorage.java
+@@ -99,7 +99,7 @@ public class SectionStorage<R> extends RegionFileStorage implements AutoCloseabl
+         return this.levelHeightAccessor.isOutsideBuildHeight(i);
+     }
+ 
+-    protected R getOrCreate(long pos) {
++    public R getOrCreate(long pos) { // MultiPaper - make public
+         if (this.outsideStoredRange(pos)) {
+             throw (IllegalArgumentException)Util.pauseInIde(new IllegalArgumentException("sectionPos out of bounds"));
+         } else {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 6eb72802377e6524e1540a1b89940cd7faed9bd8..485a2d278a20d6ed6111f71efe712d77ff19edb6 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -74,6 +74,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerUseBlockPacket.class, PlayerUseBlockPacket::new);
+         addPacket(RaidUpdatePacket.class, RaidUpdatePacket::new);
+         addPacket(RaidJoinPacket.class, RaidJoinPacket::new);
++        addPacket(SetPoiPacket.class, SetPoiPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SetPoiPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SetPoiPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..ea47e2732f0e287d09f9ce2d9c083d95852f26b6
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SetPoiPacket.java
+@@ -0,0 +1,101 @@
++package puregero.multipaper.externalserverprotocol;
++
++import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Holder;
++import net.minecraft.core.Registry;
++import net.minecraft.core.SectionPos;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.resources.ResourceKey;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.entity.ai.village.poi.PoiManager;
++import net.minecraft.world.entity.ai.village.poi.PoiRecord;
++import net.minecraft.world.entity.ai.village.poi.PoiSection;
++import net.minecraft.world.entity.ai.village.poi.PoiType;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.World;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.Optional;
++import java.util.UUID;
++
++public class SetPoiPacket extends ExternalServerPacket {
++    private static final Logger LOGGER = LogManager.getLogger(SetPoiPacket.class.getSimpleName());
++
++    private static boolean handlingPacket = false;
++    private final UUID world;
++    private final BlockPos pos;
++    private final Optional<ResourceKey<PoiType>> optionalKey;
++    private final int freeTickets;
++
++    public SetPoiPacket(ServerLevel level, BlockPos pos, Optional<Holder<PoiType>> holderOptional, int freeTickets) {
++        this.world = level.getWorld().getUID();
++        this.pos = pos;
++        this.optionalKey = holderOptional.map(Holder::unwrapKey).flatMap(optional -> optional);
++        this.freeTickets = freeTickets;
++    }
++
++    public static void broadcastUpdate(ServerLevel level, BlockPos pos) {
++        if (!handlingPacket) {
++            NewChunkHolder newChunkHolder = MultiPaper.getChunkHolder(level, pos);
++            if (newChunkHolder != null) {
++                Optional<PoiSection> poiSectionOptional = Optional.ofNullable(level.getPoiManager().get(SectionPos.asLong(pos))).flatMap(optional -> optional);
++                poiSectionOptional.ifPresent(poiSection -> {
++                    poiSection.getPoiRecord(pos).ifPresentOrElse(poiRecord -> {
++                        MultiPaper.broadcastPacketToExternalServers(newChunkHolder.externalSubscribers, () -> new SetPoiPacket(level, pos, Optional.of(poiRecord.getPoiType()), poiRecord.getFreeTickets()));
++                    }, () -> {
++                        MultiPaper.broadcastPacketToExternalServers(newChunkHolder.externalSubscribers, () -> new SetPoiPacket(level, pos, Optional.empty(), 0));
++                    });
++                });
++            }
++        }
++    }
++
++    public SetPoiPacket(FriendlyByteBuf in) {
++        this.world = in.readUUID();
++        this.pos = in.readBlockPos();
++        this.optionalKey = in.readOptional(in2 -> in2.readResourceKey(Registry.POINT_OF_INTEREST_TYPE_REGISTRY));
++        this.freeTickets = in.readVarInt();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(this.world);
++        out.writeBlockPos(this.pos);
++        out.writeOptional(this.optionalKey, FriendlyByteBuf::writeResourceKey);
++        out.writeVarInt(this.freeTickets);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            handlingPacket = true;
++            World world = Bukkit.getWorld(this.world);
++            if (world instanceof CraftWorld craftWorld) {
++                PoiManager poiManager = craftWorld.getHandle().getPoiManager();
++                this.optionalKey.ifPresentOrElse(key -> {
++                    PoiSection poiSection = poiManager.getOrCreate(SectionPos.asLong(pos));
++                    PoiRecord record = poiSection.getPoiRecord(pos).orElse(null);
++                    if (record == null || !record.getPoiType().is(key)) {
++                        poiManager.add(this.pos, Registry.POINT_OF_INTEREST_TYPE.getHolderOrThrow(key));
++                        record = poiSection.getPoiRecord(pos).orElse(null);
++                    }
++                    if (record != null) {
++                        record.setFreeTickets(freeTickets);
++                    }
++                }, () -> {
++                    poiManager.remove(this.pos);
++                });
++            }
++            handlingPacket = false;
++        });
++    }
++
++    public static boolean shouldSavePoi() {
++        return !handlingPacket;
++    }
++}

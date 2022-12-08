@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 6 Jan 2022 16:17:48 +1000
+Subject: [PATCH] Run all the queued tasks before the next tick
+
+
+diff --git a/src/main/java/net/minecraft/util/thread/BlockableEventLoop.java b/src/main/java/net/minecraft/util/thread/BlockableEventLoop.java
+index 83701fbfaa56a232593ee8f11a3afb8941238bfa..04021bf00b9c62f3212b70f112ecb4c93a44c4de 100644
+--- a/src/main/java/net/minecraft/util/thread/BlockableEventLoop.java
++++ b/src/main/java/net/minecraft/util/thread/BlockableEventLoop.java
+@@ -132,11 +132,12 @@ public abstract class BlockableEventLoop<R extends Runnable> implements Profiler
+         ++this.blockingCount;
+ 
+         try {
+-            while(!stopCondition.getAsBoolean()) {
+-                if (!this.pollTask()) {
+-                    this.waitForTasks();
+-                }
+-            }
++            // MultiPaper start - run all the queued tasks before the next tick
++            do {
++                while (this.pollTask());
++                this.waitForTasks();
++            } while (!stopCondition.getAsBoolean());
++            // MultiPaper end - run all the queued tasks before the next tick
+         } finally {
+             --this.blockingCount;
+         }

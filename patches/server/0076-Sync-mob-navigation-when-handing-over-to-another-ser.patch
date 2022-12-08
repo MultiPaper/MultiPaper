@@ -5,7 +5,7 @@ Subject: [PATCH] Sync mob navigation when handing over to another server
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/ai/navigation/PathNavigation.java b/src/main/java/net/minecraft/world/entity/ai/navigation/PathNavigation.java
-index 02653adc591d390ca8b4ee13289510d4652c8894..62e14e6a3b3a139d9c85c426eda34965a75f03ed 100644
+index 1d9d502e071324f50c8b7655790091c0c55263ba..22208bb1f4331e5a4277f59c78d977526d8d3597 100644
 --- a/src/main/java/net/minecraft/world/entity/ai/navigation/PathNavigation.java
 +++ b/src/main/java/net/minecraft/world/entity/ai/navigation/PathNavigation.java
 @@ -32,7 +32,7 @@ public abstract class PathNavigation {
@@ -18,24 +18,24 @@ index 02653adc591d390ca8b4ee13289510d4652c8894..62e14e6a3b3a139d9c85c426eda34965
      protected int lastStuckCheck;
      protected Vec3 lastStuckCheckPos = Vec3.ZERO;
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-index c2c9e05f2d7a675582d809d9cae0c3617b2d7510..5d630422bc63bafef8c01d4bec14196b7defeda2 100644
+index e4eec86610933b51baa78e484c472fba121c6534..b287e2fc79b5843eb5e4eae9c60d8f1714f43047 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -130,6 +130,14 @@ public class MultiPaperEntitiesHandler {
+@@ -127,6 +127,14 @@ public class MultiPaperEntitiesHandler {
                  // Leaving our jurisdiction, do a full entity update to ensure the new external server has all the required info
                  if (!(entity instanceof ServerPlayer)) { // Ignore players as they aren't ticked by the new external server
-                     MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity)));
+                     MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(chunkTo.getChunkHolder().externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity)));
 +                    if (entity instanceof Mob mob) {
 +                        MultiPaper.runSync(() -> {
 +                            BlockPos goal = mob.getNavigation().getTargetPos();
 +                            if (goal != null) {
-+                                MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new MobSetNavigationGoalPacket(mob, goal));
++                                MultiPaper.broadcastPacketToExternalServers(chunkTo.getChunkHolder().externalEntitiesSubscribers, () -> new MobSetNavigationGoalPacket(mob, goal));
 +                            }
 +                        });
 +                    }
                  }
              }
-             for (ExternalServer fromServer : chunkFrom.externalEntitiesSubscribers) {
+             for (ExternalServer fromServer : chunkFrom.getChunkHolder().externalEntitiesSubscribers) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
 index a8d65f014702b229e9500f881231f71ff761ee3f..7dd289fd1155bfe6f519fd49d142ac7e1bf1c0a7 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java

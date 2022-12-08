@@ -6,7 +6,7 @@ Subject: [PATCH] Take control of external chunks to ensure a redstone
 
 
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index a8f6c060c4224a4ee486cf094e6157bcb9ed99d9..4960eced8e47614392b78ef7834de75e5e74ad44 100644
+index 5ee73b6720d8fa6fd85fe7ec3098ef162183d91e..3c767c0585a691df0f80c91ddbc8dd084ac8877a 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -182,6 +182,7 @@ import org.bukkit.event.server.ServerLoadEvent;
@@ -17,7 +17,7 @@ index a8f6c060c4224a4ee486cf094e6157bcb9ed99d9..4960eced8e47614392b78ef7834de75e
  
  public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements CommandSource, AutoCloseable {
  
-@@ -1537,6 +1538,9 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1517,6 +1518,9 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          MinecraftTimings.timeUpdateTimer.stopTiming(); // Spigot // Paper
  
          this.isIteratingOverLevels = true; // Paper
@@ -28,10 +28,10 @@ index a8f6c060c4224a4ee486cf094e6157bcb9ed99d9..4960eced8e47614392b78ef7834de75e
          while (iterator.hasNext()) {
              ServerLevel worldserver = (ServerLevel) iterator.next();
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index e28b6664ca9fe8391225faf13cea5528fa845edb..dcad8ae5e8b95016be2f6160e51ecd5feff51e1d 100644
+index 81adcbd60916ee1c55c144ace8c3e636ab0fa783..b36f090c4b8430d800777bf39b13d2fd0626435c 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
-@@ -794,6 +794,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+@@ -793,6 +793,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
              return false;
          } else {
              FluidState fluid = this.getFluidState(pos);
@@ -77,10 +77,10 @@ index 83ae1b3790e9347b09f0bf0dec1839b3a7925856..9c0a6b836de9cc8309776317760d0469
      }
  
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index 88c74eb1e24c3874baa5c49b0f66295b5830ba9f..247426f85c876d8d487e5a4c199d6bf7cde27ce7 100644
+index 41d26bd7a4908b509a8f531f215ea7639d72e20c..f9974341f515c4cb0883edb666e478b064eea116 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-@@ -614,7 +614,13 @@ public class LevelChunk extends ChunkAccess {
+@@ -603,7 +603,13 @@ public class LevelChunk extends ChunkAccess {
                  boolean flag3 = iblockdata1.hasBlockEntity();
  
                  if (!this.level.isClientSide) {
@@ -95,10 +95,10 @@ index 88c74eb1e24c3874baa5c49b0f66295b5830ba9f..247426f85c876d8d487e5a4c199d6bf7
                      this.removeBlockEntity(blockposition);
                  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 80d5f643aee93e6a32506e48f945e2ed93c01ed2..9f1fb218803f14dafd0c7b961667b3849c55e809 100644
+index a69747e40e41eedd0b9744902fd627a1d1a28dea..1aaa714ccdfe5a3a2c035cb7aa89664e86ab2c8b 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -151,6 +151,8 @@ public class MultiPaper {
+@@ -124,6 +124,8 @@ public class MultiPaper {
                  broadcastPacketToExternalServers(new TimeUpdatePacket(level));
              }
          }
@@ -109,12 +109,13 @@ index 80d5f643aee93e6a32506e48f945e2ed93c01ed2..9f1fb218803f14dafd0c7b961667b384
      public static void sendTickTime(long time, double tps) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java b/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..73d9c7d88cbf170d3b8d224b8bac5c92be7b4c1e
+index 0000000000000000000000000000000000000000..c88ad1b59de282ffa6feda50e91447e2928f513f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperExternalBlocksHandler.java
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,151 @@
 +package puregero.multipaper;
 +
++import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerLevel;
@@ -122,7 +123,8 @@ index 0000000000000000000000000000000000000000..73d9c7d88cbf170d3b8d224b8bac5c92
 +import net.minecraft.world.level.chunk.LevelChunk;
 +import net.minecraft.world.level.material.Fluid;
 +import net.minecraft.world.ticks.LevelChunkTicks;
-+import puregero.multipaper.config.MultiPaperConfiguration;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
 +import puregero.multipaper.externalserverprotocol.SendTickListPacket;
 +import puregero.multipaper.mastermessagingprotocol.ChunkKey;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.RequestChunkOwnershipMessage;
@@ -136,14 +138,15 @@ index 0000000000000000000000000000000000000000..73d9c7d88cbf170d3b8d224b8bac5c92
 +
 +public class MultiPaperExternalBlocksHandler {
 +
-+    private static final HashSet<LevelChunk> scheduledChunks = new HashSet<>();
-+    private static final List<CompletableFutureWithKey<HashSet<LevelChunk>, Boolean>> takingControlOf = new ArrayList<>();
++    private static final Logger LOGGER = LogManager.getLogger(MultiPaperExternalBlocksHandler.class.getSimpleName());
++    private static final HashSet<NewChunkHolder> scheduledChunks = new HashSet<>();
++    private static final List<CompletableFutureWithKey<HashSet<NewChunkHolder>, Boolean>> takingControlOf = new ArrayList<>();
 +
 +    public static void onBlockScheduled(ServerLevel level, BlockPos pos) {
-+        LevelChunk chunk = level.getChunkIfLoaded(pos);
++        NewChunkHolder newChunkHolder = MultiPaper.getChunkHolder(level, pos);
 +
-+        if (MultiPaper.isChunkExternal(chunk)) {
-+            scheduledChunks.add(chunk);
++        if (MultiPaper.isChunkExternal(newChunkHolder)) {
++            scheduledChunks.add(newChunkHolder);
 +        }
 +    }
 +
@@ -151,23 +154,23 @@ index 0000000000000000000000000000000000000000..73d9c7d88cbf170d3b8d224b8bac5c92
 +        takingControlOf.clear();
 +
 +        while (!scheduledChunks.isEmpty()) {
-+            Iterator<LevelChunk> iterator = scheduledChunks.iterator();
-+            LevelChunk chunk = iterator.next();
++            Iterator<NewChunkHolder> iterator = scheduledChunks.iterator();
++            NewChunkHolder newChunkHolder = iterator.next();
 +            iterator.remove();
 +
-+            if (!chunk.hasExternalLockRequest) {
++            if (!newChunkHolder.hasExternalLockRequest) {
 +                // We aren't ticking this chunk
-+                sendTickListTo(chunk);
++                sendTickListTo(newChunkHolder);
 +                continue;
 +            }
 +
-+            HashSet<LevelChunk> neighbours = new HashSet<>();
++            HashSet<NewChunkHolder> neighbours = new HashSet<>();
 +
-+            fillTickingNeighbours(chunk, neighbours);
++            fillTickingNeighbours(newChunkHolder, neighbours);
 +
 +            boolean hasALocalChunk = false;
 +
-+            for (LevelChunk neighbour : neighbours) {
++            for (NewChunkHolder neighbour : neighbours) {
 +                if (MultiPaper.isChunkLocal(neighbour)) {
 +                    hasALocalChunk = true;
 +                    break;
@@ -177,7 +180,7 @@ index 0000000000000000000000000000000000000000..73d9c7d88cbf170d3b8d224b8bac5c92
 +            if (hasALocalChunk) {
 +                takingControlOf.add(requestChunkOwnership(neighbours));
 +            } else {
-+                for (LevelChunk neighbour : neighbours) {
++                for (NewChunkHolder neighbour : neighbours) {
 +                    sendTickListTo(neighbour);
 +                }
 +            }
@@ -189,32 +192,37 @@ index 0000000000000000000000000000000000000000..73d9c7d88cbf170d3b8d224b8bac5c92
 +            // Wait for the control process to complete before continuing the tick so that this doesn't mess up the next tick
 +            MinecraftServer.getServer().managedBlock(allFuture::isDone);
 +
-+            for (CompletableFutureWithKey<HashSet<LevelChunk>, Boolean> completableFuture : takingControlOf) {
++            for (CompletableFutureWithKey<HashSet<NewChunkHolder>, Boolean> completableFuture : takingControlOf) {
 +                if (!completableFuture.join()) {
 +                    // Failed to take control of the chunks, send the tick lists to their owners
-+                    for (LevelChunk chunk : completableFuture.getKey()) {
-+                        sendTickListTo(chunk);
++                    for (NewChunkHolder newChunkHolder : completableFuture.getKey()) {
++                        sendTickListTo(newChunkHolder);
 +                    }
 +                }
 +            }
 +        }
 +    }
 +
-+    private static void sendTickListTo(LevelChunk chunk) {
-+        if (MultiPaper.isChunkExternal(chunk)) {
-+            chunk.externalOwner.getConnection().send(new SendTickListPacket(chunk));
-+            ((LevelChunkTicks<Block>) chunk.getBlockTicks()).removeIf(schedule -> true);
-+            ((LevelChunkTicks<Fluid>) chunk.getFluidTicks()).removeIf(schedule -> true);
++    private static void sendTickListTo(NewChunkHolder newChunkHolder) {
++        if (MultiPaper.isChunkExternal(newChunkHolder)) {
++            if (newChunkHolder.getCurrentChunk() instanceof LevelChunk levelChunk) {
++                newChunkHolder.externalOwner.getConnection().send(new SendTickListPacket(levelChunk));
++                ((LevelChunkTicks<Block>) levelChunk.getBlockTicks()).removeIf(schedule -> true);
++                ((LevelChunkTicks<Fluid>) levelChunk.getFluidTicks()).removeIf(schedule -> true);
++            } else {
++                LOGGER.warn("Tried sending a tick list to a chunk that isn't a level chunk: " + newChunkHolder);
++            }
 +        }
 +    }
 +
-+    private static void fillTickingNeighbours(LevelChunk chunk, HashSet<LevelChunk> neighbours) {
++    private static void fillTickingNeighbours(NewChunkHolder newChunkHolder, HashSet<NewChunkHolder> neighbours) {
 +        for (int x = -1; x <= 1; x ++) {
 +            for (int z = -1; z <= 1; z ++) {
-+                LevelChunk neighbour = chunk.level.getChunkIfLoaded(chunk.locX + x, chunk.locZ + z);
++                NewChunkHolder neighbour = MultiPaper.getChunkHolder(newChunkHolder.world, newChunkHolder.chunkX + x, newChunkHolder.chunkZ + z);
 +
 +                if (neighbour != null && !neighbours.contains(neighbour) && neighbour.hasExternalLockRequest &&
-+                        (neighbour.getBlockTicks().count() > 0 || neighbour.getFluidTicks().count() > 0)) {
++                        neighbour.getCurrentChunk() instanceof LevelChunk levelChunk &&
++                        (levelChunk.getBlockTicks().count() > 0 || levelChunk.getFluidTicks().count() > 0)) {
 +                    scheduledChunks.remove(neighbour);
 +                    neighbours.add(neighbour);
 +                    fillTickingNeighbours(neighbour, neighbours);
@@ -223,19 +231,19 @@ index 0000000000000000000000000000000000000000..73d9c7d88cbf170d3b8d224b8bac5c92
 +        }
 +    }
 +
-+    private static CompletableFutureWithKey<HashSet<LevelChunk>, Boolean> requestChunkOwnership(HashSet<LevelChunk> neighbours) {
-+        CompletableFutureWithKey<HashSet<LevelChunk>, Boolean> future = new CompletableFutureWithKey<>(neighbours);
++    private static CompletableFutureWithKey<HashSet<NewChunkHolder>, Boolean> requestChunkOwnership(HashSet<NewChunkHolder> neighbours) {
++        CompletableFutureWithKey<HashSet<NewChunkHolder>, Boolean> future = new CompletableFutureWithKey<>(neighbours);
 +
 +        String world = null;
 +        ChunkKey[] chunkKeys = new ChunkKey[neighbours.size()];
 +        int i = 0;
 +
-+        for (LevelChunk chunk : neighbours) {
++        for (NewChunkHolder newChunkHolder : neighbours) {
 +            if (world == null) {
-+                world = chunk.level.getWorld().getName();
++                world = newChunkHolder.world.getWorld().getName();
 +            }
 +
-+            chunkKeys[i++] = new ChunkKey(chunk.level.getWorld().getName(), chunk.locX, chunk.locZ);
++            chunkKeys[i++] = new ChunkKey(newChunkHolder.world.getWorld().getName(), newChunkHolder.chunkX, newChunkHolder.chunkZ);
 +        }
 +
 +        MultiPaper.getConnection().sendAndAwaitReply(new RequestChunkOwnershipMessage(world, chunkKeys), BooleanMessageReply.class).thenAccept(message -> future.complete(message.result));

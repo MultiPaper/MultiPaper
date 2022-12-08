@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 14 Jan 2022 20:27:48 +1000
+Subject: [PATCH] Only create a spawner state when we are actually spawning
+ mobs
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+index 59a882de7d5ce10f6bef14092b886b8c0aae0bb5..01fae1602968f74cce3d6eea6523a85c76458928 100644
+--- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
++++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+@@ -717,7 +717,9 @@ public class ServerChunkCache extends ChunkSource {
+             this.level.timings.countNaturalMobs.startTiming(); // Paper - timings
+             int l = this.distanceManager.getNaturalSpawnChunkCount();
+             // Paper start - per player mob spawning
+-            NaturalSpawner.SpawnState spawnercreature_d; // moved down
++            // NaturalSpawner.SpawnState spawnercreature_d; // moved down // MultiPaper - removed spawnercreature_d
++            boolean flag2 = this.level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING) && !this.level.players().isEmpty() && shouldSpawnCreaturesThisTick(); // CraftBukkit // MultiPaper - moved up and added shouldSpawnCreaturesThisTick
++            if (flag2) // MultiPaper
+             if ((this.spawnFriendlies || this.spawnEnemies) && this.chunkMap.playerMobDistanceMap != null) { // don't count mobs when animals and monsters are disabled
+                 // Pufferfish start - moved down when async processing
+                 if (!gg.pufferfish.pufferfish.PufferfishConfig.enableAsyncMobSpawning) {
+@@ -738,6 +740,7 @@ public class ServerChunkCache extends ChunkSource {
+             this.level.timings.countNaturalMobs.stopTiming(); // Paper - timings
+ 
+             //this.lastSpawnState = spawnercreature_d; // Pufferfish - this is managed asynchronously
++
+             gameprofilerfiller.popPush("filteringLoadedChunks");
+             // Paper - moved down
+             this.level.timings.chunkTicks.startTiming(); // Paper
+@@ -745,7 +748,7 @@ public class ServerChunkCache extends ChunkSource {
+             // Paper - moved down
+ 
+             gameprofilerfiller.popPush("spawnAndTick");
+-            boolean flag2 = this.level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING) && !this.level.players().isEmpty(); // CraftBukkit
++            // boolean flag2 = this.level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING) && !this.level.players().isEmpty(); // CraftBukkit // Multipaper - moved up
+ 
+             // Paper - only shuffle if per-player mob spawning is disabled
+             // Paper - moved natural spawn event up
+@@ -879,6 +882,20 @@ public class ServerChunkCache extends ChunkSource {
+         // Pufferfish end
+     }
+ 
++    // MultiPaper start
++    private boolean shouldSpawnCreaturesThisTick() {
++        LevelData worlddata = level.getLevelData();
++
++        for (long ticksPerSpawnCategery : level.ticksPerSpawnCategory.values()) {
++            if (ticksPerSpawnCategery != 0L && worlddata.getGameTime() % ticksPerSpawnCategery == 0L) {
++                return true;
++            }
++        }
++
++        return false;
++    }
++    // MultiPaper end
++
+     private void getFullChunk(long pos, Consumer<LevelChunk> chunkConsumer) {
+         ChunkHolder playerchunk = this.getVisibleChunkIfPresent(pos);
+ 

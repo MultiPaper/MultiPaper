@@ -26,17 +26,16 @@ index 4e86da4e5f8af5ab6e07f846545f7b4e51e629aa..dc9d2b7ff44b0ca31ab1b6e6258795c7
  
 diff --git a/src/main/java/puregero/multipaper/commands/MPMapCommand.java b/src/main/java/puregero/multipaper/commands/MPMapCommand.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..913325e43b9501809f3973987f120d8ef06c2d79
+index 0000000000000000000000000000000000000000..fe24b18dd90c0d6ded933b19d27e67750386ae0f
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/commands/MPMapCommand.java
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,88 @@
 +package puregero.multipaper.commands;
 +
++import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
 +import net.kyori.adventure.text.Component;
 +import net.kyori.adventure.text.event.HoverEvent;
 +import net.kyori.adventure.text.format.NamedTextColor;
-+import net.minecraft.world.level.chunk.ChunkAccess;
-+import net.minecraft.world.level.chunk.LevelChunk;
 +import org.bukkit.ChatColor;
 +import org.bukkit.command.Command;
 +import org.bukkit.command.CommandSender;
@@ -76,10 +75,8 @@ index 0000000000000000000000000000000000000000..913325e43b9501809f3973987f120d8e
 +        sendHeader(player, radius);
 +    }
 +
-+    private LevelChunk getChunk(Player player, int x, int z) {
-+        ChunkAccess chunkAccess = MultiPaper.getChunkAccess(player.getWorld().getName(), ((CraftPlayer) player).getHandle().blockPosition().offset(x << 4, 0, z << 4));
-+
-+        return chunkAccess instanceof LevelChunk levelChunk ? levelChunk : null;
++    private NewChunkHolder getChunkHolder(Player player, int x, int z) {
++        return MultiPaper.getChunkHolder(player.getWorld().getName(), ((CraftPlayer) player).getHandle().blockPosition().offset(x << 4, 0, z << 4));
 +    }
 +
 +    private void sendRow(Player player, int radius, int row) {
@@ -88,14 +85,14 @@ index 0000000000000000000000000000000000000000..913325e43b9501809f3973987f120d8e
 +        int i = -radius;
 +        while (i <= radius) {
 +            StringBuilder builder = new StringBuilder();
-+            LevelChunk chunk = getChunk(player, row, i);
-+            String name = chunk == null || chunk.externalOwner == null ? null : chunk.externalOwner.getName();
-+            NamedTextColor color = chunk == null ? NamedTextColor.DARK_GRAY : (chunk.externalOwner == null ? NamedTextColor.WHITE : (chunk.externalOwner.isMe() ? NamedTextColor.AQUA : NamedTextColor.RED));
++            NewChunkHolder newChunkHolder = getChunkHolder(player, row, i);
++            String name = newChunkHolder == null || newChunkHolder.externalOwner == null ? null : newChunkHolder.externalOwner.getName();
++            NamedTextColor color = newChunkHolder == null ? NamedTextColor.DARK_GRAY : (newChunkHolder.externalOwner == null ? NamedTextColor.WHITE : (newChunkHolder.externalOwner.isMe() ? NamedTextColor.AQUA : NamedTextColor.RED));
 +
 +            while (i <= radius) {
-+                LevelChunk chunk2 = getChunk(player, row, i);
++                NewChunkHolder newChunkHolder2 = getChunkHolder(player, row, i);
 +
-+                if ((chunk2 == null && chunk != null) || (chunk2 != null && chunk == null) || (chunk != null && chunk2.externalOwner != chunk.externalOwner)) {
++                if ((newChunkHolder2 == null && newChunkHolder != null) || (newChunkHolder2 != null && newChunkHolder == null) || (newChunkHolder != null && newChunkHolder2.externalOwner != newChunkHolder.externalOwner)) {
 +                    break;
 +                }
 +

@@ -5,22 +5,24 @@ Subject: [PATCH] Close minecart containers if they change to another server
 
 
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index bd5b4a80dc99cd7f9eed8522120dd6d54c858126..0adedacece180eebe714befb96f26069d2a4a128 100644
+index feafbdaea65efad56a7b8988a8a16833933320ea..b636c5bdc46ccf5eb15b789f0c2cc0b1a20af02a 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -487,6 +487,7 @@ public class MultiPaper {
+@@ -480,6 +480,9 @@ public class MultiPaper {
  
-     public static void unlockChunk(LevelChunk chunk) {
-         if (MultiPaper.isChunkLocal(chunk)) {
-+            chunk.level.entityManager.getEntities(chunk.getPos()).forEach(MultiPaperEntitiesHandler::onEntityUnlock);
-             broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new SendEntitiesPacket(chunk));
-             broadcastPacketToExternalServers(chunk.externalSubscribers, () -> new SendTickListPacket(chunk));
-             for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+     public static void unlockChunk(NewChunkHolder newChunkHolder, ChunkAccess chunkAccess, ChunkEntitySlices chunkEntitySlices) {
+         if (chunkAccess instanceof LevelChunk levelChunk && MultiPaper.isChunkLocal(newChunkHolder)) {
++            if (chunkEntitySlices != null) {
++                chunkEntitySlices.entities.forEach(MultiPaperEntitiesHandler::onEntityUnlock);
++            }
+             broadcastPacketToExternalServers(newChunkHolder.externalEntitiesSubscribers, () -> new SendEntitiesPacket(levelChunk, chunkEntitySlices));
+             broadcastPacketToExternalServers(newChunkHolder.externalSubscribers, () -> new SendTickListPacket(levelChunk));
+             for (BlockEntity blockEntity : levelChunk.getBlockEntities().values()) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-index 5d630422bc63bafef8c01d4bec14196b7defeda2..87ba6fbc3764715cb97fd59bd08684dec2056784 100644
+index b287e2fc79b5843eb5e4eae9c60d8f1714f43047..b1373f7e0c02112b2fb6018f59c7ec3340cc647e 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -8,6 +8,7 @@ import net.minecraft.network.syncher.SynchedEntityData;
+@@ -9,6 +9,7 @@ import net.minecraft.network.syncher.SynchedEntityData;
  import net.minecraft.server.level.ChunkMap;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
@@ -36,15 +38,15 @@ index 5d630422bc63bafef8c01d4bec14196b7defeda2..87ba6fbc3764715cb97fd59bd08684de
  import puregero.multipaper.config.MultiPaperConfiguration;
  import puregero.multipaper.externalserverprotocol.*;
  import puregero.multipaper.mastermessagingprotocol.messages.masterbound.UnsubscribeEntitiesMessage;
-@@ -129,6 +131,7 @@ public class MultiPaperEntitiesHandler {
+@@ -126,6 +128,7 @@ public class MultiPaperEntitiesHandler {
              if (!MultiPaper.isChunkLocal(chunkTo)) {
                  // Leaving our jurisdiction, do a full entity update to ensure the new external server has all the required info
                  if (!(entity instanceof ServerPlayer)) { // Ignore players as they aren't ticked by the new external server
 +                    onEntityUnlock(entity);
-                     MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(chunkTo.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity)));
+                     MultiPaper.runSync(() -> MultiPaper.broadcastPacketToExternalServers(chunkTo.getChunkHolder().externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity)));
                      if (entity instanceof Mob mob) {
                          MultiPaper.runSync(() -> {
-@@ -167,6 +170,15 @@ public class MultiPaperEntitiesHandler {
+@@ -164,6 +167,15 @@ public class MultiPaperEntitiesHandler {
          }
      }
  

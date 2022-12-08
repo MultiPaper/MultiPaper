@@ -34,10 +34,10 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
-index e9a63ed10bb5bb1642f8715115d346d4306641a8..ac74e5f8007d3f39a3893c75e3672e4bfe02b872 100644
+index e50dd500d05f727856655ac3141f2c0df0388cc8..2fdb22a34aeebcb0b148659624848b545aea80ce 100644
 --- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
 +++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
-@@ -788,6 +788,7 @@ public class ServerChunkCache extends ChunkSource {
+@@ -705,6 +705,7 @@ public class ServerChunkCache extends ChunkSource {
              ProfilerFiller gameprofilerfiller = this.level.getProfiler();
  
              gameprofilerfiller.push("pollingChunks");
@@ -46,10 +46,10 @@ index e9a63ed10bb5bb1642f8715115d346d4306641a8..ac74e5f8007d3f39a3893c75e3672e4b
              boolean flag1 = level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) != 0L && worlddata.getGameTime() % level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) == 0L; // CraftBukkit
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 651dad1199014a34f617829bff05506169e2a187..b75c72d4ae6062916d541c5eac23fc922eed3dff 100644
+index 714a4d7ebb3e79119ac6b69efc7d057b9bd66f60..50d0c99e4963c1cb985ccbb0923273604ed21aa4 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -765,6 +765,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -797,6 +797,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
      // private final io.papermc.paper.util.math.ThreadUnsafeRandom randomTickRandom = new io.papermc.paper.util.math.ThreadUnsafeRandom(this.random.nextLong()); // Pufferfish - moved to super
      // Paper end
  
@@ -58,7 +58,7 @@ index 651dad1199014a34f617829bff05506169e2a187..b75c72d4ae6062916d541c5eac23fc92
      public void tickChunk(LevelChunk chunk, int randomTickSpeed) {
          ChunkPos chunkcoordintpair = chunk.getPos();
          boolean flag = this.isRaining();
-@@ -775,7 +777,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -807,7 +809,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          gameprofilerfiller.push("thunder");
          final BlockPos.MutableBlockPos blockposition = this.chunkTickMutablePosition; // Paper - use mutable to reduce allocation rate, final to force compile fail on change
  
@@ -67,7 +67,7 @@ index 651dad1199014a34f617829bff05506169e2a187..b75c72d4ae6062916d541c5eac23fc92
              blockposition.set(this.findLightningTargetAround(this.getBlockRandomPos(j, 0, k, 15))); // Paper
              if (this.isRainingAt(blockposition)) {
                  DifficultyInstance difficultydamagescaler = this.getCurrentDifficultyAt(blockposition);
-@@ -799,7 +801,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -831,7 +833,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
          }
  
          gameprofilerfiller.popPush("iceandsnow");
@@ -77,7 +77,7 @@ index 651dad1199014a34f617829bff05506169e2a187..b75c72d4ae6062916d541c5eac23fc92
              this.getRandomBlockPosition(j, 0, k, 15, blockposition);
              int normalY = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, blockposition.getX() & 15, blockposition.getZ() & 15) + 1;
 diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
-index 95e7ab4d53d9c00efc1d75439b98c1e13ea9a1ff..916d2129402817fd84863a9d1a31072d36bd1882 100644
+index b9aa7cadfaee336f435411a6fccbcad9c8c613e2..e33c9a341f806f5abeefa443f8af05bca2c192e5 100644
 --- a/src/main/java/net/minecraft/world/level/Level.java
 +++ b/src/main/java/net/minecraft/world/level/Level.java
 @@ -272,6 +272,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
@@ -89,12 +89,12 @@ index 95e7ab4d53d9c00efc1d75439b98c1e13ea9a1ff..916d2129402817fd84863a9d1a31072d
      protected Level(WritableLevelData worlddatamutable, ResourceKey<Level> resourcekey, Holder<DimensionType> holder, Supplier<ProfilerFiller> supplier, boolean flag, boolean flag1, long i, int j, org.bukkit.generator.ChunkGenerator gen, org.bukkit.generator.BiomeProvider biomeProvider, org.bukkit.World.Environment env, java.util.function.Function<org.spigotmc.SpigotWorldConfig, io.papermc.paper.configuration.WorldConfiguration> paperWorldConfigCreator, java.util.concurrent.Executor executor) { // Paper - Async-Anti-Xray - Pass executor
          this.spigotConfig = new org.spigotmc.SpigotWorldConfig(((net.minecraft.world.level.storage.PrimaryLevelData) worlddatamutable).getLevelName()); // Spigot
 diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-index 2292cb0e0c1a3e0ed34b941f028136bfb0bff13e..b7daf134b7d6475b6cdafad05174d0dcc29c5607 100644
+index 5e54cf312160e537d2fe6e6fedc618160359330e..7bda89c0cf5f796a58fff8de57ef79637ad0f73c 100644
 --- a/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
 +++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunk.java
-@@ -94,6 +94,18 @@ public class LevelChunk extends ChunkAccess {
-     }
-     // Paper end
+@@ -88,6 +88,18 @@ public class LevelChunk extends ChunkAccess {
+     private final LevelChunkTicks<Block> blockTicks;
+     private final LevelChunkTicks<Fluid> fluidTicks;
  
 +    // Airplane start - instead of using a random every time the chunk is ticked, define when lightning strikes preemptively
 +    private int lightningTick;
@@ -111,7 +111,7 @@ index 2292cb0e0c1a3e0ed34b941f028136bfb0bff13e..b7daf134b7d6475b6cdafad05174d0dc
      public LevelChunk(Level world, ChunkPos pos) {
          this(world, pos, UpgradeData.EMPTY, new LevelChunkTicks<>(), new LevelChunkTicks<>(), 0L, (LevelChunkSection[]) null, (LevelChunk.PostLoadProcessor) null, (BlendingData) null);
      }
-@@ -124,6 +136,7 @@ public class LevelChunk extends ChunkAccess {
+@@ -118,6 +130,7 @@ public class LevelChunk extends ChunkAccess {
          this.fluidTicks = fluidTickScheduler;
          // CraftBukkit start
          this.bukkitChunk = new org.bukkit.craftbukkit.CraftChunk(this);

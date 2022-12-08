@@ -18,7 +18,7 @@ index a83eedd9e3f77acacbb59a43afc1777565d58153..96cdaa932c06366a5858ad6c52f5f6c4
                  metrics.addCustomChart(new Metrics.SimplePie("multipaper_version", () -> (CraftServer.class.getPackage().getImplementationVersion() != null) ? CraftServer.class.getPackage().getImplementationVersion() : "unknown")); // Tuinity - we have our own bstats page // Airplane // MultiPaper
                  metrics.addCustomChart(new Metrics.SimplePie("total_servers", () -> String.valueOf(MultiPaper.getConnection().getServersMap().values().stream().filter(ExternalServer::isAlive).count()))); // MultiPaper
 diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
-index 62ce5456aceae7a644222df86ea14d4ef5934ed0..b4e7aba7e8e69360ead02cc836379419bf9aa5c8 100644
+index 15ae42a2959fb6a0af6bcc9e0d92325517853944..1e9e89d8d3aecf045d99b05991777a4f7a6680c3 100644
 --- a/src/main/java/net/minecraft/network/Connection.java
 +++ b/src/main/java/net/minecraft/network/Connection.java
 @@ -48,6 +48,8 @@ import org.slf4j.MarkerFactory;
@@ -30,7 +30,7 @@ index 62ce5456aceae7a644222df86ea14d4ef5934ed0..b4e7aba7e8e69360ead02cc836379419
  public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
  
      private static final float AVERAGE_PACKETS_SMOOTHING = 0.75F;
-@@ -624,6 +626,9 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+@@ -625,6 +627,9 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
          this.preparing = false;
          clearPacketQueue(); // Paper
          // Spigot End
@@ -41,10 +41,10 @@ index 62ce5456aceae7a644222df86ea14d4ef5934ed0..b4e7aba7e8e69360ead02cc836379419
              this.channel.close(); // We can't wait as this may be called from an event loop.
              this.disconnectedReason = disconnectReason;
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index 0301f140fbe7b781d34411de49fe9e079b2cf110..f04004d87b525ba7f395e4ea8f6b190e9028f57b 100644
+index 7de43d33566428f5aca509408180b319eda6ef34..e603063ccecf49c5ed2fa8510a85a203e57f4b31 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
-@@ -1440,6 +1440,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -1420,6 +1420,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
              }
          }
  
@@ -54,7 +54,7 @@ index 0301f140fbe7b781d34411de49fe9e079b2cf110..f04004d87b525ba7f395e4ea8f6b190e
          int playerSaveInterval = io.papermc.paper.configuration.GlobalConfiguration.get().playerAutoSave.rate;
          if (playerSaveInterval < 0) {
 diff --git a/src/main/java/net/minecraft/server/level/ServerEntity.java b/src/main/java/net/minecraft/server/level/ServerEntity.java
-index c9cb38a2401614210257c89fbb8dc97332b40957..444d66e74442650becf03834fcc04e9e12d35ebf 100644
+index 1ada28f98e789299d13b8461e2185d1701eb4078..a0d8d759ead8d9f2c26f5db06ea527e9b8be0534 100644
 --- a/src/main/java/net/minecraft/server/level/ServerEntity.java
 +++ b/src/main/java/net/minecraft/server/level/ServerEntity.java
 @@ -43,6 +43,7 @@ import net.minecraft.server.network.ServerPlayerConnection;
@@ -65,7 +65,7 @@ index c9cb38a2401614210257c89fbb8dc97332b40957..444d66e74442650becf03834fcc04e9e
  // CraftBukkit end
  
  public class ServerEntity {
-@@ -390,7 +391,7 @@ public class ServerEntity {
+@@ -392,7 +393,7 @@ public class ServerEntity {
  
      private void broadcastAndSend(Packet<?> packet) {
          this.broadcast.accept(packet);
@@ -75,7 +75,7 @@ index c9cb38a2401614210257c89fbb8dc97332b40957..444d66e74442650becf03834fcc04e9e
          }
  
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index a6fe628eb56833e79a05ce192a3848fc66db93c9..91d8437c0af696cd223f481aae6faafcd7ee2644 100644
+index 3b122f521c166253f20d233c0fcebdede6660be5..16f36b80e69fcf3c436b17bd57790509148f5d33 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -6,12 +6,8 @@ import com.mojang.authlib.GameProfile;
@@ -106,7 +106,7 @@ index a6fe628eb56833e79a05ce192a3848fc66db93c9..91d8437c0af696cd223f481aae6faafc
  // CraftBukkit end
  
  public class ServerPlayer extends Player {
-@@ -227,12 +229,14 @@ public class ServerPlayer extends Player {
+@@ -226,12 +228,14 @@ public class ServerPlayer extends Player {
      private final TextFilter textFilter;
      private boolean textFilteringEnabled;
      private boolean allowsListing;
@@ -122,7 +122,7 @@ index a6fe628eb56833e79a05ce192a3848fc66db93c9..91d8437c0af696cd223f481aae6faafc
      public long loginTime; // Paper
      public int patrolSpawnDelay; // Paper - per player patrol spawns
      // Paper start - cancellable death event
-@@ -1189,6 +1193,26 @@ public class ServerPlayer extends Player {
+@@ -1193,6 +1197,26 @@ public class ServerPlayer extends Player {
              }
              // Paper end
  
@@ -149,7 +149,7 @@ index a6fe628eb56833e79a05ce192a3848fc66db93c9..91d8437c0af696cd223f481aae6faafc
              return this;
          }
      }
-@@ -1848,6 +1872,8 @@ public class ServerPlayer extends Player {
+@@ -1854,6 +1878,8 @@ public class ServerPlayer extends Player {
                  this.setCamera(this);
              }
  
@@ -159,7 +159,7 @@ index a6fe628eb56833e79a05ce192a3848fc66db93c9..91d8437c0af696cd223f481aae6faafc
              this.updateEffectVisibility();
              return event; // Paper
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index cc55cb14f2d0f656213be25a1e428132871ac5dd..fe4e8cc42408c9a3f3b70662b7547eae2c379bc6 100644
+index 187791ff8197be015856fdfa9159fb26558f95cf..f81408244db22d0a3fd7440da11a4d1765fb9ef3 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -28,6 +28,8 @@ import java.util.function.UnaryOperator;
@@ -215,7 +215,7 @@ index cc55cb14f2d0f656213be25a1e428132871ac5dd..fe4e8cc42408c9a3f3b70662b7547eae
          this.connection.send(new ClientboundDisconnectPacket(ichatbasecomponent), PacketSendListener.thenRun(() -> {
              this.connection.disconnect(ichatbasecomponent);
          }));
-@@ -2125,7 +2130,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2126,7 +2131,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
          this.player.disconnect();
          // Paper start - Adventure
          quitMessage = quitMessage == null ? this.server.getPlayerList().remove(this.player) : this.server.getPlayerList().remove(this.player, quitMessage); // Paper - pass in quitMessage to fix kick message not being used
@@ -225,7 +225,7 @@ index cc55cb14f2d0f656213be25a1e428132871ac5dd..fe4e8cc42408c9a3f3b70662b7547eae
              // Paper end
          }
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 5999d85e38951503fc83b40cfe39671921ae5088..86178c58e982940aa13d3e2bb159e33061ae0526 100644
+index 3be9352ae9b0b84acf07064b45562ceffd30391b..50fd25fbe8292b7d89885f3902d0d10bcc107738 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -15,6 +15,7 @@ import java.net.SocketAddress;
@@ -1068,7 +1068,7 @@ index 0000000000000000000000000000000000000000..4d92fd923e58058422f0cdaa7df47c6c
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
-index 5cbf42b51d99d13545b17be258e52f0638d73ef9..d6c1f3684d6209d9309c144170e20e9d0c12fe93 100644
+index 5cbf42b51d99d13545b17be258e52f0638d73ef9..a5b8ebe305701a9b927663ff4a70e06e042729e8 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SubscribeToWorldPacket.java
 @@ -1,6 +1,7 @@
@@ -1084,7 +1084,7 @@ index 5cbf42b51d99d13545b17be258e52f0638d73ef9..d6c1f3684d6209d9309c144170e20e9d
  
      private void onWorldSubscribe(ExternalServerConnection connection, CraftWorld craftWorld) {
 -
-+        for (ServerPlayer player : craftWorld.getHandle().players) {
++        for (ServerPlayer player : craftWorld.getHandle().players()) {
 +            if (MultiPaper.isRealPlayer(player)) {
 +                PlayerCreatePacket.sendPlayer(player, connection);
 +            }

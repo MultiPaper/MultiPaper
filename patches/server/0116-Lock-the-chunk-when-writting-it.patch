@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 16 Jan 2022 11:51:16 +1000
+Subject: [PATCH] Lock the chunk when writting it
+
+
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
+index 9397c235b87c44f1c3ce484c41f52530c0814892..e01bce0a30c997ca316f133346f49b87ea81fa1b 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
+@@ -1874,6 +1874,8 @@ public final class NewChunkHolder {
+         try {
+             if (unloading) {
+                 try {
++                    MultiPaper.willSaveChunk(this.world, this.chunkX, this.chunkZ); // MultiPaper
++
+                     final ChunkSerializer.AsyncSaveData asyncSaveData = ChunkSerializer.getAsyncSaveData(this.world, chunk);
+ 
+                     final PrioritisedExecutor.PrioritisedTask task = this.scheduler.loadExecutor.createTask(new AsyncChunkSerializeTask(this.world, chunk, asyncSaveData, this));
+@@ -1897,6 +1899,7 @@ public final class NewChunkHolder {
+ 
+             if (unloading) {
+                 completing = true;
++                MultiPaper.willSaveChunk(this.world, this.chunkX, this.chunkZ); // MultiPaper
+                 this.completeAsyncChunkDataSave(save);
+                 LOGGER.info("Successfully serialized chunk data (" + this.chunkX + "," + this.chunkZ + ") in world '" + this.world.getWorld().getName() + "' synchronously");
+             } else {
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 1336cb44474f0cdf88b4bc42849f7c0f3da93dd1..63244b99f4925357dc921b81bb4998c4031c512e 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -505,6 +505,10 @@ public class MultiPaper {
+         newChunkHolder.hasExternalLockRequest = false;
+     }
+ 
++    public static void willSaveChunk(ServerLevel level, int x, int z) {
++        getConnection().send(new WillSaveChunkLaterMessage(level.getWorld().getName(), x, z));
++    }
++
+     public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
+         if (compoundTag == null) {
+             return new byte[0];

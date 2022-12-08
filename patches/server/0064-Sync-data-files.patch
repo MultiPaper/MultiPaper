@@ -26,7 +26,7 @@ index c8cdcf40e45f5c6270f9b124f0333643266e2858..b1381b1b57ba8f5cf42ed84f70960de8
                  LOGGER.error("Could not save data {}", this, var4);
              }
 diff --git a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
-index 67b88da702b780f79c0496cb17f1e6f1f8dd6c2b..a156d51885988b628266fe6946738ebc56377ca0 100644
+index ed96f092febd5a589b4d94368d6921ac0a71f7d6..f561899fe345545d814be68cbca53546c166d0ad 100644
 --- a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 +++ b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 @@ -326,7 +326,8 @@ public class MapItemSavedData extends SavedData {
@@ -59,7 +59,7 @@ index 67b88da702b780f79c0496cb17f1e6f1f8dd6c2b..a156d51885988b628266fe6946738ebc
          this.carriedBy.forEach(MapItemSavedData.HoldingPlayer::markDecorationsDirty);
      }
 diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
-index 0465b397b628b11a6fc52e3375945c94d68cfdd5..6582da788b967d81ca258000069ae8657d6a470f 100644
+index 2513069f4ffe594857762ef51f1b9a078b8b1d17..43c0653df12a5f22979ed2f7d5a88903b844b6fa 100644
 --- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
 +++ b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
 @@ -3,11 +3,8 @@ package net.minecraft.world.level.storage;
@@ -125,10 +125,10 @@ index 0465b397b628b11a6fc52e3375945c94d68cfdd5..6582da788b967d81ca258000069ae865
 +    // MultiPaper end
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 454723d0ee062a1b283c07563eb106169db27b68..8ddfec76b83ecd5b538e36e271f24b24918bb04c 100644
+index f6737e07c3b3d7d30ca1493aa60b261ce0501044..368edd28fe885e55310c7ad5494fd94ef1d34763 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -16,6 +16,9 @@ import net.minecraft.world.level.chunk.ChunkAccess;
+@@ -17,6 +17,9 @@ import net.minecraft.world.level.chunk.ChunkAccess;
  import net.minecraft.world.level.chunk.ChunkStatus;
  import net.minecraft.world.level.chunk.ImposterProtoChunk;
  import net.minecraft.world.level.chunk.LevelChunk;
@@ -138,15 +138,15 @@ index 454723d0ee062a1b283c07563eb106169db27b68..8ddfec76b83ecd5b538e36e271f24b24
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
  import org.bukkit.Bukkit;
-@@ -63,6 +66,7 @@ public class MultiPaper {
+@@ -58,6 +61,7 @@ public class MultiPaper {
      private static MultiPaperConnection multiPaperConnection = null;
-     private final static List<ChunkHolder> visibleChunksToCheck = new ArrayList<>();
+     private static final Logger LOGGER = LogManager.getLogger(MultiPaper.class.getSimpleName());
      public static boolean levelDatNeedsSaving = false;
 +    private static long last1Seconds = System.currentTimeMillis();
  
      public static MultiPaperConnection getConnection() {
          if (multiPaperConnection == null) {
-@@ -117,6 +121,19 @@ public class MultiPaper {
+@@ -93,6 +97,19 @@ public class MultiPaper {
                  level.saveIncrementally(true);
              }
          }
@@ -166,7 +166,7 @@ index 454723d0ee062a1b283c07563eb106169db27b68..8ddfec76b83ecd5b538e36e271f24b24
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -404,6 +421,22 @@ public class MultiPaper {
+@@ -400,6 +417,22 @@ public class MultiPaper {
          getConnection().send(new WriteUidMessage(world, data), message -> { /* do nothing */ });
      }
  
@@ -190,7 +190,7 @@ index 454723d0ee062a1b283c07563eb106169db27b68..8ddfec76b83ecd5b538e36e271f24b24
          do {
              path = path.getParentFile();
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 5a421eb43c3c16ab8ccf88174e5b0a64c946e767..e48f88005c65c6a558c3a39d6e6c973f0be12d21 100644
+index edbb01d14240567601d4ac4453c665660f33d3c4..e9fc9540bfe6856ea5f3269b42ad48e9de1d83ae 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -1,5 +1,6 @@
@@ -200,7 +200,7 @@ index 5a421eb43c3c16ab8ccf88174e5b0a64c946e767..e48f88005c65c6a558c3a39d6e6c973f
  import io.netty.bootstrap.Bootstrap;
  import io.netty.channel.Channel;
  import io.netty.channel.ChannelHandler;
-@@ -19,6 +20,9 @@ import net.minecraft.world.level.chunk.ChunkStatus;
+@@ -18,6 +19,9 @@ import net.minecraft.world.level.chunk.ChunkStatus;
  import net.minecraft.world.level.chunk.LevelChunk;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
@@ -208,9 +208,9 @@ index 5a421eb43c3c16ab8ccf88174e5b0a64c946e767..e48f88005c65c6a558c3a39d6e6c973f
 +import org.bukkit.World;
 +import org.bukkit.craftbukkit.CraftWorld;
  import puregero.multipaper.config.MultiPaperConfiguration;
- import puregero.multipaper.externalserverprotocol.RequestChunkPacket;
+ import puregero.multipaper.externalserverprotocol.SendChunkPacket;
  import puregero.multipaper.externalserverprotocol.SendTickListPacket;
-@@ -26,6 +30,7 @@ import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
+@@ -25,6 +29,7 @@ import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
  import puregero.multipaper.mastermessagingprotocol.messages.masterbound.*;
  import puregero.multipaper.mastermessagingprotocol.messages.serverbound.*;
  
@@ -218,7 +218,7 @@ index 5a421eb43c3c16ab8ccf88174e5b0a64c946e767..e48f88005c65c6a558c3a39d6e6c973f
  import java.util.HashSet;
  import java.util.Map;
  import java.util.Set;
-@@ -48,6 +53,7 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -47,6 +52,7 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
      private final Set<MasterBoundMessage> unhandledRequests = ConcurrentHashMap.newKeySet();
      private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
      public String secret;
@@ -226,7 +226,7 @@ index 5a421eb43c3c16ab8ccf88174e5b0a64c946e767..e48f88005c65c6a558c3a39d6e6c973f
  
      public MultiPaperConnection() {
          System.setProperty("multipaper.netty.threads", System.getProperty("multipaper.netty.threads", Integer.toString(Math.min(Runtime.getRuntime().availableProcessors(), 3))));
-@@ -305,4 +311,28 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -292,4 +298,28 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
              }
          }
      }

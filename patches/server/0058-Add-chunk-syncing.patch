@@ -150,7 +150,7 @@ index e5d9c6f2cbe11c2ded6d8ad111fa6a8b2086dfba..46be6d2561cdf8b18c3e94c600ed2b59
          return Boolean.FALSE;
      });
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
-index 8013dd333e27aa5fd0beb431fa32491eec9f5246..9446808dcc63d327319e8efc3536bfd9af54ba5c 100644
+index 8013dd333e27aa5fd0beb431fa32491eec9f5246..8389d501d6f4a70e4836a2d55974f77de6ebba3a 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
 @@ -34,12 +34,21 @@ import net.minecraft.world.level.chunk.LevelChunk;
@@ -259,6 +259,40 @@ index 8013dd333e27aa5fd0beb431fa32491eec9f5246..9446808dcc63d327319e8efc3536bfd9
      }
  
      private void scheduleNeighbours(final List<NewChunkHolder> needsScheduling, final List<ChunkProgressionTask> scheduleList) {
+@@ -1833,6 +1871,7 @@ public final class NewChunkHolder {
+         try {
+             if (unloading) {
+                 try {
++                    chunk.setUnsaved(false); // MultiPaper - set as saved before serializing
+                     final ChunkSerializer.AsyncSaveData asyncSaveData = ChunkSerializer.getAsyncSaveData(this.world, chunk);
+ 
+                     final PrioritisedExecutor.PrioritisedTask task = this.scheduler.loadExecutor.createTask(new AsyncChunkSerializeTask(this.world, chunk, asyncSaveData, this));
+@@ -1841,7 +1880,7 @@ public final class NewChunkHolder {
+ 
+                     task.queue();
+ 
+-                    chunk.setUnsaved(false);
++                    // chunk.setUnsaved(false); // MultiPaper - set as saved before serializing
+ 
+                     return true;
+                 } catch (final ThreadDeath death) {
+@@ -1852,6 +1891,7 @@ public final class NewChunkHolder {
+                 }
+             }
+ 
++            chunk.setUnsaved(false); // MultiPaper - set as saved before serializing
+             final CompoundTag save = ChunkSerializer.saveChunk(this.world, chunk, null);
+ 
+             if (unloading) {
+@@ -1861,7 +1901,7 @@ public final class NewChunkHolder {
+             } else {
+                 RegionFileIOThread.scheduleSave(this.world, this.chunkX, this.chunkZ, save, RegionFileIOThread.RegionFileType.CHUNK_DATA);
+             }
+-            chunk.setUnsaved(false);
++            // chunk.setUnsaved(false); // MultiPaper - set as saved before serializing
+         } catch (final ThreadDeath death) {
+             throw death;
+         } catch (final Throwable thr) {
 diff --git a/src/main/java/net/minecraft/network/FriendlyByteBuf.java b/src/main/java/net/minecraft/network/FriendlyByteBuf.java
 index 35377576ed182814051c11f902e02e8e921e84e3..970ed3671b7c6bf901a4ee7bf39887d976a5edce 100644
 --- a/src/main/java/net/minecraft/network/FriendlyByteBuf.java

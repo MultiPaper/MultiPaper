@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 2 Jun 2022 16:35:35 +1000
+Subject: [PATCH] Allow config files to be overriden through the command line
+
+
+diff --git a/src/main/java/net/minecraft/server/dedicated/Settings.java b/src/main/java/net/minecraft/server/dedicated/Settings.java
+index bafd0f3492a0b8778d28610785129c5eba7fe4a2..ae7b244b37e1de87caf517be7c1f119524fb88c4 100644
+--- a/src/main/java/net/minecraft/server/dedicated/Settings.java
++++ b/src/main/java/net/minecraft/server/dedicated/Settings.java
+@@ -34,6 +34,12 @@ public abstract class Settings<T extends Settings<T>> {
+     }
+ 
+     private String getOverride(String name, String value) {
++        // MultiPaper start - Allow properties to be set from the command line
++        if (System.getProperty("properties." + name) != null) {
++            return System.getProperty("properties." + name);
++        }
++        // MultiPaper end
++
+         if ((this.options != null) && (this.options.has(name)) && !name.equals( "online-mode")) { // Spigot
+             return String.valueOf(this.options.valueOf(name));
+         }
+diff --git a/src/main/java/org/spigotmc/SpigotConfig.java b/src/main/java/org/spigotmc/SpigotConfig.java
+index 612c3169c3463d702b85975e1db79ae6e47d60d0..ce129408ab2c17c9841dd1dca416fb73f2a92995 100644
+--- a/src/main/java/org/spigotmc/SpigotConfig.java
++++ b/src/main/java/org/spigotmc/SpigotConfig.java
+@@ -141,12 +141,14 @@ public class SpigotConfig
+ 
+     private static boolean getBoolean(String path, boolean def)
+     {
++        if (System.getProperty("spigot." + path) != null) return Boolean.getBoolean("spigot." + path); // MultiPaper
+         SpigotConfig.config.addDefault( path, def );
+         return SpigotConfig.config.getBoolean( path, SpigotConfig.config.getBoolean( path ) );
+     }
+ 
+     private static int getInt(String path, int def)
+     {
++        if (System.getProperty("spigot." + path) != null) return Integer.getInteger("spigot." + path); // MultiPaper
+         SpigotConfig.config.addDefault( path, def );
+         return SpigotConfig.config.getInt( path, SpigotConfig.config.getInt( path ) );
+     }
+@@ -159,12 +161,14 @@ public class SpigotConfig
+ 
+     private static String getString(String path, String def)
+     {
++        if (System.getProperty("spigot." + path) != null) return System.getProperty("spigot." + path); // MultiPaper
+         SpigotConfig.config.addDefault( path, def );
+         return SpigotConfig.config.getString( path, SpigotConfig.config.getString( path ) );
+     }
+ 
+     private static double getDouble(String path, double def)
+     {
++        if (System.getProperty("spigot." + path) != null) return Double.parseDouble(System.getProperty("spigot." + path)); // MultiPaper
+         SpigotConfig.config.addDefault( path, def );
+         return SpigotConfig.config.getDouble( path, SpigotConfig.config.getDouble( path ) );
+     }
+diff --git a/src/main/java/org/spigotmc/SpigotWorldConfig.java b/src/main/java/org/spigotmc/SpigotWorldConfig.java
+index 5503ad6a93d331771a0e92c0da6adedf2ac81aff..d6c1db72c2614aee4157380ce6b8ffb23f1ecb5f 100644
+--- a/src/main/java/org/spigotmc/SpigotWorldConfig.java
++++ b/src/main/java/org/spigotmc/SpigotWorldConfig.java
+@@ -41,12 +41,16 @@ public class SpigotWorldConfig
+ 
+     public boolean getBoolean(String path, boolean def)
+     {
++        if (System.getProperty("spigot.world-settings." + this.worldName + "." + path) != null) return Boolean.getBoolean("spigot.world-settings." + this.worldName + "." + path); // MultiPaper
++        if (!this.config.contains( "world-settings." + this.worldName + "." + path) && System.getProperty("spigot.world-settings.default." + path) != null) return Boolean.getBoolean("spigot.world-settings.default." + path); // MultiPaper
+         this.config.addDefault( "world-settings.default." + path, def );
+         return this.config.getBoolean( "world-settings." + this.worldName + "." + path, this.config.getBoolean( "world-settings.default." + path ) );
+     }
+ 
+     public double getDouble(String path, double def)
+     {
++        if (System.getProperty("spigot.world-settings." + this.worldName + "." + path) != null) return Double.parseDouble(System.getProperty("spigot.world-settings." + this.worldName + "." + path)); // MultiPaper
++        if (!this.config.contains( "world-settings." + this.worldName + "." + path) && System.getProperty("spigot.world-settings.default." + path) != null) return Double.parseDouble(System.getProperty("spigot.world-settings.default." + path)); // MultiPaper
+         this.config.addDefault( "world-settings.default." + path, def );
+         return this.config.getDouble( "world-settings." + this.worldName + "." + path, this.config.getDouble( "world-settings.default." + path ) );
+     }
+@@ -63,6 +67,8 @@ public class SpigotWorldConfig
+     }
+     public int getInt(String path, int def, boolean setDef)
+     {
++        if (System.getProperty("spigot.world-settings." + this.worldName + "." + path) != null) return Integer.getInteger("spigot.world-settings." + this.worldName + "." + path); // MultiPaper
++        if (!this.config.contains( "world-settings." + this.worldName + "." + path) && System.getProperty("spigot.world-settings.default." + path) != null) return Integer.getInteger("spigot.world-settings.default." + path); // MultiPaper
+         if (setDef) this.config.addDefault( "world-settings.default." + path, def );
+         return this.config.getInt( "world-settings." + this.worldName + "." + path, this.config.getInt( "world-settings.default." + path, def ) );
+         // Paper end
+@@ -76,6 +82,8 @@ public class SpigotWorldConfig
+ 
+     public String getString(String path, String def)
+     {
++        if (System.getProperty("spigot.world-settings." + this.worldName + "." + path) != null) return System.getProperty("spigot.world-settings." + this.worldName + "." + path); // MultiPaper
++        if (!this.config.contains( "world-settings." + this.worldName + "." + path) && System.getProperty("spigot.world-settings.default." + path) != null) return System.getProperty("spigot.world-settings.default." + path); // MultiPaper
+         this.config.addDefault( "world-settings.default." + path, def );
+         return this.config.getString( "world-settings." + this.worldName + "." + path, this.config.getString( "world-settings.default." + path ) );
+     }

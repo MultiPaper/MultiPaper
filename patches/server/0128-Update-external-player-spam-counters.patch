@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 27 Feb 2022 11:24:14 +1000
+Subject: [PATCH] Update external player spam counters
+
+
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 53907a104bbe4eb43ded3ccee4b36283a18de416..f71f7b4a40127b797c6c34dcabcbef9b4e86cb6b 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -425,20 +425,23 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+         // Paper end
+ 
+         this.server.getProfiler().pop();
+-        // CraftBukkit start
+-        for (int spam; (spam = this.chatSpamTickCount.get()) > 0 && !this.chatSpamTickCount.compareAndSet(spam, spam - 1); ) ;
+-        if (tabSpamLimiter.get() > 0) tabSpamLimiter.getAndDecrement(); // Paper - split to seperate variable
+-        if (recipeSpamPackets.get() > 0) recipeSpamPackets.getAndDecrement(); // Paper
+-        /* Use thread-safe field access instead
+-        if (this.chatSpamTickCount > 0) {
+-            --this.chatSpamTickCount;
+-        }
+-        */
+-        // CraftBukkit end
+-
+-        if (this.dropSpamTickCount > 0) {
+-            --this.dropSpamTickCount;
+-        }
++// MultiPaper start - move to reduceSpamCounters()
++//        // CraftBukkit start
++//        for (int spam; (spam = this.chatSpamTickCount.get()) > 0 && !this.chatSpamTickCount.compareAndSet(spam, spam - 1); ) ;
++//        if (tabSpamLimiter.get() > 0) tabSpamLimiter.getAndDecrement(); // Paper - split to seperate variable
++//        if (recipeSpamPackets.get() > 0) recipeSpamPackets.getAndDecrement(); // Paper
++//        /* Use thread-safe field access instead
++//        if (this.chatSpamTickCount > 0) {
++//            --this.chatSpamTickCount;
++//        }
++//        */
++//        // CraftBukkit end
++//
++//        if (this.dropSpamTickCount > 0) {
++//            --this.dropSpamTickCount;
++//        }
++        reduceSpamCounters();
++// MultiPaper end
+ 
+         if (this.player.getLastActionTime() > 0L && this.server.getPlayerIdleTimeout() > 0 && Util.getMillis() - this.player.getLastActionTime() > (long) (this.server.getPlayerIdleTimeout() * 1000 * 60) && !this.player.wonGame) { // Paper - Prevent AFK kick while watching end credits.
+             this.player.resetLastActionTime(); // CraftBukkit - SPIGOT-854
+@@ -456,6 +459,25 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+         this.lastGoodZ = this.player.getZ();
+     }
+ 
++    // MultiPaper start
++    public void reduceSpamCounters() {
++        // CraftBukkit start
++        for (int spam; (spam = this.chatSpamTickCount.get()) > 0 && !this.chatSpamTickCount.compareAndSet(spam, spam - 1); ) ;
++        if (tabSpamLimiter.get() > 0) tabSpamLimiter.getAndDecrement(); // Paper - split to seperate variable
++        if (recipeSpamPackets.get() > 0) recipeSpamPackets.getAndDecrement(); // Paper
++        /* Use thread-safe field access instead
++        if (this.chatSpamTickCount > 0) {
++            --this.chatSpamTickCount;
++        }
++        */
++        // CraftBukkit end
++
++        if (this.dropSpamTickCount > 0) {
++            --this.dropSpamTickCount;
++        }
++    }
++    // MultiPaper end
++
+     @Override
+     public Connection getConnection() {
+         return this.connection;
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index facebe82eba26a3c429a7ad77fb7ac4e34ea1bfc..0251479932cf25af6f34ddf168fdf7b5a80f8c00 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -92,6 +92,8 @@ public class MultiPaper {
+             }
+ 
+             player.syncExperience();
++
++            player.connection.reduceSpamCounters();
+         }
+ 
+         for (ExternalServer server : getConnection().getServersMap().values()) {

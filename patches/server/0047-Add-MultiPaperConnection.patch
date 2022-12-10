@@ -1,0 +1,250 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 15 Nov 2021 13:01:36 +1000
+Subject: [PATCH] Add MultiPaperConnection
+
+
+diff --git a/build.gradle.kts b/build.gradle.kts
+index 6eb2be8b96b0735036e2632f31bae22464a6a18a..ba18228c42a0a00806296d9950d4f887291d9e30 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -7,6 +7,7 @@ plugins {
+ }
+ 
+ dependencies {
++    implementation(project(":MultiPaper-MasterMessagingProtocol")) // MultiPaper
+     implementation(project(":MultiPaper-API")) // MultiPaper // Airplane // Paper
+     // Airplane start
+     implementation("io.papermc.paper:paper-mojangapi:1.19.3-R0.1-SNAPSHOT") {
+diff --git a/src/main/java/net/minecraft/server/Main.java b/src/main/java/net/minecraft/server/Main.java
+index 3130c4f9a4ba239d95fc3e73f18e5ae717b19108..7e788da082bc32cb1db9dd551ed9b8bdceef4281 100644
+--- a/src/main/java/net/minecraft/server/Main.java
++++ b/src/main/java/net/minecraft/server/Main.java
+@@ -70,6 +70,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
+ 
+ import puregero.multipaper.config.MultiPaperConfiguration;
+ import puregero.multipaper.config.MultiPaperConfigurationLoader;
++import puregero.multipaper.MultiPaper;
+ 
+ public class Main {
+ 
+@@ -116,6 +117,7 @@ public class Main {
+ 
+             MultiPaperConfigurationLoader.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper
+             System.setProperty("multipaper.master-connection.my-name", MultiPaperConfiguration.get().masterConnection.myName); // MultiPaper - remember this property even after config reloads
++            MultiPaper.getConnection(); // MultiPaper - start connection
+ 
+             Bootstrap.bootStrap();
+             Bootstrap.validate();
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index 1ea819f61ce5e8e7cfdcbe73b5c3cd95ad406a7a..89d3434c0abc4009b9a3f1dbd4757ce15592c4b2 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -193,6 +193,7 @@ import org.bukkit.event.server.ServerLoadEvent;
+ // CraftBukkit end
+ 
+ import co.aikar.timings.MinecraftTimings; // Paper
++import puregero.multipaper.MultiPaper;
+ 
+ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements CommandSource, AutoCloseable {
+ 
+diff --git a/src/main/java/puregero/multipaper/ExternalServer.java b/src/main/java/puregero/multipaper/ExternalServer.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..35b8352a2c798c70cfebeddd2a95dc8edf1d21d9
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/ExternalServer.java
+@@ -0,0 +1,50 @@
++package puregero.multipaper;
++
++public class ExternalServer {
++    private final String name;
++    private final boolean me;
++    private int averageTickTime;
++    private double tps;
++    private long lastAlive;
++
++    public ExternalServer(String name, boolean me) {
++        this.name = name;
++        this.me = me;
++    }
++
++    public int getAverageTickTime() {
++        return averageTickTime;
++    }
++
++    public void setAverageTickTime(int averageTickTime) {
++        this.averageTickTime = averageTickTime;
++    }
++
++    public long getLastAlive() {
++        return lastAlive;
++    }
++
++    public void setLastAlive(long lastAlive) {
++        this.lastAlive = lastAlive;
++    }
++
++    public String getName() {
++        return name;
++    }
++
++    public boolean isMe() {
++        return me;
++    }
++
++    public boolean isAlive() {
++        return getLastAlive() > System.currentTimeMillis() - 2500 && getTps() > 0;
++    }
++
++    public double getTps() {
++        return tps;
++    }
++
++    public void setTps(double tps) {
++        this.tps = tps;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..d9fa811b2a0b5f8402ae0e811b09ddbd8509e8ad
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -0,0 +1,13 @@
++package puregero.multipaper;
++
++public class MultiPaper {
++    private static MultiPaperConnection multiPaperConnection = null;
++
++    public static MultiPaperConnection getConnection() {
++        if (multiPaperConnection == null) {
++            multiPaperConnection = new MultiPaperConnection();
++        }
++
++        return multiPaperConnection;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..77fb1d267595b7ece91793b58e86a377f6154dea
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -0,0 +1,119 @@
++package puregero.multipaper;
++
++import io.netty.channel.Channel;
++import io.netty.channel.ChannelHandler;
++import io.netty.channel.ChannelHandlerContext;
++import io.netty.channel.socket.SocketChannel;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.config.MultiPaperConfiguration;
++import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.HelloMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundProtocol;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessageHandler;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundProtocol;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerInfoUpdateMessage;
++
++import java.util.Map;
++import java.util.Set;
++import java.util.UUID;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.TimeUnit;
++import java.util.function.Consumer;
++
++@ChannelHandler.Sharable
++public class MultiPaperConnection extends ServerBoundMessageHandler {
++
++    private static final Logger LOGGER = LogManager.getLogger(MultiPaperConnection.class.getSimpleName());
++    private static final UUID thisServersUuid = UUID.randomUUID();
++
++    private final String myName;
++    private final MessageBootstrap<ServerBoundMessage, MasterBoundMessage> bootstrap;
++    private SocketChannel channel;
++    private boolean channelActive = false;
++    private final Set<MasterBoundMessage> unhandledRequests = ConcurrentHashMap.newKeySet();
++    private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
++
++    public MultiPaperConnection() {
++        System.setProperty("multipaper.netty.threads", System.getProperty("multipaper.netty.threads", Integer.toString(Math.min(Runtime.getRuntime().availableProcessors(), 3))));
++        myName = MultiPaperConfiguration.get().masterConnection.myName;
++        bootstrap = new MessageBootstrap<>(new ServerBoundProtocol(), new MasterBoundProtocol(), channel -> channel.pipeline().addLast(this));
++        connect();
++    }
++
++    public void connect() {
++        String server = MultiPaperConfiguration.get().masterConnection.masterAddress;
++        LOGGER.info("Connecting to " + server + "...");
++        String[] serverParts = server.split(":");
++        bootstrap.connectTo(serverParts[0], Integer.parseInt(serverParts[1])).addListener(future -> {
++            if (future.cause() != null) {
++                CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS).execute(this::connect);
++            }
++        });
++    }
++
++    public Channel getChannel() {
++        return channel;
++    }
++
++    @Override
++    public void channelActive(ChannelHandlerContext ctx) {
++        channel = (SocketChannel) ctx.channel();
++        LOGGER.info("Connected to " + channel.remoteAddress());
++        channel.write(new HelloMessage(myName, thisServersUuid));
++
++        for (MasterBoundMessage unhandledRequest : unhandledRequests) {
++            channel.write(unhandledRequest);
++        }
++
++        channelActive = true;
++        channel.flush();
++    }
++
++    @Override
++    public void channelInactive(ChannelHandlerContext ctx) {
++        channelActive = false;
++        LOGGER.info("Lost connection to " + ((SocketChannel) ctx.channel()).remoteAddress());
++        connect();
++    }
++
++    private void waitForActiveChannel() {
++        while (channel == null || !channel.isActive() || !channelActive) {
++            // Wait for channel to become active
++            try {
++                Thread.sleep(50);
++            } catch (InterruptedException e) {
++                e.printStackTrace();
++            }
++        }
++    }
++
++    public void send(MasterBoundMessage message) {
++        waitForActiveChannel();
++        channel.writeAndFlush(message);
++    }
++
++    public void send(MasterBoundMessage message, Consumer<ServerBoundMessage> callback) {
++        waitForActiveChannel();
++        unhandledRequests.add(message);
++        send(setCallback(message, reply -> {
++            unhandledRequests.remove(message);
++            callback.accept(reply);
++        }));
++    }
++
++    public Map<String, ExternalServer> getServersMap() {
++        return serversMap;
++    }
++
++    @Override
++    public void handle(ServerInfoUpdateMessage message) {
++        ExternalServer server = serversMap.computeIfAbsent(message.name, key -> new ExternalServer(key, key.equals(myName)));
++        server.setAverageTickTime(message.averageTickTime);
++        server.setTps(message.tps);
++        server.setLastAlive(System.currentTimeMillis());
++    }
++}

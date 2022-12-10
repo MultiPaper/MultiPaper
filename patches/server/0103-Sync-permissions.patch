@@ -1,0 +1,119 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 1 Jan 2022 19:32:56 +1000
+Subject: [PATCH] Sync permissions
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
+index 65d16b9d13d3eca3a5f498c6710b49962adb57f5..0889a156eb7a7d17b1812117e1808b26efa65513 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
+@@ -72,7 +72,7 @@ import puregero.multipaper.externalserverprotocol.PlayerFoodUpdatePacket;
+ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
+     private CraftInventoryPlayer inventory;
+     private final CraftInventory enderChest;
+-    protected final PermissibleBase perm = new PermissibleBase(this);
++    public final PermissibleBase perm = new PermissibleBase(this); // MultiPaper
+     private boolean op;
+     private GameMode mode;
+ 
+@@ -224,12 +224,12 @@ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
+ 
+     @Override
+     public boolean hasPermission(String name) {
+-        return this.perm.hasPermission(name);
++        return this.perm.hasPermission(name) || (this instanceof CraftPlayer player && player.getData("permission." + name) != null && Boolean.parseBoolean(player.getData("permission." + name))); // MultiPaper
+     }
+ 
+     @Override
+     public boolean hasPermission(Permission perm) {
+-        return this.perm.hasPermission(perm);
++        return this.perm.hasPermission(perm) || (this instanceof CraftPlayer player && player.getData("permission." + perm.getName()) != null && Boolean.parseBoolean(player.getData("permission." + perm.getName()))); // MultiPaper
+     }
+ 
+     @Override
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 55f64cbee76a962c843a3776d2913830765be28c..f863560a2671994c166048c2077092b4f34412ec 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -141,6 +141,8 @@ public class MultiPaper {
+ 
+             MultiPaperStatHandler.sendIncreases();
+         }
++
++        MultiPaperPermissionSyncer.sync();
+     }
+ 
+     public static void sendTickTime(long time, double tps) {
+diff --git a/src/main/java/puregero/multipaper/MultiPaperPermissionSyncer.java b/src/main/java/puregero/multipaper/MultiPaperPermissionSyncer.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..5c52e8351d82e799b383f44906c1c74bd0c5e8d9
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/MultiPaperPermissionSyncer.java
+@@ -0,0 +1,66 @@
++package puregero.multipaper;
++
++
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.entity.Player;
++import puregero.multipaper.config.MultiPaperConfiguration;
++
++import java.util.HashMap;
++import java.util.HashSet;
++
++public class MultiPaperPermissionSyncer {
++
++    private static final HashMap<Player, MultiPaperPermissionSyncer> syncers = new HashMap<>();
++
++    private final Player player;
++    private final HashMap<String, Boolean> permissions = new HashMap<>();
++
++    public MultiPaperPermissionSyncer(Player player) {
++        this.player = player;
++    }
++
++    public static void sync() {
++        if (!MultiPaperConfiguration.get().syncSettings.syncPermissions) {
++            return;
++        }
++
++        for (Player player : Bukkit.getOnlinePlayers()) {
++            syncers.computeIfAbsent(player, MultiPaperPermissionSyncer::new);
++        }
++
++        syncers.values().removeIf(MultiPaperPermissionSyncer::tick);
++    }
++
++    private boolean tick() {
++        if (!player.isOnline()) {
++            return true;
++        }
++
++        if (((CraftPlayer) player).perm.dirty) {
++            ((CraftPlayer) player).perm.dirty = false;
++            HashSet<String> visitedPermissions = new HashSet<>();
++
++            player.getEffectivePermissions().forEach(info -> {
++                visitedPermissions.add(info.getPermission());
++                if (!permissions.containsKey(info.getPermission()) || permissions.get(info.getPermission()) != info.getValue()) {
++                    player.setData("permission." + info.getPermission(), Boolean.toString(info.getValue()));
++                    permissions.put(info.getPermission(), info.getValue());
++                }
++            });
++
++            permissions.entrySet().removeIf(entry -> {
++                if (!visitedPermissions.contains(entry.getKey())) {
++                    player.setData("permission." + entry.getKey(), null);
++
++                    return true;
++                } else {
++                    return false;
++                }
++            });
++        }
++
++        return false;
++    }
++
++}

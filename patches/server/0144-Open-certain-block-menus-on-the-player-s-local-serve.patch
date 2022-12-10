@@ -1,0 +1,164 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 19 Mar 2022 01:38:18 +1000
+Subject: [PATCH] Open certain block menus on the player's local server
+
+
+diff --git a/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java b/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
+index 9ebc53d434737c8cd39073470b2b5fcbad167812..166551335a93792b0d154e51c34ab78868a4e21f 100644
+--- a/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
++++ b/src/main/java/net/minecraft/world/level/block/state/BlockBehaviour.java
+@@ -12,6 +12,8 @@ import java.util.function.Predicate;
+ import java.util.function.ToIntFunction;
+ import java.util.stream.Stream;
+ import javax.annotation.Nullable;
++
++import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.core.Holder;
+@@ -24,6 +26,8 @@ import net.minecraft.tags.FluidTags;
+ import net.minecraft.tags.TagKey;
+ import net.minecraft.util.Mth;
+ import net.minecraft.util.RandomSource;
++import net.minecraft.world.CompoundContainer;
++import net.minecraft.world.Container;
+ import net.minecraft.world.InteractionHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.MenuProvider;
+@@ -45,13 +49,7 @@ import net.minecraft.world.level.EmptyBlockGetter;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.LevelAccessor;
+ import net.minecraft.world.level.LevelReader;
+-import net.minecraft.world.level.block.Block;
+-import net.minecraft.world.level.block.EntityBlock;
+-import net.minecraft.world.level.block.Mirror;
+-import net.minecraft.world.level.block.RenderShape;
+-import net.minecraft.world.level.block.Rotation;
+-import net.minecraft.world.level.block.SoundType;
+-import net.minecraft.world.level.block.SupportType;
++import net.minecraft.world.level.block.*;
+ import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.world.level.block.entity.BlockEntityTicker;
+ import net.minecraft.world.level.block.entity.BlockEntityType;
+@@ -73,6 +71,10 @@ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++import puregero.multipaper.ExternalPlayer;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.MultiPaperContainerHandler;
++import puregero.multipaper.externalserverprotocol.PlayerUseBlockPacket;
+ 
+ public abstract class BlockBehaviour implements FeatureElement {
+ 
+@@ -1058,6 +1060,36 @@ public abstract class BlockBehaviour implements FeatureElement {
+         }
+ 
+         public InteractionResult use(Level world, Player player, InteractionHand hand, BlockHitResult hit) {
++            // MultiPaper start - Open these menus on the player's server
++            if ((player instanceof ExternalPlayer externalPlayer) && (
++                    this.getBlock() instanceof CraftingTableBlock ||
++                    this.getBlock() instanceof EnchantmentTableBlock ||
++                    this.getBlock() instanceof EnderChestBlock ||
++                    this.getBlock() instanceof AnvilBlock ||
++                    this.getBlock() instanceof LoomBlock ||
++                    this.getBlock() instanceof FletchingTableBlock ||
++                    this.getBlock() instanceof CartographyTableBlock ||
++                    this.getBlock() instanceof GrindstoneBlock ||
++                    this.getBlock() instanceof SmithingTableBlock ||
++                    this.getBlock() instanceof StonecutterBlock
++            )) {
++                externalPlayer.externalServerConnection.send(new PlayerUseBlockPacket(player, hit.getBlockPos()));
++                return InteractionResult.CONSUME;
++            }
++            // MultiPaper end
++            // MultiPaper start - Open double chests on the double chests' primary server
++            if (this.getBlock() instanceof ChestBlock chestBlock) {
++                Container chestContainer = ChestBlock.getContainer(chestBlock, this.asState(), world, hit.getBlockPos(), true);
++                if (chestContainer instanceof CompoundContainer compoundContainer) {
++                    BlockEntity primaryChestEntity = MultiPaperContainerHandler.getPrimaryChest(compoundContainer);
++                    NewChunkHolder newChunkHolder = MultiPaper.getChunkHolder((ServerLevel) primaryChestEntity.getLevel(), primaryChestEntity.getBlockPos());
++                    if (MultiPaper.isChunkExternal(newChunkHolder)) {
++                        newChunkHolder.externalOwner.getConnection().send(new PlayerUseBlockPacket(player, hit.getBlockPos()));
++                        return InteractionResult.CONSUME;
++                    }
++                }
++            }
++            // MultiPaper end
+             return this.getBlock().use(this.asState(), world, hit.getBlockPos(), player, hand, hit);
+         }
+ 
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 4f99b58e9d3da8ada83c80d13e476654fef71179..c0d356fa3ac2dd75ea09c28827e0d05437d38117 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -71,6 +71,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(DestroyAndAckPacket.class, DestroyAndAckPacket::new);
+         addPacket(EntityTeleportPacket.class, EntityTeleportPacket::new);
+         addPacket(ProjectileHitEntityPacket.class, ProjectileHitEntityPacket::new);
++        addPacket(PlayerUseBlockPacket.class, PlayerUseBlockPacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerUseBlockPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerUseBlockPacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..eceb57019cb450c9bb230fe1cdb986d7c5555f21
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerUseBlockPacket.java
+@@ -0,0 +1,55 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Direction;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.InteractionHand;
++import net.minecraft.world.entity.player.Player;
++import net.minecraft.world.phys.BlockHitResult;
++import net.minecraft.world.phys.Vec3;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++import java.util.UUID;
++
++public class PlayerUseBlockPacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(PlayerUseBlockPacket.class.getSimpleName());
++
++    private final UUID uuid;
++    private final BlockPos pos;
++
++    public PlayerUseBlockPacket(Player player, BlockPos blockPos) {
++        this.uuid = player.getUUID();
++        this.pos = blockPos;
++    }
++
++    public PlayerUseBlockPacket(FriendlyByteBuf in) {
++        uuid = in.readUUID();
++        pos = BlockPos.of(in.readLong());
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUUID(uuid);
++        out.writeLong(pos.asLong());
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
++
++            if (player == null) {
++                LOGGER.warn("Tried to use a block " + pos + " with a non-existent player of uuid " + uuid);
++                return;
++            }
++
++            player.level.getBlockState(pos).use(player.level, player, InteractionHand.MAIN_HAND, new BlockHitResult(new Vec3(pos.getX(), pos.getY(), pos.getZ()), Direction.NORTH, pos, false));
++        });
++    }
++}

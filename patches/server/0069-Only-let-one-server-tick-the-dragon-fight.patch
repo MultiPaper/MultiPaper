@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 28 Nov 2021 16:34:05 +1000
+Subject: [PATCH] Only let one server tick the dragon fight
+
+
+diff --git a/src/main/java/net/minecraft/world/level/dimension/end/EndDragonFight.java b/src/main/java/net/minecraft/world/level/dimension/end/EndDragonFight.java
+index e9eb32469a5c03f7a3677ef50fd4541c1ed662ad..471916de94d4b80c491bec5da4e9068456d44c9e 100644
+--- a/src/main/java/net/minecraft/world/level/dimension/end/EndDragonFight.java
++++ b/src/main/java/net/minecraft/world/level/dimension/end/EndDragonFight.java
+@@ -56,6 +56,7 @@ import net.minecraft.world.level.levelgen.feature.SpikeFeature;
+ import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
+ import net.minecraft.world.phys.AABB;
+ import org.slf4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class EndDragonFight {
+     private static final Logger LOGGER = LogUtils.getLogger();
+@@ -237,8 +238,10 @@ public class EndDragonFight {
+     private void findOrCreateDragon() {
+         List<? extends EnderDragon> list = this.level.getDragons();
+         if (list.isEmpty()) {
++            if (MultiPaper.isChunkLocal(this.level.getChunkIfLoaded(0, 0))) { // MultiPaper - only respawn the dragon if we're ticking it
+             LOGGER.debug("Haven't seen the dragon, respawning it");
+             this.createNewDragon();
++            } // MultiPaper - only respawn the dragon if we're ticking it
+         } else {
+             LOGGER.debug("Haven't seen our dragon, but found another one to use.");
+             this.dragonUUID = list.get(0).getUUID();
+@@ -343,8 +346,10 @@ public class EndDragonFight {
+         Set<ServerPlayer> set = Sets.newHashSet();
+ 
+         for(ServerPlayer serverPlayer : this.level.getPlayers(VALID_PLAYER)) {
++            if (MultiPaper.isChunkLocal(this.level.getChunk(0, 0))) { // MultiPaper - only add players if we're ticking
+             this.dragonEvent.addPlayer(serverPlayer);
+             set.add(serverPlayer);
++            } // MultiPaper - only add players if we're ticking
+         }
+ 
+         Set<ServerPlayer> set2 = Sets.newHashSet(this.dragonEvent.getPlayers());

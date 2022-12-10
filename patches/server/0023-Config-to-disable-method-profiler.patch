@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paul Sauve <paul@technove.co>
+Date: Mon, 26 Apr 2021 11:34:29 -0500
+Subject: [PATCH] Config to disable method profiler
+
+
+diff --git a/src/main/java/gg/airplane/AirplaneConfig.java b/src/main/java/gg/airplane/AirplaneConfig.java
+index e15b45eebeef3bd83cdc53ed45750e9fdeef81b2..855b3c3c760618dc6086ee4d13d9e7ab0c2fd2c0 100644
+--- a/src/main/java/gg/airplane/AirplaneConfig.java
++++ b/src/main/java/gg/airplane/AirplaneConfig.java
+@@ -209,4 +209,13 @@ public class AirplaneConfig {
+     }
+ 
+ 
++    public static boolean disableMethodProfiler;
++
++    private static void miscSettings() {
++        disableMethodProfiler = config.getBoolean("misc.disable-method-profiler", true);
++
++        config.setComment("misc", "Settings for things that don't belong elsewhere");
++    }
++
++
+ }
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index 5561e6b7325f4692cc8109d42722b38aab3117cf..003603fa757543e7d0959e2567f26212aaca8cbc 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -2241,6 +2241,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+     }
+ 
+     public ProfilerFiller getProfiler() {
++        if (gg.airplane.AirplaneConfig.disableMethodProfiler) return net.minecraft.util.profiling.InactiveProfiler.INSTANCE;
+         return this.profiler;
+     }
+ 
+diff --git a/src/main/java/net/minecraft/world/level/Level.java b/src/main/java/net/minecraft/world/level/Level.java
+index 4d5da12fbdf0893d4f6997122dde3fe739541465..f8d736c654cb24051f6129b93c5ff054650843dc 100644
+--- a/src/main/java/net/minecraft/world/level/Level.java
++++ b/src/main/java/net/minecraft/world/level/Level.java
+@@ -1538,6 +1538,7 @@ public abstract class Level implements LevelAccessor, AutoCloseable {
+     }
+ 
+     public ProfilerFiller getProfiler() {
++        if (gg.airplane.AirplaneConfig.disableMethodProfiler) return net.minecraft.util.profiling.InactiveProfiler.INSTANCE; // Airplane
+         return (ProfilerFiller) this.profiler.get();
+     }
+ 

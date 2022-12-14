@@ -5,7 +5,7 @@ Subject: [PATCH] Sync entities
 
 
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
-index 8389d501d6f4a70e4836a2d55974f77de6ebba3a..afa88c592929be9d816a97b3e8bc593f81044759 100644
+index 8389d501d6f4a70e4836a2d55974f77de6ebba3a..7887074e9fcba84a1409f21a3b6768640e75fc0c 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
 @@ -37,6 +37,7 @@ import org.slf4j.Logger;
@@ -24,7 +24,15 @@ index 8389d501d6f4a70e4836a2d55974f77de6ebba3a..afa88c592929be9d816a97b3e8bc593f
  
      // load/unload state
  
-@@ -878,6 +880,7 @@ public final class NewChunkHolder {
+@@ -165,6 +167,7 @@ public final class NewChunkHolder {
+             if (result != null) {
+                 this.entityDataLoadTaskWaiters = null;
+                 this.pendingEntityChunk = result.left() == null ? EMPTY_ENTITY_CHUNK : result.left();
++                MultiPaper.runSync(() -> world.chunkTaskScheduler.chunkHolderManager.getOrCreateEntityChunk(chunkX, chunkZ, false)); // MultiPaper - we can't leave entities cached in nbt. We need all entities accessible in case another server updates the entities in the chunk
+                 if (result.right() != null) {
+                     LOGGER.error("Unhandled entity data load exception, data data will be lost: ", result.right());
+                 }
+@@ -878,6 +881,7 @@ public final class NewChunkHolder {
              // we need to delay the callback until after determining transience, otherwise a potential loader could
              // set entityChunk before we do
              this.entityDataUnload.completable().complete(lastEntityUnload);
@@ -32,7 +40,7 @@ index 8389d501d6f4a70e4836a2d55974f77de6ebba3a..afa88c592929be9d816a97b3e8bc593f
          }
  
          // unload poi data
-@@ -1945,6 +1948,7 @@ public final class NewChunkHolder {
+@@ -1945,6 +1949,7 @@ public final class NewChunkHolder {
                  return false;
              }
  
@@ -1874,15 +1882,16 @@ index aa1c3e3f6c2ae8c5bc173606fce3ca53acdf771d..156d250bfefb9e244aa6a4c65b4b6444
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..33944a47cf782e4266c025fd3695203a9e01866c
+index 0000000000000000000000000000000000000000..26df6c6d6052f71da435d4ef973d1bb15b103bc3
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntitiesPacket.java
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,79 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
++import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.level.ChunkPos;
 +import org.apache.logging.log4j.LogManager;
@@ -1895,6 +1904,7 @@ index 0000000000000000000000000000000000000000..33944a47cf782e4266c025fd3695203a
 +import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.ConcurrentModificationException;
++import java.util.concurrent.CompletableFuture;
 +
 +public class RequestEntitiesPacket extends ExternalServerPacket {
 +
@@ -1932,7 +1942,7 @@ index 0000000000000000000000000000000000000000..33944a47cf782e4266c025fd3695203a
 +        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
 +        NewChunkHolder chunkHolder = level.chunkTaskScheduler.chunkHolderManager.getChunkHolder(ChunkPos.asLong(cx, cz));
 +        if (chunkHolder == null || chunkHolder.getEntityChunk() == null) {
-+            if (depth == 20 || Bukkit.isStopping()) {
++            if (depth >= 20 || Bukkit.isStopping()) {
 +                LOGGER.warn(connection.externalServer.getName() + " is requesting entities " + world + "," + cx + "," + cz + " but we timed out waiting for them to load.");
 +                connection.send(new SendEntitiesPacket(world, cx, cz, null));
 +                return;

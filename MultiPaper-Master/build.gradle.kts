@@ -19,7 +19,7 @@ dependencies {
     implementation(project(":MultiPaper-MasterMessagingProtocol"))
     implementation("org.jetbrains:annotations:22.0.0")
     implementation("org.json:json:20211205")
-    implementation("org.yaml:snakeyaml:1.32")
+    implementation("org.yaml:snakeyaml:1.33")
     implementation("io.netty:netty-all:4.1.75.Final")
     implementation("se.llbit:jo-nbt:1.3.0")
     compileOnly("net.md-5:bungeecord-api:1.16-R0.4")

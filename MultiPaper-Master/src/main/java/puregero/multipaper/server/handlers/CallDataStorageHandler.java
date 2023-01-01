@@ -2,6 +2,7 @@ package puregero.multipaper.server.handlers;
 
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.CallDataStorageMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.KeyValueStringMapMessageReply;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.NullableStringMessageReply;
@@ -138,7 +139,7 @@ public class CallDataStorageHandler {
 
             if (file.isFile()) {
                 try (FileInputStream in = new FileInputStream(file)) {
-                    yaml = new Yaml().load(in);
+                    yaml = new Yaml(new SafeConstructor()).load(in);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }

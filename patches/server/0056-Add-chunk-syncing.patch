@@ -1092,7 +1092,7 @@ index 0000000000000000000000000000000000000000..d139536be7ab15293b798af115e71a8d
 +}
 +
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 83736cca003bf96271153700a89fcee3c43a63ff..c145a3e278ded8e32b1541f4f042102db79c68bb 100644
+index 8527d2a45956182ab0bace5c898a5bbd8dfcf987..a5729bfca042727adcb5628ffa10bcb6cb610702 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -21,9 +21,12 @@ import puregero.multipaper.mastermessagingprotocol.MessageLengthDecoder;
@@ -1137,8 +1137,8 @@ index 83736cca003bf96271153700a89fcee3c43a63ff..c145a3e278ded8e32b1541f4f042102d
 +    public void requestChunk(String world, int cx, int cz, Consumer<DataInputStream> callback) {
 +        if (callback != null) {
 +            if (chunkCallbacks.put(new ChunkKey(world, cx, cz), callback) != null) {
-+                LOGGER.warn("A chunk callback already existed for " + world + ", " + cx + ", " + cz + " (new request is to " + externalServer.getName() + ")");
-+                LOGGER.warn("Stats for " + externalServer.getName() + ": last packet sent=" + (System.currentTimeMillis() - lastPacketSent) + "ms ago; last packet received=" + (System.currentTimeMillis() - lastPacketReceived) + "ms ago");
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("A chunk callback already existed for " + world + ", " + cx + ", " + cz + " (new request is to " + externalServer.getName() + ")");
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Stats for " + externalServer.getName() + ": last packet sent=" + (System.currentTimeMillis() - lastPacketSent) + "ms ago; last packet received=" + (System.currentTimeMillis() - lastPacketReceived) + "ms ago");
 +            }
 +        }
 +
@@ -1147,7 +1147,7 @@ index 83736cca003bf96271153700a89fcee3c43a63ff..c145a3e278ded8e32b1541f4f042102d
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 136a7bb726afef1ee199b066eec8ebecf7ef13b1..4f4f658edb77cb36e4ee473626a620ab0dfd619a 100644
+index 136a7bb726afef1ee199b066eec8ebecf7ef13b1..592f6e3f17b79e50aa130c0c86a6e6f9f0dac26d 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,25 +1,52 @@
@@ -1264,7 +1264,7 @@ index 136a7bb726afef1ee199b066eec8ebecf7ef13b1..4f4f658edb77cb36e4ee473626a620ab
 +            if (bukkitWorld == null || MultiPaper.getChunkHolder(world, cx, cz) == null) {
 +                if (Bukkit.getPluginManager().getPlugin("Dynmap") == null) {
 +                    // Dynmap uses this, so don't log for Dynmap servers
-+                    LOGGER.warn(Thread.currentThread() + " has no chunk holder for reading chunk " + world + "," + path + "," + cx + "," + cz + ", reading it straight from disk instead");
++                    if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn(Thread.currentThread() + " has no chunk holder for reading chunk " + world + "," + path + "," + cx + "," + cz + ", reading it straight from disk instead");
 +                }
 +
 +                return forceReadChunk(world, path, cx, cz).thenApply(data -> data.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data))));
@@ -1299,7 +1299,7 @@ index 136a7bb726afef1ee199b066eec8ebecf7ef13b1..4f4f658edb77cb36e4ee473626a620ab
 +        try {
 +            return readRegionFileAsync(world, path, cx, cz).get(20, TimeUnit.SECONDS);
 +        } catch (TimeoutException timeoutException) {
-+            LOGGER.warn("Timed out reading " + world + "," + path + "," + cx + "," + cz + ", retrying...");
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Timed out reading " + world + "," + path + "," + cx + "," + cz + ", retrying...");
 +            return readRegionFile(world, path, cx, cz);
 +        } catch (Exception e) {
 +            throw new RuntimeException(e);
@@ -1460,10 +1460,10 @@ index 136a7bb726afef1ee199b066eec8ebecf7ef13b1..4f4f658edb77cb36e4ee473626a620ab
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..59d011962c3692e235997a5cf2893478347a2828
+index 0000000000000000000000000000000000000000..059b7a931aa9160b214434a8454f82a328d12c5b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
-@@ -0,0 +1,255 @@
+@@ -0,0 +1,256 @@
 +package puregero.multipaper;
 +
 +import ca.spottedleaf.starlight.common.light.SWMRNibbleArray;
@@ -1489,6 +1489,7 @@ index 0000000000000000000000000000000000000000..59d011962c3692e235997a5cf2893478
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +import puregero.multipaper.externalserverprotocol.SendUpdatePacket;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.SubscribeChunkMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.UnsubscribeChunkMessage;
@@ -1526,7 +1527,7 @@ index 0000000000000000000000000000000000000000..59d011962c3692e235997a5cf2893478
 +        NewChunkHolder holder = MultiPaper.getChunkHolder(world, cx, cz);
 +
 +        if (holder != null && holder.getCurrentChunk() != null) {
-+            LOGGER.warn("Chunk " + world + "," + cx + "," + cz + " was unsubscribed from but has a chunk loaded! Resubscribing...");
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Chunk " + world + "," + cx + "," + cz + " was unsubscribed from but has a chunk loaded! Resubscribing...");
 +            MultiPaper.getConnection().send(new SubscribeChunkMessage(world, cx, cz));
 +        }
 +    }
@@ -1559,7 +1560,7 @@ index 0000000000000000000000000000000000000000..59d011962c3692e235997a5cf2893478
 +        }
 +
 +        if (chunk == null) {
-+            LOGGER.warn("A " + packet.getClass().getSimpleName() + " occurred on an unloaded chunk " + newChunkHolder);
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("A " + packet.getClass().getSimpleName() + " occurred on an unloaded chunk " + newChunkHolder);
 +            return;
 +        }
 +        if (blockUpdateChunk == null) { // Don't broadcast the update to other servers if we're handling an update
@@ -1720,7 +1721,7 @@ index 0000000000000000000000000000000000000000..59d011962c3692e235997a5cf2893478
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index a9ecd0c2f8554970544e505d0099b8dc01644753..47aec762c8583f0f5af89ce13eb5e5be626249c0 100644
+index 33aca3238c308bfab3f47836c4e216722d6c1f5f..3ee956360efd691ff0a00a6c29f40be1286baa9d 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -9,16 +9,23 @@ import io.netty.channel.epoll.EpollEventLoopGroup;
@@ -1801,7 +1802,7 @@ index a9ecd0c2f8554970544e505d0099b8dc01644753..47aec762c8583f0f5af89ce13eb5e5be
 +                if (newChunkHolder.getCurrentChunk() instanceof LevelChunk levelChunk) {
 +                    server.getConnection().send(new SendTickListPacket(levelChunk));
 +                } else {
-+                    LOGGER.warn("Chunk " + message.cx + ", " + message.cz + " in world " + message.world + " is not a level chunk, but we own it and want to send tick list to " + server.getName());
++                    if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Chunk " + message.cx + ", " + message.cz + " in world " + message.world + " is not a level chunk, but we own it and want to send tick list to " + server.getName());
 +                }
 +            }
 +            if (server != null && server.isMe()) {
@@ -1837,7 +1838,7 @@ index a9ecd0c2f8554970544e505d0099b8dc01644753..47aec762c8583f0f5af89ce13eb5e5be
 +            if (newChunkHolder != null) {
 +                newChunkHolder.externalSubscribers.add(server);
 +            } else {
-+                LOGGER.warn("Received AddChunkSubscriberMessage for unloaded chunk " + message.world + " " + message.cx + " " + message.cz);
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Received AddChunkSubscriberMessage for unloaded chunk " + message.world + " " + message.cx + " " + message.cz);
 +            }
 +        });
 +    }
@@ -1851,7 +1852,7 @@ index a9ecd0c2f8554970544e505d0099b8dc01644753..47aec762c8583f0f5af89ce13eb5e5be
 +            if (newChunkHolder != null) {
 +                newChunkHolder.externalSubscribers.remove(server);
 +            } else {
-+                LOGGER.warn("Received RemoveChunkSubscriberMessage for unloaded chunk " + message.world + " " + message.cx + " " + message.cz);
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Received RemoveChunkSubscriberMessage for unloaded chunk " + message.world + " " + message.cx + " " + message.cz);
 +            }
 +        });
 +    }
@@ -1871,7 +1872,7 @@ index a9ecd0c2f8554970544e505d0099b8dc01644753..47aec762c8583f0f5af89ce13eb5e5be
 +                newChunkHolder.externalSubscribers.clear();
 +                newChunkHolder.externalSubscribers.addAll(servers);
 +            } else {
-+                LOGGER.warn("Received ChunkSubscribersSyncMessage for unloaded chunk " + message.world + " " + message.cx + " " + message.cz);
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Received ChunkSubscribersSyncMessage for unloaded chunk " + message.world + " " + message.cx + " " + message.cz);
 +            }
 +        });
 +    }
@@ -1884,7 +1885,7 @@ index a9ecd0c2f8554970544e505d0099b8dc01644753..47aec762c8583f0f5af89ce13eb5e5be
 +        if (!server.isMe()) {
 +            NewChunkHolder holder = MultiPaper.getChunkHolder(message.world, message.cx, message.cz);
 +            if (holder == null) {
-+                LOGGER.warn("Received a chunk change status notification for an unloaded chunk " + message.world + ";" + message.cx + ";" + message.cz + " from " + server.getName());
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Received a chunk change status notification for an unloaded chunk " + message.world + ";" + message.cx + ";" + message.cz + " from " + server.getName());
 +            } else if (holder.getCurrentChunk() != null && !holder.getCurrentChunk().getStatus().isOrAfter(status)) {
 +                SendChunkPacket.forceChunkUnsafeUnload(message.world, message.cx, message.cz);
 +            }
@@ -1976,10 +1977,10 @@ index 0000000000000000000000000000000000000000..229506e75000777a5c3c686533eac47e
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java
-index 4b5bb154c26b6a1c95d013b571c1d0f7867f52d2..e4ecd29f6fe5c7d10613b9db6c7b7563d21ea02e 100644
+index 48b021460dc7856a7972939c4b0c5190c30775a5..3c0e5a433a897659fd9b2af43619c4fea26c8285 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java
-@@ -19,6 +19,7 @@ public class ExternalServerPacketHandler extends SimpleChannelInboundHandler<Ext
+@@ -20,6 +20,7 @@ public class ExternalServerPacketHandler extends SimpleChannelInboundHandler<Ext
  
      @Override
      protected void channelRead0(ChannelHandlerContext ctx, ExternalServerPacket msg) {
@@ -2004,10 +2005,10 @@ index 361232ab565973d262cfb6ecc54fd823e28d799e..191294b08434bd4ea0a7ea29d040b782
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4bfe8626ccfc5de2918a3b3416c884e74b26cba3
+index 0000000000000000000000000000000000000000..31ac7255d8feae3f5c7577353e36a4e0849760c2
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestChunkPacket.java
-@@ -0,0 +1,146 @@
+@@ -0,0 +1,147 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
@@ -2028,6 +2029,7 @@ index 0000000000000000000000000000000000000000..4bfe8626ccfc5de2918a3b3416c884e7
 +import puregero.multipaper.ExternalServer;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.ConcurrentModificationException;
 +import java.util.concurrent.CompletableFuture;
@@ -2067,7 +2069,7 @@ index 0000000000000000000000000000000000000000..4bfe8626ccfc5de2918a3b3416c884e7
 +        World bukkitWorld = Bukkit.getWorld(world);
 +
 +        if (!(bukkitWorld instanceof CraftWorld craftWorld)) {
-+            LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we don't have the world " + world + " loaded.");
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we don't have the world " + world + " loaded.");
 +            connection.send(new SendChunkPacket(world, cx, cz, null));
 +            return;
 +        }
@@ -2076,7 +2078,7 @@ index 0000000000000000000000000000000000000000..4bfe8626ccfc5de2918a3b3416c884e7
 +        NewChunkHolder newChunkHolder = MultiPaper.getChunkHolder(world, cx, cz);
 +
 +        if (newChunkHolder == null) {
-+            LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we aren't trying to load it.");
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we aren't trying to load it.");
 +            connection.send(new SendChunkPacket(world, cx, cz, null));
 +            return;
 +        }
@@ -2102,7 +2104,7 @@ index 0000000000000000000000000000000000000000..4bfe8626ccfc5de2918a3b3416c884e7
 +            }
 +
 +            if (chunk == null) {
-+                LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we don't have it loaded.");
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn(connection.externalServer.getName() + " is requesting chunk " + world + "," + cx + "," + cz + " but we don't have it loaded.");
 +                connection.send(new SendChunkPacket(world, cx, cz, null));
 +                return;
 +            }
@@ -2137,16 +2139,16 @@ index 0000000000000000000000000000000000000000..4bfe8626ccfc5de2918a3b3416c884e7
 +
 +                connection.send(new SendChunkPacket(world, cx, cz, tag));
 +            } catch (ConcurrentModificationException e) {
-+                LOGGER.warn("Got ConcurrentModificationException while sending chunk, sending it in main thread instead");
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Got ConcurrentModificationException while sending chunk, sending it in main thread instead");
 +                MultiPaper.runSync(() -> handle(connection));
 +            }
 +        })
 +        // Timeout instantly if this server is blocking our chunk loading, as this is probably also blocking their chunk loading
 +        .orTimeout(15, TimeUnit.SECONDS).exceptionally(throwable -> {
 +            if (throwable instanceof TimeoutException) {
-+                LOGGER.warn("Timed out while sending chunk " + world + "," + cx + "," + cz);
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Timed out while sending chunk " + world + "," + cx + "," + cz);
 +            } else {
-+                LOGGER.warn("Error while sending chunk " + world + "," + cx + "," + cz, throwable);
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Error while sending chunk " + world + "," + cx + "," + cz, throwable);
 +            }
 +
 +            connection.send(new SendChunkPacket(world, cx, cz, null));
@@ -2156,10 +2158,10 @@ index 0000000000000000000000000000000000000000..4bfe8626ccfc5de2918a3b3416c884e7
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9903fc6840284405970b0222540bda4685b36e11
+index 0000000000000000000000000000000000000000..54401e711060e6bc1f8540ada7f68395a1af5a60
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,124 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
@@ -2179,6 +2181,7 @@ index 0000000000000000000000000000000000000000..9903fc6840284405970b0222540bda46
 +import puregero.multipaper.ChunkKey;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.io.ByteArrayInputStream;
 +import java.io.DataInputStream;
@@ -2232,7 +2235,7 @@ index 0000000000000000000000000000000000000000..9903fc6840284405970b0222540bda46
 +            Consumer<DataInputStream> callback = connection.chunkCallbacks.remove(new ChunkKey(world, cx, cz));
 +            if (callback != null) {
 +                if (data.length == 0) {
-+                    LOGGER.warn(connection.externalServer.getName() + " sent us an empty chunk for " + world + "," + cx + "," + cz + ", force loading it from disk");
++                    if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn(connection.externalServer.getName() + " sent us an empty chunk for " + world + "," + cx + "," + cz + ", force loading it from disk");
 +                    MultiPaper.forceReadChunk(world, "region", cx, cz).thenAccept(data2 -> callback.accept(data2.length == 0 ? null : new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(data2)))));
 +                } else {
 +                    callback.accept(new DataInputStream(new ByteArrayInputStream(data)));
@@ -2247,13 +2250,13 @@ index 0000000000000000000000000000000000000000..9903fc6840284405970b0222540bda46
 +                ServerLevel level = craftWorld != null ? craftWorld.getHandle() : null;
 +                NewChunkHolder holder = MultiPaper.getChunkHolder(world, cx, cz);
 +                if (level == null) {
-+                    LOGGER.warn("Received chunk data " + world + "," + cx + "," + cz + " but we don't have world loaded.");
++                    if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Received chunk data " + world + "," + cx + "," + cz + " but we don't have world loaded.");
 +                } else if (holder == null) {
-+                    LOGGER.warn("Received chunk data " + world + "," + cx + "," + cz + " but no chunk is loaded here");
++                    if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Received chunk data " + world + "," + cx + "," + cz + " but no chunk is loaded here");
 +                } else if (holder.getCurrentChunk() instanceof LevelChunk) {
-+                    LOGGER.warn("Received chunk data " + world + "," + cx + "," + cz + " (" + tag.getString("Status") + "), but it is a level chunk (" + holder.getCurrentGenStatus() + ")");
++                    if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Received chunk data " + world + "," + cx + "," + cz + " (" + tag.getString("Status") + "), but it is a level chunk (" + holder.getCurrentGenStatus() + ")");
 +                } else {
-+                    LOGGER.warn("Received chunk data " + world + "," + cx + "," + cz + " (" + tag.getString("Status") + "), but we have a " + holder.getCurrentGenStatus() + " chunk, forcing reload from disk.");
++                    if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Received chunk data " + world + "," + cx + "," + cz + " (" + tag.getString("Status") + "), but we have a " + holder.getCurrentGenStatus() + " chunk, forcing reload from disk.");
 +                    forceChunkUnsafeUnload(world, cx, cz);
 +                }
 +            }
@@ -2285,10 +2288,10 @@ index 0000000000000000000000000000000000000000..9903fc6840284405970b0222540bda46
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..801d03669f9056ca9cd3dc2c617521c29a6854be
+index 0000000000000000000000000000000000000000..598dd7e20933c3bd5347299a9c4d02993a711a3b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendTickListPacket.java
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,90 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.core.registries.BuiltInRegistries;
@@ -2308,6 +2311,7 @@ index 0000000000000000000000000000000000000000..801d03669f9056ca9cd3dc2c617521c2
 +import org.bukkit.craftbukkit.CraftWorld;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.io.IOException;
 +
@@ -2373,17 +2377,17 @@ index 0000000000000000000000000000000000000000..801d03669f9056ca9cd3dc2c617521c2
 +                protoChunk.blockTicks = ProtoChunkTicks.load(tag.getList("block_ticks", Tag.TAG_COMPOUND), s -> BuiltInRegistries.BLOCK.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
 +                protoChunk.fluidTicks = ProtoChunkTicks.load(tag.getList("fluid_ticks", Tag.TAG_COMPOUND), s -> BuiltInRegistries.FLUID.getOptional(ResourceLocation.tryParse(s)), chunk.getPos());
 +            } else {
-+                LOGGER.warn("Received tick lists for an unloaded chunk " + world + "," + cx + "," + cz);
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Received tick lists for an unloaded chunk " + world + "," + cx + "," + cz);
 +            }
 +        });
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c9ad59beb1115af9b058b3a03e41705f74df2cba
+index 0000000000000000000000000000000000000000..93643f018d5d8ad3fae10493d6d6c5efef0e22dc
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendUpdatePacket.java
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,66 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -2399,6 +2403,7 @@ index 0000000000000000000000000000000000000000..c9ad59beb1115af9b058b3a03e41705f
 +import puregero.multipaper.MultiPaper;
 +import puregero.multipaper.MultiPaperChunkHandler;
 +import puregero.multipaper.MultiPaperWorldBorderHandler;
++import puregero.multipaper.config.MultiPaperConfiguration;
 +
 +import java.util.UUID;
 +
@@ -2445,7 +2450,7 @@ index 0000000000000000000000000000000000000000..c9ad59beb1115af9b058b3a03e41705f
 +        } else if (packet instanceof ClientboundSetBorderSizePacket || packet instanceof ClientboundSetBorderLerpSizePacket || packet instanceof ClientboundSetBorderCenterPacket || packet instanceof ClientboundSetBorderWarningDelayPacket || packet instanceof ClientboundSetBorderWarningDistancePacket) {
 +            MultiPaper.runSync(() -> MultiPaperWorldBorderHandler.handle(world, packet));
 +        } else {
-+            LOGGER.warn("Unhandled update packet of type " + packet.getClass().getSimpleName());
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Unhandled update packet of type " + packet.getClass().getSimpleName());
 +        }
 +    }
 +}

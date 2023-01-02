@@ -139,7 +139,7 @@ index 35b8352a2c798c70cfebeddd2a95dc8edf1d21d9..ceaad2b5af855905ad1b87e7308fb354
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c5abd55879ea5e317806e435f7be7b10489ffa12
+index 0000000000000000000000000000000000000000..0255076d90be94c0b0a94a71cc76d08eba2de756
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -0,0 +1,123 @@
@@ -234,7 +234,7 @@ index 0000000000000000000000000000000000000000..c5abd55879ea5e317806e435f7be7b10
 +                    MessageBootstrap.getEventLoopGroup().register(future.channel()).sync();
 +                });
 +            } else {
-+                LOGGER.info("Using Minecraft's event loop");
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.info("Using Minecraft's event loop");
 +            }
 +        }
 +    }
@@ -335,7 +335,7 @@ index 19948c5a87dd5f0da3aef064dbb6448d306395b6..63f573a93c8f46f2bc41cd6d81ae9d1e
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 77fb1d267595b7ece91793b58e86a377f6154dea..a9ecd0c2f8554970544e505d0099b8dc01644753 100644
+index 77fb1d267595b7ece91793b58e86a377f6154dea..33aca3238c308bfab3f47836c4e216722d6c1f5f 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -1,9 +1,15 @@
@@ -405,7 +405,7 @@ index 77fb1d267595b7ece91793b58e86a377f6154dea..a9ecd0c2f8554970544e505d0099b8dc
 +            return;
 +        }
 +
-+        LOGGER.info("Connecting to external server " + message.host + ":" + message.port + "...");
++        if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.info("Connecting to external server " + message.host + ":" + message.port + "...");
 +
 +        ExternalServerConnection externalServerConnection = new ExternalServerConnection();
 +
@@ -510,7 +510,7 @@ index 0000000000000000000000000000000000000000..e5537b79ec4b6329e4b5932279ea2bb4
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4b5bb154c26b6a1c95d013b571c1d0f7867f52d2
+index 0000000000000000000000000000000000000000..21e44812c8a18da79dd33e6cadd90918fa0bc359
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketHandler.java
 @@ -0,0 +1,46 @@
@@ -544,7 +544,7 @@ index 0000000000000000000000000000000000000000..4b5bb154c26b6a1c95d013b571c1d0f7
 +            if (throwable instanceof SocketException) {
 +                disconnectedWithException = true;
 +                if (connection.externalServer != null) {
-+                    LOGGER.info("External server " + connection.externalServer.getName() + " has disconnected: " + throwable.getMessage());
++                    if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.info("External server " + connection.externalServer.getName() + " has disconnected: " + throwable.getMessage());
 +                }
 +            } else {
 +                throwable.printStackTrace();
@@ -556,7 +556,7 @@ index 0000000000000000000000000000000000000000..4b5bb154c26b6a1c95d013b571c1d0f7
 +    public void channelInactive(ChannelHandlerContext ctx) {
 +        connection.nanoTime = 0;
 +        if (!disconnectedWithException && connection.externalServer != null) {
-+            LOGGER.info("External server " + connection.externalServer.getName() + " has disconnected");
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.info("External server " + connection.externalServer.getName() + " has disconnected");
 +        }
 +    }
 +}
@@ -603,7 +603,7 @@ index 0000000000000000000000000000000000000000..8ae5d51ce27c013595462029c8237a1c
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e375e2aba32cdc0a0d7ce7afa2c99fcf2d473281
+index 0000000000000000000000000000000000000000..379f3923753168ccafcea42b66a6d22e1026e840
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HelloPacket.java
 @@ -0,0 +1,108 @@
@@ -659,13 +659,13 @@ index 0000000000000000000000000000000000000000..e375e2aba32cdc0a0d7ce7afa2c99fcf
 +
 +        ExternalServerConnection previousConnection = connection.externalServer.getConnection();
 +        if (previousConnection == null || previousConnection.nanoTime < nanoTime) {
-+            LOGGER.info("Connected to external server " + bungeecordName);
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.info("Connected to external server " + bungeecordName);
 +            initCompression(connection);
 +            connection.externalServer.setConnection(connection);
 +            onConnect(connection);
 +        } else if (previousConnection.nanoTime == nanoTime) {
 +            // How lucky do you have to be for nano time to be the same?
-+            LOGGER.info("A new connection to external server " + bungeecordName + " had the same nano time as a previous connection, resending with a new nano time...");
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.info("A new connection to external server " + bungeecordName + " had the same nano time as a previous connection, resending with a new nano time...");
 +            HelloPacket helloPacket = new HelloPacket(MultiPaperConfiguration.get().masterConnection.myName, connection.getSupportedCompressionFlags());
 +            if (helloPacket.nanoTime == nanoTime) {
 +                // Oh, nano time is broken, that's why
@@ -673,7 +673,7 @@ index 0000000000000000000000000000000000000000..e375e2aba32cdc0a0d7ce7afa2c99fcf
 +            }
 +            connection.getChannel().writeAndFlush(helloPacket);
 +        } else {
-+            LOGGER.info("A new connection to external server " + bungeecordName + " failed as a previous connection had a newer nano time.");
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.info("A new connection to external server " + bungeecordName + " failed as a previous connection had a newer nano time.");
 +        }
 +    }
 +
@@ -689,7 +689,7 @@ index 0000000000000000000000000000000000000000..e375e2aba32cdc0a0d7ce7afa2c99fcf
 +        }
 +
 +        if (compressionHandler != null) {
-+            LOGGER.info("Using compression " + compressionHandler.getClass().getSimpleName() + " with " + connection.externalServer.getName());
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.info("Using compression " + compressionHandler.getClass().getSimpleName() + " with " + connection.externalServer.getName());
 +            ChannelOutboundHandlerAdapter finalCompressionHandler = compressionHandler;
 +            connection.getChannel().writeAndFlush(new SetCompressionPacket(compressionType)).addListener(future -> {
 +                if (MultiPaperConfiguration.get().peerConnection.consolidationDelay > 0) {

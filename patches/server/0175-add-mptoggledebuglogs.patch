@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: mohammed jasem alaajel <xrambad@gmail.com>
+Date: Mon, 2 Jan 2023 16:32:52 +0400
+Subject: [PATCH] add /mptoggledebuglogs
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+index 75c47d4c51e41cce641d79b5cd3d0bb4eccd5cff..7c702a99fb131794a06c730474a4ca040250df6c 100644
+--- a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
++++ b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+@@ -4,10 +4,7 @@ import java.util.Map;
+ import org.bukkit.Server;
+ import org.bukkit.command.Command;
+ import org.bukkit.command.SimpleCommandMap;
+-import puregero.multipaper.commands.MPDebugCommand;
+-import puregero.multipaper.commands.MPMapCommand;
+-import puregero.multipaper.commands.SListCommand;
+-import puregero.multipaper.commands.ServersCommand;
++import puregero.multipaper.commands.*;
+ 
+ public class CraftCommandMap extends SimpleCommandMap {
+ 
+@@ -29,6 +26,7 @@ public class CraftCommandMap extends SimpleCommandMap {
+         register("multipaper", new ServersCommand("servers"));
+         register("multipaper", new MPMapCommand("mpmap"));
+         register("multipaper", new SListCommand("slist"));
++        register("multipaper", new MPToggleDebugLogs("mptoggledebuglogs"));
+     }
+     // MultiPaper end
+ 
+diff --git a/src/main/java/puregero/multipaper/commands/MPToggleDebugLogs.java b/src/main/java/puregero/multipaper/commands/MPToggleDebugLogs.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..64248ec65bd249117dc233b2746edb164b3c1e07
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/commands/MPToggleDebugLogs.java
+@@ -0,0 +1,40 @@
++package puregero.multipaper.commands;
++
++import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
++import net.kyori.adventure.text.Component;
++import net.kyori.adventure.text.event.HoverEvent;
++import net.kyori.adventure.text.format.NamedTextColor;
++import org.bukkit.ChatColor;
++import org.bukkit.command.Command;
++import org.bukkit.command.CommandSender;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.entity.Player;
++import org.jetbrains.annotations.NotNull;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.config.MultiPaperConfiguration;
++
++public class MPToggleDebugLogs extends Command {
++
++    public MPToggleDebugLogs(String command) {
++        super(command);
++        setPermission("multipaper.command.mptoggledebuglogs");
++    }
++
++    @Override
++    public boolean execute(@NotNull CommandSender sender, @NotNull String commandLabel, String[] args) {
++        MultiPaperConfiguration configuration = MultiPaperConfiguration.get();
++        if (configuration.debugSettings.enabled) {
++            sender.sendMessage(Component.text("MultiPaper debug logging has been disabled!").color(NamedTextColor.RED)
++                    .append(Component.text("[!] This does not persist in the next restart").color(NamedTextColor.DARK_RED))
++            );
++            configuration.debugSettings.enabled = false;
++        } else {
++            sender.sendMessage(Component.text("MultiPaper debug logging has been enabled!").color(NamedTextColor.GREEN)
++                    .append(Component.text("[!] This does not persist in the next restart").color(NamedTextColor.DARK_RED))
++            );
++            configuration.debugSettings.enabled = true;
++        }
++        return MultiPaperConfiguration.get().debugSettings.enabled;
++    }
++
++}

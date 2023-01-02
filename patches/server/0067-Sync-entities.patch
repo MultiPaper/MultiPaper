@@ -729,7 +729,7 @@ index 5a447aa7fa81277f7566c34c2ad2ffac0f5cd5d3..c739253a861d19c7f26d3ffa8bb58bba
      }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index a5729bfca042727adcb5628ffa10bcb6cb610702..43ff7f29ae88401a64d1976f6b641da6bd3ea8b4 100644
+index a5729bfca042727adcb5628ffa10bcb6cb610702..1447f721fd2f79405f072345b1fb44762cb88767 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -42,6 +42,7 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
@@ -748,8 +748,8 @@ index a5729bfca042727adcb5628ffa10bcb6cb610702..43ff7f29ae88401a64d1976f6b641da6
 +    public void requestEntities(String world, int cx, int cz, Consumer<DataInputStream> callback) {
 +        if (callback != null) {
 +            if (entitiesCallbacks.put(new ChunkKey(world, cx, cz), callback) != null) {
-+                LOGGER.warn("An entities callback already existed for " + world + ", " + cx + ", " + cz + " (new request is to " + externalServer.getName() + ")");
-+                LOGGER.warn("Stats for " + externalServer.getName() + ": last packet sent=" + (System.currentTimeMillis() - lastPacketSent) + "ms ago; last packet received=" + (System.currentTimeMillis() - lastPacketReceived) + "ms ago");
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("An entities callback already existed for " + world + ", " + cx + ", " + cz + " (new request is to " + externalServer.getName() + ")");
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Stats for " + externalServer.getName() + ": last packet sent=" + (System.currentTimeMillis() - lastPacketSent) + "ms ago; last packet received=" + (System.currentTimeMillis() - lastPacketReceived) + "ms ago");
 +            }
 +        }
 +
@@ -901,7 +901,7 @@ index 77882699cee58e504ac8d682725b98b612356c02..0e097b0b6a7e8e2eae584746233b4724
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3a82773e577316f0457e4a739ca5df59593f2ad8
+index 0000000000000000000000000000000000000000..9d75ff7b09f49ed1350b7bbff9847fc6c7df7035
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 @@ -0,0 +1,366 @@
@@ -1148,7 +1148,7 @@ index 0000000000000000000000000000000000000000..3a82773e577316f0457e4a739ca5df59
 +                livingEntity.detectEquipmentUpdates();
 +            }
 +        } else {
-+            LOGGER.warn("Unhandled packet " + packet);
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Unhandled packet " + packet);
 +        }
 +    }
 +
@@ -1187,7 +1187,7 @@ index 0000000000000000000000000000000000000000..3a82773e577316f0457e4a739ca5df59
 +            ((LivingEntity) entities[0]).take(entity, takeItemEntityPacket.getAmount());
 +            takingItem = false;
 +        } else {
-+            LOGGER.warn("Unhandled dependencies packet " + packet);
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("Unhandled dependencies packet " + packet);
 +        }
 +    }
 +
@@ -1204,7 +1204,7 @@ index 0000000000000000000000000000000000000000..3a82773e577316f0457e4a739ca5df59
 +                MultiPaper.broadcastPacketToExternalServers(newChunkHolder.externalEntitiesSubscribers, () -> new EntityUpdateNBTPacket(entity));
 +                MultiPaper.broadcastPacketToExternalServers(newChunkHolder.externalEntitiesSubscribers, () -> new EntityUpdatePacket(entity, new ClientboundSetEntityDataPacket(entity.getId(), entity.getEntityData().getAll())));
 +            } else {
-+                LOGGER.warn(entity + " spawned in an unloaded chunk, broadcasting it to all servers just incase anyone has it loaded");
++                if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn(entity + " spawned in an unloaded chunk, broadcasting it to all servers just incase anyone has it loaded");
 +                MultiPaper.broadcastPacketToExternalServers(new EntityUpdateNBTPacket(entity));
 +                MultiPaper.broadcastPacketToExternalServers(new EntityUpdatePacket(entity, new ClientboundSetEntityDataPacket(entity.getId(), entity.getEntityData().getAll())));
 +            }
@@ -1225,7 +1225,7 @@ index 0000000000000000000000000000000000000000..3a82773e577316f0457e4a739ca5df59
 +        if (newChunkHolder != null) {
 +            MultiPaper.broadcastPacketToExternalServers(newChunkHolder.externalEntitiesSubscribers, () -> new EntityRemovePacket(entity));
 +        } else {
-+            LOGGER.warn(entity + " removed in an unloaded chunk");
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn(entity + " removed in an unloaded chunk");
 +        }
 +    }
 +
@@ -1267,7 +1267,7 @@ index 0000000000000000000000000000000000000000..3a82773e577316f0457e4a739ca5df59
 +        if (newChunkHolder != null) {
 +            MultiPaper.broadcastPacketToExternalServers(newChunkHolder.externalEntitiesSubscribers, () -> new EntityUpdatePacket(entity, packet));
 +        } else {
-+            LOGGER.warn("onEntityUpdate was called for an unloaded chunk " + entity);
++            if (MultiPaperConfiguration.get().debugSettings.enabled) LOGGER.warn("onEntityUpdate was called for an unloaded chunk " + entity);
 +        }
 +    }
 +}

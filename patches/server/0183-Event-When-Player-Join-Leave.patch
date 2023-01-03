@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: DoctaEnkoda <bierquejason@gmail.com>
+Date: Tue, 3 Jan 2023 03:35:42 +0100
+Subject: [PATCH] Event When Player Join Leave
+
+Add PlayerLeaveExternalServerEvent when Player Leave an External Server
+Add PlayerJoinExternalServerEvent when Player Join an External Server
+
+Beware, this does not replace PlayerJoinEvent and PlayerQuitEvent but still allows to know when a player leaves a server on another instance.
+
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+index e4bc6f2a4757905e304dbfe0d9bc669d878d0054..2bc25f8fe667f4f90fb51673680ea48d19ddb98e 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
+@@ -14,8 +14,10 @@ import net.minecraft.world.level.GameType;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
+ import org.bukkit.event.player.PlayerKickEvent;
+ import puregero.multipaper.*;
++import puregero.multipaper.event.player.PlayerJoinExternalServerEvent;
+ 
+ import javax.annotation.Nullable;
+ import java.net.InetAddress;
+@@ -144,6 +146,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+     @Override
+     public void handle(ExternalServerConnection connection) {
+         LOGGER.info("Adding player " + gameProfile.getName() + " (" + gameProfile.getId() + ")");
++        PlayerJoinExternalServerEvent playerJoinExternalServerEvent = new PlayerJoinExternalServerEvent(gameProfile.getId(), gameProfile.getName());
++        Bukkit.getPluginManager().callEvent(playerJoinExternalServerEvent);
+         MultiPaper.runSync(() -> {
+             ServerPlayer existingPlayer = MinecraftServer.getServer().getPlayerList().getPlayer(gameProfile.getId());
+             if (existingPlayer != null) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
+index d5853995ed4774799475e5f1c156d5814e524c9d..d0c5767d18732a8c658148180762c76689c15018 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java
+@@ -6,9 +6,11 @@ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.ServerPlayer;
+ import org.apache.logging.log4j.LogManager;
+ import org.apache.logging.log4j.Logger;
++import org.bukkit.Bukkit;
+ import org.bukkit.event.player.PlayerKickEvent;
+ import puregero.multipaper.ExternalServerConnection;
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.event.player.PlayerLeaveExternalServerEvent;
+ 
+ import java.util.UUID;
+ 
+@@ -44,6 +46,8 @@ public class PlayerRemovePacket extends ExternalServerPacket {
+             }
+ 
+             player.connection.disconnect(EXTERNAL_DISCONNECT_COMPONENT, PlayerKickEvent.Cause.TIMEOUT);
++            PlayerLeaveExternalServerEvent playerLeaveExternalServerEvent = new PlayerLeaveExternalServerEvent(player.getGameProfile().getId(), player.getGameProfile().getName());
++            Bukkit.getPluginManager().callEvent(playerLeaveExternalServerEvent);
+         });
+     }
+ }

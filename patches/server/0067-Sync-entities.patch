@@ -1509,10 +1509,10 @@ index 0000000000000000000000000000000000000000..6ffa94bd2c8926f37ba95ce14fda3932
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2f2f5ca85a2cb78f8fb3fbd15c40bd88bc968cba
+index 0000000000000000000000000000000000000000..9bf1cd74d09b7788d35ee28911fb1509a9263b8e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,113 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1548,10 +1548,13 @@ index 0000000000000000000000000000000000000000..2f2f5ca85a2cb78f8fb3fbd15c40bd88
 +    private final UUID uuid;
 +    private final Packet<?> packet;
 +
++    private final long chunkPos;
++
 +    public EntityUpdatePacket(Entity entity, Packet<?> packet) {
 +        this.world = ((ServerLevel) entity.level).uuid;
 +        this.uuid = entity.getUUID();
 +        this.packet = packet;
++        this.chunkPos = entity.chunkPosition().longKey;
 +    }
 +
 +    public EntityUpdatePacket(FriendlyByteBuf in) {
@@ -1562,6 +1565,7 @@ index 0000000000000000000000000000000000000000..2f2f5ca85a2cb78f8fb3fbd15c40bd88
 +        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
 +        int packetId = friendlyByteBuf.readVarInt();
 +        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++        this.chunkPos = in.readLong();
 +    }
 +
 +    @Override
@@ -1578,6 +1582,7 @@ index 0000000000000000000000000000000000000000..2f2f5ca85a2cb78f8fb3fbd15c40bd88
 +        packet.write(friendlyByteBuf);
 +        threadsWritingUpdatePackets.remove(Thread.currentThread().getId());
 +        out.writeByteArray(buf.array());
++        out.writeLong(this.chunkPos);
 +    }
 +
 +    @Override
@@ -1599,6 +1604,12 @@ index 0000000000000000000000000000000000000000..2f2f5ca85a2cb78f8fb3fbd15c40bd88
 +
 +                // If we can't find the entity, try again later,
 +                // the spawn entity packet is probably coming later
++
++                // first we check if we really need to request the entity by checking if entity's chunk is loaded
++                if (!level.areEntitiesLoaded(this.chunkPos)) {
++                    return;
++                }
++
 +                if (depth > 5) {
 +                    LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName() + ", requesting it");
 +                    connection.send(new RequestEntityPacket(world, uuid));
@@ -1617,10 +1628,10 @@ index 0000000000000000000000000000000000000000..2f2f5ca85a2cb78f8fb3fbd15c40bd88
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..70f1c67e9c762cb36489f723dd042ed44b907cbb
+index 0000000000000000000000000000000000000000..7f58f63dc42095f5a966ca6f4647b64cdf7414d8
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
-@@ -0,0 +1,146 @@
+@@ -0,0 +1,156 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1655,12 +1666,14 @@ index 0000000000000000000000000000000000000000..70f1c67e9c762cb36489f723dd042ed4
 +    private final UUID uuid;
 +    private final UUID[] uuids;
 +    private final Packet<?> packet;
++    private final long chunkPos;
 +
 +    public EntityUpdateWithDependenciesPacket(Entity entity, Collection<Entity> dependents, Packet<?> packet) {
 +        this.world = ((ServerLevel) entity.level).uuid;
 +        this.uuid = entity.getUUID();
 +        this.uuids = dependents.stream().filter(Objects::nonNull).map(Entity::getUUID).toArray(UUID[]::new);
 +        this.packet = packet;
++        this.chunkPos = entity.chunkPosition().longKey;
 +    }
 +
 +    public EntityUpdateWithDependenciesPacket(FriendlyByteBuf in) {
@@ -1677,6 +1690,7 @@ index 0000000000000000000000000000000000000000..70f1c67e9c762cb36489f723dd042ed4
 +        FriendlyByteBuf friendlyByteBuf = new FriendlyByteBuf(buf);
 +        int packetId = friendlyByteBuf.readVarInt();
 +        packet = ConnectionProtocol.PLAY.createPacket(PacketFlow.CLIENTBOUND, packetId, friendlyByteBuf);
++        this.chunkPos = in.readLong();
 +    }
 +
 +    @Override
@@ -1696,6 +1710,7 @@ index 0000000000000000000000000000000000000000..70f1c67e9c762cb36489f723dd042ed4
 +        friendlyByteBuf.writeVarInt(id);
 +        packet.write(friendlyByteBuf);
 +        out.writeByteArray(buf.array());
++        out.writeLong(this.chunkPos);
 +    }
 +
 +    @Override
@@ -1717,6 +1732,12 @@ index 0000000000000000000000000000000000000000..70f1c67e9c762cb36489f723dd042ed4
 +
 +                // If we can't find the entity, try again later,
 +                // the spawn entity packet is probably coming later
++
++                // first we check if we really need to request the entity by checking if entity's chunk is loaded
++                if (!level.areEntitiesLoaded(this.chunkPos)) {
++                    return;
++                }
++
 +                if (depth > 5) {
 +                    LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName() + ", requesting it");
 +                    connection.send(new RequestEntityPacket(world, uuid));

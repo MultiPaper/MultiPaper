@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Robert Nisipeanu <github@nisipeanu.com>
+Date: Wed, 28 Dec 2022 21:11:06 +0200
+Subject: [PATCH] Share PersistentDataContainer for block states between
+ servers
+
+
+diff --git a/src/main/java/net/minecraft/network/protocol/game/ClientboundBlockEntityDataPacket.java b/src/main/java/net/minecraft/network/protocol/game/ClientboundBlockEntityDataPacket.java
+index b1e326cf4f7fe447f81b588dcb0eda9a435e59a8..8af3b6796a60f15287508a4343e35087c9e4dfc4 100644
+--- a/src/main/java/net/minecraft/network/protocol/game/ClientboundBlockEntityDataPacket.java
++++ b/src/main/java/net/minecraft/network/protocol/game/ClientboundBlockEntityDataPacket.java
+@@ -16,8 +16,12 @@ public class ClientboundBlockEntityDataPacket implements Packet<ClientGamePacket
+     @Nullable
+     private final CompoundTag tag;
+ 
++    public static ClientboundBlockEntityDataPacket create(BlockEntity blockEntity, Function<BlockEntity, CompoundTag> nbtGetter, boolean sanitizeNbt) {
++        return new ClientboundBlockEntityDataPacket(blockEntity.getBlockPos(), blockEntity.getType(), sanitizeNbt ? blockEntity.sanitizeSentNbt(nbtGetter.apply(blockEntity)) : nbtGetter.apply(blockEntity)); // MultiPaper - Skip nbt sanitization when syncing between servers
++    }
++
+     public static ClientboundBlockEntityDataPacket create(BlockEntity blockEntity, Function<BlockEntity, CompoundTag> nbtGetter) {
+-        return new ClientboundBlockEntityDataPacket(blockEntity.getBlockPos(), blockEntity.getType(), blockEntity.sanitizeSentNbt(nbtGetter.apply(blockEntity))); // Paper - Sanitize sent data
++        return create(blockEntity, nbtGetter, true); // MultiPaper - Sanitize sent data (Paper compatibility)
+     }
+ 
+     public static ClientboundBlockEntityDataPacket create(BlockEntity blockEntity) {
+diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+index 257c3df5aa6734ab36053438e328f816ce3acdff..768d168658e5acd06e1febba5e20ed9b10974333 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
++++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
+@@ -464,7 +464,7 @@ public class ChunkHolder {
+                 this.broadcast(packet, false);
+             }
+ 
+-            if(!broadcastingToPlayersOnly) MultiPaperChunkHandler.onBlockUpdate(this, ClientboundBlockEntityDataPacket.create(tileentity, BlockEntity::saveWithFullMetadata)); // MultiPaper - sync the full block with external servers
++            if(!broadcastingToPlayersOnly) MultiPaperChunkHandler.onBlockUpdate(this, ClientboundBlockEntityDataPacket.create(tileentity, BlockEntity::saveWithFullMetadata, false)); // MultiPaper - sync the full block with external servers
+         }
+ 
+     }
+diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
+index 53b29b38c607c89d20b289a628503b337f768696..10fcea6168000c24e6dacf4d65c6d773014dcc99 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
++++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
+@@ -80,7 +80,7 @@ public class MultiPaperChunkHandler {
+         MultiPaper.runSync(() -> {
+             for (BlockEntity blockEntity : blockEntitiesToBroadcast) {
+                 if (blockEntity != null && blockEntity.getLevel() != null) {
+-                    MultiPaperChunkHandler.onBlockUpdate(MultiPaper.getChunkHolder(blockEntity.getLevel().getWorld().getName(), blockEntity.getBlockPos()), ClientboundBlockEntityDataPacket.create(blockEntity, BlockEntity::saveWithFullMetadata));
++                    MultiPaperChunkHandler.onBlockUpdate(MultiPaper.getChunkHolder(blockEntity.getLevel().getWorld().getName(), blockEntity.getBlockPos()), ClientboundBlockEntityDataPacket.create(blockEntity, BlockEntity::saveWithFullMetadata, false));
+                 }
+             }
+             blockEntitiesToBroadcast.clear();

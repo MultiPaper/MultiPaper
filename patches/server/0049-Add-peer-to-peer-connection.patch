@@ -5,7 +5,7 @@ Subject: [PATCH] Add peer-to-peer connection
 
 
 diff --git a/src/main/java/com/destroystokyo/paper/Metrics.java b/src/main/java/com/destroystokyo/paper/Metrics.java
-index 1eb8adf8d7b7ed3f9d9be2d667df90757640e5f4..a83eedd9e3f77acacbb59a43afc1777565d58153 100644
+index 19ab67f5860413f7200e98929585d8ca8f9d9ffd..81a0be0c3654b46debbea41ebe5ffedf8725e6b5 100644
 --- a/src/main/java/com/destroystokyo/paper/Metrics.java
 +++ b/src/main/java/com/destroystokyo/paper/Metrics.java
 @@ -9,6 +9,8 @@ import org.bukkit.plugin.Plugin;
@@ -17,27 +17,31 @@ index 1eb8adf8d7b7ed3f9d9be2d667df90757640e5f4..a83eedd9e3f77acacbb59a43afc17775
  
  import javax.net.ssl.HttpsURLConnection;
  import java.io.ByteArrayOutputStream;
-@@ -605,6 +607,7 @@ public class Metrics {
-                 metrics.addCustomChart(new Metrics.SingleLineChart("players", () -> Bukkit.getOnlinePlayers().size()));
-                 metrics.addCustomChart(new Metrics.SimplePie("online_mode", () -> Bukkit.getOnlineMode() ? "online" : "offline"));
+@@ -613,6 +615,7 @@ public class Metrics {
+                     paperVersion = "unknown";
+                 }
                  metrics.addCustomChart(new Metrics.SimplePie("multipaper_version", () -> (CraftServer.class.getPackage().getImplementationVersion() != null) ? CraftServer.class.getPackage().getImplementationVersion() : "unknown")); // Tuinity - we have our own bstats page // Airplane // MultiPaper
 +                metrics.addCustomChart(new Metrics.SimplePie("total_servers", () -> String.valueOf(MultiPaper.getConnection().getServersMap().values().stream().filter(ExternalServer::isAlive).count()))); // MultiPaper
  
                  metrics.addCustomChart(new Metrics.DrilldownPie("java_version", () -> {
                      Map<String, Map<String, Integer>> map = new HashMap<>();
 diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
-index 507e98438f6d13de1bcf063db673a8e483dbea47..dc7fd278a183c7b1185c5e1024647f412d67dbdc 100644
+index 38c09c65dfa4a7a0c80d36f726c1fd028cbe05f8..6a8def2d9a9902dd03cb874087c076c94123d3c7 100644
 --- a/src/main/java/net/minecraft/network/Connection.java
 +++ b/src/main/java/net/minecraft/network/Connection.java
-@@ -572,7 +572,7 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
-         // Paper end
-         if (this.packetListener instanceof net.minecraft.server.network.ServerLoginPacketListenerImpl) {
-             if ( ((net.minecraft.server.network.ServerLoginPacketListenerImpl) this.packetListener).state != net.minecraft.server.network.ServerLoginPacketListenerImpl.State.READY_TO_ACCEPT // Paper
--                || (joinAttemptsThisTick++ < MAX_PER_TICK)) { // Paper - limit the number of joins which can be processed each tick
-+                || (joinAttemptsThisTick++ < io.papermc.paper.configuration.GlobalConfiguration.get().misc.maxJoinsPerTick)) { // Paper - limit the number of joins which can be processed each tick // MultiPaper - reference paper config directly, not intermediate values
-                 ((net.minecraft.server.network.ServerLoginPacketListenerImpl) this.packetListener).tick();
-             } // Paper
+@@ -570,6 +570,12 @@ public class Connection extends SimpleChannelInboundHandler<Packet<?>> {
+             Connection.joinAttemptsThisTick = 0;
          }
+         // Paper end
++        if (this.packetListener instanceof net.minecraft.server.network.ServerLoginPacketListenerImpl) {
++            if ( ((net.minecraft.server.network.ServerLoginPacketListenerImpl) this.packetListener).state != net.minecraft.server.network.ServerLoginPacketListenerImpl.State.READY_TO_ACCEPT // Paper
++                || (joinAttemptsThisTick++ < io.papermc.paper.configuration.GlobalConfiguration.get().misc.maxJoinsPerTick)) { // Paper - limit the number of joins which can be processed each tick // MultiPaper - reference paper config directly, not intermediate values
++                ((net.minecraft.server.network.ServerLoginPacketListenerImpl) this.packetListener).tick();
++            } // Paper
++        }
+         PacketListener packetlistener = this.packetListener;
+ 
+         if (packetlistener instanceof TickablePacketListener) {
 diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
 index 6d10d2b6f10e9b5866208213efa7c30e1ec38f94..afd4bda5111d63b222d9026f39583f885565de50 100644
 --- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java

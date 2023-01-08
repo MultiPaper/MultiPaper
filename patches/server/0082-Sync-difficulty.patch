@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 31 Jan 2022 21:14:15 +1000
+Subject: [PATCH] Sync difficulty
+
+
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index 1a9637c901e38c7ecee13e1e163cd95fd28089c3..5d1ea36064c40501d487c2585670961bcc9518d9 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -195,6 +195,7 @@ import org.bukkit.event.server.ServerLoadEvent;
+ import co.aikar.timings.MinecraftTimings; // Paper
+ import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperExternalBlocksHandler;
++import puregero.multipaper.externalserverprotocol.DifficultyUpdatePacket;
+ 
+ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements CommandSource, AutoCloseable {
+ 
+@@ -1756,6 +1757,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+             level.setSpawnSettings(worldData.getDifficulty() != Difficulty.PEACEFUL && ((DedicatedServer) this).settings.getProperties().spawnMonsters, this.isSpawningAnimals());
+             // this.getPlayerList().getPlayers().forEach(this::sendDifficultyUpdate);
+             // Paper end
++            if (!DifficultyUpdatePacket.updatingDifficulty) MultiPaper.broadcastPacketToExternalServers(level.getWorld().getName(), new DifficultyUpdatePacket(level)); // MultiPaper
+         }
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/DifficultyUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/DifficultyUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..693e97891b8f8ea7c7fe9e8985c8f843d2ee32e3
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/DifficultyUpdatePacket.java
+@@ -0,0 +1,46 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.Difficulty;
++import org.bukkit.Bukkit;
++import org.bukkit.World;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++public class DifficultyUpdatePacket extends ExternalServerPacket {
++
++    public static boolean updatingDifficulty = false;
++
++    private final String world;
++    private final String difficulty;
++
++    public DifficultyUpdatePacket(ServerLevel level) {
++        this.world = level.getWorld().getName();
++        this.difficulty = level.serverLevelData.getDifficulty().getKey();
++    }
++
++    public DifficultyUpdatePacket(FriendlyByteBuf in) {
++        world = in.readUtf();
++        difficulty = in.readUtf();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeUtf(difficulty);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            World bukkitWorld = Bukkit.getWorld(world);
++            if (bukkitWorld instanceof CraftWorld craftWorld) {
++                updatingDifficulty = true;
++                craftWorld.getHandle().getServer().setDifficulty(craftWorld.getHandle(), Difficulty.byName(difficulty), true);
++                updatingDifficulty = false;
++            }
++        });
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index c707ff7c31aaa09dffe7523af57d81edac29872c..45cc2069a0023162c8063664f776dff5804687ff 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -64,6 +64,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerSetCameraPacket.class, PlayerSetCameraPacket::new);
+         addPacket(PlayerSetRespawnPosition.class, PlayerSetRespawnPosition::new);
+         addPacket(SpawnUpdatePacket.class, SpawnUpdatePacket::new);
++        addPacket(DifficultyUpdatePacket.class, DifficultyUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {

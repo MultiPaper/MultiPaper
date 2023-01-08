@@ -1,0 +1,156 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Paul <paul@technove.co>
+Date: Wed, 15 Sep 2021 19:10:18 -0500
+Subject: [PATCH] Reduce entity fluid lookups if no fluids
+
+
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 3d57923fb36f4a5445c3ab78a24d408819b045b4..62a14dab6908dfbd5c319c3b80afbc88c4481358 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -4121,16 +4121,18 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+     }
+ 
+     public boolean updateFluidHeightAndDoFluidPushing(TagKey<Fluid> tag, double speed) {
+-        if (this.touchingUnloadedChunk()) {
++        if (false && this.touchingUnloadedChunk()) { // Airplane - cost of a lookup here is the same cost as below, so skip
+             return false;
+         } else {
+             AABB axisalignedbb = this.getBoundingBox().deflate(0.001D);
+-            int i = Mth.floor(axisalignedbb.minX);
+-            int j = Mth.ceil(axisalignedbb.maxX);
+-            int k = Mth.floor(axisalignedbb.minY);
+-            int l = Mth.ceil(axisalignedbb.maxY);
+-            int i1 = Mth.floor(axisalignedbb.minZ);
+-            int j1 = Mth.ceil(axisalignedbb.maxZ);
++            // Airplane start - rename
++            int minBlockX = Mth.floor(axisalignedbb.minX);
++            int maxBlockX = Mth.ceil(axisalignedbb.maxX);
++            int minBlockY = Mth.floor(axisalignedbb.minY);
++            int maxBlockY = Mth.ceil(axisalignedbb.maxY);
++            int minBlockZ = Mth.floor(axisalignedbb.minZ);
++            int maxBlockZ = Mth.ceil(axisalignedbb.maxZ);
++            // Airplane end
+             double d1 = 0.0D;
+             boolean flag = this.isPushedByFluid();
+             boolean flag1 = false;
+@@ -4138,14 +4140,62 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+             int k1 = 0;
+             BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
+ 
+-            for (int l1 = i; l1 < j; ++l1) {
+-                for (int i2 = k; i2 < l; ++i2) {
+-                    for (int j2 = i1; j2 < j1; ++j2) {
+-                        blockposition_mutableblockposition.set(l1, i2, j2);
+-                        FluidState fluid = this.level.getFluidState(blockposition_mutableblockposition);
++            // Airplane start - based off CollisionUtil.getCollisionsForBlocksOrWorldBorder
++            final int minSection = io.papermc.paper.util.WorldUtil.getMinSection(this.level);
++            final int maxSection = io.papermc.paper.util.WorldUtil.getMaxSection(this.level);
++            final int minBlock = minSection << 4;
++            final int maxBlock = (maxSection << 4) | 15;
++
++            // special cases:
++            if (minBlockY > maxBlock || maxBlockY < minBlock) {
++                // no point in checking
++                return false;
++            }
++
++            int minYIterate = Math.max(minBlock, minBlockY);
++            int maxYIterate = Math.min(maxBlock, maxBlockY);
++
++            int minChunkX = minBlockX >> 4;
++            int maxChunkX = maxBlockX >> 4;
++
++            int minChunkZ = minBlockZ >> 4;
++            int maxChunkZ = maxBlockZ >> 4;
++
++            for (int currChunkZ = minChunkZ; currChunkZ <= maxChunkZ; ++currChunkZ) {
++                int minZ = currChunkZ == minChunkZ ? minBlockZ & 15 : 0; // coordinate in chunk
++                int maxZ = currChunkZ == maxChunkZ ? maxBlockZ & 15 : 16; // coordinate in chunk
++
++                for (int currChunkX = minChunkX; currChunkX <= maxChunkX; ++currChunkX) {
++                    int minX = currChunkX == minChunkX ? minBlockX & 15 : 0; // coordinate in chunk
++                    int maxX = currChunkX == maxChunkX ? maxBlockX & 15 : 16; // coordinate in chunk
++
++                    net.minecraft.world.level.chunk.ChunkAccess chunk = this.level.getChunkIfLoadedImmediately(currChunkX, currChunkZ);
++                    if (chunk == null) {
++                        return false; // if we're touching an unloaded chunk then it's false
++                    }
++
++                    net.minecraft.world.level.chunk.LevelChunkSection[] sections = chunk.getSections();
++
++                    for (int currY = minYIterate; currY < maxYIterate; ++currY) {
++                        net.minecraft.world.level.chunk.LevelChunkSection section = sections[(currY >> 4) - minSection];
++
++                        if (section == null || section.hasOnlyAir() || section.fluidStateCount == 0) { // if no fluids, nothing in this section
++                            // empty
++                            // skip to next section
++                            currY = (currY & ~(15)) + 15; // increment by 15: iterator loop increments by the extra one
++                            continue;
++                        }
++
++                        net.minecraft.world.level.chunk.PalettedContainer<BlockState> blocks = section.states;
++
++                        for (int currZ = minZ; currZ < maxZ; ++currZ) {
++                            for (int currX = minX; currX < maxX; ++currX) {
++                                int localBlockIndex = (currX) | (currZ << 4) | ((currY & 15) << 8);
++                                FluidState fluid = blocks.get(localBlockIndex).getFluidState();
+ 
+                         if (fluid.is(tag)) {
+-                            double d2 = (double) ((float) i2 + fluid.getHeight(this.level, blockposition_mutableblockposition));
++                            blockposition_mutableblockposition.set((currChunkX << 4) + currX, currY, (currChunkZ << 4) + currZ);
++                            double d2 = (double) ((float) currY + fluid.getHeight(this.level, blockposition_mutableblockposition));
+ 
+                             if (d2 >= axisalignedbb.minY) {
+                                 flag1 = true;
+@@ -4167,9 +4217,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+                                 // CraftBukkit end
+                             }
+                         }
++                            }
++                        }
+                     }
+                 }
+             }
++            // Airplane end
+ 
+             if (vec3d.length() > 0.0D) {
+                 if (k1 > 0) {
+diff --git a/src/main/java/net/minecraft/world/level/chunk/LevelChunkSection.java b/src/main/java/net/minecraft/world/level/chunk/LevelChunkSection.java
+index b0c9fce9d4e06cac139e341d218d0b6aac1f1943..b2bb62d228c0d2f0c80f6d3ff11b172269a7ad43 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/LevelChunkSection.java
++++ b/src/main/java/net/minecraft/world/level/chunk/LevelChunkSection.java
+@@ -24,6 +24,9 @@ public class LevelChunkSection {
+     short nonEmptyBlockCount; // Paper - package-private
+     private short tickingBlockCount;
+     private short tickingFluidCount;
++    // Airplane start
++    public short fluidStateCount;
++    // Airplane end
+     public final PalettedContainer<BlockState> states;
+     // CraftBukkit start - read/write
+     private PalettedContainer<Holder<Biome>> biomes;
+@@ -198,6 +201,7 @@ public class LevelChunkSection {
+ 
+         if (!fluid.isEmpty()) {
+             --this.tickingFluidCount;
++            --this.fluidStateCount; // Airplane
+         }
+ 
+         if (!state.isAir()) {
+@@ -212,6 +216,7 @@ public class LevelChunkSection {
+ 
+         if (!fluid1.isEmpty()) {
+             ++this.tickingFluidCount;
++            ++this.fluidStateCount; // Airplane
+         }
+ 
+         this.updateKnownBlockInfo(x | (z << 4) | (y << 8), iblockdata1, state); // Paper
+@@ -260,6 +265,7 @@ public class LevelChunkSection {
+                 if (fluid.isRandomlyTicking()) {
+                     this.tickingFluidCount = (short) (this.tickingFluidCount + 1);
+                 }
++                this.fluidStateCount++; // Airplane
+             }
+ 
+         });

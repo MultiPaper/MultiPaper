@@ -4,7 +4,7 @@ import io.papermc.paperweight.util.constants.*
 plugins {
     java
     id("com.github.johnrengelman.shadow") version "7.1.2"
-    id("io.papermc.paperweight.patcher") version "1.4.0"
+    id("io.papermc.paperweight.patcher") version "1.4.1"
 }
 
 repositories {
@@ -59,21 +59,26 @@ paperweight {
     serverProject.set(project(":MultiPaper-Server"))
 
     remapRepo.set("https://maven.fabricmc.net/")
-    decompileRepo.set("https://files.minecraftforge.net/maven/")
+    decompileRepo.set("https://maven.quiltmc.org")
 
-    usePaperUpstream(providers.gradleProperty("paperRef")) {
-        withPaperPatcher {
+    useStandardUpstream("pufferfish") {
+        url.set(github("pufferfish-gg", "Pufferfish"))
+        ref.set(providers.gradleProperty("pufferfishRef"))
+        
+        withStandardPatcher {
+            apiSourceDirPath.set("pufferfish-api") 
             apiPatchDir.set(layout.projectDirectory.dir("patches/api"))
             apiOutputDir.set(layout.projectDirectory.dir("MultiPaper-API"))
 
+            serverSourceDirPath.set("pufferfish-server")
             serverPatchDir.set(layout.projectDirectory.dir("patches/server"))
             serverOutputDir.set(layout.projectDirectory.dir("MultiPaper-Server"))
         }
     }
-    
-    tasks.register("paperRefLatest") {
-        // Update the paperRef in gradle.properties to be the latest commit
-        val tempDir = layout.cacheDir("paperRefLatest");
+
+    tasks.register("pufferfishRefLatest") {
+        // Update the pufferfishRef in gradle.properties to be the latest commit
+        val tempDir = layout.cacheDir("pufferfishRefLatest");
         val file = "gradle.properties";
         
         doFirst {
@@ -81,15 +86,15 @@ paperweight {
                     val sha: String
             )
 
-            val paperLatestCommitJson = layout.cache.resolve("paperLatestCommit.json");
-            download.get().download("https://api.github.com/repos/PaperMC/Paper/commits/master", paperLatestCommitJson);
-            val paperLatestCommit = gson.fromJson<paper.libs.com.google.gson.JsonObject>(paperLatestCommitJson)["sha"].asString;
+            val pufferfishLatestCommitJson = layout.cache.resolve("pufferfishLatestCommit.json");
+            download.get().download("https://api.github.com/repos/pufferfish-gg/Pufferfish/commits/ver/1.19", pufferfishLatestCommitJson);
+            val pufferfishLatestCommit = gson.fromJson<paper.libs.com.google.gson.JsonObject>(pufferfishLatestCommitJson)["sha"].asString;
 
             copy {
                 from(file)
                 into(tempDir)
                 filter { line: String ->
-                    line.replace("paperRef = .*".toRegex(), "paperRef = $paperLatestCommit")
+                    line.replace("pufferfishRef = .*".toRegex(), "pufferfishRef = $pufferfishLatestCommit")
                 }
             }
         }

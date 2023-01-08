@@ -1,0 +1,51 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 26 Jun 2022 11:17:27 +1000
+Subject: [PATCH] Optimize CraftServer.getWorld(UUID)
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index a666431085d582b7d8988a81d2659317db537329..614b346958de80dc17e8337f642e04e3bb6ed55f 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -48,6 +48,8 @@ import java.util.logging.Level;
+ import java.util.logging.Logger;
+ import java.util.stream.Collectors;
+ import javax.imageio.ImageIO;
++
++import it.unimi.dsi.fastutil.objects.Object2ObjectLinkedOpenHashMap;
+ import net.minecraft.advancements.Advancement;
+ import net.minecraft.commands.CommandSourceStack;
+ import net.minecraft.commands.Commands;
+@@ -283,6 +285,7 @@ public final class CraftServer implements Server {
+     protected final DedicatedServer console;
+     protected final DedicatedPlayerList playerList;
+     private final Map<String, World> worlds = new LinkedHashMap<String, World>();
++    private final Map<UUID, World> worldsByUUID = new Object2ObjectLinkedOpenHashMap<>(); // MultiPaper - optimize getWorld(UUID)
+     private final Map<Class<?>, Registry<?>> registries = new HashMap<>();
+     private YamlConfiguration configuration;
+     private YamlConfiguration commandsConfiguration;
+@@ -1409,6 +1412,7 @@ public final class CraftServer implements Server {
+             this.getLogger().log(Level.SEVERE, null, ex);
+         }
+ 
++        this.worldsByUUID.remove(world.getUID()); // MultiPaper - optimize getWorld(UUID)
+         this.worlds.remove(world.getName().toLowerCase(java.util.Locale.ENGLISH));
+         this.console.removeLevel(handle);
+         return true;
+@@ -1427,6 +1431,7 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public World getWorld(UUID uid) {
++        if (true) return this.worldsByUUID.get(uid); // MultiPaper - optimize getWorld(UUID)
+         for (World world : this.worlds.values()) {
+             if (world.getUID().equals(uid)) {
+                 return world;
+@@ -1450,6 +1455,7 @@ public final class CraftServer implements Server {
+             System.out.println("World " + world.getName() + " is a duplicate of another world and has been prevented from loading. Please delete the uid.dat file from " + world.getName() + "'s world directory if you want to be able to load the duplicate world.");
+             return;
+         }
++        this.worldsByUUID.put(world.getUID(), world); // MultiPaper - optimize getWorld(UUID)
+         this.worlds.put(world.getName().toLowerCase(java.util.Locale.ENGLISH), world);
+         MultiPaper.broadcastPacketToExternalServers(new SubscribeToWorldPacket(world.getName())); // MultiPaper
+     }

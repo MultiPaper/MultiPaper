@@ -18,7 +18,7 @@ index c1de5db539f08f2876a9a6e23a24d20f757b6bc2..57128d35375547b148f5529d2d582f5a
                  final String paperVersion;
                  final String implVersion = org.bukkit.craftbukkit.Main.class.getPackage().getImplementationVersion();
 diff --git a/src/main/java/net/minecraft/network/Connection.java b/src/main/java/net/minecraft/network/Connection.java
-index dc7fd278a183c7b1185c5e1024647f412d67dbdc..53834c918a0e8af2e97cea9da8e42143b6e7eda7 100644
+index 38c09c65dfa4a7a0c80d36f726c1fd028cbe05f8..e09bd1f72b8bb6be683980443d1e6f884b080ba7 100644
 --- a/src/main/java/net/minecraft/network/Connection.java
 +++ b/src/main/java/net/minecraft/network/Connection.java
 @@ -48,6 +48,8 @@ import org.slf4j.MarkerFactory;
@@ -161,7 +161,7 @@ index 7d6d3c8556033d289fdadc489e73fba478fce41a..0160782f017926f634f7a5e4cfb27885
              this.updateEffectVisibility();
              return event; // Paper
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 34540b4ebad2ec430fa12e1e5d9d6e4a79df91de..d661f7cb19dd640519457b6b2de6f6f72cec1f83 100644
+index c89e430cfddb431ee1d20e59f8bd60e3a3a952b9..bef06f32b997a7b21dc21ea83599728f55e4b7b0 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -28,6 +28,8 @@ import java.util.function.UnaryOperator;
@@ -227,7 +227,7 @@ index 34540b4ebad2ec430fa12e1e5d9d6e4a79df91de..d661f7cb19dd640519457b6b2de6f6f7
              // Paper end
          }
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index c0b599b1835d28ddda3690b29f29bd8c6f03e215..175291958ca01a2d2f1f6f6243e1a700a4944141 100644
+index 8961310c0789c4dd95a729ecc0b8dbf8d701ffc4..7073569245e2180df79ed00f8c5d3464e41ff3a3 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -15,6 +15,7 @@ import java.net.SocketAddress;
@@ -308,12 +308,15 @@ index c0b599b1835d28ddda3690b29f29bd8c6f03e215..175291958ca01a2d2f1f6f6243e1a700
          usercache.add(gameprofile);
          CompoundTag nbttagcompound = this.load(player);
          ResourceKey resourcekey;
-@@ -569,10 +565,10 @@ public abstract class PlayerList {
+@@ -568,11 +564,12 @@ public abstract class PlayerList {
+             entityplayer.closeContainer(org.bukkit.event.inventory.InventoryCloseEvent.Reason.DISCONNECT); // Paper
          }
  
-         PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(entityplayer.getBukkitEntity(), leaveMessage, entityplayer.quitReason); // Paper - quit reason
+-        PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(entityplayer.getBukkitEntity(), leaveMessage, entityplayer.quitReason); // Paper - Adventure & quit reason
 -        this.cserver.getPluginManager().callEvent(playerQuitEvent);
-+        if (MultiPaper.isRealPlayer(entityplayer)) this.cserver.getPluginManager().callEvent(playerQuitEvent); // Paper - if we disconnected before join ever fired, don't fire quit // MultiPaper - don't run for external players
++
++        PlayerQuitEvent playerQuitEvent = new PlayerQuitEvent(entityplayer.getBukkitEntity(), leaveMessage, entityplayer.quitReason); // Paper - quit reason
++        if (MultiPaper.isRealPlayer(entityplayer)) this.cserver.getPluginManager().callEvent(playerQuitEvent); // MultiPaper - don't run for external players
          entityplayer.getBukkitEntity().disconnect(playerQuitEvent.getQuitMessage());
  
 -        if (server.isSameThread()) entityplayer.doTick(); // SPIGOT-924 // Paper - don't tick during emergency shutdowns (Watchdog)
@@ -321,7 +324,7 @@ index c0b599b1835d28ddda3690b29f29bd8c6f03e215..175291958ca01a2d2f1f6f6243e1a700
          // CraftBukkit end
  
          // Paper start - Remove from collideRule team if needed
-@@ -647,6 +643,9 @@ public abstract class PlayerList {
+@@ -647,6 +644,9 @@ public abstract class PlayerList {
          this.cserver.getScoreboardManager().removePlayer(entityplayer.getBukkitEntity());
          // CraftBukkit end
  
@@ -331,7 +334,7 @@ index c0b599b1835d28ddda3690b29f29bd8c6f03e215..175291958ca01a2d2f1f6f6243e1a700
          return playerQuitEvent.quitMessage(); // Paper - Adventure
      }
  
-@@ -769,6 +768,12 @@ public abstract class PlayerList {
+@@ -769,6 +769,12 @@ public abstract class PlayerList {
  
      public ServerPlayer respawn(ServerPlayer entityplayer, ServerLevel worldserver, boolean flag, Location location, boolean avoidSuffocation, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag...respawnFlags) {
          // Paper end
@@ -344,7 +347,7 @@ index c0b599b1835d28ddda3690b29f29bd8c6f03e215..175291958ca01a2d2f1f6f6243e1a700
          entityplayer.stopRiding(); // CraftBukkit
          this.players.remove(entityplayer);
          this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot
-@@ -948,6 +953,26 @@ public abstract class PlayerList {
+@@ -948,6 +954,26 @@ public abstract class PlayerList {
          // Paper end
  
          // CraftBukkit end
@@ -371,7 +374,7 @@ index c0b599b1835d28ddda3690b29f29bd8c6f03e215..175291958ca01a2d2f1f6f6243e1a700
          return entityplayer1;
      }
  
-@@ -958,6 +983,20 @@ public abstract class PlayerList {
+@@ -958,6 +984,20 @@ public abstract class PlayerList {
          this.sendPlayerPermissionLevel(player, i);
      }
  

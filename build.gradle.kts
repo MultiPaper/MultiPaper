@@ -77,7 +77,7 @@ paperweight {
     }
 
     tasks.register("pufferfishRefLatest") {
-        // Update the paperRef in gradle.properties to be the latest commit
+        // Update the pufferfishRef in gradle.properties to be the latest commit
         val tempDir = layout.cacheDir("pufferfishRefLatest");
         val file = "gradle.properties";
         

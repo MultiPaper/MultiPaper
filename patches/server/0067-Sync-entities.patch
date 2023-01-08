@@ -649,7 +649,7 @@ index 12b4e41d6323f969e0731b83dfef92d71c0df3b1..c287c82e2b77b8e0372e6a0a3ca6f789
          FRESH, PENDING, LOADED;
  
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 57d0c5a6b7659527b4855e9a884c61c9f6c9abb6..7fc712660769b9ab85ab799d98a2b60623115799 100644
+index 57d0c5a6b7659527b4855e9a884c61c9f6c9abb6..fa9ca6c3c8d5a9eb983d399de7b9dd5574b40487 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
 @@ -6,6 +6,7 @@ import net.minecraft.network.PacketSendListener;
@@ -682,7 +682,14 @@ index 57d0c5a6b7659527b4855e9a884c61c9f6c9abb6..7fc712660769b9ab85ab799d98a2b606
  
      public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, String advancements, String stats) {
          loadedAdvancements.put(gameProfile.getId(), advancements);
-@@ -48,6 +53,17 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -41,13 +46,23 @@ public class ExternalPlayer extends ServerPlayer {
+         this.externalServerConnection = externalServerConnection;
+         this.address = address;
+         this.isRealPlayer = true;
+-        this.didPlayerJoinEvent = true;
+         this.valid = true;
+         this.onGround = true;
+         connection = new ServerGamePacketListenerImpl(getServer(), new ExternalPlayerConnection(PacketFlow.CLIENTBOUND), this);
          setPos(x, y, z);
          setYRot(yaw);
          setXRot(pitch);
@@ -700,7 +707,7 @@ index 57d0c5a6b7659527b4855e9a884c61c9f6c9abb6..7fc712660769b9ab85ab799d98a2b606
          getServer().getPlayerList().addPlayer(this);
          ((ServerLevel) level).addNewPlayer(this);
          sendPackets = false;
-@@ -98,12 +114,15 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -98,12 +113,15 @@ public class ExternalPlayer extends ServerPlayer {
      }
  
      @Override
@@ -714,7 +721,7 @@ index 57d0c5a6b7659527b4855e9a884c61c9f6c9abb6..7fc712660769b9ab85ab799d98a2b606
 -    public void checkInsideBlocks() {
 -        super.checkInsideBlocks();
 +    public void onSyncedDataUpdated(EntityDataAccessor<?> data) {
-+        if (!updatingData && didPlayerJoinEvent) {
++        if (!updatingData) {
 +            MultiPaper.broadcastPacketToExternalServers(new EntityUpdatePacket(this,
 +                    new ClientboundSetEntityDataPacket(getId(), Collections.singletonList(getEntityData().getItem(data).value()))));
 +        }

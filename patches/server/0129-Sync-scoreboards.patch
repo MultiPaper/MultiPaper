@@ -127,10 +127,10 @@ index 1da0d84762fcc0566d47974db3d927735ff592f7..2441eb28b97f930d4ec798c5b35954b4
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0a8ab55aefc35b6496045d46b079e506e063aeb3
+index 0000000000000000000000000000000000000000..0b185bb80062d054829e9252791c6b1336aa8ab1
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,170 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -232,12 +232,20 @@ index 0000000000000000000000000000000000000000..0a8ab55aefc35b6496045d46b079e506
 +    }
 +
 +    private void handle(ServerScoreboard scoreboard, ClientboundSetPlayerTeamPacket setPlayerTeamPacket) {
++        if (setPlayerTeamPacket.getTeamAction() == null) {
++            return;
++        }
++
 +        PlayerTeam team = scoreboard.getPlayerTeam(setPlayerTeamPacket.getName());
 +
 +        if (setPlayerTeamPacket.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.ADD && team == null) {
 +            team = scoreboard.addPlayerTeam(setPlayerTeamPacket.getName());
-+        } else if (setPlayerTeamPacket.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.REMOVE) {
++        } else if (setPlayerTeamPacket.getTeamAction() == ClientboundSetPlayerTeamPacket.Action.REMOVE && team != null) {
 +            scoreboard.removePlayerTeam(team);
++        }
++
++        if (team == null) {
++            return;
 +        }
 +
 +        if (setPlayerTeamPacket.getPlayerAction() == ClientboundSetPlayerTeamPacket.Action.ADD) {

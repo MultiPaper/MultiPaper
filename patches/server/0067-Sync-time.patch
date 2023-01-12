@@ -1,0 +1,182 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sun, 21 Nov 2021 01:24:00 +1000
+Subject: [PATCH] Sync time
+
+
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index e244e24408ca5a08ab5cf808083f20fe8e5304c6..838a0c38022c7f7668dfb0078eae6864ef89ca22 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -1502,6 +1502,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+             long worldTime = world.getGameTime();
+             final ClientboundSetTimePacket worldPacket = new ClientboundSetTimePacket(worldTime, dayTime, doDaylight);
+             for (Player entityhuman : world.players()) {
++                if (MultiPaper.isExternalPlayer(entityhuman)) continue; // MultiPaper - Don't send the time to external players
+                 if (!(entityhuman instanceof ServerPlayer) || (tickCount + entityhuman.getId()) % 20 != 0) {
+                     continue;
+                 }
+diff --git a/src/main/java/net/minecraft/server/commands/TimeCommand.java b/src/main/java/net/minecraft/server/commands/TimeCommand.java
+index f0a7a8df3caa2ea765bb0a87cfede71d0995d276..8b16d7f426d7f934a9569dd39605fa9c9b482ee0 100644
+--- a/src/main/java/net/minecraft/server/commands/TimeCommand.java
++++ b/src/main/java/net/minecraft/server/commands/TimeCommand.java
+@@ -11,6 +11,8 @@ import net.minecraft.server.level.ServerLevel;
+ // CraftBukkit start
+ import org.bukkit.Bukkit;
+ import org.bukkit.event.world.TimeSkipEvent;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
+ // CraftBukkit end
+ 
+ public class TimeCommand {
+@@ -61,6 +63,7 @@ public class TimeCommand {
+             Bukkit.getPluginManager().callEvent(event);
+             if (!event.isCancelled()) {
+                 worldserver.setDayTime((long) worldserver.getDayTime() + event.getSkipAmount());
++                MultiPaper.broadcastPacketToExternalServers(new TimeUpdatePacket(worldserver, true)); // MultiPaper
+             }
+             // CraftBukkit end
+         }
+@@ -80,6 +83,7 @@ public class TimeCommand {
+             Bukkit.getPluginManager().callEvent(event);
+             if (!event.isCancelled()) {
+                 worldserver.setDayTime(worldserver.getDayTime() + event.getSkipAmount());
++                MultiPaper.broadcastPacketToExternalServers(new TimeUpdatePacket(worldserver, true)); // MultiPaper
+             }
+             // CraftBukkit end
+         }
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index d0c5170a181a558f7a0143af7bcba527d5dd418a..920c27080103220d8b587445c48699730f4c31d2 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -174,7 +174,9 @@ import org.bukkit.event.world.TimeSkipEvent;
+ // CraftBukkit end
+ import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
+ import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet; // Paper
++import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperChunkHandler;
++import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
+ 
+ public class ServerLevel extends Level implements WorldGenLevel {
+ 
+@@ -654,6 +656,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+                 getCraftServer().getPluginManager().callEvent(event);
+                 if (!event.isCancelled()) {
+                     this.setDayTime(this.getDayTime() + event.getSkipAmount());
++                    MultiPaper.broadcastPacketToExternalServers(new TimeUpdatePacket(this, true)); // MultiPaper
+                 }
+             }
+ 
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+index f8d321e925bf2708e51590542325c1bdc67d5964..e9d92fa20fe915fa1c0088e4e0a5da0bb2a792e8 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+@@ -134,6 +134,8 @@ import org.bukkit.util.Consumer;
+ import org.bukkit.util.RayTraceResult;
+ import org.bukkit.util.StructureSearchResult;
+ import org.bukkit.util.Vector;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
+ 
+ public class CraftWorld extends CraftRegionAccessor implements World {
+     public static final int CUSTOM_DIMENSION_OFFSET = 10;
+@@ -859,6 +861,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+         }
+ 
+         this.world.setDayTime(this.world.getDayTime() + event.getSkipAmount());
++        MultiPaper.broadcastPacketToExternalServers(new TimeUpdatePacket(world, true)); // MultiPaper
+ 
+         // Forces the client to update to the new time immediately
+         for (Player p : this.getPlayers()) {
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index 39f494f0ee947f733a4a3cd0b56135ab8591db73..18a3af00ad11096e2169a7041e0730c27af7971c 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -116,6 +116,12 @@ public class MultiPaper {
+         MultiPaperAckBlockChangesHandler.tick();
+ 
+         MultiPaperInventoryHandler.tick();
++
++        if (MinecraftServer.getServer().getTickCount() % 20 == 0) {
++            for (ServerLevel level : MinecraftServer.getServer().getAllLevels()) {
++                broadcastPacketToExternalServers(new TimeUpdatePacket(level));
++            }
++        }
+     }
+ 
+     public static void sendTickTime(long time, double tps) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index 02052873895fda0c4dae745680f0c7fe7012e235..c41679ee4e55cc5765d30acb4289be79291a9624 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -34,6 +34,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(RemoveWhiteListedPlayerPacket.class, RemoveWhiteListedPlayerPacket::new);
+         addPacket(PlayerActionPacket.class, PlayerActionPacket::new);
+         addPacket(PlayerInventoryUpdatePacket.class, PlayerInventoryUpdatePacket::new);
++        addPacket(TimeUpdatePacket.class, TimeUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/TimeUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/TimeUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..68e8c1cb4a60aca5173a28cdfb858bd1eef4ee3f
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/TimeUpdatePacket.java
+@@ -0,0 +1,57 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.Level;
++import net.minecraft.world.level.storage.PrimaryLevelData;
++import org.bukkit.Bukkit;
++import org.bukkit.World;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++
++public class TimeUpdatePacket extends ExternalServerPacket {
++
++    private final String world;
++    private final long gameTime;
++    private final long dayTime;
++    private final boolean force;
++
++    public TimeUpdatePacket(Level level) {
++        this(level, false);
++    }
++
++    public TimeUpdatePacket(Level level, boolean force) {
++        this.world = level.getWorld().getName();
++        this.gameTime = level.getGameTime();
++        this.dayTime = level.getDayTime();
++        this.force = force;
++    }
++
++    public TimeUpdatePacket(FriendlyByteBuf in) {
++        world = in.readUtf();
++        gameTime = in.readLong();
++        dayTime = in.readLong();
++        force = in.readBoolean();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeLong(gameTime);
++        out.writeLong(dayTime);
++        out.writeBoolean(force);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        World bukkitWorld = Bukkit.getWorld(world);
++        if (bukkitWorld != null) {
++            ServerLevel level = ((CraftWorld) bukkitWorld).getHandle();
++            if (force || level.getGameTime() < gameTime - 20) {
++                // We're more than a second behind, update us
++                ((PrimaryLevelData) level.levelData).setGameTime(gameTime);
++                ((PrimaryLevelData) level.levelData).setDayTime(dayTime);
++            }
++        }
++    }
++}

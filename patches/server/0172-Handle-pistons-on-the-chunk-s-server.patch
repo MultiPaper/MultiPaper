@@ -5,7 +5,7 @@ Subject: [PATCH] Handle pistons on the chunk's server
 
 
 diff --git a/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java b/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
-index 50b6b532331617ca6e06a16ed4274413bbb17006..4f6fdc1769852ff3b351ab6799285aa9a0ec05d0 100644
+index 50b6b532331617ca6e06a16ed4274413bbb17006..f12babf67286d858f8186b556d9854e59c95f1c3 100644
 --- a/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
 +++ b/src/main/java/net/minecraft/world/level/block/piston/PistonBaseBlock.java
 @@ -31,6 +31,7 @@ import net.minecraft.world.level.block.state.StateDefinition;
@@ -37,7 +37,7 @@ index 50b6b532331617ca6e06a16ed4274413bbb17006..4f6fdc1769852ff3b351ab6799285aa9
                  }
 -                world.setBlockEntity(MovingPistonBlock.newMovingBlockEntity(blockposition3, iblockdata2, allowDesync ? list1.get(k) : iblockdata1, dir, retract, false));
 +
-+                PistonMoveBlockStartPacket.startBlockMove((ServerLevel) world, oldPos, blockposition3, dir, retract);
++                PistonMoveBlockStartPacket.startBlockMove((ServerLevel) world, oldPos, blockposition3, allowDesync ? list1.get(k) : iblockdata1, dir, retract);
 +                // world.setBlockEntity(MovingPistonBlock.newMovingBlockEntity(blockposition3, iblockdata2, allowDesync ? list1.get(k) : iblockdata1, dir, retract, false)); // MultiPaper - handled ourselves
                  if (!allowDesync) {
 -                    world.setBlock(oldPos, Blocks.AIR.defaultBlockState(), 2 | 4 | 16 | 1024); // set air to prevent later physics updates from seeing this block
@@ -224,14 +224,15 @@ index 0000000000000000000000000000000000000000..779ffbdd404b566efbc6eb4b8c8d2c91
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PistonMoveBlockStartPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PistonMoveBlockStartPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..aa950abd4ef8e5f00cfaa87f3c66a7b17128824d
+index 0000000000000000000000000000000000000000..e587ca8c62249d47db18389deca5baf6c11868da
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PistonMoveBlockStartPacket.java
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,113 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.core.Direction;
++import net.minecraft.core.registries.BuiltInRegistries;
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.level.block.Blocks;
@@ -253,11 +254,11 @@ index 0000000000000000000000000000000000000000..aa950abd4ef8e5f00cfaa87f3c66a7b1
 +
 +    private static final Logger LOGGER = LogManager.getLogger(PistonMoveBlockStartPacket.class.getSimpleName());
 +
-+    public static void startBlockMove(ServerLevel level, BlockPos from, BlockPos to, Direction pistonDir, boolean retract) {
-+        startBlockMove(level, from, to, pistonDir, retract, false);
++    public static void startBlockMove(ServerLevel level, BlockPos from, BlockPos to, BlockState pushedBlock, Direction pistonDir, boolean retract) {
++        startBlockMove(level, from, to, pushedBlock, pistonDir, retract, false);
 +    }
 +
-+    public static void startBlockMove(ServerLevel level, BlockPos from, BlockPos to, Direction pistonDir, boolean retract, boolean isExternal) {
++    public static void startBlockMove(ServerLevel level, BlockPos from, BlockPos to, BlockState pushedBlock, Direction pistonDir, boolean retract, boolean isExternal) {
 +        LevelChunk fromChunk = level.getChunkIfLoaded(from);
 +        LevelChunk toChunk = level.getChunkIfLoaded(to);
 +
@@ -265,7 +266,7 @@ index 0000000000000000000000000000000000000000..aa950abd4ef8e5f00cfaa87f3c66a7b1
 +            // Place a moving piston head in our chunk so that it can start ticking and maintain proper timing
 +            BlockState movingPiston = Blocks.MOVING_PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, pistonDir);
 +            level.setBlock(to, movingPiston, 68);
-+            level.setBlockEntity(MovingPistonBlock.newMovingBlockEntity(to, movingPiston, Blocks.AIR.defaultBlockState(), pistonDir, retract, false));
++            level.setBlockEntity(MovingPistonBlock.newMovingBlockEntity(to, movingPiston, pushedBlock, pistonDir, retract, false));
 +            level.getChunkSource().blockChanged(to);
 +        }
 +
@@ -288,19 +289,21 @@ index 0000000000000000000000000000000000000000..aa950abd4ef8e5f00cfaa87f3c66a7b1
 +        fromChunk.playerChunk.broadcastChangesToOtherServers(fromChunk);
 +        toChunk.playerChunk.broadcastChangesToOtherServers(toChunk);
 +
-+        fromChunk.getChunkHolder().externalOwner.getConnection().send(new PistonMoveBlockStartPacket(level, from, to, pistonDir, retract));
++        fromChunk.getChunkHolder().externalOwner.getConnection().send(new PistonMoveBlockStartPacket(level, from, to, pushedBlock, pistonDir, retract));
 +    }
 +
 +    private final UUID worldUUID;
 +    private final BlockPos from;
 +    private final BlockPos to;
++    private final BlockState pushedBlock;
 +    private final Direction pistonDir;
 +    private final boolean retract;
 +
-+    public PistonMoveBlockStartPacket(ServerLevel level, BlockPos from, BlockPos to, Direction pistonDir, boolean retract) {
++    public PistonMoveBlockStartPacket(ServerLevel level, BlockPos from, BlockPos to, BlockState pushedBlock, Direction pistonDir, boolean retract) {
 +        this.worldUUID = level.getWorld().getUID();
 +        this.from = from;
 +        this.to = to;
++        this.pushedBlock = pushedBlock;
 +        this.pistonDir = pistonDir;
 +        this.retract = retract;
 +    }
@@ -309,6 +312,7 @@ index 0000000000000000000000000000000000000000..aa950abd4ef8e5f00cfaa87f3c66a7b1
 +        this.worldUUID = in.readUUID();
 +        this.from = in.readBlockPos();
 +        this.to = in.readBlockPos();
++        this.pushedBlock = BuiltInRegistries.BLOCK.get(in.readResourceLocation()).defaultBlockState();
 +        this.pistonDir = in.readEnum(Direction.class);
 +        this.retract = in.readBoolean();
 +    }
@@ -318,6 +322,7 @@ index 0000000000000000000000000000000000000000..aa950abd4ef8e5f00cfaa87f3c66a7b1
 +        out.writeUUID(this.worldUUID);
 +        out.writeBlockPos(this.from);
 +        out.writeBlockPos(this.to);
++        out.writeResourceLocation(BuiltInRegistries.BLOCK.getKey(this.pushedBlock.getBlock()));
 +        out.writeEnum(this.pistonDir);
 +        out.writeBoolean(this.retract);
 +    }
@@ -332,7 +337,7 @@ index 0000000000000000000000000000000000000000..aa950abd4ef8e5f00cfaa87f3c66a7b1
 +                return;
 +            }
 +
-+            startBlockMove(craftWorld.getHandle(), from, to, pistonDir, retract, true);
++            startBlockMove(craftWorld.getHandle(), from, to, pushedBlock, pistonDir, retract, true);
 +        });
 +    }
 +}

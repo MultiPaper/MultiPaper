@@ -5,7 +5,7 @@ Subject: [PATCH] Fix Citizens
 
 
 diff --git a/src/main/java/net/minecraft/stats/ServerStatsCounter.java b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
-index f62c4e97b294b697d5a68affa25f9904f8ea7cb7..11c2aad228d33c5691f21e8697ff3ae92c271d9e 100644
+index f62c4e97b294b697d5a68affa25f9904f8ea7cb7..6c05dba90767c4f0ef18be5de36d092fd5b9fdee 100644
 --- a/src/main/java/net/minecraft/stats/ServerStatsCounter.java
 +++ b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
 @@ -55,8 +55,17 @@ public class ServerStatsCounter extends StatsCounter {
@@ -14,7 +14,7 @@ index f62c4e97b294b697d5a68affa25f9904f8ea7cb7..11c2aad228d33c5691f21e8697ff3ae9
              try {
 -                String json = ExternalPlayer.loadedStats.remove(UUID.fromString(this.file.getName().split("\\.")[0]));
 -                if (json == null) json = MultiPaper.readStats(server.storageSource.levelDirectory.path().getFileName().toString(), this.file.getName().split("\\.")[0]);
-+                // DoctaEnkoda - Start Fix Citizens
++                // MultiPaper - DoctaEnkoda Start Fix Citizens
 +                UUID uuidFile;
 +                try {
 +                    uuidFile = UUID.fromString(this.file.getName().split("\\.")[0]);
@@ -23,7 +23,7 @@ index f62c4e97b294b697d5a68affa25f9904f8ea7cb7..11c2aad228d33c5691f21e8697ff3ae9
 +                    return;
 +                }
 +                String json = ExternalPlayer.loadedStats.remove(uuidFile);
-+                // DoctaEnkoda - End Fix Citizens
++                // MultiPaper - DoctaEnkoda End Fix Citizens
 +                if (json == null) json = MultiPaper.readStats(server.storageSource.levelDirectory.path().getFileName().toString(), uuidFile.toString());
                  if (!json.isEmpty()) {
                      this.parseLocal(server.getFixerUpper(), json);
@@ -33,7 +33,7 @@ index f62c4e97b294b697d5a68affa25f9904f8ea7cb7..11c2aad228d33c5691f21e8697ff3ae9
              // MultiPaper start
              if (true) {
 -                MultiPaper.writeStats(server.storageSource.levelDirectory.path().getFileName().toString(), this.file.getName().split("\\.")[0], this.toJson());
-+                // DoctaEnkoda - Start Fix Citizens
++                // MultiPaper - DoctaEnkoda Start Fix Citizens
 +                UUID uuidFile;
 +                try {
 +                    uuidFile = UUID.fromString(this.file.getName().split("\\.")[0]);
@@ -43,12 +43,12 @@ index f62c4e97b294b697d5a68affa25f9904f8ea7cb7..11c2aad228d33c5691f21e8697ff3ae9
 +                }
 +                String json = ExternalPlayer.loadedStats.remove(uuidFile);
 +                MultiPaper.writeStats(server.storageSource.levelDirectory.path().getFileName().toString(), uuidFile.toString(), this.toJson());
-+                // DoctaEnkoda - End Fix Citizens
++                // MultiPaper - DoctaEnkoda End Fix Citizens
                  return;
              }
              // MultiPaper end
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index df163434fc5245d893d23ac375bc5f27d1315d4f..4d2f9662d4e803fccaca39f7356f5e0cfe60ffb8 100644
+index df163434fc5245d893d23ac375bc5f27d1315d4f..7886c9ddd9ad0fb37535cd912f0f2b7b0caa6678 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -274,7 +274,7 @@ public class MultiPaper {
@@ -56,7 +56,7 @@ index df163434fc5245d893d23ac375bc5f27d1315d4f..4d2f9662d4e803fccaca39f7356f5e0c
  
      public static boolean isRealPlayer(Entity entity) {
 -        return entity instanceof ServerPlayer && !(entity instanceof ExternalPlayer);
-+        return entity instanceof ServerPlayer player && !(entity instanceof ExternalPlayer) && !player.getBukkitEntity().hasMetadata("NPC");
++        return entity instanceof ServerPlayer player && !(entity instanceof ExternalPlayer) && !player.getBukkitEntity().hasMetadata("NPC"); // MultiPaper - DoctaEnkoda Fix Citizens Check
      }
  
      public static boolean isRealPlayer(org.bukkit.entity.Entity bukkitEntity) {
@@ -65,19 +65,20 @@ index df163434fc5245d893d23ac375bc5f27d1315d4f..4d2f9662d4e803fccaca39f7356f5e0c
  
      public static boolean isExternalPlayer(Entity entity) {
 -        return entity instanceof ExternalPlayer;
-+        return entity instanceof ExternalPlayer && !entity.getBukkitEntity().hasMetadata("NPC");
++        return entity instanceof ExternalPlayer && !entity.getBukkitEntity().hasMetadata("NPC"); // MultiPaper - DoctaEnkoda Fix Citizens Check
      }
  
      public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-index ff7c1726c323a104bac9a9a8b3a8ea6d6414dc75..00b4421b94c34b9cc71011806bb146a1de3cca2d 100644
+index ff7c1726c323a104bac9a9a8b3a8ea6d6414dc75..7ef7682efaca41154f3f9fb3dacd373098900fb2 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -349,7 +349,14 @@ public class MultiPaperEntitiesHandler {
+@@ -349,7 +349,15 @@ public class MultiPaperEntitiesHandler {
          if (entity instanceof ExternalPlayer) return;
          if (reason == Entity.RemovalReason.UNLOADED_TO_CHUNK || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER) return;
  
 -        LevelChunk chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
++        // MultiPaper - DoctaEnkoda Start Fix Citizens
 +        LevelChunk chunk;
 +
 +        if (reason == Entity.RemovalReason.KILLED) {
@@ -85,22 +86,22 @@ index ff7c1726c323a104bac9a9a8b3a8ea6d6414dc75..00b4421b94c34b9cc71011806bb146a1
 +        } else {
 +            chunk = entity.level.getChunkIfLoaded(entity.blockPosition());
 +        }
-+
++        // MultiPaper - DoctaEnkoda End Fix Citizens
          if (chunk != null) {
              MultiPaper.broadcastPacketToExternalServers(chunk.externalEntitiesSubscribers, () -> new EntityRemovePacket(entity));
          } else {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
-index 4f27d37e3fbdf1570f907d1eb5eaa24ea6d638c5..b6a71b69c6f7c32b21b02611a0923018645011ba 100644
+index 4f27d37e3fbdf1570f907d1eb5eaa24ea6d638c5..5087ef4ca4e4662d1ee05b976382b8d2e8ce4bab 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
 @@ -70,6 +70,10 @@ public class RequestEntityPacket extends ExternalServerPacket {
      }
  
      private void triedToRequestPlayer(ExternalServerConnection connection, ServerPlayer serverPlayer) {
-+        // DoctaEnkoda - Start Fix Citizens
++        // MultiPaper - DoctaEnkoda Start Fix Citizens
 +        if (serverPlayer.getBukkitEntity().hasMetadata("NPC"))
 +            return;
-+        // DoctaEnkoda - Stop Fix Citizens
++        // MultiPaper - DoctaEnkoda Stop Fix Citizens
          Pair<UUID, ExternalServerConnection> key = Pair.of(serverPlayer.getUUID(), connection);
          int count = playerRequestCounts.getOrDefault(key, 0);
          playerRequestCounts.put(key, count + 1);

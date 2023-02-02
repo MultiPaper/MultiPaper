@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 24 Dec 2021 13:40:24 +1000
+Subject: [PATCH] Don't let a player login if they're on an external server
+
+
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index af60b8b1200425b64c787ba72f4e97f091316572..b1eeee1b6162bb77c5db04c012bc07b821ccc00e 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -672,6 +672,12 @@ public abstract class PlayerList {
+         for (int i = 0; i < this.players.size(); ++i) {
+             entityplayer = (ServerPlayer) this.players.get(i);
+             if (entityplayer.getUUID().equals(uuid) || (io.papermc.paper.configuration.GlobalConfiguration.get().proxies.isProxyOnlineMode() && entityplayer.getGameProfile().getName().equalsIgnoreCase(gameprofile.getName()))) { // Paper - validate usernames
++                // MultiPaper start - don't let a player login if they're on an external server
++                if (MultiPaper.isExternalPlayer(entityplayer)) {
++                    loginlistener.disconnect(PaperAdventure.asVanilla(net.kyori.adventure.text.Component.text("You are already logged in.")));
++                    return null;
++                }
++                // MultiPaper end - don't let a player login if they're on an external server
+                 list.add(entityplayer);
+             }
+         }

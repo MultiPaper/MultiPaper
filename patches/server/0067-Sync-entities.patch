@@ -900,7 +900,7 @@ index 8fe8e8a4ba2764f3e91b6c90290bdcbb56402cd7..527fcdebeeca72b18af59dcc48612ac4
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3a82773e577316f0457e4a739ca5df59593f2ad8
+index 0000000000000000000000000000000000000000..56b618b56863ad27d923b0fa561bea8de0b20eba
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 @@ -0,0 +1,366 @@
@@ -1218,11 +1218,11 @@ index 0000000000000000000000000000000000000000..3a82773e577316f0457e4a739ca5df59
 +        if (!shouldSyncEntity(entity) && MultiPaperEntitiesHandler.getControllingPassenger(entity) == entity && !entity.isPassenger() && !(entity instanceof Player && reason == Entity.RemovalReason.KILLED)) return;
 +        if (removingEntity) return;
 +        if (entity instanceof ExternalPlayer) return;
-+        if (reason == Entity.RemovalReason.UNLOADED_TO_CHUNK || reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER) return;
++        if (reason == Entity.RemovalReason.UNLOADED_TO_CHUNK) return;
 +
 +        NewChunkHolder newChunkHolder = MultiPaper.getChunkHolder((ServerLevel) entity.level, entity.chunkPosition().x, entity.chunkPosition().z);
 +        if (newChunkHolder != null) {
-+            MultiPaper.broadcastPacketToExternalServers(newChunkHolder.externalEntitiesSubscribers, () -> new EntityRemovePacket(entity));
++            MultiPaper.broadcastPacketToExternalServers(newChunkHolder.externalEntitiesSubscribers, () -> new EntityRemovePacket(entity, reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER));
 +        } else {
 +            LOGGER.warn(entity + " removed in an unloaded chunk");
 +        }
@@ -1299,10 +1299,10 @@ index 0000000000000000000000000000000000000000..1b826e5e3194728467fdeb4cf0d87a25
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c4b1a72eccf095ba828f3b4a647ea51bb5bcc354
+index 0000000000000000000000000000000000000000..18aaa60780da1eab262b1969edc5d6fb7a3a17e3
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,76 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
@@ -1325,25 +1325,29 @@ index 0000000000000000000000000000000000000000..c4b1a72eccf095ba828f3b4a647ea51b
 +
 +    private final String world;
 +    private final UUID uuid;
++    private final boolean unloadedWithPlayer;
 +
-+    public EntityRemovePacket(Entity entity) {
-+        this(((ServerLevel) entity.level).convertable.getLevelId(), entity.getUUID());
++    public EntityRemovePacket(Entity entity, boolean unloadedWithPlayer) {
++        this(((ServerLevel) entity.level).convertable.getLevelId(), entity.getUUID(), unloadedWithPlayer);
 +    }
 +
-+    public EntityRemovePacket(String world, UUID uuid) {
++    public EntityRemovePacket(String world, UUID uuid, boolean unloadedWithPlayer) {
 +        this.world = world;
 +        this.uuid = uuid;
++        this.unloadedWithPlayer = unloadedWithPlayer;
 +    }
 +
 +    public EntityRemovePacket(FriendlyByteBuf in) {
 +        this.world = in.readUtf();
 +        this.uuid = in.readUUID();
++        this.unloadedWithPlayer = in.readBoolean();
 +    }
 +
 +    @Override
 +    public void write(FriendlyByteBuf out) {
 +        out.writeUtf(world);
 +        out.writeUUID(uuid);
++        out.writeBoolean(this.unloadedWithPlayer);
 +    }
 +
 +    @Override
@@ -1353,9 +1357,11 @@ index 0000000000000000000000000000000000000000..c4b1a72eccf095ba828f3b4a647ea51b
 +            Entity entity = level.getEntity(uuid);
 +            if (entity != null) {
 +                MultiPaperEntitiesHandler.removingEntity = true;
-+                entity.setRemoved(entity instanceof Player ? Entity.RemovalReason.KILLED : Entity.RemovalReason.DISCARDED);
++                Entity.RemovalReason reason = entity instanceof Player ? Entity.RemovalReason.KILLED : Entity.RemovalReason.DISCARDED;
++                if (this.unloadedWithPlayer) reason = Entity.RemovalReason.UNLOADED_WITH_PLAYER;
++                entity.setRemoved(reason);
 +                MultiPaperEntitiesHandler.removingEntity = false;
-+            } else {
++            } else if (!this.unloadedWithPlayer) {
 +                setEntityRemoved(uuid, Entity.RemovalReason.DISCARDED);
 +            }
 +        });
@@ -1366,6 +1372,7 @@ index 0000000000000000000000000000000000000000..c4b1a72eccf095ba828f3b4a647ea51b
 +    }
 +
 +    public static void setEntityRemoved(UUID uuid, Entity.RemovalReason reason, int durationInTicks) {
++        if (reason == Entity.RemovalReason.UNLOADED_WITH_PLAYER) return;
 +        removedEntities.put(uuid, reason);
 +        ((CraftScheduler) Bukkit.getScheduler()).scheduleInternalTask(() -> {
 +            removedEntities.remove(uuid, reason);

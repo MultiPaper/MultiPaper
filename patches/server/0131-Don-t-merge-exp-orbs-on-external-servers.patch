@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 26 Jul 2022 16:03:19 +1000
+Subject: [PATCH] Don't merge exp orbs on external servers
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
+index b65c39645aa437fdb1ac745ec18bba11f63f092d..af405193ea0d33632d037e1e52f76fef63803352 100644
+--- a/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
++++ b/src/main/java/org/bukkit/craftbukkit/event/CraftEventFactory.java
+@@ -224,6 +224,7 @@ import org.bukkit.inventory.meta.BookMeta;
+ import org.bukkit.potion.PotionEffect;
+ 
+ import org.bukkit.event.entity.SpawnerSpawnEvent; // Spigot
++import puregero.multipaper.MultiPaper;
+ 
+ public class CraftEventFactory {
+     public static final DamageSource MELTING = CraftDamageSource.copyOf(DamageSource.ON_FIRE);
+@@ -690,7 +691,7 @@ public class CraftEventFactory {
+ 
+                 List<Entity> entities = world.getEntities(entity, entity.getBoundingBox().inflate(radius, radius, radius));
+                 for (Entity e : entities) {
+-                    if (e instanceof net.minecraft.world.entity.ExperienceOrb) {
++                    if (e instanceof net.minecraft.world.entity.ExperienceOrb && !MultiPaper.isChunkExternal(world.getChunkIfLoaded(e.blockPosition()))) { // Multipaper - Don't merge exp orbs on external servers
+                         net.minecraft.world.entity.ExperienceOrb loopItem = (net.minecraft.world.entity.ExperienceOrb) e;
+                         // Paper start
+                         if (!loopItem.isRemoved() && !(maxValue > 0 && loopItem.value >= maxValue) && new com.destroystokyo.paper.event.entity.ExperienceOrbMergeEvent((org.bukkit.entity.ExperienceOrb) entity.getBukkitEntity(), (org.bukkit.entity.ExperienceOrb) loopItem.getBukkitEntity()).callEvent()) { // Paper - ExperienceOrbMergeEvent

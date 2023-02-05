@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 15 Nov 2021 02:34:43 +1000
+Subject: [PATCH] MultiPaper build changes
+
+
+diff --git a/build.gradle.kts b/build.gradle.kts
+index 020927dfe9624453311d1d171a10f44344ec8710..f74320ece325904c2edee55ac922eb31b4038666 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -7,7 +7,7 @@ plugins {
+ }
+ 
+ dependencies {
+-    implementation(project(":purpur-api")) // Purpur
++    implementation(project(":MultiPaper-API")) // MultiPaper // Purpur
+     // Pufferfish start
+     implementation("io.papermc.paper:paper-mojangapi:1.19.3-R0.1-SNAPSHOT") {
+         exclude("io.papermc.paper", "paper-api")
+@@ -77,13 +77,16 @@ tasks.jar {
+     manifest {
+         val git = Git(rootProject.layout.projectDirectory.path)
+         val gitHash = git("rev-parse", "--short=7", "HEAD").getText().trim()
+-        val implementationVersion = System.getenv("BUILD_NUMBER") ?: "\"$gitHash\""
++        val mcVersion = properties["mcVersion"] // MultiPaper
++        val buildNumber = System.getenv("BUILD_NUMBER") // MultiPaper
++        val implementationVersion = if (buildNumber != null) "MultiPaper-$mcVersion-$buildNumber" else "git-MultiPaper-\"$gitHash\"" // MultiPaper
+         val date = git("show", "-s", "--format=%ci", gitHash).getText().trim() // Paper
+         val gitBranch = git("rev-parse", "--abbrev-ref", "HEAD").getText().trim() // Paper
+         attributes(
+             "Main-Class" to "org.bukkit.craftbukkit.Main",
+             "Implementation-Title" to "CraftBukkit",
+             "Implementation-Version" to "git-Purpur-$implementationVersion", // Purpur
++            "Implementation-Version" to implementationVersion, // MultiPaper
+             "Implementation-Vendor" to date, // Paper
+             "Specification-Title" to "Bukkit",
+             "Specification-Version" to project.version,
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 4a8aafd341fdad4b5ae326c4759b3381f5061fb5..2f637b6f504637520425c1844ec7e014aa149980 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -262,7 +262,7 @@ import javax.annotation.Nullable; // Paper
+ import javax.annotation.Nonnull; // Paper
+ 
+ public final class CraftServer implements Server {
+-    private final String serverName = "Purpur"; // Paper // Purpur
++    private final String serverName = "MultiPaper"; // Paper // Purpur // MultiPaper
+     private final String serverVersion;
+     private final String bukkitVersion = Versioning.getBukkitVersion();
+     private final Logger logger = Logger.getLogger("Minecraft");
+diff --git a/src/main/java/org/bukkit/craftbukkit/util/Versioning.java b/src/main/java/org/bukkit/craftbukkit/util/Versioning.java
+index fb87620c742ff7912f5e8ccd2a7930dd605576d9..303135f6a8bb637751b944c5878fa1f54c6e4a97 100644
+--- a/src/main/java/org/bukkit/craftbukkit/util/Versioning.java
++++ b/src/main/java/org/bukkit/craftbukkit/util/Versioning.java
+@@ -11,7 +11,7 @@ public final class Versioning {
+     public static String getBukkitVersion() {
+         String result = "Unknown-Version";
+ 
+-        InputStream stream = Bukkit.class.getClassLoader().getResourceAsStream("META-INF/maven/org.purpurmc.purpur/purpur-api/pom.properties"); // Purpur
++        InputStream stream = Bukkit.class.getClassLoader().getResourceAsStream("META-INF/maven/puregero.multipaper/MultiPaper-API/pom.properties"); // MultiPaper // Purpur
+         Properties properties = new Properties();
+ 
+         if (stream != null) {
+diff --git a/src/main/java/org/purpurmc/purpur/PurpurConfig.java b/src/main/java/org/purpurmc/purpur/PurpurConfig.java
+index c7c0ed8dfe58c841faf684a1fe228eeda6cd57b7..eb8b05b6098ecd4c46629b375c04d83e59c01639 100644
+--- a/src/main/java/org/purpurmc/purpur/PurpurConfig.java
++++ b/src/main/java/org/purpurmc/purpur/PurpurConfig.java
+@@ -227,7 +227,7 @@ public class PurpurConfig {
+         deathMessageOnlyBroadcastToAffectedPlayer = getBoolean("settings.broadcasts.death.only-broadcast-to-affected-player", deathMessageOnlyBroadcastToAffectedPlayer);
+     }
+ 
+-    public static String serverModName = "Purpur";
++    public static String serverModName = "MultiPaper"; // MultiPaper
+     private static void serverModName() {
+         serverModName = getString("settings.server-mod-name", serverModName);
+     }

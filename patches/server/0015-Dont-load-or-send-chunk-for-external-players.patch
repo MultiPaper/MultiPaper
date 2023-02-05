@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 2 Dec 2021 09:17:26 +1000
+Subject: [PATCH] Dont load or send chunk for external players
+
+
+diff --git a/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java b/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java
+index 0b060183429f4c72ec767075538477b4302bbf0d..bf4f7f91f8c8f09aa17e3989cff2e7cb1059b587 100644
+--- a/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java
++++ b/src/main/java/io/papermc/paper/chunk/PlayerChunkLoader.java
+@@ -22,6 +22,8 @@ import net.minecraft.world.level.chunk.LevelChunk;
+ import org.apache.commons.lang3.mutable.MutableObject;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
+ import org.bukkit.entity.Player;
++import puregero.multipaper.MultiPaper;
++
+ import java.util.ArrayDeque;
+ import java.util.ArrayList;
+ import java.util.List;
+@@ -461,7 +463,7 @@ public final class PlayerChunkLoader {
+ 
+     public void addPlayer(final ServerPlayer player) {
+         TickThread.ensureTickThread("Cannot add player async");
+-        if (!player.isRealPlayer) {
++        if (MultiPaper.isExternalPlayer(player) || !player.isRealPlayer) {
+             return;
+         }
+         final PlayerLoaderData data = new PlayerLoaderData(player, this);
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index d939b1e3bc101e66bc1019cf49d8079665dadfcc..f4417e378d92ca2593c35cb0cd7028b0409e367c 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -114,6 +114,7 @@ import org.bukkit.entity.Player;
+ // CraftBukkit end
+ 
+ import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet; // Paper
++import puregero.multipaper.MultiPaper;
+ 
+ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider {
+ 
+@@ -1066,7 +1067,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+     }
+ 
+     private boolean skipPlayer(ServerPlayer player) {
+-        return player.isSpectator() && !this.level.getGameRules().getBoolean(GameRules.RULE_SPECTATORSGENERATECHUNKS);
++        return MultiPaper.isExternalPlayer(player) || (player.isSpectator() && !this.level.getGameRules().getBoolean(GameRules.RULE_SPECTATORSGENERATECHUNKS)); // MultiPaper - skip external players
+     }
+ 
+     void updatePlayerStatus(ServerPlayer player, boolean added) {
+@@ -1593,7 +1594,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+ 
+         public void updatePlayer(ServerPlayer player) {
+             org.spigotmc.AsyncCatcher.catchOp("player tracker update"); // Spigot
+-            if (player != this.entity) {
++            if (player != this.entity && MultiPaper.isRealPlayer(player)) { // MultiPaper - don't track for external players
+                 // Paper start - remove allocation of Vec3D here
+                 // Vec3 vec3d = player.position().subtract(this.entity.position());
+                 double vec3d_dx = player.getX() - this.entity.getX();

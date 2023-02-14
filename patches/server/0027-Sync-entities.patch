@@ -4,6 +4,48 @@ Date: Sun, 21 Nov 2021 22:41:15 +1000
 Subject: [PATCH] Sync entities
 
 
+diff --git a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java b/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
+index 61c170555c8854b102c640b0b6a615f9f732edbf..9ea36aa9f0d402745417c58965e9882ebefccc5d 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
++++ b/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
+@@ -72,6 +72,24 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+         return visibility.isAccessible() ? entity : null;
+     }
+ 
++    // MultiPaper start
++    @Nullable
++    public Visibility getEntityStatusByUUID(UUID uuid) {
++        Entity entity;
++        this.entityByLock.readLock();
++        try {
++             entity = (this.entityByUUID.get(uuid));
++        } finally {
++            this.entityByLock.tryUnlockRead();
++        }
++        if (entity != null) {
++            return getEntityStatus(entity);
++        } else {
++            return null;
++        }
++    }
++    // MultiPaper stop
++
+     @Nullable
+     @Override
+     public Entity get(final int id) {
+@@ -363,10 +381,12 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+         try {
+             if (this.entityById.containsKey(entity.getId())) {
+                 LOGGER.warn("Entity id already exists: " + entity.getId() + ", mapped to " + this.entityById.get(entity.getId()) + ", can't add " + entity);
++                // new Exception().printStackTrace(); // MultiPaper - commented debug by MultiPaper
+                 return false;
+             }
+             if (this.entityByUUID.containsKey(entity.getUUID())) {
+                 LOGGER.warn("Entity uuid already exists: " + entity.getUUID() + ", mapped to " + this.entityByUUID.get(entity.getUUID()) + ", can't add " + entity);
++                // new Exception().printStackTrace(); // MultiPaper - commented debug by MultiPaper
+                 return false;
+             }
+             this.entityById.put(entity.getId(), entity);
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
 index db60d21560d772af2c3be0cf43378aaa7b440757..3e73b5f7a4829aafd1f94b3658fce90504ec3ca3 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
@@ -1388,10 +1430,10 @@ index 0000000000000000000000000000000000000000..18aaa60780da1eab262b1969edc5d6fb
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..6ffa94bd2c8926f37ba95ce14fda3932417ac000
+index 0000000000000000000000000000000000000000..b8613aeb6f63c41f0cbbf00f415f2d511ee09276
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,140 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1402,6 +1444,7 @@ index 0000000000000000000000000000000000000000..6ffa94bd2c8926f37ba95ce14fda3932
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.EntityType;
 +import net.minecraft.world.entity.Mob;
++import net.minecraft.world.level.entity.Visibility;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
@@ -1479,9 +1522,13 @@ index 0000000000000000000000000000000000000000..6ffa94bd2c8926f37ba95ce14fda3932
 +            return null;
 +        }
 +
-+        Entity entity = level.getEntity(uuid);
 +
-+        if (entity == null) {
++
++        Entity entity = level.getEntity(uuid);
++        Visibility visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
++        if (visibility != null && !visibility.isAccessible()) return null;
++
++        if (entity == null && visibility == null) {
 +            entity = EntityType.loadEntityRecursive(tag, level, entity2 -> {
 +                if (level.areEntitiesLoaded(entity2.chunkPosition().longKey)) {
 +                    level.getEntityLookup().addNewEntity(entity2);
@@ -1489,7 +1536,14 @@ index 0000000000000000000000000000000000000000..6ffa94bd2c8926f37ba95ce14fda3932
 +                    return entity2;
 +                } else {
 +                    EntityRemovePacket.setEntityRemoved(uuid, Entity.RemovalReason.UNLOADED_TO_CHUNK, 20);
-+                    LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk aren't loaded: " + entity2);
++                    /*
++                     * disable this not needed warn,
++                     * since chunk system rewrite, chunk system is now async which can unload/load without main thread knowing?
++                     * since spawning is executed on the main thread (this),
++                     * not sure if this is right explanation about chunk system rewrite.
++                     * - Ham1255
++                     */
++                    // LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk aren't loaded: " + entity2);
 +                    return null;
 +                }
 +            });
@@ -1522,10 +1576,10 @@ index 0000000000000000000000000000000000000000..6ffa94bd2c8926f37ba95ce14fda3932
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9bf1cd74d09b7788d35ee28911fb1509a9263b8e
+index 0000000000000000000000000000000000000000..14894cb98d618136a0bb41c344347adefaeb03a5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,119 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1536,6 +1590,7 @@ index 0000000000000000000000000000000000000000..9bf1cd74d09b7788d35ee28911fb1509
 +import net.minecraft.network.protocol.PacketFlow;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.entity.Visibility;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
@@ -1609,8 +1664,11 @@ index 0000000000000000000000000000000000000000..9bf1cd74d09b7788d35ee28911fb1509
 +        if (bukkitWorld instanceof CraftWorld craftWorld) {
 +            ServerLevel level = craftWorld.getHandle();
 +            Entity entity = level.getEntity(uuid);
-+
-+            if (entity == null) {
++            Visibility visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
++            if (visibility != null && !visibility.isAccessible()) {
++                return;
++            }
++            if (entity == null && visibility == null) {
 +                if (EntityRemovePacket.removedEntities.containsKey(uuid)) {
 +                    return;
 +                }
@@ -1624,7 +1682,9 @@ index 0000000000000000000000000000000000000000..9bf1cd74d09b7788d35ee28911fb1509
 +                }
 +
 +                if (depth > 5) {
-+                    LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName() + ", requesting it");
++                    if (depth >= 20) {
++                        LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName() + ", requesting it");
++                    }
 +                    connection.send(new RequestEntityPacket(world, uuid));
 +                    return;
 +                }
@@ -1641,10 +1701,10 @@ index 0000000000000000000000000000000000000000..9bf1cd74d09b7788d35ee28911fb1509
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7f58f63dc42095f5a966ca6f4647b64cdf7414d8
+index 0000000000000000000000000000000000000000..8bebc96beb41d0434857948e89dc4128ac573fa1
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,160 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1656,6 +1716,7 @@ index 0000000000000000000000000000000000000000..7f58f63dc42095f5a966ca6f4647b64c
 +import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.entity.Visibility;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
@@ -1737,8 +1798,11 @@ index 0000000000000000000000000000000000000000..7f58f63dc42095f5a966ca6f4647b64c
 +        if (bukkitWorld instanceof CraftWorld craftWorld) {
 +            ServerLevel level = craftWorld.getHandle();
 +            Entity entity = level.getEntity(uuid);
-+
-+            if (entity == null) {
++            Visibility visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
++            if (visibility != null && !visibility.isAccessible()) {
++                return;
++            }
++            if (entity == null && visibility == null) {
 +                if (EntityRemovePacket.removedEntities.containsKey(uuid)) {
 +                    return;
 +                }
@@ -2001,17 +2065,17 @@ index 0000000000000000000000000000000000000000..26df6c6d6052f71da435d4ef973d1bb1
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..5f3e476c5493b6e0ada33271d315e92c2736902f
+index 0000000000000000000000000000000000000000..893ae068f0d08efad14c3a9b1a731a939cd26133
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,89 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
-+import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.entity.Visibility;
 +import org.apache.commons.lang3.tuple.Pair;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
@@ -2054,9 +2118,12 @@ index 0000000000000000000000000000000000000000..5f3e476c5493b6e0ada33271d315e92c
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
 +        MultiPaper.runSync(() -> {
-+            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++            CraftWorld craftWorld = ((CraftWorld) Bukkit.getWorld(world));
++            if (craftWorld == null) return;
++            ServerLevel level = craftWorld.getHandle();
 +            Entity entity = level.getEntity(uuid);
-+            if (entity != null) {
++            Visibility visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
++            if (entity != null && visibility != null && visibility.isAccessible()) {
 +                if (entity instanceof ServerPlayer serverPlayer) {
 +                    triedToRequestPlayer(connection, serverPlayer);
 +                    return;
@@ -2093,10 +2160,10 @@ index 0000000000000000000000000000000000000000..5f3e476c5493b6e0ada33271d315e92c
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..19fec3c65c889889542d29de2a212afe828e0fe9
+index 0000000000000000000000000000000000000000..ac7b0b43c480702eddf814a0693df8fafed3c338
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,155 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.papermc.paper.world.ChunkEntitySlices;
@@ -2241,7 +2308,8 @@ index 0000000000000000000000000000000000000000..19fec3c65c889889542d29de2a212afe
 +                        }
 +                    });
 +                }
-+                // comment out this useless warn.
++                // commented out
++                // set EntityUpdateNBTPacket line 109 for explanation
 +                // else {
 +                //  LOGGER.warn("Unsolicited entities for " + world + "," + cx + "," + cz);
 +                // }

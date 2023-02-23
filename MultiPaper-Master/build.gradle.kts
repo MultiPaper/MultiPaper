@@ -1,7 +1,7 @@
-version = "2.11.0"
+version = "${properties["masterVersion"]}"
 
 plugins {
-    `java`
+    java
     `maven-publish`
     id("com.github.johnrengelman.shadow")
 }
@@ -30,7 +30,9 @@ dependencies {
 tasks.jar {
     manifest {
         attributes(
-                "Main-Class" to "puregero.multipaper.server.MultiPaperServer"
+            "Main-Class" to "puregero.multipaper.server.MultiPaperServer",
+            "Minecraft-Version" to "${properties["mcVersion"]}",
+            "Master-Version" to "${properties["masterVersion"]}"
         )
     }
 }

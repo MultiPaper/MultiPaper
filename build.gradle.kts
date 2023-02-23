@@ -3,6 +3,7 @@ import io.papermc.paperweight.util.constants.*
 
 plugins {
     java
+    `maven-publish`
     id("com.github.johnrengelman.shadow") version "7.1.2"
     id("io.papermc.paperweight.patcher") version "1.5.1"
 }
@@ -104,6 +105,25 @@ paperweight {
                 from(tempDir.file("gradle.properties"))
                 into(project.file(file).parent)
             }
+        }
+    }
+}
+
+tasks.generateDevelopmentBundle {
+    apiCoordinates.set("puregero.multipaper:MultiPaper-API")
+    mojangApiCoordinates.set("io.papermc.paper:paper-mojangapi")
+    libraryRepositories.set(
+        listOf(
+            "https://repo.maven.apache.org/maven2/",
+            "https://repo.papermc.io/repository/maven-public/",
+            "https://jitpack.io"
+        )
+    )
+}
+publishing {
+    publications.create<MavenPublication>("devBundle") {
+        artifact(tasks.generateDevelopmentBundle) {
+            artifactId = "dev-bundle"
         }
     }
 }

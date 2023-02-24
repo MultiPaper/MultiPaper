@@ -1,6 +1,9 @@
 plugins {
-    `java`
+    java
+    `maven-publish`
 }
+
+version = "${properties["masterVersion"]}-${properties["mcVersion"]}"
 
 repositories {
     maven {
@@ -11,3 +14,10 @@ repositories {
 dependencies {
     compileOnly("io.netty:netty-all:4.1.75.Final")
 }
+
+publishing {
+    publications.create<MavenPublication>("maven") {
+        artifact(tasks.jar)
+    }
+}
+

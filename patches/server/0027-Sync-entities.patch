@@ -305,7 +305,7 @@ index 9da2d2c0eaad120d35f68a18df16ef99fc494d94..e793a3fab3077393e19c541ef966beab
              return this.entityLookup.addNewEntity(entity); // Paper - rewrite chunk system
          }
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index af0a4aa60d42464b95a5aa7819dc74a4a5bd28fe..fd61c88755fd4f100bf60126e277eff9ffb6d601 100644
+index 4161bbb46cce9d82ef28020aff64d5c083c83f92..8249a477861c2767dbbaf2a71adf9b59761fd55b 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -1381,7 +1381,7 @@ public class ServerPlayer extends Player {
@@ -539,7 +539,7 @@ index 43cc8e8f07adecef21c70954918b8945a7c3ef62..69757ecbf3aa463d7b25902dfe500e0e
              if (this.leashInfoTag.hasUUID("UUID")) {
                  UUID uuid = this.leashInfoTag.getUUID("UUID");
 diff --git a/src/main/java/net/minecraft/world/entity/player/Player.java b/src/main/java/net/minecraft/world/entity/player/Player.java
-index a23d3aec7cec9114b8f7a2f26d72153a90c5a5a4..70556bd631869a317ddfc76448729632687f16e7 100644
+index 0c632cd0cb932a4cfaf2288c9d109325d5287537..f861e5c2c6238908f63165aac289fd2cea621deb 100644
 --- a/src/main/java/net/minecraft/world/entity/player/Player.java
 +++ b/src/main/java/net/minecraft/world/entity/player/Player.java
 @@ -144,7 +144,7 @@ public abstract class Player extends LivingEntity {
@@ -552,7 +552,7 @@ index a23d3aec7cec9114b8f7a2f26d72153a90c5a5a4..70556bd631869a317ddfc76448729632
      protected static final EntityDataAccessor<CompoundTag> DATA_SHOULDER_RIGHT = SynchedEntityData.defineId(Player.class, EntityDataSerializers.COMPOUND_TAG);
      private long timeEntitySatOnShoulder;
 diff --git a/src/main/java/net/minecraft/world/entity/projectile/FishingHook.java b/src/main/java/net/minecraft/world/entity/projectile/FishingHook.java
-index 7f3a7a769afec8449547c26453112064b9bcb04a..6d023c5148e760ac0c8ff887257ff8ff8fa19868 100644
+index 15fb5ee374b19366ebb23181896fb943e95819f0..03e86894a4440bbb7a368267724626c9dbee3a21 100644
 --- a/src/main/java/net/minecraft/world/entity/projectile/FishingHook.java
 +++ b/src/main/java/net/minecraft/world/entity/projectile/FishingHook.java
 @@ -49,6 +49,7 @@ import org.slf4j.Logger;
@@ -2065,13 +2065,14 @@ index 0000000000000000000000000000000000000000..26df6c6d6052f71da435d4ef973d1bb1
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..893ae068f0d08efad14c3a9b1a731a939cd26133
+index 0000000000000000000000000000000000000000..1566c1af1db1c2c727ded98d266920dbf7236bd5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,90 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
@@ -2144,10 +2145,10 @@ index 0000000000000000000000000000000000000000..893ae068f0d08efad14c3a9b1a731a93
 +    }
 +
 +    private void triedToRequestPlayer(ExternalServerConnection connection, ServerPlayer serverPlayer) {
++        if (!MinecraftServer.getServer().getPlayerList().players.contains(serverPlayer)) return;
 +        Pair<UUID, ExternalServerConnection> key = Pair.of(serverPlayer.getUUID(), connection);
 +        int count = playerRequestCounts.getOrDefault(key, 0);
 +        playerRequestCounts.put(key, count + 1);
-+
 +        if (count > 10) {
 +            LOGGER.error(connection.externalServer.getName() + " tried to request player " + serverPlayer.getScoreboardName() + " more than 10 times! This means they didn't sync correctly. Kicking them.");
 +            serverPlayer.getBukkitEntity().kickPlayer("Your player failed to sync. Please reconnect.");

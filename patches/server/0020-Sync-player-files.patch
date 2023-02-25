@@ -81,7 +81,7 @@ index bffef41525c10a5df581dfa390baef8a07e0c5cb..0902b98c9c1a2d2f9719c309fcfcf9a1
          this.playerIo.save(player);
          ServerStatsCounter serverstatisticmanager = (ServerStatsCounter) player.getStats(); // CraftBukkit
 diff --git a/src/main/java/net/minecraft/stats/ServerStatsCounter.java b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
-index 72946e324c575ef39f3939225b96b68f724da460..4fc612e876db815f5e2a8477595c5d564f0b009e 100644
+index 72946e324c575ef39f3939225b96b68f724da460..e3aec9e92ce819305de2b1c10f45e66c926835ba 100644
 --- a/src/main/java/net/minecraft/stats/ServerStatsCounter.java
 +++ b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
 @@ -17,12 +17,9 @@ import it.unimi.dsi.fastutil.objects.ObjectIterator;
@@ -108,43 +108,61 @@ index 72946e324c575ef39f3939225b96b68f724da460..4fc612e876db815f5e2a8477595c5d56
  
  public class ServerStatsCounter extends StatsCounter {
  
-@@ -54,6 +53,22 @@ public class ServerStatsCounter extends StatsCounter {
+@@ -54,8 +53,23 @@ public class ServerStatsCounter extends StatsCounter {
              Stat<ResourceLocation> wrapper = Stats.CUSTOM.get( entry.getKey() );
              this.stats.put( wrapper, entry.getValue().intValue() );
          }
 +        // MultiPaper start
-+        if (true) {
-+            try {
-+                String json = ExternalPlayer.loadedStats.remove(UUID.fromString(this.file.getName().split("\\.")[0]));
-+                if (json == null) json = MultiPaper.readStats(server.storageSource.levelDirectory.path().getFileName().toString(), this.file.getName().split("\\.")[0]);
-+                if (!json.isEmpty()) {
-+                    this.parseLocal(server.getFixerUpper(), json);
-+                }
++        try {
++            String json = ExternalPlayer.loadedStats.remove(UUID.fromString(this.file.getName().split("\\.")[0]));
++            if (json == null) json = MultiPaper.readStats(server.storageSource.levelDirectory.path().getFileName().toString(), this.file.getName().split("\\.")[0]);
++            if (!json.isEmpty()) {
++                this.parseLocal(server.getFixerUpper(), json);
++            }
 +            //} catch (IOException ioexception) {
 +            //    ServerStatsCounter.LOGGER.error("Couldn't read statistics file {}", file, ioexception);
-+            } catch (JsonParseException jsonparseexception) {
++        } catch (IllegalArgumentException e) {
++            LOGGER.warn("Invalid UUID was passed, possible a plugin doing weird stuff?, you can safely ignore this if you are using such plugins: {}", e.getMessage());
++        } catch (JsonParseException jsonparseexception) {
 +                ServerStatsCounter.LOGGER.error("Couldn't parse statistics file {}", file, jsonparseexception);
-+            }
-+            return;
 +        }
-+        // MultiPaper end
++
          // Spigot end
-         if (file.isFile()) {
+-        if (file.isFile()) {
++        /*if (file.isFile()) {
              try {
-@@ -70,6 +85,12 @@ public class ServerStatsCounter extends StatsCounter {
+                 this.parseLocal(server.getFixerUpper(), FileUtils.readFileToString(file));
+             } catch (IOException ioexception) {
+@@ -63,18 +77,21 @@ public class ServerStatsCounter extends StatsCounter {
+             } catch (JsonParseException jsonparseexception) {
+                 ServerStatsCounter.LOGGER.error("Couldn't parse statistics file {}", file, jsonparseexception);
+             }
+-        }
++        }*/
++        // MultiPaper end
+ 
+     }
+ 
      public void save() {
          if ( org.spigotmc.SpigotConfig.disableStatSaving ) return; // Spigot
-         try {
-+            // MultiPaper start
-+            if (true) {
-+                MultiPaper.writeStats(server.storageSource.levelDirectory.path().getFileName().toString(), this.file.getName().split("\\.")[0], this.toJson());
-+                return;
-+            }
-+            // MultiPaper end
-             FileUtils.writeStringToFile(this.file, this.toJson());
-         } catch (IOException ioexception) {
-             ServerStatsCounter.LOGGER.error("Couldn't save stats", ioexception);
-@@ -202,7 +223,7 @@ public class ServerStatsCounter extends StatsCounter {
+-        try {
+-            FileUtils.writeStringToFile(this.file, this.toJson());
+-        } catch (IOException ioexception) {
+-            ServerStatsCounter.LOGGER.error("Couldn't save stats", ioexception);
+-        }
+-
++        // MultiPaper start
++        //try {
++        MultiPaper.writeStats(server.storageSource.levelDirectory.path().getFileName().toString(), this.file.getName().split("\\.")[0], this.toJson());
++            //FileUtils.writeStringToFile(this.file, this.toJson());
++        // } catch (Exception ioexception) {
++        //    ServerStatsCounter.LOGGER.error("Couldn't save stats", ioexception);
++        // }
++        // MultiPaper end
+     }
+ 
+     @Override
+@@ -202,7 +219,7 @@ public class ServerStatsCounter extends StatsCounter {
          return nbttagcompound;
      }
  

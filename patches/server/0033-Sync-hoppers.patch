@@ -5,24 +5,24 @@ Subject: [PATCH] Sync hoppers
 
 
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
-index 6cc266091f1512e079d14aa22f55284c7f148aad..b1ebacb54f227e0d2335452ba1ac5c21b5973708 100644
+index e7fb035fb4beddbe28ad983df8c1229a2d17515e..c7858f259e4f5a2842db67d0dd00cc566ee4a5b6 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/BlockEntity.java
 @@ -29,7 +29,7 @@ import co.aikar.timings.MinecraftTimings; // Paper
  import co.aikar.timings.Timing; // Paper
  
  public abstract class BlockEntity {
--    static boolean IGNORE_TILE_UPDATES = false; // Paper
-+    public static boolean IGNORE_TILE_UPDATES = false; // Paper // MultiPaper - set public
+-    static boolean ignoreTileUpdates; // Paper
++    public static boolean ignoreTileUpdates; // Paper // MultiPaper - set public
  
      public Timing tickTimer = MinecraftTimings.getTileEntityTimings(this); // Paper
      // CraftBukkit start - data containers
 diff --git a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-index 698a0ac71cf9fb409d609a81cc2958121260a46d..919d3439e5328d71b13138c79ca409f10973ce7f 100644
+index 034a0665f56fca37a48972671cebc6ec249db120..679af17f5bb673e285f1ee599cb9a6a864a2df40 100644
 --- a/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
 +++ b/src/main/java/net/minecraft/world/level/block/entity/HopperBlockEntity.java
-@@ -5,11 +5,14 @@ import java.util.List;
- import java.util.function.BooleanSupplier;
+@@ -6,11 +6,14 @@ import java.util.function.BooleanSupplier;
+ import java.util.stream.Collectors;
  import java.util.stream.IntStream;
  import javax.annotation.Nullable;
 +
@@ -36,7 +36,7 @@ index 698a0ac71cf9fb409d609a81cc2958121260a46d..919d3439e5328d71b13138c79ca409f1
  import net.minecraft.world.CompoundContainer;
  import net.minecraft.world.Container;
  import net.minecraft.world.ContainerHelper;
-@@ -28,6 +31,7 @@ import net.minecraft.world.level.block.Block;
+@@ -29,6 +32,7 @@ import net.minecraft.world.level.block.Block;
  import net.minecraft.world.level.block.ChestBlock;
  import net.minecraft.world.level.block.HopperBlock;
  import net.minecraft.world.level.block.state.BlockState;
@@ -44,7 +44,7 @@ index 698a0ac71cf9fb409d609a81cc2958121260a46d..919d3439e5328d71b13138c79ca409f1
  import net.minecraft.world.phys.AABB;
  import net.minecraft.world.phys.shapes.BooleanOp;
  import net.minecraft.world.phys.shapes.Shapes;
-@@ -37,6 +41,9 @@ import org.bukkit.entity.HumanEntity;
+@@ -39,6 +43,9 @@ import org.bukkit.entity.HumanEntity;
  import org.bukkit.event.inventory.InventoryMoveItemEvent;
  import org.bukkit.event.inventory.InventoryPickupItemEvent;
  import org.bukkit.inventory.Inventory;
@@ -54,37 +54,37 @@ index 698a0ac71cf9fb409d609a81cc2958121260a46d..919d3439e5328d71b13138c79ca409f1
  // CraftBukkit end
  
  public class HopperBlockEntity extends RandomizableContainerBlockEntity implements Hopper {
-@@ -251,7 +258,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
-                         origItemStack.setCount(origCount - moved + remaining);
+@@ -254,7 +261,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+                         origItemStack.setCount(originalItemCount - movedItemCount + remainingItemCount);
                      }
                      hopper.setItem(i, origItemStack);
 -                    destination.setChanged();
 +                    hopper.setChanged(); // destination.setChanged(); // MultiPaper - redundant to have destination, handled in addItem, changed to hopper
                      return true;
                  }
-                 origItemStack.setCount(origCount);
-@@ -280,6 +287,20 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+                 origItemStack.setCount(originalItemCount);
+@@ -283,6 +290,20 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
              }
          }
  
 +        // MultiPaper start - logic for pulling from double chests that span multiple servers
-+        if (iinventory instanceof CompoundContainer compoundContainer) {
++        if (container instanceof CompoundContainer compoundContainer) {
 +            BlockEntity primaryChest = MultiPaperContainerHandler.getPrimaryChest(compoundContainer);
 +            NewChunkHolder newChunkHolder = MultiPaper.getChunkHolder((ServerLevel) primaryChest.getLevel(), primaryChest.getBlockPos());
 +            if (MultiPaper.isChunkExternal(newChunkHolder)) {
-+                newChunkHolder.externalOwner.getConnection().send(new PullItemFromContainerPacket(primaryChest, i, origItemStack, ihopper));
++                newChunkHolder.externalOwner.getConnection().send(new PullItemFromContainerPacket(primaryChest, i, origItemStack, hopper));
 +                if (level.paperConfig().hopper.cooldownWhenFull) {
-+                    cooldownHopper(ihopper);
++                    cooldownHopper(hopper);
 +                }
 +                return true;
 +            }
 +        }
 +        // MultiPaper end
 +
-         final ItemStack itemstack2 = addItem(iinventory, ihopper, itemstack, null);
-         final int remaining = itemstack2.getCount();
-         if (remaining != moved) {
-@@ -611,6 +632,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+         final ItemStack remainingItem = addItem(container, hopper, movedItem, null);
+         final int remainingItemCount = remainingItem.getCount();
+         if (remainingItemCount != movedItemCount) {
+@@ -621,6 +642,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
  
      private static ItemStack tryMoveInItem(@Nullable Container from, Container to, ItemStack stack, int slot, @Nullable Direction side) {
          ItemStack itemstack1 = to.getItem(slot);
@@ -92,7 +92,7 @@ index 698a0ac71cf9fb409d609a81cc2958121260a46d..919d3439e5328d71b13138c79ca409f1
  
          if (HopperBlockEntity.canPlaceItemInContainer(to, stack, slot, side)) {
              boolean flag = false;
-@@ -657,6 +679,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+@@ -667,6 +689,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
                      }
                  }
  
@@ -370,7 +370,7 @@ index 019b98edfa8d7f0120099ffc4aad0134cab9094a..a8d65f014702b229e9500f881231f71f
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PullItemFromContainerPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PullItemFromContainerPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..646d8e026fee287ec7bb54b2cda97f1006f21419
+index 0000000000000000000000000000000000000000..7e9ec7c53044e73e60a429731b4ab571c34636a9
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PullItemFromContainerPacket.java
 @@ -0,0 +1,94 @@
@@ -409,7 +409,7 @@ index 0000000000000000000000000000000000000000..646d8e026fee287ec7bb54b2cda97f10
 +        this.source = blockEntity.getBlockPos();
 +        this.slot = slot;
 +        this.itemStack = itemStack;
-+        this.destination = destinationHopper.getBlockPosition();
++        this.destination = new BlockPos(destinationHopper.getLevelX(), destinationHopper.getLevelY(), destinationHopper.getLevelZ());
 +    }
 +
 +    public PullItemFromContainerPacket(FriendlyByteBuf in) {
@@ -458,9 +458,9 @@ index 0000000000000000000000000000000000000000..646d8e026fee287ec7bb54b2cda97f10
 +                pulledItemStack.setCount(count);
 +                origItemStack.setCount(origItemStack.getCount() - count);
 +
-+                HopperBlockEntity.IGNORE_TILE_UPDATES = true;
++                HopperBlockEntity.ignoreTileUpdates = true;
 +                container.setItem(this.slot, origItemStack);
-+                HopperBlockEntity.IGNORE_TILE_UPDATES = false;
++                HopperBlockEntity.ignoreTileUpdates = false;
 +                container.setChanged();
 +
 +                connection.send(new AddItemToContainerPacket(level, this.destination, 0, pulledItemStack));

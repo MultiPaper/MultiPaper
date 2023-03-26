@@ -1,0 +1,19 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Stuart Pomeroy <stuart@pomeroys.site>
+Date: Sun, 26 Mar 2023 15:52:49 +0100
+Subject: [PATCH] Fix ability to duplicate items enchanted in anvils
+
+By default Paper makes a change that automatically sorts the enchantments on an item when enchanted or parsed from NBT. This change did not account for enchanting items through an Anvil.
+
+diff --git a/src/main/java/net/minecraft/world/item/ItemStack.java b/src/main/java/net/minecraft/world/item/ItemStack.java
+index 164d7a4b515f5690f3518feb5caf64c0acab2294..3ad92a1c1260d73283b2b2e53a7807d8d9c15815 100644
+--- a/src/main/java/net/minecraft/world/item/ItemStack.java
++++ b/src/main/java/net/minecraft/world/item/ItemStack.java
+@@ -1204,6 +1204,7 @@ public final class ItemStack {
+     public void addTagElement(String key, Tag element) {
+         this.getOrCreateTag().put(key, element);
+ 
++        if(key.equals("Enchantments")) processEnchantOrder(this.getOrCreateTag()); // MultiPaper - Reorder enchantments to prevent desync.
+         markDirty(); // MultiPaper
+     }
+ 

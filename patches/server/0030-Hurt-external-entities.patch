@@ -4,6 +4,45 @@ Date: Sun, 28 Nov 2021 22:07:06 +1000
 Subject: [PATCH] Hurt external entities
 
 
+diff --git a/src/main/java/net/minecraft/world/damagesource/DamageSource.java b/src/main/java/net/minecraft/world/damagesource/DamageSource.java
+index 615611fe372d6edaef56db058bbf2cf7641e3c26..aaf6e4183b5077af5e97aacadab02ac5c6935d02 100644
+--- a/src/main/java/net/minecraft/world/damagesource/DamageSource.java
++++ b/src/main/java/net/minecraft/world/damagesource/DamageSource.java
+@@ -66,7 +66,7 @@ public class DamageSource {
+         return this.causingEntity != this.directEntity;
+     }
+ 
+-    private DamageSource(Holder<DamageType> type, @Nullable Entity source, @Nullable Entity attacker, @Nullable Vec3 position) {
++    public DamageSource(Holder<DamageType> type, @Nullable Entity source, @Nullable Entity attacker, @Nullable Vec3 position) { // MultiPaper - make public
+         this.type = type;
+         this.causingEntity = attacker;
+         this.directEntity = source;
+diff --git a/src/main/java/net/minecraft/world/damagesource/DamageSources.java b/src/main/java/net/minecraft/world/damagesource/DamageSources.java
+index d3d9bb2cdcaa3d671370ee3014341fe741275743..d862af47f418fe3156ae849820ef293bad464e45 100644
+--- a/src/main/java/net/minecraft/world/damagesource/DamageSources.java
++++ b/src/main/java/net/minecraft/world/damagesource/DamageSources.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.damagesource;
+ 
+ import javax.annotation.Nullable;
++
++import net.minecraft.core.Holder;
+ import net.minecraft.core.Registry;
+ import net.minecraft.core.RegistryAccess;
+ import net.minecraft.core.registries.Registries;
+@@ -83,6 +85,12 @@ public class DamageSources {
+         return new DamageSource(this.damageTypes.getHolderOrThrow(key), source, attacker);
+     }
+ 
++    // MultiPaper start
++    public Holder<DamageType> getDamageType(ResourceKey<DamageType> key) {
++        return this.damageTypes.getHolderOrThrow(key);
++    }
++    // MultiPaper end
++
+     public DamageSource inFire() {
+         return this.inFire;
+     }
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
 index 90c9670df281e9b3929e7cae50f061b46ed4e39c..f620e3373bcd8f1ffa036d1ad385446c42b7c6ff 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
@@ -84,12 +123,14 @@ index ff5b08a3e27643b5e3153f3f058fd0a86090b347..aabc8ed6261846cbed62ab68c5d8ab8a
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8c031e466e1b95cedc93407bc89144d1f5659e64
+index 0000000000000000000000000000000000000000..1091fd5721547658ec24ab0865a1e01425cdeb78
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/HurtEntityPacket.java
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,120 @@
 +package puregero.multipaper.externalserverprotocol;
 +
++import io.netty.buffer.ByteBuf;
++import io.netty.buffer.Unpooled;
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
@@ -115,7 +156,7 @@ index 0000000000000000000000000000000000000000..8c031e466e1b95cedc93407bc89144d1
 +
 +    private final String world;
 +    private final UUID uuid;
-+    private final byte[] sourceBytes;
++    private final ByteBuf sourceBytes;
 +    private final float amount;
 +    private final UUID entityDamageUuid;
 +    private final BlockPos blockDamagePos;
@@ -128,9 +169,9 @@ index 0000000000000000000000000000000000000000..8c031e466e1b95cedc93407bc89144d1
 +        this.blockDamagePos = blockDamage == null ? null : ((CraftBlock) blockDamage).getPosition();
 +
 +        try {
-+            ByteArrayOutputStream out = new ByteArrayOutputStream();
-+            DamageSourceSerializer.serialize(source, new DataOutputStream(out));
-+            sourceBytes = out.toByteArray();
++            FriendlyByteBuf out = new FriendlyByteBuf(Unpooled.buffer());
++            DamageSourceSerializer.serialize(source, out);
++            sourceBytes = out;
 +        } catch (IOException e) {
 +            throw new RuntimeException(e);
 +        }
@@ -141,7 +182,6 @@ index 0000000000000000000000000000000000000000..8c031e466e1b95cedc93407bc89144d1
 +        world = in.readUtf();
 +        uuid = in.readUUID();
 +        amount = in.readFloat();
-+        sourceBytes = in.readByteArray();
 +
 +        if (in.readBoolean()) {
 +            entityDamageUuid = in.readUUID();
@@ -154,6 +194,8 @@ index 0000000000000000000000000000000000000000..8c031e466e1b95cedc93407bc89144d1
 +        } else {
 +            blockDamagePos = null;
 +        }
++
++        sourceBytes = in.readBytes(in.readableBytes());
 +    }
 +
 +    @Override
@@ -161,7 +203,6 @@ index 0000000000000000000000000000000000000000..8c031e466e1b95cedc93407bc89144d1
 +        out.writeUtf(world);
 +        out.writeUUID(uuid);
 +        out.writeFloat(amount);
-+        out.writeByteArray(sourceBytes);
 +
 +        out.writeBoolean(entityDamageUuid != null);
 +        if (entityDamageUuid != null) {
@@ -172,6 +213,8 @@ index 0000000000000000000000000000000000000000..8c031e466e1b95cedc93407bc89144d1
 +        if (blockDamagePos != null) {
 +            out.writeLong(blockDamagePos.asLong());
 +        }
++
++        out.writeBytes(sourceBytes);
 +    }
 +
 +    @Override
@@ -180,7 +223,8 @@ index 0000000000000000000000000000000000000000..8c031e466e1b95cedc93407bc89144d1
 +            try {
 +                ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
 +                Entity entity = level.getEntity(uuid);
-+                DamageSource source = DamageSourceSerializer.deserialize(level, new DataInputStream(new ByteArrayInputStream(sourceBytes)));
++                DamageSource source = DamageSourceSerializer.deserialize(entity, level, new FriendlyByteBuf(sourceBytes));
++                sourceBytes.release();
 +
 +                if (entity == null) {
 +                    LOGGER.warn("Could not find entity " + uuid + " for damage source " + source.getMsgId());
@@ -205,34 +249,29 @@ index 0000000000000000000000000000000000000000..8c031e466e1b95cedc93407bc89144d1
 +}
 diff --git a/src/main/java/puregero/multipaper/util/DamageSourceSerializer.java b/src/main/java/puregero/multipaper/util/DamageSourceSerializer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b4d194d70cceacd9ef795ece2a40bdc00a403258
+index 0000000000000000000000000000000000000000..b08b07ecff1f9a3fa4f974fdcc88a80911068e54
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/util/DamageSourceSerializer.java
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,158 @@
 +package puregero.multipaper.util;
 +
++import com.google.common.base.CaseFormat;
++import net.minecraft.core.Holder;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.resources.ResourceKey;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.damagesource.DamageSource;
-+import net.minecraft.world.damagesource.EntityDamageSource;
-+import net.minecraft.world.damagesource.IndirectEntityDamageSource;
-+import net.minecraft.world.damagesource.PointDamageSource;
-+import net.minecraft.world.entity.*;
-+import net.minecraft.world.entity.player.Player;
-+import net.minecraft.world.entity.projectile.*;
++import net.minecraft.world.damagesource.DamageType;
++import net.minecraft.world.damagesource.DamageTypes;
++import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.phys.Vec3;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +
-+import java.io.DataInputStream;
-+import java.io.DataOutputStream;
 +import java.io.IOException;
 +import java.lang.reflect.Field;
 +import java.lang.reflect.InvocationTargetException;
-+import java.lang.reflect.Method;
 +import java.lang.reflect.Modifier;
-+import java.util.ArrayList;
-+import java.util.Arrays;
-+import java.util.List;
 +import java.util.UUID;
 +
 +public class DamageSourceSerializer {
@@ -244,31 +283,10 @@ index 0000000000000000000000000000000000000000..b4d194d70cceacd9ef795ece2a40bdc0
 +     */
 +    public static void main(String[] args) throws IllegalAccessException, InvocationTargetException {
 +        StringBuilder s = new StringBuilder("return switch (msgId) {\n");
-+        for (Field field : DamageSource.class.getDeclaredFields()) {
-+            if (Modifier.isStatic(field.getModifiers()) && DamageSource.class.isAssignableFrom(field.getType())) {
-+                String msgId = ((DamageSource) field.get(null)).getMsgId();
-+                s.append("    case \"").append(msgId).append("\" -> DamageSource.").append(field.getName()).append(";\n");
-+            }
-+        }
-+        methods: for (Method method : DamageSource.class.getDeclaredMethods()) {
-+            if (Modifier.isStatic(method.getModifiers()) && DamageSource.class.isAssignableFrom(method.getReturnType())) {
-+                Object[] objects = new Object[method.getParameterCount()];
-+                for (int i = 0; i < method.getParameterCount(); i++) {
-+                    if (!Entity.class.isAssignableFrom(method.getParameterTypes()[i])) {
-+                        System.out.println("Cannot handle method " + method.getName() + " " + Arrays.toString(method.getParameterTypes()));
-+                        continue methods;
-+                    }
-+                }
-+                String msgId = ((DamageSource) method.invoke(null, objects)).getMsgId();
-+                s.append("    case \"").append(msgId).append("\" -> DamageSource.").append(method.getName()).append("(");
-+                for (int i = 0; i < method.getParameterCount(); i++) {
-+                    if (i != 0) s.append(", ");
-+                    if (method.getParameterTypes()[i] != Entity.class) {
-+                        s.append("(").append(method.getParameterTypes()[i].getSimpleName()).append(") ");
-+                    }
-+                    s.append("entities[").append(i).append("]");
-+                }
-+                s.append(");\n");
++        for (Field field : DamageTypes.class.getDeclaredFields()) {
++            if (Modifier.isStatic(field.getModifiers()) && ResourceKey.class.isAssignableFrom(field.getType())) {
++                String msgId = CaseFormat.UPPER_UNDERSCORE.to(CaseFormat.LOWER_CAMEL, field.getName());
++                s.append("    case \"").append(msgId).append("\" -> DamageTypes.").append(field.getName()).append(";\n");
 +            }
 +        }
 +        s.append("    default -> throw new IOException(\"Unknown damage cause msgId of \" + msgId);\n");
@@ -276,118 +294,120 @@ index 0000000000000000000000000000000000000000..b4d194d70cceacd9ef795ece2a40bdc0
 +        System.out.println(s);
 +    }
 +
-+    public static void serialize(DamageSource source, DataOutputStream out) throws IOException {
-+        out.writeUTF(source.getMsgId());
-+        List<Entity> entities = new ArrayList<>();
++    public static void serialize(DamageSource source, FriendlyByteBuf friendlyByteBuf) throws IOException {
++        friendlyByteBuf.writeUtf(source.getMsgId());
 +
-+        if (source instanceof EntityDamageSource) {
-+            entities.add(source.getDirectEntity());
-+        }
++        friendlyByteBuf.writeNullable(source.getEntity(), (byteBuf, entity) -> {
++            byteBuf.writeLong(entity.getUUID().getMostSignificantBits());
++            byteBuf.writeLong(entity.getUUID().getLeastSignificantBits());
++        });
 +
-+        if (source instanceof IndirectEntityDamageSource) {
-+            entities.add(source.getEntity());
-+        }
++        friendlyByteBuf.writeNullable(source.getDirectEntity(), (byteBuf, directEntity) -> {
++            byteBuf.writeLong(directEntity.getUUID().getMostSignificantBits());
++            byteBuf.writeLong(directEntity.getUUID().getLeastSignificantBits());
++        });
 +
-+        out.write(entities.size());
-+        for (Entity entity : entities) {
-+            if (entity == null) {
-+                out.writeLong(0);
-+                out.writeLong(0);
-+            } else {
-+                out.writeLong(entity.getUUID().getMostSignificantBits());
-+                out.writeLong(entity.getUUID().getLeastSignificantBits());
-+            }
-+        }
++        friendlyByteBuf.writeNullable(source.getSourcePosition(), (byteBuf, vec3) -> {
++            byteBuf.writeDouble(vec3.x);
++            byteBuf.writeDouble(vec3.y);
++            byteBuf.writeDouble(vec3.z);
++        });
 +
-+        if (source instanceof PointDamageSource pointDamageSource && pointDamageSource.getSourcePosition() != null) {
-+            out.writeBoolean(true);
-+            out.writeDouble(pointDamageSource.getSourcePosition().x);
-+            out.writeDouble(pointDamageSource.getSourcePosition().y);
-+            out.writeDouble(pointDamageSource.getSourcePosition().z);
-+        } else {
-+            out.writeBoolean(false);
-+        }
++        friendlyByteBuf.writeBoolean(source.isSweep());
++        friendlyByteBuf.writeBoolean(source.isMelting());
++        friendlyByteBuf.writeBoolean(source.isPoison());
++        friendlyByteBuf.writeBoolean(source.isCritical());
 +    }
 +
-+    public static DamageSource deserialize(ServerLevel level, DataInputStream in) throws IOException {
-+        String msgId = in.readUTF();
-+        int entityCount = in.read();
-+        Entity[] entities = new Entity[entityCount];
-+        for (int i = 0; i < entities.length; i++) {
-+            UUID uuid = new UUID(in.readLong(), in.readLong());
-+            if (uuid.getMostSignificantBits() != 0 && uuid.getLeastSignificantBits() != 0) {
-+                entities[i] = level.getEntity(uuid);
-+                if (entities[i] == null) {
-+                    LOGGER.warn("Unknown entity for damage source " + msgId + " index=" + i + " uuid=" + uuid);
-+                }
-+            }
-+        }
++    public static DamageSource deserialize(Entity entity, ServerLevel level, FriendlyByteBuf friendlyByteBuf) throws IOException {
++        String msgId = friendlyByteBuf.readUtf();
 +
-+        Vec3 sourcePosition = null;
-+        if (in.readBoolean()) {
-+            sourcePosition = new Vec3(in.readDouble(), in.readDouble(), in.readDouble());
-+        }
-+
-+        // Manual cases that don't work with the generated switch statement
-+        if (msgId.equals("mob")) {
-+            if (entities.length == 2) {
-+                return DamageSource.indirectMobAttack(entities[0], (LivingEntity) entities[1]);
-+            } else {
-+                return DamageSource.mobAttack((LivingEntity) entities[0]);
++        Entity causingEntity = friendlyByteBuf.readNullable(byteBuf -> {
++            UUID uuid = new UUID(byteBuf.readLong(), byteBuf.readLong());
++            Entity levelEntity = level.getEntity(uuid);
++            if (levelEntity == null) {
++                LOGGER.warn("Unknown entity for damage source " + msgId + " uuid=" + uuid);
 +            }
-+        } else if (msgId.equals("onFire")) {
-+            if (entities.length == 2) {
-+                return DamageSource.fireball((Fireball) entities[0], entities[1]);
-+            } else {
-+                return DamageSource.ON_FIRE;
-+            }
-+        }
++            return levelEntity;
++        });
 +
-+        // Generated switch statement
++        Entity directEntity = friendlyByteBuf.readNullable(byteBuf -> {
++            UUID uuid = new UUID(byteBuf.readLong(), byteBuf.readLong());
++            Entity levelEntity = level.getEntity(uuid);
++            if (levelEntity == null) {
++                LOGGER.warn("Unknown direct entity for damage source " + msgId + " uuid=" + uuid);
++            }
++            return levelEntity;
++        });
++
++        Vec3 sourcePosition = friendlyByteBuf.readNullable(byteBuf -> new Vec3(byteBuf.readDouble(), byteBuf.readDouble(), byteBuf.readDouble()));
++
++        boolean sweep = friendlyByteBuf.readBoolean();
++        boolean melting = friendlyByteBuf.readBoolean();
++        boolean poison = friendlyByteBuf.readBoolean();
++        boolean critical = friendlyByteBuf.readBoolean();
++
++        return createDamageSource(entity.damageSources().getDamageType(getDamageTypeKey(msgId)), causingEntity, directEntity, sourcePosition, sweep, melting, poison, critical);
++    }
++
++    private static ResourceKey<DamageType> getDamageTypeKey(String msgId) throws IOException {
++        // Auto generated switch statement
 +        return switch (msgId) {
-+            case "inFire" -> DamageSource.IN_FIRE;
-+            case "lightningBolt" -> DamageSource.LIGHTNING_BOLT;
-+//            case "onFire" -> DamageSource.ON_FIRE; // Handled above
-+            case "lava" -> DamageSource.LAVA;
-+            case "hotFloor" -> DamageSource.HOT_FLOOR;
-+            case "inWall" -> DamageSource.IN_WALL;
-+            case "cramming" -> DamageSource.CRAMMING;
-+            case "drown" -> DamageSource.DROWN;
-+            case "starve" -> DamageSource.STARVE;
-+            case "cactus" -> DamageSource.CACTUS;
-+            case "fall" -> DamageSource.FALL;
-+            case "flyIntoWall" -> DamageSource.FLY_INTO_WALL;
-+            case "outOfWorld" -> DamageSource.OUT_OF_WORLD;
-+            case "generic" -> DamageSource.GENERIC;
-+            case "magic" -> DamageSource.MAGIC;
-+            case "wither" -> DamageSource.WITHER;
-+            case "anvil" -> DamageSource.anvil(entities[0]);
-+            case "fallingBlock" -> DamageSource.fallingBlock(entities[0]);
-+            case "dragonBreath" -> DamageSource.DRAGON_BREATH;
-+            case "dryout" -> DamageSource.DRY_OUT;
-+            case "sweetBerryBush" -> DamageSource.SWEET_BERRY_BUSH;
-+            case "freeze" -> DamageSource.FREEZE;
-+            case "fallingStalactite" -> DamageSource.fallingStalactite(entities[0]);
-+            case "stalagmite" -> DamageSource.STALAGMITE;
-+            case "sting" -> DamageSource.sting((LivingEntity) entities[0]);
-+            case "arrow" -> DamageSource.arrow((AbstractArrow) entities[0], entities[1]);
-+            case "trident" -> DamageSource.trident(entities[0], entities[1]);
-+            case "fireworks" -> DamageSource.fireworks((FireworkRocketEntity) entities[0], entities[1]);
-+//            case "onFire" -> DamageSource.fireball((Fireball) entities[0], entities[1]); // Handled above
-+            case "thrown" -> DamageSource.thrown(entities[0], entities[1]);
-+            case "thorns" -> DamageSource.thorns(entities[0]);
-+//            case "mob" -> DamageSource.mobAttack((LivingEntity) entities[0]); // Handled above
-+            case "explosion" -> DamageSource.explosion(entities[0], null);
-+            case "explosion.player" -> DamageSource.explosion(entities[0], entities[1]);
-+            case "witherSkull" -> DamageSource.witherSkull((WitherSkull) entities[0], entities[1]);
-+            case "indirectMagic" -> DamageSource.indirectMagic(entities[0], entities[1]);
-+//            case "mob" -> DamageSource.indirectMobAttack(entities[0], (LivingEntity) entities[1]); // Handled above
-+            case "player" -> DamageSource.playerAttack((Player) entities[0]);
-+            case "badRespawnPoint" -> DamageSource.badRespawnPointExplosion(sourcePosition);
-+            case "fireball" -> DamageSource.fireball((Fireball) entities[0], entities[1]);
-+            case "sonic_boom" -> DamageSource.sonicBoom(entities[0]);
++            case "inFire" -> DamageTypes.IN_FIRE;
++            case "lightningBolt" -> DamageTypes.LIGHTNING_BOLT;
++            case "onFire" -> DamageTypes.ON_FIRE;
++            case "lava" -> DamageTypes.LAVA;
++            case "hotFloor" -> DamageTypes.HOT_FLOOR;
++            case "inWall" -> DamageTypes.IN_WALL;
++            case "cramming" -> DamageTypes.CRAMMING;
++            case "drown" -> DamageTypes.DROWN;
++            case "starve" -> DamageTypes.STARVE;
++            case "cactus" -> DamageTypes.CACTUS;
++            case "fall" -> DamageTypes.FALL;
++            case "flyIntoWall" -> DamageTypes.FLY_INTO_WALL;
++            case "outOfWorld" -> DamageTypes.OUT_OF_WORLD;
++            case "generic" -> DamageTypes.GENERIC;
++            case "magic" -> DamageTypes.MAGIC;
++            case "wither" -> DamageTypes.WITHER;
++            case "dragonBreath" -> DamageTypes.DRAGON_BREATH;
++            case "dryOut" -> DamageTypes.DRY_OUT;
++            case "sweetBerryBush" -> DamageTypes.SWEET_BERRY_BUSH;
++            case "freeze" -> DamageTypes.FREEZE;
++            case "stalagmite" -> DamageTypes.STALAGMITE;
++            case "fallingBlock" -> DamageTypes.FALLING_BLOCK;
++            case "fallingAnvil" -> DamageTypes.FALLING_ANVIL;
++            case "fallingStalactite" -> DamageTypes.FALLING_STALACTITE;
++            case "sting" -> DamageTypes.STING;
++            case "mobAttack" -> DamageTypes.MOB_ATTACK;
++            case "mobAttackNoAggro" -> DamageTypes.MOB_ATTACK_NO_AGGRO;
++            case "playerAttack" -> DamageTypes.PLAYER_ATTACK;
++            case "arrow" -> DamageTypes.ARROW;
++            case "trident" -> DamageTypes.TRIDENT;
++            case "mobProjectile" -> DamageTypes.MOB_PROJECTILE;
++            case "fireworks" -> DamageTypes.FIREWORKS;
++            case "fireball" -> DamageTypes.FIREBALL;
++            case "unattributedFireball" -> DamageTypes.UNATTRIBUTED_FIREBALL;
++            case "witherSkull" -> DamageTypes.WITHER_SKULL;
++            case "thrown" -> DamageTypes.THROWN;
++            case "indirectMagic" -> DamageTypes.INDIRECT_MAGIC;
++            case "thorns" -> DamageTypes.THORNS;
++            case "explosion" -> DamageTypes.EXPLOSION;
++            case "playerExplosion" -> DamageTypes.PLAYER_EXPLOSION;
++            case "sonicBoom" -> DamageTypes.SONIC_BOOM;
++            case "badRespawnPoint" -> DamageTypes.BAD_RESPAWN_POINT;
 +            default -> throw new IOException("Unknown damage cause msgId of " + msgId);
 +        };
++    }
++
++    private static DamageSource createDamageSource(Holder<DamageType> damageType, Entity causingEntity, Entity directEntity, Vec3 sourcePosition, boolean sweep, boolean melting, boolean poison, boolean critical) {
++        DamageSource damageSource = new DamageSource(damageType, causingEntity, directEntity, sourcePosition);
++
++        if (sweep) damageSource.sweep();
++        if (melting) damageSource.melting();
++        if (poison) damageSource.poison();
++        if (critical) damageSource.critical();
++
++        return damageSource;
 +    }
 +
 +}

@@ -5,7 +5,7 @@ Subject: [PATCH] Sync entity velocity changes
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 6a8f0f8489e3572e0263030d49c6e16dcbdd8fbf..8bf2d99247302f55dbdc721356dd4f688c145b45 100644
+index 4954c2edb450d271c6764b40c53d69656f1eec66..b6318b4fe594938755b4a6cfa7da5a3b771c031d 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -157,6 +157,7 @@ import puregero.multipaper.MultiPaper;
@@ -16,24 +16,24 @@ index 6a8f0f8489e3572e0263030d49c6e16dcbdd8fbf..8bf2d99247302f55dbdc721356dd4f68
  import puregero.multipaper.externalserverprotocol.EntityRemovePacket;
  import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
  import puregero.multipaper.externalserverprotocol.EntityUpdateWithDependenciesPacket;
-@@ -4515,6 +4516,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4586,6 +4587,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      public void addDeltaMovement(Vec3 velocity) {
-         this.deltaMovement = this.deltaMovement.add(velocity);
+         this.setDeltaMovement(this.getDeltaMovement().add(velocity));
 +        AddDeltaMovementPacket.broadcast(this, velocity); // MultiPaper
      }
  
      public void setDeltaMovement(double x, double y, double z) {
 diff --git a/src/main/java/net/minecraft/world/level/Explosion.java b/src/main/java/net/minecraft/world/level/Explosion.java
-index cd63170e56b402fbf8bbd904270979fa51330e26..1a2cba4479d1401d62fd7e24a682d5ab9b4c1f40 100644
+index 4beaedc5ec3562df62a7a9e6b2f40728bd933044..19e3f0e078b9600c17f0d222ebdd826a0fe5c81a 100644
 --- a/src/main/java/net/minecraft/world/level/Explosion.java
 +++ b/src/main/java/net/minecraft/world/level/Explosion.java
-@@ -287,7 +287,7 @@ public class Explosion {
-                             d14 = entity instanceof Player && level.paperConfig().environment.disableExplosionKnockback ? 0 : ProtectionEnchantment.getExplosionKnockbackAfterDampener((LivingEntity) entity, d13); // Paper - Disable explosion knockback
-                         }
+@@ -299,7 +299,7 @@ public class Explosion {
+                         d10 *= d14;
+                         Vec3 vec3d1 = new Vec3(d8, d9, d10);
  
--                        entity.setDeltaMovement(entity.getDeltaMovement().add(d8 * d14, d9 * d14, d10 * d14));
-+                        entity.addDeltaMovement(new Vec3(d8 * d14, d9 * d14, d10 * d14)); // MultiPaper
+-                        entity.setDeltaMovement(entity.getDeltaMovement().add(vec3d1));
++                        entity.addDeltaMovement(vec3d1); // MultiPaper
                          if (entity instanceof Player) {
                              Player entityhuman = (Player) entity;
  

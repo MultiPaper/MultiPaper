@@ -5,19 +5,19 @@ Subject: [PATCH] Sync data files
 
 
 diff --git a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
-index c8cdcf40e45f5c6270f9b124f0333643266e2858..b1381b1b57ba8f5cf42ed84f70960de83feece5d 100644
+index 353e602d476beea23e591ad770227c5d6c1e97fa..f7ebc8d0f5eb2ea9a7e290bee5830e8d4d53d97e 100644
 --- a/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
 +++ b/src/main/java/net/minecraft/world/level/saveddata/SavedData.java
-@@ -7,6 +7,7 @@ import net.minecraft.SharedConstants;
- import net.minecraft.nbt.CompoundTag;
+@@ -7,6 +7,7 @@ import net.minecraft.nbt.CompoundTag;
  import net.minecraft.nbt.NbtIo;
+ import net.minecraft.nbt.NbtUtils;
  import org.slf4j.Logger;
 +import puregero.multipaper.MultiPaper;
  
  public abstract class SavedData {
      private static final Logger LOGGER = LogUtils.getLogger();
 @@ -33,7 +34,7 @@ public abstract class SavedData {
-             compoundTag.putInt("DataVersion", SharedConstants.getCurrentVersion().getWorldVersion());
+             NbtUtils.addCurrentDataVersion(compoundTag);
  
              try {
 -                NbtIo.writeCompressed(compoundTag, file);
@@ -26,7 +26,7 @@ index c8cdcf40e45f5c6270f9b124f0333643266e2858..b1381b1b57ba8f5cf42ed84f70960de8
                  LOGGER.error("Could not save data {}", this, var4);
              }
 diff --git a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
-index b2845ed8d28627178589da3d2224cd9edd29c31e..0476eb0e139fbc2762d68fc22228eb0416d85ad4 100644
+index 50348a5eec1e2ffabfc8405d708461376a162913..0f4d5cecae8c09786d2e7fd0a01213938c4a38cd 100644
 --- a/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 +++ b/src/main/java/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
 @@ -326,7 +326,8 @@ public class MapItemSavedData extends SavedData {
@@ -59,7 +59,7 @@ index b2845ed8d28627178589da3d2224cd9edd29c31e..0476eb0e139fbc2762d68fc22228eb04
          this.carriedBy.forEach(MapItemSavedData.HoldingPlayer::markDecorationsDirty);
      }
 diff --git a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
-index 2da78bc43af715fe399eac1d83b3bf6e8fb8afac..dfc726ecae49af4eb9dc646def96b7d08eb2320b 100644
+index defe31a5d3aa89a3d18b94f2ff005594e38754b3..2dae49478e8b5019922f170d9b540631c88dae6d 100644
 --- a/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
 +++ b/src/main/java/net/minecraft/world/level/storage/DimensionDataStorage.java
 @@ -3,11 +3,8 @@ package net.minecraft.world.level.storage;
@@ -90,7 +90,7 @@ index 2da78bc43af715fe399eac1d83b3bf6e8fb8afac..dfc726ecae49af4eb9dc646def96b7d0
              File file = this.getDataFile(id);
 -            if (file.exists()) {
 +            if (true || file.exists()) { // MultiPaper
-                 CompoundTag compoundTag = this.readTagFromDisk(id, SharedConstants.getCurrentVersion().getWorldVersion());
+                 CompoundTag compoundTag = this.readTagFromDisk(id, SharedConstants.getCurrentVersion().getDataVersion().getVersion());
 +
 +                if (compoundTag == null) return null; // MultiPaper
 +

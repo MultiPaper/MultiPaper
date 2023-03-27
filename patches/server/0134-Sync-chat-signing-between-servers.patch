@@ -8,10 +8,10 @@ with a chat signing validation error at some point. Just disable it for your
 own sake.
 
 diff --git a/src/main/java/io/papermc/paper/adventure/ChatProcessor.java b/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
-index 309fe1162db195c7c3c94d785d6aa2700e42b08a..a5efa6f65e8f4acb43ce81725281ee749b601380 100644
+index 4d9bc4a62ebae0f3707900503576c64733de639f..f22276dd3b9ea7c76004952fee401433b03d766c 100644
 --- a/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
 +++ b/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
-@@ -42,6 +42,7 @@ import org.bukkit.event.player.PlayerChatEvent;
+@@ -43,6 +43,7 @@ import org.bukkit.event.player.PlayerChatEvent;
  import org.checkerframework.checker.nullness.qual.NonNull;
  import org.checkerframework.checker.nullness.qual.Nullable;
  import org.checkerframework.framework.qual.DefaultQualifier;
@@ -19,7 +19,7 @@ index 309fe1162db195c7c3c94d785d6aa2700e42b08a..a5efa6f65e8f4acb43ce81725281ee74
  
  import static net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection;
  
-@@ -240,6 +241,7 @@ public final class ChatProcessor {
+@@ -241,6 +242,7 @@ public final class ChatProcessor {
          } else {
              outgoingChat.sendOriginal(player, viewers, chatType);
          }
@@ -28,10 +28,10 @@ index 309fe1162db195c7c3c94d785d6aa2700e42b08a..a5efa6f65e8f4acb43ce81725281ee74
  
      interface OutgoingChat {
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 8ae95470c97d55238179943ec20cb8bd0f346809..a47d2b6f8995f2f5f5dfc911af3ca1103299ec0b 100644
+index 40dbbfba3062ae43a1d20bf3640bf655c00ad73f..27d61a67b823a6cfaca38e457545a14576e4d0d4 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-@@ -248,8 +248,10 @@ import puregero.multipaper.MultiPaperEntityInteractHandler;
+@@ -250,8 +250,10 @@ import puregero.multipaper.MultiPaperEntityInteractHandler;
  import puregero.multipaper.MultiPaperInventoryHandler;
  import puregero.multipaper.MultiPaperPlayerHandler;
  import puregero.multipaper.MultiPaperSignHandler;
@@ -42,7 +42,7 @@ index 8ae95470c97d55238179943ec20cb8bd0f346809..a47d2b6f8995f2f5f5dfc911af3ca110
  // CraftBukkit end
  
  public class ServerGamePacketListenerImpl implements ServerPlayerConnection, TickablePacketListener, ServerGamePacketListener {
-@@ -304,7 +306,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -306,7 +308,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
      private RemoteChatSession chatSession;
      private SignedMessageChain.Decoder signedMessageDecoder;
      private final LastSeenMessagesValidator lastSeenMessages;
@@ -51,7 +51,7 @@ index 8ae95470c97d55238179943ec20cb8bd0f346809..a47d2b6f8995f2f5f5dfc911af3ca110
      private final FutureChain chatMessageChain;
      private static final long KEEPALIVE_LIMIT = Long.getLong("paper.playerconnection.keepalive", 30) * 1000; // Paper - provide property to set keepalive limit
      private static final int MAX_SIGN_LINE_LENGTH = Integer.getInteger("Paper.maxSignLength", 80); // Paper
-@@ -2717,6 +2719,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2712,6 +2714,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
      public void handleChatAck(ServerboundChatAckPacket packet) {
          LastSeenMessagesValidator lastseenmessagesvalidator = this.lastSeenMessages;
  
@@ -60,7 +60,7 @@ index 8ae95470c97d55238179943ec20cb8bd0f346809..a47d2b6f8995f2f5f5dfc911af3ca110
          synchronized (this.lastSeenMessages) {
              if (!this.lastSeenMessages.applyOffset(packet.offset())) {
                  ServerGamePacketListenerImpl.LOGGER.warn("Failed to validate message acknowledgements from {}", this.player.getName().getString());
-@@ -2847,7 +2851,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2844,7 +2848,8 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
  
      }
  
@@ -70,7 +70,7 @@ index 8ae95470c97d55238179943ec20cb8bd0f346809..a47d2b6f8995f2f5f5dfc911af3ca110
          MessageSignature messagesignature = message.signature();
  
          if (messagesignature != null) {
-@@ -2864,6 +2869,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -2861,6 +2866,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
                  this.disconnect(Component.translatable("multiplayer.disconnect.too_many_pending_chats"), org.bukkit.event.player.PlayerKickEvent.Cause.TOO_MANY_PENDING_CHATS); // Paper - kick event cause
              }
  
@@ -78,7 +78,7 @@ index 8ae95470c97d55238179943ec20cb8bd0f346809..a47d2b6f8995f2f5f5dfc911af3ca110
          }
      }
  
-@@ -3789,6 +3795,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+@@ -3810,6 +3816,7 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
          this.chatMessageChain.append((executor) -> {
              this.player.setChatSession(session);
              this.server.getPlayerList().broadcastAll(new ClientboundPlayerInfoUpdatePacket(EnumSet.of(ClientboundPlayerInfoUpdatePacket.Action.INITIALIZE_CHAT), List.of(this.player)), this.player); // Paper

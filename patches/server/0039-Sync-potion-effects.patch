@@ -5,23 +5,22 @@ Subject: [PATCH] Sync potion effects
 
 
 diff --git a/src/main/java/net/minecraft/world/effect/MobEffectInstance.java b/src/main/java/net/minecraft/world/effect/MobEffectInstance.java
-index 6d5080ba244daf3b93d61d28ee0b88eb56bac723..3c5833e50a2acdf9da61fb8cb1a2d418a2d8d4ce 100644
+index 745e792482f61c571e2efbd4200dd1bdaef6e474..fdc0c8e5cc901a010f9733f4a25cf7cf68ea2f61 100644
 --- a/src/main/java/net/minecraft/world/effect/MobEffectInstance.java
 +++ b/src/main/java/net/minecraft/world/effect/MobEffectInstance.java
-@@ -114,7 +114,7 @@ public class MobEffectInstance implements Comparable<MobEffectInstance> {
-             this.amplifier = that.amplifier;
-             this.duration = that.duration;
-             bl = true;
--        } else if (that.duration > this.duration) {
-+        } else if (that.duration >= this.duration) { // MultiPaper - Override the effect even if they're the same duration
-             if (that.amplifier == this.amplifier) {
-                 this.duration = that.duration;
-                 bl = true;
+@@ -153,6 +153,7 @@ public class MobEffectInstance implements Comparable<MobEffectInstance> {
+     }
+ 
+     private boolean isShorterDurationThan(MobEffectInstance effect) {
++        if (true) return effect.isInfiniteDuration() || (!this.isInfiniteDuration() && this.duration <= effect.duration); // MultiPaper - Override the effect even if they're the same duration
+         return !this.isInfiniteDuration() && (this.duration < effect.duration || effect.isInfiniteDuration());
+     }
+ 
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index 30079f4a8128adebb0995402de5800c9e96477c3..ec3031f5677488b87008bd7e7ab90ae63b5108f3 100644
+index f620e3373bcd8f1ffa036d1ad385446c42b7c6ff..f6eeb0088a9f3502b3a96629b272011ac5e7e356 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-@@ -143,6 +143,7 @@ import org.bukkit.event.entity.EntityTeleportEvent;
+@@ -141,6 +141,7 @@ import org.bukkit.event.entity.EntityTeleportEvent;
  import org.bukkit.event.player.PlayerItemConsumeEvent;
  import puregero.multipaper.ExternalServerConnection;
  import puregero.multipaper.MultiPaper;
@@ -29,7 +28,7 @@ index 30079f4a8128adebb0995402de5800c9e96477c3..ec3031f5677488b87008bd7e7ab90ae6
  import puregero.multipaper.MultiPaperEntityInteractHandler;
  import puregero.multipaper.externalserverprotocol.EntityUpdatePacket;
  import puregero.multipaper.externalserverprotocol.HurtEntityPacket;
-@@ -1276,29 +1277,32 @@ public abstract class LivingEntity extends Entity {
+@@ -1270,29 +1271,32 @@ public abstract class LivingEntity extends Entity implements Attackable {
  
      protected void onEffectAdded(MobEffectInstance effect, @Nullable Entity source) {
          this.effectsDirty = true;

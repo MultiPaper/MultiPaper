@@ -7,19 +7,19 @@ the time, however things can occasionally break.
 
 1.19.4 [Paper](https://github.com/PaperMC/Paper) fork that enables a server admin
 to scale a single world across multiple servers. Multiple MultiPaper servers run
-the same world and use a MultiPaper-Master to coordinate with eachother and
+the same world and use a MultiPaper-Master to coordinate with each other and
 store server data. While the MultiPaper-Master is usually run as a standalone
 server, it can also be run as a BungeeCord or Velocity plugin, which has some benefits
-including being able to send players to the least busiest server when they
+including being able to send players to the least busy server when they
 join.
 
 MultiPaper 2.0:
 
 - Works like a CDN
     - Each server caches chunks that are needed by the players it's serving
-    - The servers keep each others' caches in sync with eachother
+    - The servers keep each others' caches in sync with each other
     - The servers work together to ensure every chunk gets ticked
-    - Does not require BungeeCord or Velocity, just some node balancing method to evenly
+    - Does not require BungeeCord or Velocity, just some load balancing method to evenly
       distribute players across the servers
 
 - MultiPaper-Master
@@ -43,7 +43,7 @@ How chunk syncing works:
   another server owns it, the server will keep the chunk in sync with that
   server.
 - A chunk may be loaded on a server but have no owner if it's outside the
-  simulation distance. This is since the chunk won't be ticked by any server.
+  simulation distance. This is because the chunk won't be ticked by any server.
 - When a server has a chunk loaded into memory, it will subscribe to any
   changes made within that chunk. This means if any server changes a block
   inside the chunk, it will be updated on all servers subscribed to that chunk.
@@ -85,10 +85,10 @@ you are standing in is displayed above the action bar.
 
 `/mpmap`  
 Show a map of nearby chunks and which server owns them. Up represents north. If
-your server owns the chunk, the chunk is shown as aqua. If another servers owns
+your server owns the chunk, the chunk is shown as aqua. If another server owns
 the chunk, it's shown as red. If the chunk is in memory but not within
 simulation range on your server, it's shown as white. Chunks not loaded on your
-server as shown as grey.
+server are shown as grey.
 
 ## Setting up MultiPaper
   * Download MultiPaper and MultiPaper-Master from
@@ -100,7 +100,7 @@ server as shown as grey.
     * Velocity plugin: Set the port in `plugins/multipaper-velocity/config.toml`
   * In each MultiPaper server:
     * Run the server once the generate the config file `multipaper.yml`
-    * Put the name of the server used in the BungeeCord or Velocity config in `bungeecordName`
+    * Put the name of the server used in the BungeeCord or Velocity config into `bungeecordName`
       * If you're not using BungeeCord or Velocity, just make it some unique identifier
       * eg. `survival1`
     * Put the address and port of the MultiPaper-Master in `multipaperMasterAddress`

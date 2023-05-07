@@ -5,10 +5,10 @@ Subject: [PATCH] Add getAllOnlinePlayers and getLocalOnlinePlayers
 
 
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index e406150e4f63e5bf19d4c7dbce9b419095a6ab67..0434d7309874d771807def31c5680dd097354cd7 100644
+index 6826ce1cd003a4e3888024db3629263a46e0dd69..c5c8382a8f619e0017e15d1973413c7e42114519 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
-@@ -118,6 +118,7 @@ public abstract class PlayerList {
+@@ -119,6 +119,7 @@ public abstract class PlayerList {
      private static final SimpleDateFormat BAN_DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
      private final MinecraftServer server;
      public final List<ServerPlayer> players = new java.util.concurrent.CopyOnWriteArrayList(); // CraftBukkit - ArrayList -> CopyOnWriteArrayList: Iterator safety
@@ -16,7 +16,7 @@ index e406150e4f63e5bf19d4c7dbce9b419095a6ab67..0434d7309874d771807def31c5680dd0
      private final Map<UUID, ServerPlayer> playersByUUID = Maps.newHashMap();
      private final UserBanList bans;
      private final IpBanList ipBans;
-@@ -298,6 +299,7 @@ public abstract class PlayerList {
+@@ -303,6 +304,7 @@ public abstract class PlayerList {
  
          // player.connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(this.players)); // Paper
          this.players.add(player);
@@ -24,7 +24,7 @@ index e406150e4f63e5bf19d4c7dbce9b419095a6ab67..0434d7309874d771807def31c5680dd0
          this.playersByName.put(player.getScoreboardName().toLowerCase(java.util.Locale.ROOT), player); // Spigot
          this.playersByUUID.put(player.getUUID(), player);
          // this.broadcastAll(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(entityplayer))); // CraftBukkit - replaced with loop below
-@@ -631,6 +633,7 @@ public abstract class PlayerList {
+@@ -636,6 +638,7 @@ public abstract class PlayerList {
          worldserver.removePlayerImmediately(entityplayer, Entity.RemovalReason.UNLOADED_WITH_PLAYER);
          entityplayer.getAdvancements().stopListening();
          this.players.remove(entityplayer);
@@ -32,7 +32,7 @@ index e406150e4f63e5bf19d4c7dbce9b419095a6ab67..0434d7309874d771807def31c5680dd0
          this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot
          this.server.getCustomBossEvents().onPlayerDisconnect(entityplayer);
          UUID uuid = entityplayer.getUUID();
-@@ -799,6 +802,7 @@ public abstract class PlayerList {
+@@ -804,6 +807,7 @@ public abstract class PlayerList {
          // MultiPaper end
          entityplayer.stopRiding(); // CraftBukkit
          this.players.remove(entityplayer);
@@ -40,7 +40,7 @@ index e406150e4f63e5bf19d4c7dbce9b419095a6ab67..0434d7309874d771807def31c5680dd0
          this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot
          entityplayer.getLevel().removePlayerImmediately(entityplayer, Entity.RemovalReason.DISCARDED);
          BlockPos blockposition = entityplayer.getRespawnPosition();
-@@ -936,6 +940,7 @@ public abstract class PlayerList {
+@@ -941,6 +945,7 @@ public abstract class PlayerList {
          if (!entityplayer.connection.isDisconnected()) {
              worldserver1.addRespawnedPlayer(entityplayer1);
              this.players.add(entityplayer1);
@@ -49,7 +49,7 @@ index e406150e4f63e5bf19d4c7dbce9b419095a6ab67..0434d7309874d771807def31c5680dd0
              this.playersByUUID.put(entityplayer1.getUUID(), entityplayer1);
          }
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 19f841cd391a8e5d4fc6c31f4d71675fb877259d..e03a5d5b3fa5ac1ed1e1e7ba8bfb50b80a32b8a4 100644
+index eb2968caa5f1aa297930abe984f7dbbeb10832fb..c3496e3a7e07610acd8cfaf364f8a3622a103f9b 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 @@ -288,6 +288,7 @@ public final class CraftServer implements Server {
@@ -130,7 +130,7 @@ index 19f841cd391a8e5d4fc6c31f4d71675fb877259d..e03a5d5b3fa5ac1ed1e1e7ba8bfb50b8
              String iterPlayerName = iterPlayer.getName();
  
              if (partialName.equalsIgnoreCase(iterPlayerName)) {
-@@ -2153,7 +2181,7 @@ public final class CraftServer implements Server {
+@@ -2149,7 +2177,7 @@ public final class CraftServer implements Server {
              }
          }
  
@@ -139,7 +139,7 @@ index 19f841cd391a8e5d4fc6c31f4d71675fb877259d..e03a5d5b3fa5ac1ed1e1e7ba8bfb50b8
  
          return players.toArray(new OfflinePlayer[players.size()]);
      }
-@@ -2324,6 +2352,8 @@ public final class CraftServer implements Server {
+@@ -2320,6 +2348,8 @@ public final class CraftServer implements Server {
              return ImmutableList.of();
          }
  
@@ -148,7 +148,7 @@ index 19f841cd391a8e5d4fc6c31f4d71675fb877259d..e03a5d5b3fa5ac1ed1e1e7ba8bfb50b8
          List<String> offers;
          Player player = (Player) sender;
          if (message.startsWith("/") || forceCommand) {
-@@ -2335,6 +2365,8 @@ public final class CraftServer implements Server {
+@@ -2331,6 +2361,8 @@ public final class CraftServer implements Server {
          TabCompleteEvent tabEvent = new TabCompleteEvent(player, message, offers, message.startsWith("/") || forceCommand, pos != null ? io.papermc.paper.util.MCUtil.toLocation(((CraftWorld) player.getWorld()).getHandle(), BlockPos.containing(pos)) : null); // Paper
          this.getPluginManager().callEvent(tabEvent);
  
@@ -157,7 +157,7 @@ index 19f841cd391a8e5d4fc6c31f4d71675fb877259d..e03a5d5b3fa5ac1ed1e1e7ba8bfb50b8
          return tabEvent.isCancelled() ? Collections.EMPTY_LIST : tabEvent.getCompletions();
      }
  
-@@ -2369,7 +2401,7 @@ public final class CraftServer implements Server {
+@@ -2365,7 +2397,7 @@ public final class CraftServer implements Server {
          List<String> completions = new ArrayList<String>();
          PlayerChatTabCompleteEvent event = new PlayerChatTabCompleteEvent(player, message, completions);
          String token = event.getLastToken();
@@ -166,7 +166,7 @@ index 19f841cd391a8e5d4fc6c31f4d71675fb877259d..e03a5d5b3fa5ac1ed1e1e7ba8bfb50b8
              if (player.canSee(p) && StringUtil.startsWithIgnoreCase(p.getName(), token)) {
                  completions.add(p.getName());
              }
-@@ -2870,14 +2902,14 @@ public final class CraftServer implements Server {
+@@ -2866,14 +2898,14 @@ public final class CraftServer implements Server {
  
          @Override
          public void broadcast(BaseComponent component) {

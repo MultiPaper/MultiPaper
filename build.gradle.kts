@@ -88,7 +88,7 @@ paperweight {
             )
 
             val purpurLatestCommitJson = layout.cache.resolve("purpurLatestCommit.json");
-            download.get().download("https://api.github.com/repos/PurpurMC/Purpur/commits/ver/1.19.3", purpurLatestCommitJson);
+            download.get().download("https://api.github.com/repos/PurpurMC/Purpur/commits/ver/1.19.4", purpurLatestCommitJson);
             val purpurLatestCommit = gson.fromJson<paper.libs.com.google.gson.JsonObject>(purpurLatestCommitJson)["sha"].asString;
 
             copy {

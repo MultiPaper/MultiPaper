@@ -5,6 +5,7 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class SyncChunkOwnerToAllMessage extends MasterBoundMessage {
 
     public final String world;
+
     public final int cx;
     public final int cz;
 

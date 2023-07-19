@@ -5,6 +5,7 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class WriteJsonMessage extends MasterBoundMessage {
 
     public final String file;
+
     public final byte[] data;
 
     public WriteJsonMessage(String file, byte[] data) {

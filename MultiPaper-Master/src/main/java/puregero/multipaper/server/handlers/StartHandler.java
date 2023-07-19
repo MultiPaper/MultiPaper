@@ -5,6 +5,7 @@ import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerSt
 import puregero.multipaper.server.ServerConnection;
 
 public class StartHandler {
+
     public static void handle(ServerConnection connection, StartMessage message) {
         if (!message.host.isEmpty() && !message.host.equals("0.0.0.0")) {
             System.out.print("Setting " + connection.getBungeeCordName() + "'s host to " + message.host + " with port " + message.port);

@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.util.concurrent.CompletableFuture;
 
 public class WriteLevelHandler {
+
     public static void handle(ServerConnection connection, WriteLevelMessage message) {
         CompletableFuture.runAsync(() -> {
             try {

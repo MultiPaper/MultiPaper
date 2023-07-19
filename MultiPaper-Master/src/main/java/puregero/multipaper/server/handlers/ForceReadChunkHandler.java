@@ -13,6 +13,7 @@ import java.util.concurrent.CompletableFuture;
  * Like ReadChunkHandler, but forces a read and won't redirect to another server that already has it loaded.
  */
 public class ForceReadChunkHandler {
+
     public static void handle(ServerConnection connection, ForceReadChunkMessage message) {
         ChunkLockManager.waitForLock(message.world, message.cx, message.cz, () -> {
             RegionFileCache.getChunkDeflatedDataAsync(getWorldDir(message.world, message.path), message.cx, message.cz).thenAccept(b -> {

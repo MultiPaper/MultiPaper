@@ -10,8 +10,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public class DataStreamManager<T extends Message> {
+
     private final AtomicInteger streamIdIncrementer = new AtomicInteger(1);
+
     final Map<Integer, InboundDataStream> inboundDataStreams = new ConcurrentHashMap<>();
+
     private final MessageHandler<T> messageHandler;
 
     public DataStreamManager(MessageHandler<T> messageHandler) {
@@ -40,8 +43,7 @@ public class DataStreamManager<T extends Message> {
         dataStream.doData(data);
     }
 
-    public T createDataStreamMessage(int streamId, byte[] data, int offset, int length) {
+    public Message<?> createDataStreamMessage(int streamId, byte[] data, int offset, int length) {
         return messageHandler.createDataStreamMessage(streamId, data, offset, length);
     }
-
 }

@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 
 public class RequestChunkOwnershipHandler {
+
     public static void handle(ServerConnection connection, RequestChunkOwnershipMessage message) {
         boolean hasAtLeastOneChunkLocked = false;
         for (ChunkKey key : message.chunks) {

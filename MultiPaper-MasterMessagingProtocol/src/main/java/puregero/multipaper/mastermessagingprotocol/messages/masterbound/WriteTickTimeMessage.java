@@ -5,6 +5,7 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class WriteTickTimeMessage extends MasterBoundMessage {
 
     public final long tickTime;
+
     public final float tps;
 
     public WriteTickTimeMessage(long tickTime, float tps) {

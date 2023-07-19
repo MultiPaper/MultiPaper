@@ -1,7 +1,9 @@
 package puregero.multipaper.mastermessagingprotocol;
 
 public class ChunkKey {
+
     public final String world;
+
     public final int x;
     public final int z;
 

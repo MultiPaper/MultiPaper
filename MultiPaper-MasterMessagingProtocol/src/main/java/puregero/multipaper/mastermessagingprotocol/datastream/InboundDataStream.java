@@ -13,9 +13,13 @@ import java.util.function.Consumer;
 public class InboundDataStream {
 
     private final DataStreamManager<?> manager;
+
     private final Channel channel;
+
     private final int streamId;
+
     List<Consumer<byte[]>> dataHandlers = new ArrayList<>();
+
     List<Runnable> closeHandlers = new ArrayList<>();
 
     InboundDataStream(DataStreamManager<?> manager, Channel channel, int streamId) {
@@ -93,5 +97,4 @@ public class InboundDataStream {
         closeHandlers.forEach(Runnable::run);
         manager.inboundDataStreams.remove(streamId, this);
     }
-
 }

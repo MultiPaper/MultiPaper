@@ -5,6 +5,7 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class WriteDataMessage extends MasterBoundMessage {
 
     public final String path;
+
     public final byte[] data;
 
     public WriteDataMessage(String path, byte[] data) {

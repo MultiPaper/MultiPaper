@@ -11,8 +11,10 @@ public class ProxiedConnection {
 
     private final SocketChannel socketChannel;
     private final SocketChannel destinationChannel;
+
     private final ByteBuffer readBuffer = ByteBuffer.allocate(ProxyServer.BUFFER_SIZE);
     private ByteBuffer writeBuffer;
+
     public boolean helloPacket = true;
 
     public ProxiedConnection(SocketChannel socketChannel, SocketChannel destinationChannel) {

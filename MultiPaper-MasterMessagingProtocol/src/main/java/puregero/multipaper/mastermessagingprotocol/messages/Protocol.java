@@ -9,6 +9,7 @@ import java.util.function.Function;
 public class Protocol<T extends Message<?>> {
 
     private final List<Class<? extends T>> MESSAGES = new ArrayList<>();
+
     private final List<Function<ExtendedByteBuf, T>> MESSAGE_DESERIALIZERS = new ArrayList<>();
 
     protected void addMessage(Class<? extends T> clazz, Function<ExtendedByteBuf, T> deserializer) {

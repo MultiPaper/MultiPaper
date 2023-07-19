@@ -8,14 +8,15 @@ import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBo
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundProtocol;
 import puregero.multipaper.server.proxy.ProxyServer;
 
-import java.io.IOException;
 import java.util.UUID;
 
 public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, ServerBoundMessage> {
+
     public static final int DEFAULT_PORT = 35353;
+
     public static final String SECRET = UUID.randomUUID().toString();
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
         DAEMON = false;
 
         String address = null;
@@ -45,7 +46,7 @@ public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, Serve
 
         new MultiPaperServer(address, port);
 
-        new CommandLineInput().run();
+        new CommandLineInput().start();
     }
 
     public MultiPaperServer(int port) {

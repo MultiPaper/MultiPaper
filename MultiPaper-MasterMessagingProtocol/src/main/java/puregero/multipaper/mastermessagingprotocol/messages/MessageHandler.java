@@ -12,7 +12,9 @@ import java.util.function.Consumer;
 public abstract class MessageHandler<T extends Message> extends SimpleChannelInboundHandler<T> {
 
     private final Map<Integer, Consumer<T>> callbacks = new ConcurrentHashMap<>();
+
     private final AtomicInteger transactionId = new AtomicInteger(1);
+
     private final DataStreamManager<T> dataStreamManager = new DataStreamManager<>(this);
 
     public DataStreamManager<T> getDataStreamManager() {
@@ -51,5 +53,4 @@ public abstract class MessageHandler<T extends Message> extends SimpleChannelInb
             message.handle(this);
         }
     }
-
 }

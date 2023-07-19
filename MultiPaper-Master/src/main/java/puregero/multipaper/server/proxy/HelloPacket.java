@@ -8,8 +8,11 @@ import java.nio.charset.StandardCharsets;
 public class HelloPacket {
 
     private final int protocolVersion;
+
     public String host;
+
     private final short port;
+
     private final byte nextState;
 
     public HelloPacket(int protocolVersion, String host, short port, byte nextState) {

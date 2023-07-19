@@ -13,6 +13,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 public class ReadLevelHandler {
+
     private static final HashMap<String, Long> emptyLevelDatLockTimes = new HashMap<>();
     private static final HashMap<String, String> emptyLevelDatLocker = new HashMap<>();
 

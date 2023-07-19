@@ -16,16 +16,25 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 public class ServerConnection extends MasterBoundMessageHandler {
+
     private final SocketChannel channel;
 
     private String name;
+
     private long lastPing = System.currentTimeMillis();
+
     private final CircularTimer timer = new CircularTimer();
+
     public final HashSet<UUID> playerUUIDs = new HashSet<>();
+
     private final List<Player> players = new ArrayList<>();
+
     private double tps;
+
     private int port = -1;
+
     private String host;
+
     private UUID uuid;
 
     /**

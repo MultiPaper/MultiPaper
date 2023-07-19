@@ -5,6 +5,7 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class ServerStartedMessage extends ServerBoundMessage {
 
     public final String host;
+
     public final int port;
 
     public ServerStartedMessage(String host, int port) {

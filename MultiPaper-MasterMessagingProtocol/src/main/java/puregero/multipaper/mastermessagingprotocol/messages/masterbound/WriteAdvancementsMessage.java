@@ -6,6 +6,7 @@ public class WriteAdvancementsMessage extends MasterBoundMessage {
 
     public final String world;
     public final String uuid;
+
     public final byte[] data;
 
     public WriteAdvancementsMessage(String world, String uuid, byte[] data) {

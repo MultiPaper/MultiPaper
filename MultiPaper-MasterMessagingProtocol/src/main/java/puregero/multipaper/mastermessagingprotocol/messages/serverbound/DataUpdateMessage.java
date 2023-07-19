@@ -5,6 +5,7 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class DataUpdateMessage extends ServerBoundMessage {
 
     public final String path;
+
     public final byte[] data;
 
     public DataUpdateMessage(String path, byte[] data) {

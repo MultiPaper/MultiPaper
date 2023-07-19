@@ -5,8 +5,10 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class ChunkChangedStatusMessage extends MasterBoundMessage {
 
     public final String world;
+
     public final int cx;
     public final int cz;
+
     public final String status;
 
     public ChunkChangedStatusMessage(String world, int cx, int cz, String status) {

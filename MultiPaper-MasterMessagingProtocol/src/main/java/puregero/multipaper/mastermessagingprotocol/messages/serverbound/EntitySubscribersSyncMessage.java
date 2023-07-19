@@ -5,8 +5,10 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class EntitySubscribersSyncMessage extends ServerBoundMessage {
 
     public final String world;
+
     public final int cx;
     public final int cz;
+
     public final String[] subscribers;
 
     public EntitySubscribersSyncMessage(String world, int cx, int cz, String[] subscribers) {

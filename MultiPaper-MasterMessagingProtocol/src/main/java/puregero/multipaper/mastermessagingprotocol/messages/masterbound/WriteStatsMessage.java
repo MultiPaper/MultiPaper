@@ -6,6 +6,7 @@ public class WriteStatsMessage extends MasterBoundMessage {
 
     public final String world;
     public final String uuid;
+
     public final byte[] data;
 
     public WriteStatsMessage(String world, String uuid, byte[] data) {

@@ -5,8 +5,11 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class UploadFileMessage extends MasterBoundMessage {
 
     public final boolean immediatelySyncToOtherServers;
+
     public final String path;
+
     public final long lastModified;
+
     public final byte[] data;
 
     public UploadFileMessage(boolean immediatelySyncToOtherServers, String path, long lastModified, byte[] data) {

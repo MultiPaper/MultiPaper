@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
 public class WriteDataHandler {
+
     public static void handle(ServerConnection connection, WriteDataMessage message) {
         CompletableFuture.runAsync(() -> {
             try {

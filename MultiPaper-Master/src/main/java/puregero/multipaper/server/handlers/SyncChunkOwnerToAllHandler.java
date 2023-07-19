@@ -6,6 +6,7 @@ import puregero.multipaper.server.ChunkSubscriptionManager;
 import puregero.multipaper.server.ServerConnection;
 
 public class SyncChunkOwnerToAllHandler {
+
     public static void handle(ServerConnection connection, SyncChunkOwnerToAllMessage message) {
         ServerConnection owner = ChunkSubscriptionManager.getOwner(message.world, message.cx, message.cz);
 

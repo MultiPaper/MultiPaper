@@ -11,6 +11,7 @@ import java.nio.file.NoSuchFileException;
 import java.util.concurrent.CompletableFuture;
 
 public class ReadUidHandler {
+
     public static void handle(ServerConnection connection, ReadUidMessage message) {
         CompletableFuture.runAsync(() -> {
             try {

@@ -6,6 +6,7 @@ public class ForceReadChunkMessage extends MasterBoundMessage {
 
     public final String world;
     public final String path;
+
     public final int cx;
     public final int cz;
 

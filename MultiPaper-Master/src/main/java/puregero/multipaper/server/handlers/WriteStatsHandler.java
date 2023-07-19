@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
 public class WriteStatsHandler {
+
     public static void handle(ServerConnection connection, WriteStatsMessage message) {
         CompletableFuture.runAsync(() -> {
             try {

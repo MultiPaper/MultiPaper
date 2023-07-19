@@ -6,6 +6,7 @@ import puregero.multipaper.server.ChunkSubscriptionManager;
 import puregero.multipaper.server.ServerConnection;
 
 public class UnsubscribeChunkHandler {
+
     public static void handle(ServerConnection connection, UnsubscribeChunkMessage message) {
         ChunkSubscriptionManager.unsubscribe(connection, message.world, message.cx, message.cz);
 

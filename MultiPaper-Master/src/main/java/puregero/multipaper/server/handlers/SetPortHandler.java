@@ -4,6 +4,7 @@ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.SetPortM
 import puregero.multipaper.server.ServerConnection;
 
 public class SetPortHandler {
+
     public static void handle(ServerConnection connection, SetPortMessage message) {
         connection.setPort(message.port);
     }

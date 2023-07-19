@@ -5,8 +5,11 @@ import puregero.multipaper.mastermessagingprotocol.messages.Message;
 import puregero.multipaper.mastermessagingprotocol.messages.MessageHandler;
 
 public class DataStreamMessage<T extends MessageHandler<? extends Message<?>>> extends Message<T> {
+
     public final int streamId;
+
     public final byte[] data;
+
     private final int offset;
     private final int length;
 

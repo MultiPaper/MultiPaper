@@ -6,11 +6,15 @@ import java.io.IOException;
 import java.util.UUID;
 
 public class Player {
+
     private final UUID uuid;
+
     private final String world;
+
     private final double x;
     private final double y;
     private final double z;
+
     private final float yaw;
     private final float pitch;
 

@@ -7,6 +7,7 @@ import puregero.multipaper.server.ServerConnection;
 import java.util.List;
 
 public class PlayerConnectHandler {
+
     public static void handle(ServerConnection connection, PlayerConnectMessage message) {
         List<ServerConnection> connections = ServerConnection.getConnections();
 

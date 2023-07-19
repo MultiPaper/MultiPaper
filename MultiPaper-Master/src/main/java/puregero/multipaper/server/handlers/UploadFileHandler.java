@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
 public class UploadFileHandler {
+
     public static void handle(ServerConnection connection, UploadFileMessage message) {
         File file = new File("synced-server-files", message.path);
         FileLocker.createLockAsync(file).thenAcceptAsync(lock -> {

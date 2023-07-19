@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 public class ExtendedByteBuf extends ByteBuf {
+
     private final ByteBuf parent;
 
     public ExtendedByteBuf(ByteBuf parent) {

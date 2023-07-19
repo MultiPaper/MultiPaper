@@ -4,6 +4,7 @@ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.PlayerDi
 import puregero.multipaper.server.ServerConnection;
 
 public class PlayerDisconnectHandler {
+
     public static void handle(ServerConnection connection, PlayerDisconnectMessage message) {
         connection.removePlayer(message.uuid);
     }

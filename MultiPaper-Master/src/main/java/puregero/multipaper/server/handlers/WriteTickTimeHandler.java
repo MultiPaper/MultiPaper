@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class WriteTickTimeHandler {
+
     private static final Map<String, Long> lastUpdates = new ConcurrentHashMap<>();
 
     public static void handle(ServerConnection connection, WriteTickTimeMessage message) {

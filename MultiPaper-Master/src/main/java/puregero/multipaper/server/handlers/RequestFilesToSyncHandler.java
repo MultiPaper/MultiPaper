@@ -6,9 +6,11 @@ import puregero.multipaper.server.ServerConnection;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class RequestFilesToSyncHandler {
+
     public static void handle(ServerConnection connection, RequestFilesToSyncMessage message) {
         List<File> files = new ArrayList<>();
 

@@ -26,11 +26,15 @@ import java.util.Collection;
     authors = { "PureGero" }
 )
 public class MultiPaperVelocity {
+
     private final ProxyServer server;
+
     private final Logger logger;
+
     private final Path dataFolder;
 
     private int port;
+
     private boolean balanceNodes;
 
     @Inject

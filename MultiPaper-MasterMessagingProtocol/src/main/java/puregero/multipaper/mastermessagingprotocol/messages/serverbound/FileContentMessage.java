@@ -5,7 +5,9 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class FileContentMessage extends ServerBoundMessage {
 
     public final String path;
+
     public final long lastModified;
+
     public final int streamId;
 
     public FileContentMessage(String path, long lastModified, int streamId) {

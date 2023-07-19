@@ -6,6 +6,7 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class RequestChunkOwnershipMessage extends MasterBoundMessage {
 
     public final String world;
+
     public final ChunkKey[] chunks;
 
     public RequestChunkOwnershipMessage(String world, ChunkKey[] chunks) {

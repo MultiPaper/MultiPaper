@@ -23,6 +23,7 @@ import java.util.List;
 public class MultiPaperBungee extends Plugin implements Listener {
 
     private final HashSet<ProxiedPlayer> usingServerCommand = new HashSet<>();
+
     private boolean balanceNodes = true;
 
     @Override
@@ -103,5 +104,4 @@ public class MultiPaperBungee extends Plugin implements Listener {
     private boolean isMultiPaperServer(String name) {
         return ServerConnection.getConnection(name) != null;
     }
-
 }

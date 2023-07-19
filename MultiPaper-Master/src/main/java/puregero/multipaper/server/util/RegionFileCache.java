@@ -46,11 +46,7 @@ public class RegionFileCache {
 
         Reference<RegionFile> ref = cache.get(file);
 
-        if (ref != null && ref.get() != null) {
-            return true;
-        }
-
-        return false;
+        return ref != null && ref.get() != null;
     }
 
     private static File canonical(File file) {

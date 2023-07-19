@@ -11,7 +11,9 @@ import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
 
 public class WriteJsonHandler {
+
     public static final HashMap<String, byte[]> writesInProgress = new HashMap<>();
+
     private static final Object writingLock = new Object();
 
     public static void handle(ServerConnection connection, WriteJsonMessage message) {

@@ -21,6 +21,7 @@ import java.util.function.Consumer;
 public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extends ChannelInitializer<SocketChannel> {
 
     public static boolean DAEMON = true;
+
     private static final ThreadFactory eventLoopThreadFactory = new ThreadFactory() {
         private int counter = 0;
 
@@ -33,11 +34,13 @@ public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extend
     };
 
     private static EventLoopGroup eventLoopGroup;
+
     private static Class<? extends SocketChannel> socketChannelClass;
     private static Class<? extends ServerSocketChannel> serverSocketChannelClass;
 
     private final Protocol<I> inboundProtocol;
     private final Protocol<O> outboundProtocol;
+
     private final Consumer<SocketChannel> setupChannel;
 
     public static EventLoopGroup getEventLoopGroup() {
@@ -97,5 +100,4 @@ public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extend
         socketChannel.pipeline().addLast(new MessageDecoder<>(this.inboundProtocol));
         setupChannel.accept(socketChannel);
     }
-
 }

@@ -5,7 +5,9 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class ServerInfoUpdateMessage extends ServerBoundMessage {
 
     public final String name;
+
     public final int averageTickTime;
+
     public final float tps;
 
     public ServerInfoUpdateMessage(String name, int averageTickTime, float tps) {

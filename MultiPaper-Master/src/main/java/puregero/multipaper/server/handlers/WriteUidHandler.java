@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.util.concurrent.CompletableFuture;
 
 public class WriteUidHandler {
+
     public static void handle(ServerConnection connection, WriteUidMessage message) {
         CompletableFuture.runAsync(() -> {
             try {

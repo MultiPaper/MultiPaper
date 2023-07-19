@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
 public class ReadStatsHandler {
+
     public static void handle(ServerConnection connection, ReadStatsMessage message) {
         CompletableFuture.runAsync(() -> {
             try {

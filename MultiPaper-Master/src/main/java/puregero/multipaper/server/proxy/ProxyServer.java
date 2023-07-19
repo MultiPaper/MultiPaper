@@ -19,8 +19,10 @@ public class ProxyServer extends Thread {
     public static final int WORKER_THREADS = Integer.parseInt(System.getProperty("proxyserver.workerthreads", Integer.toString(Runtime.getRuntime().availableProcessors())));
 
     private final ServerSocketChannel serverChannel;
+
     private final Selector selector;
     private Selector[] workerSelectors;
+
     private int workerSelectorsIndex = 0;
 
     public static void openServer(int port) {
@@ -37,7 +39,7 @@ public class ProxyServer extends Thread {
             ProxyServer acceptThread = new ProxyServer(serverChannel, selector, "ProxyServer-Accept");
 
             acceptThread.workerSelectors = new Selector[Math.max(1, WORKER_THREADS)];
-            for (int i = 0; i < acceptThread.workerSelectors.length; i ++) {
+            for (int i = 0; i < acceptThread.workerSelectors.length; i++) {
                 acceptThread.workerSelectors[i] = Selector.open();
                 new ProxyServer(serverChannel, acceptThread.workerSelectors[i], "ProxyServer-Worker #" + (i + 1)).start();
             }
@@ -179,5 +181,4 @@ public class ProxyServer extends Thread {
         ServerConnection bestServer = connections.get((int) (Math.random() * connections.size()));
         return new InetSocketAddress(bestServer.getHost(), bestServer.getPort());
     }
-
 }

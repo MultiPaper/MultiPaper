@@ -3,8 +3,11 @@ package puregero.multipaper.mastermessagingprotocol.messages.serverbound;
 import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 
 public class ServerBoundDataStreamMessage extends ServerBoundMessage {
+
     public final int streamId;
+
     public final byte[] data;
+
     private final int offset;
     private final int length;
 

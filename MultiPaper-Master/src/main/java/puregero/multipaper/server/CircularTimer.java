@@ -1,8 +1,10 @@
 package puregero.multipaper.server;
 
 public class CircularTimer {
-    private long[] times = new long[1200];
+
+    private final long[] times = new long[1200];
     private long total = 0;
+
     private int index = 0;
 
     public void append(long time) {

@@ -11,6 +11,7 @@ import java.nio.file.NoSuchFileException;
 import java.util.concurrent.CompletableFuture;
 
 public class ReadJsonHandler {
+
     public static void handle(ServerConnection connection, ReadJsonMessage message) {
         CompletableFuture.runAsync(() -> {
             try {

@@ -5,7 +5,9 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class CallDataStorageMessage extends MasterBoundMessage {
 
     public final String key;
+
     public final Action action;
+
     public final String value;
 
     public CallDataStorageMessage(String key, Action action, String value) {
@@ -39,10 +41,10 @@ public class CallDataStorageMessage extends MasterBoundMessage {
         handler.handle(this);
     }
 
-    public static enum Action {
+    public enum Action {
         GET,
         LIST,
         SET,
-        ADD;
+        ADD
     }
 }

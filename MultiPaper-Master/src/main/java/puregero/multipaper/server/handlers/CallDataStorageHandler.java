@@ -19,7 +19,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 public class CallDataStorageHandler {
+
     private static Map<String, Object> yaml;
+
     private static CompletableFuture<Void> saveFuture;
 
     public static void handle(ServerConnection connection, CallDataStorageMessage message) {

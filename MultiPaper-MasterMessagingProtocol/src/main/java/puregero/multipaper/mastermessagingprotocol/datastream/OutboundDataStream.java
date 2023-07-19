@@ -12,7 +12,9 @@ import java.io.OutputStream;
 public class OutboundDataStream {
 
     private final DataStreamManager<?> manager;
+
     private final Channel channel;
+
     private final int streamId;
 
     OutboundDataStream(DataStreamManager<?> manager, Channel channel, int streamId) {
@@ -85,5 +87,4 @@ public class OutboundDataStream {
             promise.setFailure(e);
         }
     }
-
 }

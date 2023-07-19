@@ -5,8 +5,10 @@ import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 public class ServerChangedChunkStatusMessage extends ServerBoundMessage {
 
     public final String world;
+
     public final int cx;
     public final int cz;
+
     public final String status;
     public final String server;
 

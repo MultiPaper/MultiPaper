@@ -3,8 +3,11 @@ package puregero.multipaper.mastermessagingprotocol.messages.masterbound;
 import puregero.multipaper.mastermessagingprotocol.ExtendedByteBuf;
 
 public class MasterBoundDataStreamMessage extends MasterBoundMessage {
+
     public final int streamId;
+
     public final byte[] data;
+
     private final int offset;
     private final int length;
 

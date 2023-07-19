@@ -6,6 +6,7 @@ import puregero.multipaper.server.ChunkSubscriptionManager;
 import puregero.multipaper.server.ServerConnection;
 
 public class LockChunkHandler {
+
     public static void handle(ServerConnection connection, LockChunkMessage message) {
         ServerConnection owner = ChunkSubscriptionManager.lock(connection, message.world, message.cx, message.cz);
 

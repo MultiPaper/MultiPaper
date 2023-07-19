@@ -7,6 +7,7 @@ import java.util.UUID;
 public class HelloMessage extends MasterBoundMessage {
 
     public final String name;
+
     public final UUID serverUuid;
 
     public HelloMessage(String name, UUID serverUuid) {

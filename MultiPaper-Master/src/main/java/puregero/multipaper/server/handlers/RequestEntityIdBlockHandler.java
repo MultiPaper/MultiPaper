@@ -12,9 +12,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class RequestEntityIdBlockHandler {
+
     private static final int BLOCK_SIZE = Integer.getInteger("entityid.block.size", 4096);
+
     private static AtomicInteger lastBlock = null;
+
     private static volatile boolean queueLastBlockSave = true;
+
     private static CompletableFuture<Void> lastBlockWriteInProgress = CompletableFuture.completedFuture(null);
 
     static {

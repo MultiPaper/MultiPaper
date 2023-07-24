@@ -17,10 +17,10 @@ index 745e792482f61c571e2efbd4200dd1bdaef6e474..fdc0c8e5cc901a010f9733f4a25cf7cf
      }
  
 diff --git a/src/main/java/net/minecraft/world/entity/LivingEntity.java b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-index f620e3373bcd8f1ffa036d1ad385446c42b7c6ff..f6eeb0088a9f3502b3a96629b272011ac5e7e356 100644
+index b45579d2940082c9852ecd162c105c717769154b..59765ea9ea528e964b067cdfe1516e22362f7b7b 100644
 --- a/src/main/java/net/minecraft/world/entity/LivingEntity.java
 +++ b/src/main/java/net/minecraft/world/entity/LivingEntity.java
-@@ -141,6 +141,7 @@ import org.bukkit.event.entity.EntityTeleportEvent;
+@@ -142,6 +142,7 @@ import org.bukkit.event.entity.EntityTeleportEvent;
  import org.bukkit.event.player.PlayerItemConsumeEvent;
  import puregero.multipaper.ExternalServerConnection;
  import puregero.multipaper.MultiPaper;
@@ -28,26 +28,31 @@ index f620e3373bcd8f1ffa036d1ad385446c42b7c6ff..f6eeb0088a9f3502b3a96629b272011a
  import puregero.multipaper.MultiPaperEntityInteractHandler;
  import puregero.multipaper.externalserverprotocol.EntityUpdatePacket;
  import puregero.multipaper.externalserverprotocol.HurtEntityPacket;
-@@ -1270,29 +1271,32 @@ public abstract class LivingEntity extends Entity implements Attackable {
+@@ -1287,11 +1288,12 @@ public abstract class LivingEntity extends Entity implements Attackable {
  
      protected void onEffectAdded(MobEffectInstance effect, @Nullable Entity source) {
          this.effectsDirty = true;
--        if (!this.level.isClientSide) {
-+        if (!this.level.isClientSide && !MultiPaper.isExternalPlayer(this)) { // MultiPaper
+-        if (!this.level().isClientSide) {
++        if (!this.level().isClientSide && !MultiPaper.isExternalPlayer(this)) { // MultiPaper
              effect.getEffect().addAttributeModifiers(this, this.getAttributes(), effect.getAmplifier());
+             this.sendEffectToPassengers(effect);
          }
  
 +        MultiPaperEffectsHandler.onEffectAdd(this, effect); // MultiPaper
      }
  
+     public void sendEffectToPassengers(MobEffectInstance effect) {
+@@ -1311,7 +1313,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+ 
      protected void onEffectUpdated(MobEffectInstance effect, boolean reapplyEffect, @Nullable Entity source) {
          this.effectsDirty = true;
--        if (reapplyEffect && !this.level.isClientSide) {
-+        if (reapplyEffect && !MultiPaper.isExternalPlayer(this)) { // MultiPaper
+-        if (reapplyEffect && !this.level().isClientSide) {
++        if (reapplyEffect && !this.level().isClientSide && !MultiPaper.isExternalPlayer(this)) { // MultiPaper
              MobEffect mobeffectlist = effect.getEffect();
  
              mobeffectlist.removeAttributeModifiers(this, this.getAttributes(), effect.getAmplifier());
-             mobeffectlist.addAttributeModifiers(this, this.getAttributes(), effect.getAmplifier());
+@@ -1322,11 +1324,12 @@ public abstract class LivingEntity extends Entity implements Attackable {
+             this.sendEffectToPassengers(effect);
          }
  
 +        MultiPaperEffectsHandler.onEffectAdd(this, effect); // MultiPaper
@@ -55,9 +60,13 @@ index f620e3373bcd8f1ffa036d1ad385446c42b7c6ff..f6eeb0088a9f3502b3a96629b272011a
  
      protected void onEffectRemoved(MobEffectInstance effect) {
          this.effectsDirty = true;
--        if (!this.level.isClientSide) {
-+        if (!this.level.isClientSide && !MultiPaper.isExternalPlayer(this)) { // MultiPaper
+-        if (!this.level().isClientSide) {
++        if (!this.level().isClientSide && !MultiPaper.isExternalPlayer(this)) { // MultiPaper
              effect.getEffect().removeAttributeModifiers(this, this.getAttributes(), effect.getAmplifier());
+             Iterator iterator = this.getPassengers().iterator();
+ 
+@@ -1341,6 +1344,7 @@ public abstract class LivingEntity extends Entity implements Attackable {
+             }
          }
  
 +        MultiPaperEffectsHandler.onEffectRemove(this, effect); // MultiPaper

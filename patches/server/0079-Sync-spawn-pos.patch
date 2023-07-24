@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 31 Jan 2022 21:23:37 +1000
+Subject: [PATCH] Sync spawn pos
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index 27a80270222bb37db835d20f7a87153cc349bc8a..dd5c9349bd5d0e91c14d5f62b0b982cde7599a43 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -184,6 +184,7 @@ import it.unimi.dsi.fastutil.objects.ReferenceOpenHashSet; // Paper
+ import puregero.multipaper.MultiPaper;
+ import puregero.multipaper.MultiPaperChunkHandler;
+ import puregero.multipaper.MultiPaperEntitiesHandler;
++import puregero.multipaper.externalserverprotocol.SpawnUpdatePacket;
+ import puregero.multipaper.externalserverprotocol.TimeUpdatePacket;
+ 
+ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2264,6 +2265,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+             this.removeTicketsForSpawn(this.paperConfig().spawn.keepSpawnLoadedRange * 16, prevSpawn);
+             this.addTicketsForSpawn(this.paperConfig().spawn.keepSpawnLoadedRange * 16, pos);
+         }
++        if (!SpawnUpdatePacket.updatingSpawn) MultiPaper.broadcastPacketToExternalServers(getWorld().getName(), new SpawnUpdatePacket(this));
+         this.getServer().getPlayerList().broadcastAll(new ClientboundSetDefaultSpawnPositionPacket(pos, angle));
+     }
+ 
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+index be7a8e59e572dc428f1a10d6df4d0d9aec23092c..c707ff7c31aaa09dffe7523af57d81edac29872c 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
+@@ -63,6 +63,7 @@ public class ExternalServerPacketSerializer {
+         addPacket(PlayerListNameUpdatePacket.class, PlayerListNameUpdatePacket::new);
+         addPacket(PlayerSetCameraPacket.class, PlayerSetCameraPacket::new);
+         addPacket(PlayerSetRespawnPosition.class, PlayerSetRespawnPosition::new);
++        addPacket(SpawnUpdatePacket.class, SpawnUpdatePacket::new);
+     }
+ 
+     private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SpawnUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SpawnUpdatePacket.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..30ff6b8e4f77c156be3a8a0858cf69d32b179c0b
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/SpawnUpdatePacket.java
+@@ -0,0 +1,50 @@
++package puregero.multipaper.externalserverprotocol;
++
++import net.minecraft.core.BlockPos;
++import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.server.level.ServerLevel;
++import org.bukkit.Bukkit;
++import org.bukkit.World;
++import org.bukkit.craftbukkit.CraftWorld;
++import puregero.multipaper.ExternalServerConnection;
++import puregero.multipaper.MultiPaper;
++
++public class SpawnUpdatePacket extends ExternalServerPacket {
++
++    public static boolean updatingSpawn = false;
++
++    private final String world;
++    private final BlockPos pos;
++    private final float angle;
++
++    public SpawnUpdatePacket(ServerLevel level) {
++        this.world = level.getWorld().getName();
++        this.pos = new BlockPos(level.levelData.getXSpawn(), level.levelData.getYSpawn(), level.levelData.getZSpawn());
++        this.angle = level.levelData.getSpawnAngle();
++    }
++
++    public SpawnUpdatePacket(FriendlyByteBuf in) {
++        world = in.readUtf();
++        pos = BlockPos.of(in.readLong());
++        angle = in.readFloat();
++    }
++
++    @Override
++    public void write(FriendlyByteBuf out) {
++        out.writeUtf(world);
++        out.writeLong(pos.asLong());
++        out.writeFloat(angle);
++    }
++
++    @Override
++    public void handle(ExternalServerConnection connection) {
++        MultiPaper.runSync(() -> {
++            World bukkitWorld = Bukkit.getWorld(world);
++            if (bukkitWorld instanceof CraftWorld craftWorld) {
++                updatingSpawn = true;
++                craftWorld.getHandle().setDefaultSpawnPos(pos, angle);
++                updatingSpawn = false;
++            }
++        });
++    }
++}

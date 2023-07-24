@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 7 Dec 2022 19:55:45 +1000
+Subject: [PATCH] Process transient entity chunks on the master
+
+
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
+index c1b2fbaf037a6b6d9e7a4b539a96fa421065e8f8..25a6264ff8912932975d24c2ae7c642a074a40fc 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
+@@ -1961,7 +1961,7 @@ public final class NewChunkHolder {
+                     return false;
+                 }
+                 try {
+-                    mergeFrom = RegionFileIOThread.loadData(this.world, this.chunkX, this.chunkZ, RegionFileIOThread.RegionFileType.ENTITY_DATA, PrioritisedExecutor.Priority.BLOCKING);
++                    mergeFrom = new CompoundTag(); // mergeFrom = RegionFileIOThread.loadData(this.world, this.chunkX, this.chunkZ, RegionFileIOThread.RegionFileType.ENTITY_DATA, PrioritisedExecutor.Priority.BLOCKING); // MultiPaper - Process transient entity chunks on the master
+                 } catch (final Exception ex) {
+                     LOGGER.error("Cannot merge transient entities for chunk (" + this.chunkX + "," + this.chunkZ + ") in world '" + this.world.getWorld().getName() + "', data on disk will be replaced", ex);
+                 }
+@@ -1974,6 +1974,7 @@ public final class NewChunkHolder {
+                     return false;
+                 } else {
+                     EntityStorage.copyEntities(mergeFrom, save);
++                    save.putBoolean("multipaper.transient", true); // MultiPaper - Process transient entity chunks on the master
+                 }
+             }
+             if (save == null && this.lastEntitySaveNull) {
+diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
+index d6651d406410eb7e6e22d89bedc53479cc4291ea..5a6c0d14a800fbbaad4cbad476186e8257193713 100644
+--- a/src/main/java/puregero/multipaper/MultiPaper.java
++++ b/src/main/java/puregero/multipaper/MultiPaper.java
+@@ -393,7 +393,7 @@ public class MultiPaper {
+     }
+ 
+     public static void writeRegionFileNBT(String world, String path, int cx, int cz, CompoundTag compoundTag) throws IOException {
+-        writeRegionFile(world, path, cx, cz, nbtToBytes(compoundTag));
++        writeRegionFile(world, path, cx, cz, nbtToBytes(compoundTag), compoundTag != null && compoundTag.contains("multipaper.transient"));
+     }
+ 
+     public static CompoundTag readLevel(String world) throws IOException {

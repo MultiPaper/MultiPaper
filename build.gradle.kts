@@ -4,8 +4,8 @@ import io.papermc.paperweight.util.constants.*
 plugins {
     java
     `maven-publish`
-    id("com.github.johnrengelman.shadow") version "8.1.0"
-    id("io.papermc.paperweight.patcher") version "1.5.3"
+    id("com.github.johnrengelman.shadow") version "8.1.1"
+    id("io.papermc.paperweight.patcher") version "1.5.5"
 }
 
 repositories {
@@ -88,7 +88,7 @@ paperweight {
             )
 
             val purpurLatestCommitJson = layout.cache.resolve("purpurLatestCommit.json");
-            download.get().download("https://api.github.com/repos/PurpurMC/Purpur/commits/ver/1.19.4", purpurLatestCommitJson);
+            download.get().download("https://api.github.com/repos/PurpurMC/Purpur/commits/ver/1.20.1", purpurLatestCommitJson);
             val purpurLatestCommit = gson.fromJson<paper.libs.com.google.gson.JsonObject>(purpurLatestCommitJson)["sha"].asString;
 
             copy {

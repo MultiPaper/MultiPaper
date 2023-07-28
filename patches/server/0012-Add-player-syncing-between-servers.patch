@@ -392,7 +392,7 @@ index ebcdf6aee72b817b9bbba8f8d580eae1876fc6e5..3560a183867d44ee64790895b7e7afa0
              // CraftBukkit start
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3a0d3c035376d810caf00079ba601d27d5047138
+index 0000000000000000000000000000000000000000..51be0878d6d61e6d2a1b8f2c65d5651ac19c2749
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
 @@ -0,0 +1,85 @@
@@ -440,7 +440,7 @@ index 0000000000000000000000000000000000000000..3a0d3c035376d810caf00079ba601d27
 +        setYRot(yaw);
 +        setXRot(pitch);
 +        getServer().getPlayerList().addPlayer(this);
-+        ((ServerLevel) level).addNewPlayer(this);
++        ((ServerLevel) level()).addNewPlayer(this);
 +        sendPackets = false;
 +        containerMenu.transferTo(containerMenu, getBukkitEntity());
 +        initInventoryMenu();
@@ -513,7 +513,7 @@ index 411dd31f7467769fbe0868c46244a219e1530b35..7dc391159a2a6d116fd3d1ea34d7b766
  
      public Channel getChannel() {
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index e09ad91c4c33e1dce449a765bcce33cbe3bdcc95..794f96048974381edd428ed69a550e818de63c5f 100644
+index e09ad91c4c33e1dce449a765bcce33cbe3bdcc95..049e94daaff596cb8fa0bc56ecd62189508a2439 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,9 +1,17 @@
@@ -552,7 +552,7 @@ index e09ad91c4c33e1dce449a765bcce33cbe3bdcc95..794f96048974381edd428ed69a550e81
 +                // Copied from Paper start - Configurable container update tick rate
 +                if (externalPlayer.containerMenu != externalPlayer.inventoryMenu && --externalPlayer.containerUpdateDelay <= 0) {
 +                    externalPlayer.containerMenu.broadcastChanges();
-+                    externalPlayer.containerUpdateDelay = externalPlayer.level.paperConfig().tickRates.containerUpdate;
++                    externalPlayer.containerUpdateDelay = externalPlayer.level().paperConfig().tickRates.containerUpdate;
 +                }
 +                // Copied from Paper end
 +            }
@@ -585,7 +585,7 @@ index e09ad91c4c33e1dce449a765bcce33cbe3bdcc95..794f96048974381edd428ed69a550e81
 +
 +    public static void broadcastPacketToExternalServers(ServerPlayer player, ExternalServerPacket packet) {
 +        if (player instanceof ExternalPlayer || player.didMultiPaperJoin) {
-+            broadcastPacketToExternalServers(player.getLevel().getWorld().getName(), packet);
++            broadcastPacketToExternalServers(player.level().getWorld().getName(), packet);
 +        }
 +    }
 +
@@ -594,7 +594,7 @@ index e09ad91c4c33e1dce449a765bcce33cbe3bdcc95..794f96048974381edd428ed69a550e81
 +        PlayerCreatePacket.sendPlayer(player,
 +                getConnection().getServersMap().values().stream()
 +                        .map(ExternalServer::getConnection)
-+                        .filter(connection -> connection != null && connection.isOpen() && connection.subscribedWorlds.contains(player.getLevel().getWorld().getName()))
++                        .filter(connection -> connection != null && connection.isOpen() && connection.subscribedWorlds.contains(player.level().getWorld().getName()))
 +                        .toArray(ExternalServerConnection[]::new)
 +        );
 +    }
@@ -642,7 +642,7 @@ index e3cf79d81b58fabeddf5f42a9351f36a5f2197be..10a45aba2d7fb538e76c7bc7889b5281
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..28784d2cb62328bb087bd22485696ae0c359bbe8
+index 0000000000000000000000000000000000000000..2de995334ae25b078e3f990f2b87edb99b5a5cb4
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java
 @@ -0,0 +1,73 @@
@@ -663,7 +663,7 @@ index 0000000000000000000000000000000000000000..28784d2cb62328bb087bd22485696ae0
 +public class PlayerChangeDimensionPacket extends ExternalServerPacket {
 +
 +    private final UUID uuid;
-+    private final String world;
++    private final UUID world;
 +    private final double x;
 +    private final double y;
 +    private final double z;
@@ -671,7 +671,7 @@ index 0000000000000000000000000000000000000000..28784d2cb62328bb087bd22485696ae0
 +
 +    public PlayerChangeDimensionPacket(ServerPlayer player, boolean reset) {
 +        this.uuid = player.getUUID();
-+        this.world = player.getLevel().convertable.getLevelId();
++        this.world = player.level().getWorld().getUID();
 +        this.x = player.getX();
 +        this.y = player.getY();
 +        this.z = player.getZ();
@@ -680,7 +680,7 @@ index 0000000000000000000000000000000000000000..28784d2cb62328bb087bd22485696ae0
 +
 +    public PlayerChangeDimensionPacket(FriendlyByteBuf in) {
 +        uuid = in.readUUID();
-+        world = in.readUtf();
++        world = in.readUUID();
 +        x = in.readDouble();
 +        y = in.readDouble();
 +        z = in.readDouble();
@@ -690,7 +690,7 @@ index 0000000000000000000000000000000000000000..28784d2cb62328bb087bd22485696ae0
 +    @Override
 +    public void write(FriendlyByteBuf out) {
 +        out.writeUUID(uuid);
-+        out.writeUtf(world);
++        out.writeUUID(world);
 +        out.writeDouble(x);
 +        out.writeDouble(y);
 +        out.writeDouble(z);
@@ -704,7 +704,7 @@ index 0000000000000000000000000000000000000000..28784d2cb62328bb087bd22485696ae0
 +            ServerPlayer player = MinecraftServer.getServer().getPlayerList().getPlayer(uuid);
 +
 +            // Remove from old world
-+            player.getLevel().removePlayerImmediately(player, Entity.RemovalReason.DISCARDED);
++            ((ServerLevel) player.level()).removePlayerImmediately(player, Entity.RemovalReason.DISCARDED);
 +
 +            player.setPosRaw(x, y, z);
 +
@@ -777,7 +777,7 @@ index 0000000000000000000000000000000000000000..d6d16bfeec41efd36c15812249d40ba3
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..1277ac79859667bd8f65cbf8d9e7232d1905cffe
+index 0000000000000000000000000000000000000000..d2661f84dbd996db81b6d8daffb7e0a276369a81
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 @@ -0,0 +1,109 @@
@@ -816,7 +816,7 @@ index 0000000000000000000000000000000000000000..1277ac79859667bd8f65cbf8d9e7232d
 +
 +    private PlayerCreatePacket(ServerPlayer player) {
 +        this.gameProfile = player.gameProfile;
-+        this.world = player.getLevel().getWorld().getName();
++        this.world = player.level().getWorld().getName();
 +        this.x = player.getX();
 +        this.y = player.getY();
 +        this.z = player.getZ();

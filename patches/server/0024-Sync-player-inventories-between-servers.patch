@@ -394,7 +394,7 @@ index 9e78c913da090d351d3dbaff3eff7d19fb18c8e4..3ac814b061a338ff2aa354ebb355c4b4
  
      public void grow(int amount) {
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 569d124fa03e8b553c09bd7e28da3b2033bbe5ab..57d0c5a6b7659527b4855e9a884c61c9f6c9abb6 100644
+index 46205e2a51f4c6f2ae4a58737cefc7469fae6893..8d916c1e7ae67ba42e9a972b46c952df3056abbc 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
 @@ -101,4 +101,9 @@ public class ExternalPlayer extends ServerPlayer {
@@ -408,11 +408,11 @@ index 569d124fa03e8b553c09bd7e28da3b2033bbe5ab..57d0c5a6b7659527b4855e9a884c61c9
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 53f2933a3a51f9a63f60f87b7515e40bf63c5277..521c13927248d502315054170b2f37a0939df30d 100644
+index 0def4b85908caf39e0a36e61d7b5ed788bf8642d..306292ef73d4a468922310176905a9d006834791 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -80,6 +80,8 @@ public class MultiPaper {
-                     externalPlayer.containerUpdateDelay = externalPlayer.level.paperConfig().tickRates.containerUpdate;
+                     externalPlayer.containerUpdateDelay = externalPlayer.level().paperConfig().tickRates.containerUpdate;
                  }
                  // Copied from Paper end
 +
@@ -440,10 +440,10 @@ index 53f2933a3a51f9a63f60f87b7515e40bf63c5277..521c13927248d502315054170b2f37a0
              return new byte[0];
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..bb4d7cdcc54dedde29693bf83d0add0f06cdc91f
+index 0000000000000000000000000000000000000000..8d083ab12060016a7ca2ea5d693957be3320f02b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-@@ -0,0 +1,380 @@
+@@ -0,0 +1,377 @@
 +package puregero.multipaper;
 +
 +import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
@@ -460,6 +460,7 @@ index 0000000000000000000000000000000000000000..bb4d7cdcc54dedde29693bf83d0add0f
 +import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
 +import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 +import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
++import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.RelativeMovement;
@@ -525,7 +526,7 @@ index 0000000000000000000000000000000000000000..bb4d7cdcc54dedde29693bf83d0add0f
 +     * Returns true if the even should be cancelled
 +     */
 +    public static boolean handleInteractEvent(ServerPlayer player, ServerboundUseItemOnPacket packet) {
-+        NewChunkHolder newChunkHolder = MultiPaper.getChunkHolder(player.getLevel(), packet.getHitResult().getBlockPos());
++        NewChunkHolder newChunkHolder = MultiPaper.getChunkHolder((ServerLevel) player.level(), packet.getHitResult().getBlockPos());
 +        ItemStack item = player.getItemInHand(packet.getHand());
 +        if (MultiPaper.isChunkExternal(newChunkHolder) && !(item.getItem() instanceof BucketItem)) {
 +            newChunkHolder.externalOwner.getConnection().send(new PlayerActionPacket(player, packet));
@@ -539,7 +540,7 @@ index 0000000000000000000000000000000000000000..bb4d7cdcc54dedde29693bf83d0add0f
 +     * Returns true if the even should be cancelled
 +     */
 +    public static boolean handleUseItemEvent(ServerPlayer player, ServerboundUseItemPacket packet) {
-+        NewChunkHolder newChunkHolder = MultiPaper.getChunkHolder(player.getLevel(), player.blockPosition());
++        NewChunkHolder newChunkHolder = MultiPaper.getChunkHolder((ServerLevel) player.level(), player.blockPosition());
 +        ItemStack item = player.getItemInHand(packet.getHand());
 +        if (MultiPaper.isChunkExternal(newChunkHolder) && item.getItem() instanceof EnderEyeItem) {
 +            newChunkHolder.externalOwner.getConnection().send(new PlayerActionPacket(player, packet));
@@ -648,7 +649,7 @@ index 0000000000000000000000000000000000000000..bb4d7cdcc54dedde29693bf83d0add0f
 +        for (List<ItemStack> compartment : player.getInventory().compartments) {
 +            for (int slot = 0; slot < compartment.size(); slot++) {
 +                ItemStack item = compartment.get(slot);
-+                if (isSameItemSameTag(item, replacingItem)) {
++                if (ItemStack.isSameItemSameTags(item, replacingItem)) {
 +                    if (item.getCount() < count) {
 +                        count -= item.getCount();
 +                        item.setCount(0);
@@ -665,9 +666,9 @@ index 0000000000000000000000000000000000000000..bb4d7cdcc54dedde29693bf83d0add0f
 +    }
 +
 +    private static int removeItemEntity(ItemStack replacingItem, ServerPlayer player, int count) {
-+        for (ItemEntity entity : player.level.getEntitiesOfClass(ItemEntity.class, AABB.ofSize(player.position(), 16, 16, 16))) {
++        for (ItemEntity entity : player.level().getEntitiesOfClass(ItemEntity.class, AABB.ofSize(player.position(), 16, 16, 16))) {
 +            ItemStack item = entity.getItem();
-+            if (isSameItemSameTag(item, replacingItem)) {
++            if (ItemStack.isSameItemSameTags(item, replacingItem)) {
 +                if (item.getCount() < count) {
 +                    count -= item.getCount();
 +                    item.setCount(0);
@@ -682,10 +683,6 @@ index 0000000000000000000000000000000000000000..bb4d7cdcc54dedde29693bf83d0add0f
 +        }
 +
 +        return count;
-+    }
-+
-+    private static boolean isSameItemSameTag(ItemStack left, ItemStack right) {
-+       return left.is(right.getItem()) && ItemStack.tagMatches(left, right);
 +    }
 +
 +    private static boolean isSameItemSameTagIgnoringDurability(ItemStack left, ItemStack right) {
@@ -703,7 +700,7 @@ index 0000000000000000000000000000000000000000..bb4d7cdcc54dedde29693bf83d0add0f
 +            right.getTag().remove("Damage");
 +        }
 +
-+        boolean result = left.is(right.getItem()) && ItemStack.tagMatches(left, right);
++        boolean result = ItemStack.isSameItemSameTags(left, right);
 +
 +        if (hasLeftDurability) left.getTag().putInt("Damage", leftDurability);
 +        if (hasRightDurability) right.getTag().putInt("Damage", rightDurability);
@@ -987,7 +984,7 @@ index 0000000000000000000000000000000000000000..2e51741d76d2d209accb673f8043ed99
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index 3dbcd2f5daa1003db67ec7ec109ec0517c3168a2..86b6f73e3eeabc36c483dc3be1a07055098d1458 100644
+index 07be541eded9c434296d6e10cc3ae44f5b4a7e93..bcb17ae5b57131f6627aeecde4cec91c23bef215 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 @@ -2,6 +2,7 @@ package puregero.multipaper.externalserverprotocol;

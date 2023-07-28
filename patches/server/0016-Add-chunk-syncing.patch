@@ -54,7 +54,7 @@ index 36e93fefdfbebddce4c153974c7cd81af3cb92e9..f14779e36a58aebb1d757149861127ed
          final ChunkTasks task;
          synchronized (this) {
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
-index 2519ad2884b6c09b312432b933c31476b369e599..d0f987eb0e3e51f502ab5a0bbf8c3835f4bb394d 100644
+index 2519ad2884b6c09b312432b933c31476b369e599..259c3a1c34f592bde4600ad2a057d4cc143a648a 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
 @@ -1040,7 +1040,7 @@ public final class ChunkHolderManager {
@@ -77,18 +77,18 @@ index 2519ad2884b6c09b312432b933c31476b369e599..d0f987eb0e3e51f502ab5a0bbf8c3835
 +        if (BLOCK_TICKET_UPDATES.get() == Boolean.TRUE) {
 +            throw new IllegalStateException("Cannot unload chunks recursively");
 +        }
-+        if (this.ticketLock.isHeldByCurrentThread()) {
++        if (this.ticketLockArea.isHeldByCurrentThread(chunkHolder.chunkX, chunkHolder.chunkZ)) {
 +            throw new IllegalStateException("Cannot hold ticket update lock while calling processUnloads");
 +        }
-+        if (this.taskScheduler.schedulingLock.isHeldByCurrentThread()) {
++        if (this.taskScheduler.schedulingLockArea.isHeldByCurrentThread(chunkHolder.chunkX, chunkHolder.chunkZ)) {
 +            throw new IllegalStateException("Cannot hold scheduling lock while calling processUnloads");
 +        }
 +
 +        NewChunkHolder.UnloadState state;
 +
-+        this.ticketLock.lock();
++        final ReentrantAreaLock.Node ticketLock = this.ticketLockArea.lock(chunkHolder.chunkX, chunkHolder.chunkZ);
 +        try {
-+            this.taskScheduler.schedulingLock.lock();
++            final ReentrantAreaLock.Node schedulingLock = this.taskScheduler.schedulingLockArea.lock(chunkHolder.chunkX, chunkHolder.chunkZ);
 +            try {
 +                state = chunkHolder.unloadStage1();
 +                if (state == null) {
@@ -97,10 +97,10 @@ index 2519ad2884b6c09b312432b933c31476b369e599..d0f987eb0e3e51f502ab5a0bbf8c3835
 +                    return;
 +                }
 +            } finally {
-+                this.taskScheduler.schedulingLock.unlock();
++                this.taskScheduler.schedulingLockArea.unlock(schedulingLock);
 +            }
 +        } finally {
-+            this.ticketLock.unlock();
++            this.ticketLockArea.unlock(ticketLock);
 +        }
 +
 +        final Boolean before = this.blockTicketUpdates();
@@ -110,9 +110,9 @@ index 2519ad2884b6c09b312432b933c31476b369e599..d0f987eb0e3e51f502ab5a0bbf8c3835
 +            this.unblockTicketUpdates(before);
 +        }
 +
-+        this.ticketLock.lock();
++        final ReentrantAreaLock.Node ticketLock2 = this.ticketLockArea.lock(chunkHolder.chunkX, chunkHolder.chunkZ);
 +        try {
-+            this.taskScheduler.schedulingLock.lock();
++            final ReentrantAreaLock.Node schedulingLock2 = this.taskScheduler.schedulingLockArea.lock(chunkHolder.chunkX, chunkHolder.chunkZ);
 +            try {
 +                if (chunkHolder.unloadStage3()) {
 +                    this.removeChunkHolder(chunkHolder);
@@ -121,10 +121,10 @@ index 2519ad2884b6c09b312432b933c31476b369e599..d0f987eb0e3e51f502ab5a0bbf8c3835
 +                    this.addTicketAtLevel(TicketType.UNLOAD_COOLDOWN, chunkHolder.chunkX, chunkHolder.chunkZ, MAX_TICKET_LEVEL, Unit.INSTANCE);
 +                }
 +            } finally {
-+                this.taskScheduler.schedulingLock.unlock();
++                this.taskScheduler.schedulingLockArea.unlock(schedulingLock2);
 +            }
 +        } finally {
-+            this.ticketLock.unlock();
++            this.ticketLockArea.unlock(ticketLock2);
 +        }
 +    }
 +    // MultiPaper end
@@ -317,7 +317,7 @@ index 3944852921335c78a04a9dc301882ab5b152b1ed..90107814a68a401bda71d66bbec50eff
  
      public static ClientboundBlockEntityDataPacket create(BlockEntity blockEntity) {
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
-index e2202389a2c4133a183cca59c4e909fc419379ab..2655ee81c8c3d2f5d9893b3b3da4eb7e183d67da 100644
+index e2202389a2c4133a183cca59c4e909fc419379ab..72411e43a4c1da627ae1dec77a051476e12d0b58 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
 @@ -2,12 +2,14 @@ package net.minecraft.server.level;
@@ -417,7 +417,7 @@ index e2202389a2c4133a183cca59c4e909fc419379ab..2655ee81c8c3d2f5d9893b3b3da4eb7e
 +            blocksToBroadcastToPlayers.forEach(blockPos -> {
 +                BlockState blockState = chunk.getLevel().getBlockState(blockPos);
 +                this.broadcast(new ClientboundBlockUpdatePacket(blockPos, blockState), false);
-+                this.broadcastBlockEntityIfNeeded(chunk.getLevel(), blockPos, blockState);
++                this.broadcastBlockEntityIfNeeded(this.getPlayers(false), chunk.getLevel(), blockPos, blockState);
 +            });
 +            broadcastingToPlayersOnly = false;
 +            blocksToBroadcastToPlayers.clear();
@@ -514,10 +514,18 @@ index b02335301fa76174dcb3b9f212c1a02570cfd4c1..aa86da608e4c61a384319800af73a56e
                      chunk1.incrementInhabitedTime(j);
                      if (flag2 && (!gg.pufferfish.pufferfish.PufferfishConfig.enableAsyncMobSpawning || _pufferfish_spawnCountsReady.get()) && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair) && this.chunkMap.anyPlayerCloseEnoughForSpawning(holder, chunkcoordintpair, true)) { // Spigot // Paper - optimise anyPlayerCloseEnoughForSpawning & optimise chunk tick iteration
 diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
-index 221d1d0e1b4b46de6ebca5faac09bbda875fae17..a8720c8b0dae1a2a2e7ef1ca2ff062e988dc1bb1 100644
+index 221d1d0e1b4b46de6ebca5faac09bbda875fae17..73fae9f95a6addcd4aa77c54a86f34944fd3eece 100644
 --- a/src/main/java/net/minecraft/server/level/ServerLevel.java
 +++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
-@@ -177,6 +177,8 @@ import org.bukkit.event.world.GenericGameEvent;
+@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
+ import com.mojang.datafixers.DataFixer;
+ import com.mojang.datafixers.util.Pair;
+ import com.mojang.logging.LogUtils;
++import io.papermc.paper.util.MCUtil;
+ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+ import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+ import it.unimi.dsi.fastutil.longs.LongSet;
+@@ -177,6 +178,8 @@ import org.bukkit.event.world.GenericGameEvent;
  import org.bukkit.event.world.TimeSkipEvent;
  // CraftBukkit end
  import it.unimi.dsi.fastutil.ints.IntArrayList; // Paper
@@ -526,7 +534,7 @@ index 221d1d0e1b4b46de6ebca5faac09bbda875fae17..a8720c8b0dae1a2a2e7ef1ca2ff062e9
  
  public class ServerLevel extends Level implements WorldGenLevel {
  
-@@ -657,8 +659,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -657,8 +660,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
          // CraftBukkit end
          this.players = Lists.newArrayList();
          this.entityTickList = new EntityTickList();
@@ -537,7 +545,7 @@ index 221d1d0e1b4b46de6ebca5faac09bbda875fae17..a8720c8b0dae1a2a2e7ef1ca2ff062e9
          this.navigatingMobs = new ObjectOpenHashSet();
          this.blockEvents = new ObjectLinkedOpenHashSet();
          this.blockEventsToReschedule = new ArrayList(64);
-@@ -2545,6 +2547,11 @@ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -2545,6 +2548,11 @@ public class ServerLevel extends Level implements WorldGenLevel {
                  return;
              }
              // CraftBukkit end
@@ -1130,7 +1138,7 @@ index 83736cca003bf96271153700a89fcee3c43a63ff..c145a3e278ded8e32b1541f4f042102d
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 136a7bb726afef1ee199b066eec8ebecf7ef13b1..d5e9881df7d79db4bb390fbbb51bc6d84da09a80 100644
+index 46db7eda31346d2654483ae2cec264890632593c..4ceac2918126afc8f30743385171aaeea2d662ac 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,25 +1,52 @@
@@ -1443,7 +1451,7 @@ index 136a7bb726afef1ee199b066eec8ebecf7ef13b1..d5e9881df7d79db4bb390fbbb51bc6d8
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..59d011962c3692e235997a5cf2893478347a2828
+index 0000000000000000000000000000000000000000..c6503af0fd03ee334c44445fe7b6ce7ba78245eb
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperChunkHandler.java
 @@ -0,0 +1,255 @@
@@ -1679,15 +1687,15 @@ index 0000000000000000000000000000000000000000..59d011962c3692e235997a5cf2893478
 +        BitSet bitset = packet.getLightData().getSkyYMask();
 +        BitSet bitset1 = packet.getLightData().getEmptySkyYMask();
 +        Iterator<byte[]> iterator = packet.getLightData().getSkyUpdates().iterator();
-+        readSectionList(chunk, i, j, levellightengine, LightLayer.SKY, bitset, bitset1, iterator, packet.getLightData().getTrustEdges());
++        readSectionList(chunk, i, j, levellightengine, LightLayer.SKY, bitset, bitset1, iterator);
 +        BitSet bitset2 = packet.getLightData().getBlockYMask();
 +        BitSet bitset3 = packet.getLightData().getEmptyBlockYMask();
 +        Iterator<byte[]> iterator1 = packet.getLightData().getBlockUpdates().iterator();
-+        readSectionList(chunk, i, j, levellightengine, LightLayer.BLOCK, bitset2, bitset3, iterator1, packet.getLightData().getTrustEdges());
++        readSectionList(chunk, i, j, levellightengine, LightLayer.BLOCK, bitset2, bitset3, iterator1);
 +    }
 +
 +    // From the client
-+    private static void readSectionList(ChunkAccess chunk, int i, int j, LevelLightEngine levelLightEngine, LightLayer lightLayer, BitSet bitset2, BitSet bitset3, Iterator<byte[]> iterator1, boolean trustEdges) {
++    private static void readSectionList(ChunkAccess chunk, int i, int j, LevelLightEngine levelLightEngine, LightLayer lightLayer, BitSet bitset2, BitSet bitset3, Iterator<byte[]> iterator1) {
 +        for(int k = 0; k < levelLightEngine.getLightSectionCount(); ++k) {
 +            int l = levelLightEngine.getMinLightSection() + k;
 +            boolean flag = bitset2.get(k);
@@ -2139,10 +2147,10 @@ index 0000000000000000000000000000000000000000..4bfe8626ccfc5de2918a3b3416c884e7
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9903fc6840284405970b0222540bda4685b36e11
+index 0000000000000000000000000000000000000000..8ed4aebd2a08e9dbcb1e5d17fe30eadb87428a74
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendChunkPacket.java
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,122 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
@@ -2247,7 +2255,6 @@ index 0000000000000000000000000000000000000000..9903fc6840284405970b0222540bda46
 +
 +    private ChunkAccess loadChunk(ServerLevel level, ChunkPos pos, CompoundTag tag) {
 +        ChunkSerializer.InProgressChunkHolder newChunk = ChunkSerializer.loadChunk(level, level.getPoiManager(), pos, tag, true);
-+        MultiPaper.runSync(() -> newChunk.tasks.forEach(Runnable::run));
 +        return newChunk.protoChunk instanceof ImposterProtoChunk imposterProtoChunk ? imposterProtoChunk.getWrapped() : newChunk.protoChunk;
 +    }
 +

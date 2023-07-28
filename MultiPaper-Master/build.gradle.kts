@@ -16,7 +16,7 @@ repositories {
 }
 
 dependencies {
-    implementation(project(":MultiPaper-MasterMessagingProtocol"))
+    implementation(project(":multipaper-mastermessagingprotocol"))
     implementation("org.jetbrains:annotations:22.0.0")
     implementation("org.json:json:20211205")
     implementation("org.yaml:snakeyaml:1.33")

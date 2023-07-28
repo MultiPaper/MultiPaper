@@ -57,7 +57,7 @@ subprojects {
 }
 
 paperweight {
-    serverProject.set(project(":MultiPaper-Server"))
+    serverProject.set(project(":multipaper-server"))
 
     remapRepo.set("https://repo.papermc.io/repository/maven-public/")
     decompileRepo.set("https://repo.papermc.io/repository/maven-public/")

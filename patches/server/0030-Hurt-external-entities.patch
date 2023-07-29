@@ -249,57 +249,38 @@ index 0000000000000000000000000000000000000000..207e2596ec3525308d9143531dba1e18
 +}
 diff --git a/src/main/java/puregero/multipaper/util/DamageSourceSerializer.java b/src/main/java/puregero/multipaper/util/DamageSourceSerializer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..95b76a8d584a1b2fc0f73eb50d93768b3036a388
+index 0000000000000000000000000000000000000000..7981ac08e020e0e7814f4262571adf4e8b7332ff
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/util/DamageSourceSerializer.java
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,92 @@
 +package puregero.multipaper.util;
 +
-+import com.google.common.base.CaseFormat;
 +import net.minecraft.core.Holder;
++import net.minecraft.core.registries.Registries;
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.resources.ResourceKey;
++import net.minecraft.resources.ResourceLocation;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.damagesource.DamageSource;
 +import net.minecraft.world.damagesource.DamageType;
-+import net.minecraft.world.damagesource.DamageTypes;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.phys.Vec3;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +
 +import java.io.IOException;
-+import java.lang.reflect.Field;
-+import java.lang.reflect.InvocationTargetException;
-+import java.lang.reflect.Modifier;
 +import java.util.UUID;
 +
 +public class DamageSourceSerializer {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(DamageSourceSerializer.class.getSimpleName());
 +
-+    /**
-+     * Generate the switch statement used in deserialize
-+     */
-+    public static void main(String[] args) throws IllegalAccessException, InvocationTargetException {
-+        StringBuilder s = new StringBuilder("return switch (msgId) {\n");
-+        for (Field field : DamageTypes.class.getDeclaredFields()) {
-+            if (Modifier.isStatic(field.getModifiers()) && ResourceKey.class.isAssignableFrom(field.getType())) {
-+                String msgId = CaseFormat.UPPER_UNDERSCORE.to(CaseFormat.LOWER_CAMEL, field.getName());
-+                s.append("    case \"").append(msgId).append("\" -> DamageTypes.").append(field.getName()).append(";\n");
-+            }
-+        }
-+        s.append("    default -> throw new IOException(\"Unknown damage cause msgId of \" + msgId);\n");
-+        s.append("};");
-+        System.out.println(s);
-+    }
-+
 +    public static void serialize(DamageSource source, FriendlyByteBuf friendlyByteBuf) throws IOException {
-+        friendlyByteBuf.writeUtf(source.getMsgId());
++        friendlyByteBuf.writeUtf(source.typeHolder().unwrapKey().orElseThrow().location().getPath());
 +
-+        friendlyByteBuf.writeNullable(source.getEntity(), (byteBuf, entity) -> {
-+            byteBuf.writeLong(entity.getUUID().getMostSignificantBits());
-+            byteBuf.writeLong(entity.getUUID().getLeastSignificantBits());
++        friendlyByteBuf.writeNullable(source.getEntity(), (byteBuf, causingEntity) -> {
++            byteBuf.writeLong(causingEntity.getUUID().getMostSignificantBits());
++            byteBuf.writeLong(causingEntity.getUUID().getLeastSignificantBits());
 +        });
 +
 +        friendlyByteBuf.writeNullable(source.getDirectEntity(), (byteBuf, directEntity) -> {
@@ -347,56 +328,9 @@ index 0000000000000000000000000000000000000000..95b76a8d584a1b2fc0f73eb50d93768b
 +        boolean poison = friendlyByteBuf.readBoolean();
 +        boolean critical = friendlyByteBuf.readBoolean();
 +
-+        return createDamageSource(entity.damageSources().getDamageType(getDamageTypeKey(msgId)), causingEntity, directEntity, sourcePosition, sweep, melting, poison, critical);
-+    }
++        ResourceKey<DamageType> resourceKey = ResourceKey.create(Registries.DAMAGE_TYPE, new ResourceLocation(msgId));
 +
-+    private static ResourceKey<DamageType> getDamageTypeKey(String msgId) throws IOException {
-+        // Auto generated switch statement
-+        return switch (msgId) {
-+            case "inFire" -> DamageTypes.IN_FIRE;
-+            case "lightningBolt" -> DamageTypes.LIGHTNING_BOLT;
-+            case "onFire" -> DamageTypes.ON_FIRE;
-+            case "lava" -> DamageTypes.LAVA;
-+            case "hotFloor" -> DamageTypes.HOT_FLOOR;
-+            case "inWall" -> DamageTypes.IN_WALL;
-+            case "cramming" -> DamageTypes.CRAMMING;
-+            case "drown" -> DamageTypes.DROWN;
-+            case "starve" -> DamageTypes.STARVE;
-+            case "cactus" -> DamageTypes.CACTUS;
-+            case "fall" -> DamageTypes.FALL;
-+            case "flyIntoWall" -> DamageTypes.FLY_INTO_WALL;
-+            case "outOfWorld" -> DamageTypes.FELL_OUT_OF_WORLD;
-+            case "generic" -> DamageTypes.GENERIC;
-+            case "magic" -> DamageTypes.MAGIC;
-+            case "wither" -> DamageTypes.WITHER;
-+            case "dragonBreath" -> DamageTypes.DRAGON_BREATH;
-+            case "dryOut" -> DamageTypes.DRY_OUT;
-+            case "sweetBerryBush" -> DamageTypes.SWEET_BERRY_BUSH;
-+            case "freeze" -> DamageTypes.FREEZE;
-+            case "stalagmite" -> DamageTypes.STALAGMITE;
-+            case "fallingBlock" -> DamageTypes.FALLING_BLOCK;
-+            case "fallingAnvil" -> DamageTypes.FALLING_ANVIL;
-+            case "fallingStalactite" -> DamageTypes.FALLING_STALACTITE;
-+            case "sting" -> DamageTypes.STING;
-+            case "mobAttack" -> DamageTypes.MOB_ATTACK;
-+            case "mobAttackNoAggro" -> DamageTypes.MOB_ATTACK_NO_AGGRO;
-+            case "playerAttack" -> DamageTypes.PLAYER_ATTACK;
-+            case "arrow" -> DamageTypes.ARROW;
-+            case "trident" -> DamageTypes.TRIDENT;
-+            case "mobProjectile" -> DamageTypes.MOB_PROJECTILE;
-+            case "fireworks" -> DamageTypes.FIREWORKS;
-+            case "fireball" -> DamageTypes.FIREBALL;
-+            case "unattributedFireball" -> DamageTypes.UNATTRIBUTED_FIREBALL;
-+            case "witherSkull" -> DamageTypes.WITHER_SKULL;
-+            case "thrown" -> DamageTypes.THROWN;
-+            case "indirectMagic" -> DamageTypes.INDIRECT_MAGIC;
-+            case "thorns" -> DamageTypes.THORNS;
-+            case "explosion" -> DamageTypes.EXPLOSION;
-+            case "playerExplosion" -> DamageTypes.PLAYER_EXPLOSION;
-+            case "sonicBoom" -> DamageTypes.SONIC_BOOM;
-+            case "badRespawnPoint" -> DamageTypes.BAD_RESPAWN_POINT;
-+            default -> throw new IOException("Unknown damage cause msgId of " + msgId);
-+        };
++        return createDamageSource(entity.damageSources().getDamageType(resourceKey), causingEntity, directEntity, sourcePosition, sweep, melting, poison, critical);
 +    }
 +
 +    private static DamageSource createDamageSource(Holder<DamageType> damageType, Entity causingEntity, Entity directEntity, Vec3 sourcePosition, boolean sweep, boolean melting, boolean poison, boolean critical) {

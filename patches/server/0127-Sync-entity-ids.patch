@@ -5,19 +5,19 @@ Subject: [PATCH] Sync entity ids
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 3ca1bcbbfaa8e6e4c7049c30864a594ecfc06357..20eecff8032359b70c468de9b1c6d3d694df54eb 100644
+index 7febd8ea9f87be619acd521d9bf13ffebca2af44..8ce1fd45fdace98ec34ae5e7c4090e4377534a02 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-@@ -261,7 +261,7 @@ public class ServerPlayer extends Player {
-     // Paper start - mob spawning rework
+@@ -262,7 +262,7 @@ public class ServerPlayer extends Player {
      public static final int MOBCATEGORY_TOTAL_ENUMS = net.minecraft.world.entity.MobCategory.values().length;
      public final int[] mobCounts = new int[MOBCATEGORY_TOTAL_ENUMS]; // Paper
+     public final int[] mobBackoffCounts = new int[MOBCATEGORY_TOTAL_ENUMS]; // Paper - per player mob count backoff
 -    public final com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> cachedSingleMobDistanceMap;
 +    public com.destroystokyo.paper.util.PooledHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> cachedSingleMobDistanceMap; // MultiPaper - make not final
      // Paper end
  
      // CraftBukkit start
-@@ -281,7 +281,7 @@ public class ServerPlayer extends Player {
+@@ -282,7 +282,7 @@ public class ServerPlayer extends Player {
      // CraftBukkit end
      public boolean isRealPlayer; // Paper
      public double lastEntitySpawnRadiusSquared; // Paper - optimise isOutsideRange, this field is in blocks
@@ -27,7 +27,7 @@ index 3ca1bcbbfaa8e6e4c7049c30864a594ecfc06357..20eecff8032359b70c468de9b1c6d3d6
      public org.bukkit.event.player.PlayerQuitEvent.QuitReason quitReason = null; // Paper - there are a lot of changes to do if we change all methods leading to the event
      public boolean purpurClient = false; // Purpur
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 19d7f01037062585ac313828037a274f5e455926..ab0b9ae30508dc8e6b49991fc1f9a56b3f674d95 100644
+index e4288111146e4688a7e9f7ad37952ac997d4d860..4373a6d954670127b96ae66e44d8dc61a2d6e3a4 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -156,6 +156,8 @@ import puregero.multipaper.ExternalServer;
@@ -39,7 +39,7 @@ index 19d7f01037062585ac313828037a274f5e455926..ab0b9ae30508dc8e6b49991fc1f9a56b
  import puregero.multipaper.externalserverprotocol.EntityRemovePacket;
  import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
  import puregero.multipaper.externalserverprotocol.EntityUpdateWithDependenciesPacket;
-@@ -618,7 +620,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -619,7 +621,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
      // Paper end - make end portalling safe
  
      public Entity(EntityType<?> type, Level world) {
@@ -48,7 +48,7 @@ index 19d7f01037062585ac313828037a274f5e455926..ab0b9ae30508dc8e6b49991fc1f9a56b
          this.passengers = ImmutableList.of();
          this.deltaMovement = Vec3.ZERO;
          this.bb = Entity.INITIAL_AABB;
-@@ -2443,6 +2445,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2445,6 +2447,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      public CompoundTag saveWithoutId(CompoundTag nbt) {
          try {
@@ -56,7 +56,7 @@ index 19d7f01037062585ac313828037a274f5e455926..ab0b9ae30508dc8e6b49991fc1f9a56b
              if (this.vehicle != null) {
                  nbt.put("Pos", this.newDoubleList(this.vehicle.getX(), this.getY(), this.vehicle.getZ()));
              } else {
-@@ -2549,9 +2552,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2551,9 +2554,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                      Entity entity = (Entity) iterator.next();
                      CompoundTag nbttagcompound1 = new CompoundTag();
  
@@ -68,7 +68,7 @@ index 19d7f01037062585ac313828037a274f5e455926..ab0b9ae30508dc8e6b49991fc1f9a56b
                  }
  
                  if (!nbttaglist.isEmpty()) {
-@@ -2603,6 +2608,18 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2605,6 +2610,18 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      public void load(CompoundTag nbt) {
          try {

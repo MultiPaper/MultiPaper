@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Wed, 30 Aug 2023 19:13:36 +0900
+Subject: [PATCH] Don't create entity chunks just for external players
+
+Creating an entity chunk includes loading the chunk from disk, which is
+unnecessary for external players, which don't need their chunks to be
+loaded. This prevents all the servers from loading chunks for external
+players, which is a huge performance boost.
+
+diff --git a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java b/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
+index fd428b26de5c580460d4ed269244fe95875a984b..a8146b70fe3cac39156216a78eb35f0f3d5b1e65 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
++++ b/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
+@@ -27,6 +27,8 @@ import net.minecraft.world.phys.AABB;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.annotations.Nullable;
+ import org.slf4j.Logger;
++import puregero.multipaper.ExternalPlayer;
++
+ import java.util.ArrayList;
+ import java.util.Arrays;
+ import java.util.Iterator;
+@@ -404,8 +406,8 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+         entity.sectionX = sectionX;
+         entity.sectionY = sectionY;
+         entity.sectionZ = sectionZ;
+-        final ChunkEntitySlices slices = this.getOrCreateChunk(sectionX, sectionZ);
+-        if (!slices.addEntity(entity, sectionY)) {
++        final ChunkEntitySlices slices = entity instanceof ExternalPlayer ? this.getChunk(sectionX, sectionZ) : this.getOrCreateChunk(sectionX, sectionZ); // MultiPaper - don't create the chunk for externals players
++        if (slices != null && !slices.addEntity(entity, sectionY)) { // MultiPaper - don't create the chunk for externals players
+             LOGGER.warn("Entity " + entity + " added to world '" + this.world.getWorld().getName() + "', but was already contained in entity chunk (" + sectionX + "," + sectionZ + ")");
+         }
+ 
+@@ -438,12 +440,14 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+         final ChunkEntitySlices slices = this.getChunk(sectionX, sectionZ);
+         // all entities should be in a chunk
+         if (slices == null) {
++            if (!(entity instanceof ExternalPlayer)) // MultiPaper - don't create the chunk for externals players
+             LOGGER.warn("Cannot remove entity " + entity + " from null entity slices (" + sectionX + "," + sectionZ + ")");
+         } else {
+             if (slices.isPreventingStatusUpdates()) {
+                 throw new IllegalStateException("Attempting to remove entity " + entity + " from entity slices (" + sectionX + "," + sectionZ + ") that is receiving status updates");
+             }
+             if (!slices.removeEntity(entity, sectionY)) {
++                if (!(entity instanceof ExternalPlayer)) // MultiPaper - don't create the chunk for externals players
+                 LOGGER.warn("Failed to remove entity " + entity + " from entity slices (" + sectionX + "," + sectionZ + ")");
+             }
+         }
+@@ -482,13 +486,13 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+         TickThread.ensureTickThread(this.world, entity.sectionX, entity.sectionZ, "Cannot move entity off-main");
+ 
+         final ChunkEntitySlices old = this.getChunk(entity.sectionX, entity.sectionZ);
+-        final ChunkEntitySlices slices = this.getOrCreateChunk(newSectionX, newSectionZ);
++        final ChunkEntitySlices slices = entity instanceof ExternalPlayer ? this.getChunk(newSectionX, newSectionZ) : this.getOrCreateChunk(newSectionX, newSectionZ); // MultiPaper - don't create the chunk for externals players
+ 
+-        if (!old.removeEntity(entity, entity.sectionY)) {
++        if (old != null && !old.removeEntity(entity, entity.sectionY)) { // MultiPaper - don't create the chunk for externals players
+             LOGGER.warn("Could not remove entity " + entity + " from its old chunk section (" + entity.sectionX + "," + entity.sectionY + "," + entity.sectionZ + ") since it was not contained in the section");
+         }
+ 
+-        if (!slices.addEntity(entity, newSectionY)) {
++        if (slices != null && !slices.addEntity(entity, newSectionY)) { // MultiPaper - don't create the chunk for externals players
+             LOGGER.warn("Could not add entity " + entity + " to its new chunk section (" + newSectionX + "," + newSectionY + "," + newSectionZ + ") as it is already contained in the section");
+         }
+ 

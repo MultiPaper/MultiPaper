@@ -93,6 +93,10 @@ Kick connecting players whether the player count summed across all servers
 exceeds the max-players value (false, default), or whether the player count on
 just the local server exceeds the max-players value (true).
 
+`persistent-player-entity-ids`  
+Whether the player should always have the same entity id across all servers.
+This is useful for some plugins that enable seamless cross-server teleporting.
+
 ### files
 
 `files-to-not-sync`  

@@ -89,25 +89,18 @@ index 30518e842c67ea383177d83b467ae2fe722f8bb2..0db98625eec0c5af4a44ccb620d543d2
          this.playerIo.save(player);
          ServerStatsCounter serverstatisticmanager = (ServerStatsCounter) player.getStats(); // CraftBukkit
 diff --git a/src/main/java/net/minecraft/stats/ServerStatsCounter.java b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
-index 9501e5f25f5c4d3069e554d4dc82b0e094156682..d10973391535ba02cea34450e913ea9ce02f6670 100644
+index 9bb8d4d7be6a937980aa653db82be084d066a563..46b7e30a203b0d4d6cc832110410bd3e90854242 100644
 --- a/src/main/java/net/minecraft/stats/ServerStatsCounter.java
 +++ b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
-@@ -17,12 +17,9 @@ import it.unimi.dsi.fastutil.objects.ObjectIterator;
- import java.io.File;
- import java.io.IOException;
- import java.io.StringReader;
--import java.util.Iterator;
--import java.util.Map;
-+import java.util.*;
- import java.util.Map.Entry;
--import java.util.Objects;
--import java.util.Optional;
--import java.util.Set;
-+
+@@ -23,6 +23,7 @@ import java.util.Map.Entry;
+ import java.util.Objects;
+ import java.util.Optional;
+ import java.util.Set;
++import java.util.UUID;
  import net.minecraft.SharedConstants;
  import net.minecraft.Util;
  import net.minecraft.core.Registry;
-@@ -37,6 +34,8 @@ import net.minecraft.util.datafix.DataFixTypes;
+@@ -37,6 +38,8 @@ import net.minecraft.util.datafix.DataFixTypes;
  import net.minecraft.world.entity.player.Player;
  import org.apache.commons.io.FileUtils;
  import org.slf4j.Logger;
@@ -116,40 +109,25 @@ index 9501e5f25f5c4d3069e554d4dc82b0e094156682..d10973391535ba02cea34450e913ea9c
  
  public class ServerStatsCounter extends StatsCounter {
  
-@@ -54,8 +53,23 @@ public class ServerStatsCounter extends StatsCounter {
-             Stat<ResourceLocation> wrapper = Stats.CUSTOM.get( entry.getKey() );
-             this.stats.put( wrapper, entry.getValue().intValue() );
-         }
-+        // MultiPaper start
-+        try {
-+            String json = ExternalPlayer.loadedStats.remove(UUID.fromString(this.file.getName().split("\\.")[0]));
-+            if (json == null) json = MultiPaper.readStats(server.storageSource.levelDirectory.path().getFileName().toString(), this.file.getName().split("\\.")[0]);
-+            if (!json.isEmpty()) {
-+                this.parseLocal(server.getFixerUpper(), json);
-+            }
-+            //} catch (IOException ioexception) {
-+            //    ServerStatsCounter.LOGGER.error("Couldn't read statistics file {}", file, ioexception);
-+        } catch (IllegalArgumentException e) {
-+            LOGGER.warn("Invalid UUID was passed, possible a plugin doing weird stuff?, you can safely ignore this if you are using such plugins: {}", e.getMessage());
-+        } catch (JsonParseException jsonparseexception) {
-+                ServerStatsCounter.LOGGER.error("Couldn't parse statistics file {}", file, jsonparseexception);
-+        }
-+
-         // Spigot end
+@@ -48,11 +51,13 @@ public class ServerStatsCounter extends StatsCounter {
+     public ServerStatsCounter(MinecraftServer server, File file) {
+         this.server = server;
+         this.file = file;
 -        if (file.isFile()) {
-+        /*if (file.isFile()) {
++        String json = ExternalPlayer.loadedStats.remove(UUID.fromString(this.file.getName().split("\\.")[0])); // MultiPaper
++        if (json == null) json = MultiPaper.readStats(server.storageSource.levelDirectory.path().getFileName().toString(), this.file.getName().split("\\.")[0]); // MultiPaper
++        if (json != null && !json.isEmpty() /*file.isFile()*/) { // MultiPaper
              try {
-                 this.parseLocal(server.getFixerUpper(), FileUtils.readFileToString(file));
-             } catch (IOException ioexception) {
-@@ -63,18 +77,21 @@ public class ServerStatsCounter extends StatsCounter {
+-                this.parseLocal(server.getFixerUpper(), FileUtils.readFileToString(file));
+-            } catch (IOException ioexception) {
+-                ServerStatsCounter.LOGGER.error("Couldn't read statistics file {}", file, ioexception);
++                this.parseLocal(server.getFixerUpper(), json /*FileUtils.readFileToString(file)*/); // MultiPaper
++//            } catch (IOException ioexception) { // MultiPaper
++//                ServerStatsCounter.LOGGER.error("Couldn't read statistics file {}", file, ioexception); // MultiPaper
              } catch (JsonParseException jsonparseexception) {
                  ServerStatsCounter.LOGGER.error("Couldn't parse statistics file {}", file, jsonparseexception);
              }
--        }
-+        }*/
-+        // MultiPaper end
- 
-     }
+@@ -69,12 +74,14 @@ public class ServerStatsCounter extends StatsCounter {
  
      public void save() {
          if ( org.spigotmc.SpigotConfig.disableStatSaving ) return; // Spigot
@@ -170,7 +148,7 @@ index 9501e5f25f5c4d3069e554d4dc82b0e094156682..d10973391535ba02cea34450e913ea9c
      }
  
      @Override
-@@ -198,7 +215,7 @@ public class ServerStatsCounter extends StatsCounter {
+@@ -199,7 +206,7 @@ public class ServerStatsCounter extends StatsCounter {
          return nbttagcompound;
      }
  
@@ -259,7 +237,7 @@ index 36af81f0957d17e170d229059c66f4eb4539dfeb..fd97d17610b8053fb78ee07ab2a9033d
  
              if (file1.exists()) {
 diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
-index 668d825a2469706e4de11629a0b41877de700ca6..692c3d9eb2c8f7593ec16d13cb0d6b0b98cd7c90 100644
+index 720a81da72a8002ff02cc39e5fca42354519c742..f66134430bbb0fa3238c4bf53483ec80bd9943e9 100644
 --- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 @@ -173,6 +173,7 @@ import org.bukkit.scoreboard.Scoreboard;

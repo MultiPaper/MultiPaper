@@ -379,7 +379,7 @@ index 0db98625eec0c5af4a44ccb620d543d20829b843..fc76f71e84ed638c8fd9957803b0a2da
                      serversToCreatePlayerOn.add(externalServer.getConnection());
                  } else if (subscribedToSoruce) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 84a3e09a408ea4d1f7ed03d1bc77533bbc31e0d7..579b8f4dbd67755e69e1d521054db6f40b34eb69 100644
+index 84a3e09a408ea4d1f7ed03d1bc77533bbc31e0d7..a94d32308ceb531784857c7c1586bbe2566db15a 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -146,7 +146,10 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -408,6 +408,15 @@ index 84a3e09a408ea4d1f7ed03d1bc77533bbc31e0d7..579b8f4dbd67755e69e1d521054db6f4
      private static final EntityDataAccessor<Integer> DATA_TICKS_FROZEN = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.INT);
      private EntityInLevelCallback levelCallback;
      private final VecDeltaCodec packetPositionCodec;
+@@ -2330,7 +2334,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+         } else {
+             String s = this.getEncodeId();
+ 
+-            if (!this.persist || s == null) { // CraftBukkit - persist flag
++            if ((!isSyncing && !this.persist) || s == null) { // CraftBukkit - persist flag // MultiPaper - only use the persist flag if we're not syncing between servers
+                 return false;
+             } else {
+                 nbt.putString("id", s);
 @@ -2695,7 +2699,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
          EntityType<?> entitytypes = this.getType();
          ResourceLocation minecraftkey = EntityType.getKey(entitytypes);

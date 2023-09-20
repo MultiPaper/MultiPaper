@@ -157,9 +157,11 @@ Some other things to look out for:
     however other events for the player could be called on any server.
   * `Bukkit.broadcastMessage` will send the message to all players on all
     MultiPaper servers.
-  * `Bukkit.getOnlinePlayers` will return the players on all MultiPaper
-    servers. You can use `Player.isLocalPlayer()` to determine if the player
-    is on your server or not.
+  * `Bukkit.getOnlinePlayers` will return the players only on your server. Use
+    `Bukkit.getAllOnlinePlayers` to get the players across all servers.
+  * You can use `Player.isLocalPlayer`, `Chunk.isLocalChunk`, 
+    `Location.isChunkLocal`, `Entity.isInLocalChunk`, `Block.isInLocalChunk`
+    to check if its being managed by your server.
 
 ### Using the MultiPaper API as a dependency
 

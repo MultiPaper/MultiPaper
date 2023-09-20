@@ -89,7 +89,7 @@ index 30518e842c67ea383177d83b467ae2fe722f8bb2..0db98625eec0c5af4a44ccb620d543d2
          this.playerIo.save(player);
          ServerStatsCounter serverstatisticmanager = (ServerStatsCounter) player.getStats(); // CraftBukkit
 diff --git a/src/main/java/net/minecraft/stats/ServerStatsCounter.java b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
-index 9bb8d4d7be6a937980aa653db82be084d066a563..46b7e30a203b0d4d6cc832110410bd3e90854242 100644
+index 9bb8d4d7be6a937980aa653db82be084d066a563..f1301cb54a142cc4faa9926cab2c1c406fef5c7c 100644
 --- a/src/main/java/net/minecraft/stats/ServerStatsCounter.java
 +++ b/src/main/java/net/minecraft/stats/ServerStatsCounter.java
 @@ -23,6 +23,7 @@ import java.util.Map.Entry;
@@ -109,14 +109,21 @@ index 9bb8d4d7be6a937980aa653db82be084d066a563..46b7e30a203b0d4d6cc832110410bd3e
  
  public class ServerStatsCounter extends StatsCounter {
  
-@@ -48,11 +51,13 @@ public class ServerStatsCounter extends StatsCounter {
+@@ -48,11 +51,20 @@ public class ServerStatsCounter extends StatsCounter {
      public ServerStatsCounter(MinecraftServer server, File file) {
          this.server = server;
          this.file = file;
 -        if (file.isFile()) {
-+        String json = ExternalPlayer.loadedStats.remove(UUID.fromString(this.file.getName().split("\\.")[0])); // MultiPaper
-+        if (json == null) json = MultiPaper.readStats(server.storageSource.levelDirectory.path().getFileName().toString(), this.file.getName().split("\\.")[0]); // MultiPaper
-+        if (json != null && !json.isEmpty() /*file.isFile()*/) { // MultiPaper
++        // MultiPaper start
++        String json = null, uuid = this.file.getName().split("\\.")[0];
++        try {
++            json = ExternalPlayer.loadedStats.remove(UUID.fromString(uuid));
++        } catch (IllegalArgumentException e) {
++            LOGGER.warn("Invalid UUID was passed, possible a plugin doing weird stuff?, you can safely ignore this if you are using such plugins: {}", e.getMessage());
++        }
++        if (json == null) json = MultiPaper.readStats(server.storageSource.levelDirectory.path().getFileName().toString(), uuid);
++        if (json != null && !json.isEmpty() /*file.isFile()*/) {
++        // MultiPaper end
              try {
 -                this.parseLocal(server.getFixerUpper(), FileUtils.readFileToString(file));
 -            } catch (IOException ioexception) {
@@ -127,7 +134,7 @@ index 9bb8d4d7be6a937980aa653db82be084d066a563..46b7e30a203b0d4d6cc832110410bd3e
              } catch (JsonParseException jsonparseexception) {
                  ServerStatsCounter.LOGGER.error("Couldn't parse statistics file {}", file, jsonparseexception);
              }
-@@ -69,12 +74,14 @@ public class ServerStatsCounter extends StatsCounter {
+@@ -69,12 +81,14 @@ public class ServerStatsCounter extends StatsCounter {
  
      public void save() {
          if ( org.spigotmc.SpigotConfig.disableStatSaving ) return; // Spigot
@@ -148,7 +155,7 @@ index 9bb8d4d7be6a937980aa653db82be084d066a563..46b7e30a203b0d4d6cc832110410bd3e
      }
  
      @Override
-@@ -199,7 +206,7 @@ public class ServerStatsCounter extends StatsCounter {
+@@ -199,7 +213,7 @@ public class ServerStatsCounter extends StatsCounter {
          return nbttagcompound;
      }
  

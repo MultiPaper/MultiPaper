@@ -12,7 +12,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.netty:netty-all:4.1.75.Final")
+    compileOnly("io.netty:netty-all:4.1.87.Final")
 }
 
 publishing {

@@ -20,19 +20,25 @@ Whether to let players join this server using the Master's built-in proxy.
 
 ## optimizations
 
-`disable-safety-redstone-chunk-lock`
+`disable-safety-redstone-chunk-lock`  
 When executing a redstone contraption that is run across multiple servers,
 MultiPaper syncs these servers together such that the redstone contraption can
 run without getting out of sync. Disabling this can prevent lag spikes caused
 by this system, but can also mess up cross-server redstone.
 
-`dont-save-just-for-lighting-updates`
+`dont-save-just-for-lighting-updates`  
 When loading chunks, lighting updates are frequently applied to them even if
 the chunks are pre-generated, causing unnecessary savings of the chunks.
 Enabling this option can significantly reduce the number of chunks being saved
 unnecessarily.
 
-`reduce-player-position-updates-in-unloaded-chunks`
+`max-footstep-packets-sent-per-player`  
+The maximum number of footstep packets sent per player. Setting this to `16`
+would send a player's footsteps to only 16 random players, rather than every
+player nearby. This is useful for reducing lag caused by very large crowds of
+players. Set to `-1` to disable.
+
+`reduce-player-position-updates-in-unloaded-chunks`  
 Enabling this will prevent a player's position being updated every tick on
 external servers that don't have the player's chunk loaded. This will mean that
 if you teleport to the player, you will be teleported to an outdated location.

@@ -1,0 +1,118 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 2 Oct 2023 20:49:57 +0900
+Subject: [PATCH] Option to reduce footstep sounds being sent
+
+
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index 61f2fb4b9ff5120f596bebd817ae2c6e4e395493..c3462753df53ee197b4a002cbff21d538932420f 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -1,6 +1,5 @@
+ package net.minecraft.server.players;
+ 
+-import co.aikar.timings.MinecraftTimings;
+ import com.google.common.collect.Lists;
+ import com.google.common.collect.Maps;
+ import com.google.common.collect.Sets;
+@@ -18,6 +17,7 @@ import java.time.Instant;
+ import java.util.ArrayList;
+ import java.util.Collection;
+ import java.util.EnumSet;
++import java.util.HashSet;
+ import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map;
+@@ -36,6 +36,7 @@ import net.minecraft.core.LayeredRegistryAccess;
+ import net.minecraft.core.RegistryAccess;
+ import net.minecraft.core.RegistrySynchronization;
+ import net.minecraft.core.UUIDUtil;
++import net.minecraft.core.registries.BuiltInRegistries;
+ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.nbt.NbtOps;
+ import net.minecraft.network.Connection;
+@@ -53,6 +54,7 @@ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.PlayerAdvancements;
+ import net.minecraft.server.RegistryLayer;
+ import net.minecraft.server.ServerScoreboard;
++import net.minecraft.sounds.SoundEvent;
+ import net.minecraft.tags.BlockTags;
+ import net.minecraft.tags.TagNetworkSerialization;
+ import net.minecraft.util.Mth;
+@@ -93,7 +95,6 @@ import org.bukkit.Location;
+ import org.bukkit.craftbukkit.CraftServer;
+ import org.bukkit.craftbukkit.CraftWorld;
+ import org.bukkit.craftbukkit.entity.CraftPlayer;
+-import org.bukkit.craftbukkit.util.CraftChatMessage;
+ import org.bukkit.craftbukkit.util.CraftLocation;
+ import org.bukkit.entity.Player;
+ import org.bukkit.event.player.PlayerChangedWorldEvent;
+@@ -102,7 +103,6 @@ import org.bukkit.event.player.PlayerLoginEvent;
+ import org.bukkit.event.player.PlayerQuitEvent;
+ import org.bukkit.event.player.PlayerRespawnEvent;
+ import org.bukkit.event.player.PlayerRespawnEvent.RespawnReason;
+-import org.bukkit.event.player.PlayerSpawnChangeEvent;
+ import puregero.multipaper.ExternalPlayer;
+ import puregero.multipaper.ExternalServerConnection;
+ import puregero.multipaper.MultiPaper;
+@@ -142,6 +142,7 @@ public abstract class PlayerList {
+     private boolean allowCheatsForAllPlayers;
+     private static final boolean ALLOW_LOGOUTIVATOR = false;
+     private int sendAllPlayerInfoIn;
++    private int broadcastStartIndex = 0; // MultiPaper
+ 
+     // CraftBukkit start
+     private CraftServer cserver;
+@@ -1290,8 +1291,11 @@ public abstract class PlayerList {
+     }
+ 
+     public void broadcast(@Nullable net.minecraft.world.entity.player.Player player, double x, double y, double z, double distance, ResourceKey<Level> worldKey, Packet<?> packet) {
++        boolean shouldReduceBroadcast = shouldReduceBroadcast(packet); // MultiPaper - reduce footsteps
++        broadcastStartIndex++; // MultiPaper - add randomness to broadcast order
++        int count = 0; // MultiPaper - reduce footsteps
+         for (int i = 0; i < this.players.size(); ++i) {
+-            ServerPlayer entityplayer = (ServerPlayer) this.players.get(i);
++            ServerPlayer entityplayer = (ServerPlayer) this.players.get((i + broadcastStartIndex) % this.players.size()); // MultiPaper - add randomness to broadcast order
+ 
+             // CraftBukkit start - Test if player receiving packet can see the source of the packet
+             if (player != null && !entityplayer.getBukkitEntity().canSee(player.getBukkitEntity())) {
+@@ -1306,12 +1310,39 @@ public abstract class PlayerList {
+ 
+                 if (d4 * d4 + d5 * d5 + d6 * d6 < distance * distance) {
+                     entityplayer.connection.send(packet);
++                    if (shouldReduceBroadcast && ++count >= MultiPaperConfiguration.get().optimizations.maxFootstepPacketsSentPerPlayer) break; // MultiPaper - reduce footsteps
+                 }
+             }
+         }
+ 
+     }
+ 
++    // MultiPaper start - reduce footsteps being sent
++    private boolean shouldReduceBroadcast(Packet<?> packet) {
++        return MultiPaperConfiguration.get().optimizations.maxFootstepPacketsSentPerPlayer >= 0
++                && packet instanceof ClientboundSoundPacket soundPacket
++                && isFootstepSound(soundPacket.getSound().value());
++    }
++
++    private final Set<SoundEvent> footstepSounds = new HashSet<>();
++    private boolean isFootstepSound(SoundEvent value) {
++        if (footstepSounds.isEmpty()) {
++            prefillFootstepSounds();
++        }
++
++        return footstepSounds.contains(value);
++    }
++
++    private void prefillFootstepSounds() {
++        for (Map.Entry<ResourceKey<SoundEvent>, SoundEvent> entry : BuiltInRegistries.SOUND_EVENT.entrySet()) {
++            String path = entry.getKey().location().getPath();
++            if (path.contains("swim") || path.contains("step")) {
++                footstepSounds.add(entry.getValue());
++            }
++        }
++    }
++    // MultiPaper end - reduce footsteps being sent
++
+     public void saveAll() {
+         // Paper start - incremental player saving
+         this.saveAll(-1);

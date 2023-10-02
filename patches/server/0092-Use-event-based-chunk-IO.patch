@@ -1,52 +1,64 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: PureGero <puregero@gmail.com>
-Date: Thu, 27 Jan 2022 12:31:40 +1000
+Date: Mon, 2 Oct 2023 15:53:14 +0900
 Subject: [PATCH] Use event-based chunk IO
 
 
-diff --git a/src/main/java/com/destroystokyo/paper/io/PaperFileIOThread.java b/src/main/java/com/destroystokyo/paper/io/PaperFileIOThread.java
-index f2c27e0ac65be4b75c1d86ef6fd45fdb538d96ac..c6d1def201ac6690c5dd224e1c6a135fefee8640 100644
---- a/src/main/java/com/destroystokyo/paper/io/PaperFileIOThread.java
-+++ b/src/main/java/com/destroystokyo/paper/io/PaperFileIOThread.java
-@@ -6,6 +6,9 @@ import net.minecraft.server.level.ServerLevel;
- import net.minecraft.world.level.ChunkPos;
- import net.minecraft.world.level.chunk.storage.RegionFile;
+diff --git a/src/main/java/io/papermc/paper/chunk/system/io/RegionFileIOThread.java b/src/main/java/io/papermc/paper/chunk/system/io/RegionFileIOThread.java
+index c156c9a67c55ec23589bd60d3e653049d2ddca12..84751974f84c32562df5bc1a1495d22422905784 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/io/RegionFileIOThread.java
++++ b/src/main/java/io/papermc/paper/chunk/system/io/RegionFileIOThread.java
+@@ -17,6 +17,9 @@ import net.minecraft.world.level.chunk.storage.RegionFile;
+ import net.minecraft.world.level.chunk.storage.RegionFileStorage;
+ import org.bukkit.Bukkit;
  import org.slf4j.Logger;
-+import puregero.multipaper.IOHandler;
 +import puregero.multipaper.MultiPaperIO;
 +import puregero.multipaper.config.MultiPaperConfiguration;
- 
- import java.io.IOException;
- import java.util.concurrent.CompletableFuture;
-@@ -37,14 +40,15 @@ import java.util.function.Function;
-  * @deprecated
-  */
- @Deprecated(forRemoval = true)
--public final class PaperFileIOThread extends QueueExecutorThread {
-+public final class PaperFileIOThread extends QueueExecutorThread implements IOHandler { // MultiPaper - implements IOHandler
-+    @Override public void queueTask(ChunkDataTask chunkDataTask) { super.queueTask(chunkDataTask); } // MultiPaper - implements IOHandler
- 
-     public static final Logger LOGGER = LogUtils.getLogger();
-     public static final CompoundTag FAILURE_VALUE = new CompoundTag();
- 
-     public static final class Holder {
- 
--        public static final PaperFileIOThread INSTANCE = new PaperFileIOThread();
-+        public static final IOHandler INSTANCE = MultiPaperConfiguration.get().optimizations.useEventBasedIo ? new MultiPaperIO() : new PaperFileIOThread(); // MultiPaper - Use event-based completable futures instead of a worker thread
- 
-         static {
-              // Paper - fail hard on usage
-diff --git a/src/main/java/puregero/multipaper/ChunkKey.java b/src/main/java/puregero/multipaper/ChunkKey.java
-index d139536be7ab15293b798af115e71a8dbe4a2f3d..928fe46b5061ff6a1acbec61eec698756e8ac124 100644
---- a/src/main/java/puregero/multipaper/ChunkKey.java
-+++ b/src/main/java/puregero/multipaper/ChunkKey.java
-@@ -30,5 +30,17 @@ public class ChunkKey {
- 
-         return name.hashCode() ^ i ^ j;
-     }
 +
-+    public String getWorld() {
+ import java.io.IOException;
+ import java.lang.invoke.VarHandle;
+ import java.util.concurrent.CompletableFuture;
+@@ -804,6 +807,11 @@ public final class RegionFileIOThread extends PrioritisedQueueExecutorThread {
+     public static Cancellable loadDataAsync(final ServerLevel world, final int chunkX, final int chunkZ,
+                                             final RegionFileType type, final BiConsumer<CompoundTag, Throwable> onComplete,
+                                             final boolean intendingToBlock, final PrioritisedExecutor.Priority priority) {
++        // MultiPaper start - event based io
++        if (MultiPaperConfiguration.get().optimizations.useEventBasedIo) {
++            return MultiPaperIO.loadDataAsync(world, chunkX, chunkZ, type, onComplete, intendingToBlock, priority);
++        }
++        // MultiPaper end
+         final RegionFileIOThread thread = RegionFileIOThread.selectThread(world, chunkX, chunkZ, type);
+         return thread.loadDataAsyncInternal(world, chunkX, chunkZ, type, onComplete, intendingToBlock, priority);
+     }
+diff --git a/src/main/java/puregero/multipaper/ChunkRegionKey.java b/src/main/java/puregero/multipaper/ChunkRegionKey.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f37106c1870ae7979523a5b14c98e6d255a3569
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/ChunkRegionKey.java
+@@ -0,0 +1,57 @@
++package puregero.multipaper;
++
++public class ChunkRegionKey {
++    private final String name;
++    private final String path;
++    private final int x;
++    private final int z;
++
++    private int hashCodeCache;
++
++    public ChunkRegionKey(String name, String path, int x, int z) {
++        this.name = name;
++        this.path = path;
++        this.x = x;
++        this.z = z;
++    }
++
++    public String getName() {
 +        return name;
++    }
++
++    public String getPath() {
++        return path;
 +    }
 +
 +    public int getX() {
@@ -56,206 +68,220 @@ index d139536be7ab15293b798af115e71a8dbe4a2f3d..928fe46b5061ff6a1acbec61eec69875
 +    public int getZ() {
 +        return z;
 +    }
- }
- 
-diff --git a/src/main/java/puregero/multipaper/IOHandler.java b/src/main/java/puregero/multipaper/IOHandler.java
-new file mode 100644
-index 0000000000000000000000000000000000000000..3f836cbb3fd779f9a414804ff11d1af933a1b2ce
---- /dev/null
-+++ b/src/main/java/puregero/multipaper/IOHandler.java
-@@ -0,0 +1,36 @@
-+package puregero.multipaper;
 +
-+import com.destroystokyo.paper.io.PaperFileIOThread;
-+import net.minecraft.nbt.CompoundTag;
-+import net.minecraft.server.level.ServerLevel;
++    @Override
++    public boolean equals(Object other) {
++        if (other instanceof ChunkRegionKey) {
++            return ((ChunkRegionKey) other).name.equals(name)
++                    && ((ChunkRegionKey) other).path.equals(path)
++                    && ((ChunkRegionKey) other).x == x
++                    && ((ChunkRegionKey) other).z == z;
++        }
 +
-+import java.util.concurrent.CompletableFuture;
-+import java.util.function.Consumer;
++        return super.equals(other);
++    }
 +
-+public interface IOHandler {
-+    void scheduleSave(ServerLevel world, int chunkX, int chunkZ, CompoundTag poiData, CompoundTag chunkData, int priority);
++    @Override
++    public int hashCode() {
++        if (hashCodeCache != 0) return hashCodeCache;
 +
-+    CompletableFuture<PaperFileIOThread.ChunkData> loadChunkDataAsyncFuture(ServerLevel world, int chunkX, int chunkZ,
-+                                                                            int priority, boolean readPoiData, boolean readChunkData,
-+                                                                            boolean intendingToBlock);
++        // Taken from ChunkCoordIntPair
++        int i = 1664525 * this.x + 1013904223;
++        int j = 1664525 * (this.z ^ -559038737) + 1013904223;
 +
-+    void loadChunkDataAsync(ServerLevel world, int chunkX, int chunkZ,
-+                            int priority, Consumer<PaperFileIOThread.ChunkData> onComplete,
-+                            boolean readPoiData, boolean readChunkData,
-+                            boolean intendingToBlock);
-+
-+    PaperFileIOThread.ChunkData loadChunkData(ServerLevel world, int chunkX, int chunkZ, int priority,
-+                                              boolean readPoiData, boolean readChunkData);
-+
-+    void queueTask(PaperFileIOThread.ChunkDataTask chunkDataTask);
-+
-+    void bumpPriority(ServerLevel world, int chunkX, int chunkZ, int priority);
-+
-+    void setPriority(ServerLevel world, int chunkX, int chunkZ, int priority);
-+
-+    void start();
-+
-+    boolean close(final boolean wait, final boolean killQueue);
-+
-+    void flush();
++        return hashCodeCache = name.hashCode() ^ path.hashCode() ^ i ^ j;
++    }
 +}
++
 diff --git a/src/main/java/puregero/multipaper/MultiPaperIO.java b/src/main/java/puregero/multipaper/MultiPaperIO.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..b36b30f561f837105339109fa61552a8bdabd42b
+index 0000000000000000000000000000000000000000..50da564699b3b420f9dba252f61b4d781444944c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperIO.java
-@@ -0,0 +1,153 @@
+@@ -0,0 +1,186 @@
 +package puregero.multipaper;
 +
-+import com.destroystokyo.paper.io.PaperFileIOThread;
++import ca.spottedleaf.concurrentutil.executor.Cancellable;
++import ca.spottedleaf.concurrentutil.executor.standard.PrioritisedExecutor;
++import com.mojang.logging.LogUtils;
++import io.papermc.paper.chunk.system.io.RegionFileIOThread;
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.nbt.NbtIo;
-+import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerLevel;
-+import org.apache.logging.log4j.LogManager;
-+import org.apache.logging.log4j.Logger;
++import org.slf4j.Logger;
 +
 +import java.io.IOException;
++import java.util.ArrayList;
++import java.util.Comparator;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.Iterator;
++import java.util.List;
++import java.util.Map;
++import java.util.PriorityQueue;
++import java.util.Queue;
 +import java.util.Set;
 +import java.util.concurrent.CompletableFuture;
-+import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.Executor;
++import java.util.concurrent.Executors;
 +import java.util.concurrent.TimeUnit;
-+import java.util.function.Consumer;
++import java.util.concurrent.TimeoutException;
++import java.util.function.BiConsumer;
 +
-+public class MultiPaperIO extends Thread implements IOHandler {
-+    private static final Logger LOGGER = LogManager.getLogger(MultiPaperIO.class.getSimpleName());
++public class MultiPaperIO {
 +
-+    private final ConcurrentHashMap<ChunkKey, CompletableFuture<CompoundTag>> chunkReadsInProgress = new ConcurrentHashMap<>();
-+    private final ConcurrentHashMap<ChunkKey, CompletableFuture<CompoundTag>> poiReadsInProgress = new ConcurrentHashMap<>();
-+    private final Set<CompletableFuture<Void>> writesInProgress = ConcurrentHashMap.newKeySet();
++    private static final Logger LOGGER = LogUtils.getClassLogger();
++    private static final int CONCURRENT_READS = 16;
++    private static final Executor EVENT_LOOP = Executors.newSingleThreadExecutor();
 +
-+    @Override
-+    public void scheduleSave(ServerLevel world, int chunkX, int chunkZ, CompoundTag poiData, CompoundTag chunkData, int priority) {
-+        if (poiData != null) {
-+            writeAsync(() -> {
-+                try {
-+                    MultiPaper.writeRegionFileNBT(world.convertable.getLevelId(), "poi", chunkX, chunkZ, poiData);
-+                } catch (IOException e) {
-+                    throw new RuntimeException(e);
-+                }
-+            });
-+        }
++    private static final List<ScheduledChunkRead> ongoingReads = new ArrayList<>();
 +
-+        if (chunkData != null) {
-+            writeAsync(() -> {
-+                try {
-+                    MultiPaper.writeRegionFileNBT(world.convertable.getLevelId(), "region", chunkX, chunkZ, chunkData);
-+                } catch (IOException e) {
-+                    throw new RuntimeException(e);
-+                }
-+            });
-+        }
++    private static final Map<ChunkRegionKey, ScheduledChunkRead> scheduledChunkReads = new HashMap<>();
++    private static final Queue<ScheduledChunkRead> priorityQueue = new PriorityQueue<>(Comparator.comparingInt(a -> a.priority.ordinal()));
++
++    public static Cancellable loadDataAsync(final ServerLevel world, final int chunkX, final int chunkZ,
++                                            final RegionFileIOThread.RegionFileType type, final BiConsumer<CompoundTag, Throwable> onComplete,
++                                            final boolean intendingToBlock, final PrioritisedExecutor.Priority priority) {
++        String path = switch (type) {
++            case CHUNK_DATA -> "region";
++            case ENTITY_DATA -> "entities";
++            case POI_DATA -> "poi";
++        };
++        LoadTask loadTask = new LoadTask(world.getWorld().getName(), path, chunkX, chunkZ, onComplete, intendingToBlock, priority);
++        CompletableFuture.runAsync(() -> schedule(loadTask), EVENT_LOOP);
++        return loadTask;
 +    }
 +
-+    private void writeAsync(Runnable runnable) {
-+        CompletableFuture<Void> future = CompletableFuture.runAsync(runnable);
-+        writesInProgress.add(future);
-+        future.whenComplete((_void, throwable) -> writesInProgress.remove(future));
-+    }
++    private static void processQueue() {
++        ScheduledChunkRead scheduledChunkRead = priorityQueue.peek();
 +
-+    @Override
-+    public CompletableFuture<PaperFileIOThread.ChunkData> loadChunkDataAsyncFuture(final ServerLevel world, final int chunkX, final int chunkZ,
-+                                                                                   final int priority, final boolean readPoiData, final boolean readChunkData,
-+                                                                                   final boolean intendingToBlock) {
-+        final CompletableFuture<PaperFileIOThread.ChunkData> future = new CompletableFuture<>();
-+        PaperFileIOThread.ChunkData chunkData = new PaperFileIOThread.ChunkData();
-+
-+        CompletableFuture.allOf(
-+                readPoiData ? readPoi(world, chunkX, chunkZ).thenAccept(poi -> chunkData.poiData = poi) : CompletableFuture.completedFuture(null),
-+                readChunkData ? readChunk(world, chunkX, chunkZ).thenAccept(chunk -> chunkData.chunkData = chunk) : CompletableFuture.completedFuture(null)
-+        ).thenRun(() -> future.complete(chunkData));
-+
-+        return future;
-+    }
-+
-+    @Override
-+    public void loadChunkDataAsync(final ServerLevel world, final int chunkX, final int chunkZ,
-+                                   final int priority, final Consumer<PaperFileIOThread.ChunkData> onComplete,
-+                                   final boolean readPoiData, final boolean readChunkData,
-+                                   final boolean intendingToBlock) {
-+        loadChunkDataAsyncFuture(world, chunkX, chunkZ, priority, readPoiData, readChunkData, intendingToBlock).thenAccept(onComplete);
-+    }
-+
-+    @Override
-+    public PaperFileIOThread.ChunkData loadChunkData(final ServerLevel world, final int chunkX, final int chunkZ, final int priority,
-+                                                     final boolean readPoiData, final boolean readChunkData) {
-+        return this.loadChunkDataAsyncFuture(world, chunkX, chunkZ, priority, readPoiData, readChunkData, true).join();
-+    }
-+
-+    private CompletableFuture<CompoundTag> readChunk(final ServerLevel world, final int chunkX, final int chunkZ) {
-+        ChunkKey key = new ChunkKey(world.convertable.getLevelId(), chunkX, chunkZ);
-+        CompletableFuture<CompoundTag> future = chunkReadsInProgress.computeIfAbsent(key, key2 -> readChunk(key2, "region"));
-+        future.whenComplete((tag, throwable) -> chunkReadsInProgress.remove(key, future));
-+        return future;
-+    }
-+
-+    private CompletableFuture<CompoundTag> readPoi(final ServerLevel world, final int chunkX, final int chunkZ) {
-+        ChunkKey key = new ChunkKey(world.convertable.getLevelId(), chunkX, chunkZ);
-+        CompletableFuture<CompoundTag> future = poiReadsInProgress.computeIfAbsent(key, key2 -> readChunk(key2, "poi"));
-+        future.whenComplete((tag, throwable) -> poiReadsInProgress.remove(key, future));
-+        return future;
-+    }
-+
-+    private CompletableFuture<CompoundTag> readChunk(final ChunkKey key, final String path) {
-+        CompletableFuture<CompoundTag> future = MultiPaper.readRegionFileAsync(key.getWorld(), path, key.getX(), key.getZ())
-+                .thenApplyAsync(in -> {
-+                    try {
-+                        return in == null ? null : NbtIo.read(in);
-+                    } catch (IOException e) {
-+                        throw new RuntimeException(e);
-+                    }
-+                }).exceptionally(exception -> {
-+                    exception.printStackTrace();
-+                    return PaperFileIOThread.FAILURE_VALUE;
-+                });
-+
-+        future.thenApply(nbt -> false).completeOnTimeout(true, 15, TimeUnit.SECONDS).thenAccept(timedout -> {
-+            if (timedout) {
-+                LOGGER.warn("Timed out reading " + key.getWorld() + "," + path + "," + key.getX() + "," + key.getZ() + ", retrying...");
-+                readChunk(key, path).thenAccept(future::complete);
-+            }
-+        });
-+
-+        return future;
-+    }
-+
-+    public void start() {
-+        // Do nothing, this isn't a worker thread
-+    }
-+
-+    @Override
-+    public void queueTask(PaperFileIOThread.ChunkDataTask chunkDataTask) {
-+        // Do nothing, this isn't a worker thread
-+    }
-+
-+    @Override
-+    public void bumpPriority(ServerLevel world, int chunkX, int chunkZ, int priority) {
-+        // Do nothing, we don't have priorities
-+    }
-+
-+    @Override
-+    public void setPriority(ServerLevel world, int chunkX, int chunkZ, int priority) {
-+        // Do nothing, we don't have priorities
-+    }
-+
-+    public void flush() {
-+        while (!writesInProgress.isEmpty()) {
-+            for (CompletableFuture<Void> future : writesInProgress) {
-+                MinecraftServer.getServer().managedBlock(future::isDone);
-+            }
++        if (scheduledChunkRead != null && (ongoingReads.size() < CONCURRENT_READS || scheduledChunkRead.priority == PrioritisedExecutor.Priority.BLOCKING)) {
++            priorityQueue.poll().execute();
 +        }
 +    }
 +
-+    public boolean close(boolean wait, boolean killQueue) {
-+        if (wait) {
-+            flush();
++    private static void schedule(LoadTask loadTask) {
++        ScheduledChunkRead scheduledChunkRead = scheduledChunkReads.computeIfAbsent(loadTask.chunkRegionKey, ScheduledChunkRead::new);
++        scheduledChunkRead.dependants.add(loadTask);
++        scheduledChunkRead.recalculatePriority();
++    }
++
++    private static boolean cancel(LoadTask loadTask) {
++        ScheduledChunkRead scheduledChunkRead = scheduledChunkReads.computeIfAbsent(loadTask.chunkRegionKey, ScheduledChunkRead::new);
++        if (scheduledChunkRead.priority == PrioritisedExecutor.Priority.COMPLETING) {
++            return false;
 +        }
++
++        scheduledChunkRead.dependants.remove(loadTask);
++        scheduledChunkRead.recalculatePriority();
 +        return true;
++    }
++
++    private static class ScheduledChunkRead {
++        final ChunkRegionKey chunkRegionKey;
++        final Set<LoadTask> dependants = new HashSet<>();
++        PrioritisedExecutor.Priority priority = null;
++        boolean intendingToBlock = false;
++
++        ScheduledChunkRead(ChunkRegionKey chunkRegionKey) {
++            this.chunkRegionKey = chunkRegionKey;
++        }
++
++        void recalculatePriority() {
++            if (priority == PrioritisedExecutor.Priority.COMPLETING) {
++                // Either in progress or completed, can't change priority now
++                return;
++            }
++
++            PrioritisedExecutor.Priority oldPriority = priority;
++
++            priority = PrioritisedExecutor.Priority.IDLE;
++            intendingToBlock = false;
++            for (LoadTask loadTask : dependants) {
++                if (loadTask.priority.ordinal() < priority.ordinal()) {
++                    priority = loadTask.priority;
++                }
++                if (loadTask.intendingToBlock) {
++                    intendingToBlock = true;
++                }
++            }
++
++            if (priority != oldPriority) {
++                if (oldPriority != null) {
++                    priorityQueue.remove(this);
++                }
++
++                if (dependants.isEmpty()) {
++                    scheduledChunkReads.remove(chunkRegionKey);
++                    return;
++                }
++
++                priorityQueue.add(this);
++                processQueue();
++            }
++        }
++
++        void execute() {
++            if (priority == PrioritisedExecutor.Priority.COMPLETING) {
++                throw new RuntimeException("Executing twice!!!");
++            }
++
++            priority = PrioritisedExecutor.Priority.COMPLETING;
++            ongoingReads.add(this);
++
++            read();
++        }
++
++        void read() {
++            MultiPaper.readRegionFileAsync(chunkRegionKey.getName(), chunkRegionKey.getPath(), chunkRegionKey.getX(), chunkRegionKey.getZ()).thenApply(in -> {
++                try {
++                    return in == null ? null : NbtIo.read(in);
++                } catch (IOException e) {
++                    throw new RuntimeException(e);
++                }
++            }).thenAcceptAsync(nbt -> {
++                complete(nbt, null);
++            }, EVENT_LOOP).orTimeout(20, TimeUnit.SECONDS).exceptionallyAsync(throwable -> {
++                if (throwable instanceof TimeoutException) {
++                    LOGGER.warn("Timed out reading " + chunkRegionKey.getName() + "," + chunkRegionKey.getPath() + "," + chunkRegionKey.getX() + "," + chunkRegionKey.getZ() + ", retrying...");
++                    read();
++                } else {
++                    LOGGER.error("Error reading " + chunkRegionKey.getName() + "," + chunkRegionKey.getPath() + "," + chunkRegionKey.getX() + "," + chunkRegionKey.getZ(), throwable);
++                    complete(null, throwable);
++                }
++                return null;
++            }, EVENT_LOOP);
++        }
++
++        void complete(CompoundTag compoundTag, Throwable throwable) {
++            ongoingReads.remove(this);
++            scheduledChunkReads.remove(chunkRegionKey);
++            Iterator<LoadTask> loadTaskIterator = dependants.iterator();
++            while (loadTaskIterator.hasNext()) {
++                LoadTask loadTask = loadTaskIterator.next();
++                CompletableFuture.runAsync(() -> loadTask.onComplete.accept(compoundTag, throwable));
++                loadTaskIterator.remove();
++            }
++            processQueue();
++        }
++    }
++
++    private static class LoadTask implements Cancellable {
++        private final ChunkRegionKey chunkRegionKey;
++        private final BiConsumer<CompoundTag, Throwable> onComplete;
++        private final boolean intendingToBlock;
++        private final PrioritisedExecutor.Priority priority;
++
++        LoadTask(String world, String path, int chunkX, int chunkZ, BiConsumer<CompoundTag, Throwable> onComplete, boolean intendingToBlock, PrioritisedExecutor.Priority priority) {
++            this.chunkRegionKey = new ChunkRegionKey(world, path, chunkX, chunkZ);
++            this.onComplete = onComplete;
++            this.intendingToBlock = intendingToBlock;
++            this.priority = priority;
++        }
++
++        @Override
++        public boolean cancel() {
++            return CompletableFuture.supplyAsync(() -> MultiPaperIO.cancel(this), EVENT_LOOP).join();
++        }
 +    }
 +}

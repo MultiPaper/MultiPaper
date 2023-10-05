@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: PureGero <puregero@gmail.com>
 Date: Fri, 1 Sep 2023 20:24:00 +0900
-Subject: [PATCH] Persisten player entity ids
+Subject: [PATCH] Persistent player entity ids
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
@@ -66,6 +66,35 @@ index 8ce1fd45fdace98ec34ae5e7c4090e4377534a02..494fd868fc853bbc9570af1a4fc01d25
          this.chatVisibility = ChatVisiblity.FULL;
          this.canChatColor = true;
          this.lastActionTime = Util.getMillis();
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index a2536dfc34e4fd42d59589741f24083f059ad233..3b0ad2a2e7391af9279d1184c4b22a83093624c8 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -748,13 +748,17 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+         return this.entityData;
+     }
+ 
+-    public boolean equals(Object object) {
+-        return object instanceof Entity ? ((Entity) object).id == this.id : false;
+-    }
+-
+-    public int hashCode() {
+-        return this.id;
+-    }
++    // MultiPaper start - The Vanilla server never changes an entity's id from the randomly generated one, so we can use Java's built in equals and hashcode instead
++    // The Vanilla client does actually use these methods, but the server does not
++    // Since MultiPaper does change the entity's id, these can return true when the entities are not actually equal
++//    public boolean equals(Object object) {
++//        return object instanceof Entity ? ((Entity) object).id == this.id : false;
++//    }
++//
++//    public int hashCode() {
++//        return this.id;
++//    }
++    // MultiPaper end
+ 
+     public void remove(Entity.RemovalReason reason) {
+         this.setRemoved(reason);
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 index 5370ffb23452f5e6eff9b2b3dd53c2c42f98cd2a..9b2f5ea606f7fb6701fa4ece902fef93b69b96a4 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java

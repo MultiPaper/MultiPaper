@@ -103,6 +103,12 @@ just the local server exceeds the max-players value (true).
 Whether the player should always have the same entity id across all servers.
 This is useful for some plugins that enable seamless cross-server teleporting.
 
+`persistent-vehicle-entity-ids-seconds`  
+Whether a player's vehicle should save the entity id when the player leaves the
+server. This is the amount of seconds that entity id should remain valid for
+before a new entity id is assigned instead (default is 15 seconds). Set to 0
+to disable this.
+
 ### files
 
 `files-to-not-sync`  

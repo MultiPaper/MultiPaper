@@ -5,7 +5,7 @@ Subject: [PATCH] Sync entity ids
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 7febd8ea9f87be619acd521d9bf13ffebca2af44..8ce1fd45fdace98ec34ae5e7c4090e4377534a02 100644
+index 7febd8ea9f87be619acd521d9bf13ffebca2af44..7544a199d426009df9a70d7810a9656149784564 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -262,7 +262,7 @@ public class ServerPlayer extends Player {
@@ -26,8 +26,18 @@ index 7febd8ea9f87be619acd521d9bf13ffebca2af44..8ce1fd45fdace98ec34ae5e7c4090e43
      public PlayerNaturallySpawnCreaturesEvent playerNaturallySpawnedEvent; // Paper
      public org.bukkit.event.player.PlayerQuitEvent.QuitReason quitReason = null; // Paper - there are a lot of changes to do if we change all methods leading to the event
      public boolean purpurClient = false; // Purpur
+@@ -617,7 +617,9 @@ public class ServerPlayer extends Player {
+             CompoundTag nbttagcompound2 = new CompoundTag();
+             CompoundTag nbttagcompound3 = new CompoundTag();
+ 
++            entity.isSavingVehicle = true; // MultiPaper
+             entity.save(nbttagcompound3);
++            entity.isSavingVehicle = false; // MultiPaper
+             nbttagcompound2.putUUID("Attach", entity1.getUUID());
+             nbttagcompound2.put("Entity", nbttagcompound3);
+             nbt.put("RootVehicle", nbttagcompound2);
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index e4288111146e4688a7e9f7ad37952ac997d4d860..4373a6d954670127b96ae66e44d8dc61a2d6e3a4 100644
+index 6e6f1ffae4434b781d4b3a0c9d499f0f767e70a1..b6a891dc08e4f7715eb84ac7240da514a5e4c353 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -156,6 +156,8 @@ import puregero.multipaper.ExternalServer;
@@ -39,7 +49,17 @@ index e4288111146e4688a7e9f7ad37952ac997d4d860..4373a6d954670127b96ae66e44d8dc61
  import puregero.multipaper.externalserverprotocol.EntityRemovePacket;
  import puregero.multipaper.externalserverprotocol.EntityUpdateNBTPacket;
  import puregero.multipaper.externalserverprotocol.EntityUpdateWithDependenciesPacket;
-@@ -619,7 +621,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -361,7 +363,8 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+     private static final int FLAG_INVISIBLE = 5;
+     protected static final int FLAG_GLOWING = 6;
+     protected static final int FLAG_FALL_FLYING = 7;
+-    public boolean isSyncing = false;  // MultiPaper - add isSyncing
++    public boolean isSyncing = false; // MultiPaper - add isSyncing
++    public boolean isSavingVehicle = false; // MultiPaper - add isSavingVehicle
+     private static final EntityDataAccessor<Integer> DATA_AIR_SUPPLY_ID = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.INT);
+     private static final EntityDataAccessor<Optional<Component>> DATA_CUSTOM_NAME = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.OPTIONAL_COMPONENT);
+     private static final EntityDataAccessor<Boolean> DATA_CUSTOM_NAME_VISIBLE = SynchedEntityData.defineId(Entity.class, EntityDataSerializers.BOOLEAN);
+@@ -619,7 +622,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
      // Paper end - make end portalling safe
  
      public Entity(EntityType<?> type, Level world) {
@@ -48,36 +68,54 @@ index e4288111146e4688a7e9f7ad37952ac997d4d860..4373a6d954670127b96ae66e44d8dc61
          this.passengers = ImmutableList.of();
          this.deltaMovement = Vec3.ZERO;
          this.bb = Entity.INITIAL_AABB;
-@@ -2445,6 +2447,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2445,6 +2448,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      public CompoundTag saveWithoutId(CompoundTag nbt) {
          try {
-+            if (this.isSyncing && MultiPaperConfiguration.get().syncSettings.syncEntityIds) nbt.putInt("EntityId", this.getId()); // MultiPaper
++            // MultiPaper start
++            if (this.isSyncing && MultiPaperConfiguration.get().syncSettings.syncEntityIds) nbt.putInt("EntityId", this.getId());
++            if (this.isSavingVehicle && MultiPaperConfiguration.get().syncSettings.persistentVehicleEntityIdsSeconds > 0) {
++                nbt.putInt("VehicleEntityId", this.getId());
++                nbt.putLong("VehicleEntityIdExpireTime", System.currentTimeMillis());
++            }
++            // MultiPaper end
              if (this.vehicle != null) {
                  nbt.put("Pos", this.newDoubleList(this.vehicle.getX(), this.getY(), this.vehicle.getZ()));
              } else {
-@@ -2551,9 +2554,11 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2551,9 +2561,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                      Entity entity = (Entity) iterator.next();
                      CompoundTag nbttagcompound1 = new CompoundTag();
  
 +                    if (this.isSyncing) entity.isSyncing = true; // MultiPaper
++                    if (this.isSavingVehicle) entity.isSavingVehicle = true; // MultiPaper
                      if (entity.saveAsPassenger(nbttagcompound1)) {
                          nbttaglist.add(nbttagcompound1);
                      }
 +                    if (this.isSyncing) entity.isSyncing = false; // MultiPaper
++                    if (this.isSavingVehicle) entity.isSavingVehicle = false; // MultiPaper
                  }
  
                  if (!nbttaglist.isEmpty()) {
-@@ -2605,6 +2610,18 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2605,6 +2619,28 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      public void load(CompoundTag nbt) {
          try {
 +            // MultiPaper start
-+            if (nbt.contains("EntityId") && MultiPaperConfiguration.get().syncSettings.syncEntityIds) {
++            if (!(this instanceof ServerPlayer) && nbt.contains("EntityId") && MultiPaperConfiguration.get().syncSettings.syncEntityIds) {
 +                int entityId = nbt.getInt("EntityId");
 +                if (getId() != entityId) {
 +                    if (level != null && level.getEntity(getId()) != null) {
 +                        new Exception("Failed to sync entity id for " + this + ". This entity has already been added to the world!").printStackTrace();
++                    } else {
++                        setId(entityId);
++                    }
++                }
++            }
++            if (!(this instanceof ServerPlayer) && nbt.contains("VehicleEntityId") && nbt.contains("VehicleEntityIdExpireTime") && nbt.getLong("VehicleEntityIdExpireTime") > System.currentTimeMillis() - MultiPaperConfiguration.get().syncSettings.persistentVehicleEntityIdsSeconds * 1000) {
++                int entityId = nbt.getInt("VehicleEntityId");
++                if (getId() != entityId) {
++                    if (level != null && level.getEntity(getId()) != null) {
++                        new Exception("Failed to persist vehicle entity id for " + this + ". This entity has already been added to the world!").printStackTrace();
 +                    } else {
 +                        setId(entityId);
 +                    }

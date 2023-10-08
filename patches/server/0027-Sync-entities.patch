@@ -318,7 +318,7 @@ index be331455a878093fb12a704dd7d5870706ae9785..38a7ef6831d2ea020f3d709cbff16a46
          this.clientViewDistance = packet.viewDistance;
          // CraftBukkit end
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index ce2a7f687f5d64d164b664c441eeffe2cba783ba..76e1abcca021238c055fe573111ab5290f08514a 100644
+index efc690102465d7b4e1d4f68067af57517ed18372..21d961e0e7c4e897a36b0edc1d76f98b9254c0d9 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -251,6 +251,7 @@ import puregero.multipaper.ExternalPlayer;
@@ -379,7 +379,7 @@ index 0db98625eec0c5af4a44ccb620d543d20829b843..fc76f71e84ed638c8fd9957803b0a2da
                      serversToCreatePlayerOn.add(externalServer.getConnection());
                  } else if (subscribedToSoruce) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 84a3e09a408ea4d1f7ed03d1bc77533bbc31e0d7..a94d32308ceb531784857c7c1586bbe2566db15a 100644
+index 84a3e09a408ea4d1f7ed03d1bc77533bbc31e0d7..5c0e3e1a851843b72d654dc00331ade126d15e8e 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -146,7 +146,10 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -427,21 +427,39 @@ index 84a3e09a408ea4d1f7ed03d1bc77533bbc31e0d7..a94d32308ceb531784857c7c1586bbe2
      }
  
      protected abstract void readAdditionalSaveData(CompoundTag nbt);
+@@ -2890,7 +2895,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+                 if (entity.getBukkitEntity() instanceof Vehicle && this.getBukkitEntity() instanceof LivingEntity) {
+                     VehicleEnterEvent event = new VehicleEnterEvent((Vehicle) entity.getBukkitEntity(), this.getBukkitEntity());
+                     // Suppress during worldgen
+-                    if (this.valid) {
++                    if (this.valid && !MultiPaperEntitiesHandler.modifyingPassengers) { // MultiPaper - don't call VehicleEnterEvent if we're syncing the passengers from another server
+                         Bukkit.getPluginManager().callEvent(event);
+                     }
+                     if (event.isCancelled()) {
 @@ -2901,7 +2906,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                  // Spigot start
                  org.spigotmc.event.entity.EntityMountEvent event = new org.spigotmc.event.entity.EntityMountEvent(this.getBukkitEntity(), entity.getBukkitEntity());
                  // Suppress during worldgen
 -                if (this.valid) {
-+                if (this.valid && !MultiPaperEntitiesHandler.modifyingPassengers) { // MultiPaper - don't call EntityDismountEvent if we're syncing the passengers from another server
++                if (this.valid && !MultiPaperEntitiesHandler.modifyingPassengers) { // MultiPaper - don't call EntityMountEvent if we're syncing the passengers from another server
                      Bukkit.getPluginManager().callEvent(event);
                  }
                  if (event.isCancelled()) {
+@@ -3004,7 +3009,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+                         (LivingEntity) entity.getBukkitEntity(), !suppressCancellation // Paper
+                 );
+                 // Suppress during worldgen
+-                if (this.valid) {
++                if (this.valid && !MultiPaperEntitiesHandler.modifyingPassengers) { // MultiPaper - don't call VehicleExitEvent if we're syncing the passengers from another server
+                     Bukkit.getPluginManager().callEvent(event);
+                 }
+                 CraftEntity craftn = (CraftEntity) entity.getBukkitEntity().getVehicle();
 @@ -3017,7 +3022,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
              // Spigot start
              org.spigotmc.event.entity.EntityDismountEvent event = new org.spigotmc.event.entity.EntityDismountEvent(entity.getBukkitEntity(), this.getBukkitEntity(), !suppressCancellation); // Paper
              // Suppress during worldgen
 -            if (this.valid) {
-+            if (this.valid && !MultiPaperEntitiesHandler.modifyingPassengers) { // MultiPaper - don't call EntityMountEvent if we're syncing the passengers from another server
++            if (this.valid && !MultiPaperEntitiesHandler.modifyingPassengers) { // MultiPaper - don't call EntityDismountEvent if we're syncing the passengers from another server
                  Bukkit.getPluginManager().callEvent(event);
              }
              if (event.isCancelled()) {

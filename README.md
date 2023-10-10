@@ -117,7 +117,7 @@ java
   -DbungeecordName=server1
   -DmultipaperMasterAddress=127.0.0.1:35353
   -Dproperties.view-distance=16
-  -Dpaper.settings.proxy-protocol=true
+  -Dpaper.global.proxies.proxy-protocol=true
   -Dspigot.world-settings.default.entity-tracking-range.players=128
   -jar multipaper.jar
 ```

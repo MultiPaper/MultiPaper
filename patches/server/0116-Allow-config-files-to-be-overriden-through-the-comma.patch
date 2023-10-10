@@ -4,8 +4,50 @@ Date: Thu, 2 Jun 2022 16:35:35 +1000
 Subject: [PATCH] Allow config files to be overriden through the command line
 
 
+diff --git a/src/main/java/io/papermc/paper/configuration/Configurations.java b/src/main/java/io/papermc/paper/configuration/Configurations.java
+index 9ef6712c70fcd8912a79f3f61e351aac09572cf3..96475a7101c6bf44ad227cda8b50c5e8df0e1fab 100644
+--- a/src/main/java/io/papermc/paper/configuration/Configurations.java
++++ b/src/main/java/io/papermc/paper/configuration/Configurations.java
+@@ -111,6 +111,21 @@ public abstract class Configurations<G, W> {
+         }
+     }
+ 
++    // MultiPaper start - allow command line override
++    private void setFromProperties(String prefix, ConfigurationNode node) {
++        for (Map.Entry<Object, Object> property : System.getProperties().entrySet()) {
++            if (property.getKey().toString().startsWith(prefix)) {
++                String key = property.getKey().toString().substring(prefix.length());
++                try {
++                    node.node((Object[]) key.split("\\.")).set(property.getValue());
++                } catch (SerializationException e) {
++                    e.printStackTrace();
++                }
++            }
++        }
++    }
++    // MultiPaper end - allow command line override
++
+     protected G initializeGlobalConfiguration(final CheckedFunction<ConfigurationNode, G, SerializationException> creator) throws ConfigurateException {
+         final Path configFile = this.globalFolder.resolve(this.globalConfigFileName);
+         final YamlConfigurationLoader loader = this.createGlobalLoaderBuilder()
+@@ -124,6 +139,7 @@ public abstract class Configurations<G, W> {
+             node = CommentedConfigurationNode.root(loader.defaultOptions());
+         }
+         this.applyGlobalConfigTransformations(node);
++        setFromProperties("paper.global.", node); // MultiPaper - allow command line override
+         final G instance = creator.apply(node);
+         trySaveFileNode(loader, node, configFile.toString());
+         return instance;
+@@ -151,6 +167,7 @@ public abstract class Configurations<G, W> {
+             node.node(Configuration.VERSION_FIELD).raw(WorldConfiguration.CURRENT_VERSION);
+         }
+         this.applyWorldConfigTransformations(contextMap, node);
++        setFromProperties("paper.world.defaults.", node); // MultiPaper - allow command line override
+         final W instance = node.require(this.worldConfigClass);
+         node.set(this.worldConfigClass, instance);
+         trySaveFileNode(loader, node, configFile.toString());
 diff --git a/src/main/java/net/minecraft/server/dedicated/Settings.java b/src/main/java/net/minecraft/server/dedicated/Settings.java
-index 135fc81414446f24c3adad71f5199c7898a6c1cd..4aacb8aac9f952d92a835c10c4a3e64aefe1ff61 100644
+index faca42b2b5b20559f98c300b7011b67165391a0d..c43bd9a235686957f8774d4cfd16f381ec2fcb18 100644
 --- a/src/main/java/net/minecraft/server/dedicated/Settings.java
 +++ b/src/main/java/net/minecraft/server/dedicated/Settings.java
 @@ -40,6 +40,12 @@ public abstract class Settings<T extends Settings<T>> {

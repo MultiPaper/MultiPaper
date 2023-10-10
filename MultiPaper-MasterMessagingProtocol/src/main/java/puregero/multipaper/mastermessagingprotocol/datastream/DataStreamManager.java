@@ -5,7 +5,9 @@ import puregero.multipaper.mastermessagingprotocol.messages.Message;
 import puregero.multipaper.mastermessagingprotocol.messages.MessageHandler;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
@@ -31,7 +33,16 @@ public class DataStreamManager<T extends Message> {
     }
 
     public void handleInboundData(int streamId, byte[] data) {
+        handleInboundData(streamId, data, 0);
+    }
+
+    public void handleInboundData(int streamId, byte[] data, int recursive) {
         InboundDataStream dataStream = inboundDataStreams.get(streamId);
+
+        if (dataStream == null && recursive < 5) {
+            CompletableFuture.delayedExecutor(250, TimeUnit.MILLISECONDS).execute(() -> handleInboundData(streamId, data, recursive + 1));
+            return;
+        }
 
         if (dataStream == null) {
             throw new IllegalArgumentException("Unknown data stream with streamId=" + streamId);

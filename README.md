@@ -5,7 +5,7 @@
 **MultiPaper is in public beta.** Most features work for most players most of
 the time, however things can occasionally break.
 
-1.20.1 [Paper](https://github.com/PaperMC/Paper) fork that enables a server admin
+1.20.1 [Purpur](https://github.com/PurpurMC/Purpur) fork that enables a server admin
 to scale a single world across multiple servers. Multiple MultiPaper servers run
 the same world and use a MultiPaper-Master to coordinate with each other and
 store server data. While the MultiPaper-Master is usually run as a standalone

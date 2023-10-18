@@ -105,12 +105,13 @@ index 1bfe465b9aaeea7d3c871140145b7de1b8f1d93d..2a18c57a2b6c686a807a19e44e6db2f0
       *
 diff --git a/src/main/java/org/bukkit/MultiPaperNotificationManager.java b/src/main/java/org/bukkit/MultiPaperNotificationManager.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d569e2c95f07e05d9fce019dafc33f9c51c4461a
+index 0000000000000000000000000000000000000000..809fcfc71b8d7ebdf9321b860543c9de929c2f45
 --- /dev/null
 +++ b/src/main/java/org/bukkit/MultiPaperNotificationManager.java
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,138 @@
 +package org.bukkit;
 +
++import org.bukkit.entity.Player;
 +import org.bukkit.plugin.Plugin;
 +
 +import java.nio.charset.StandardCharsets;
@@ -163,7 +164,7 @@ index 0000000000000000000000000000000000000000..d569e2c95f07e05d9fce019dafc33f9c
 +    }
 +
 +    /**
-+     * Notify other servers.
++     * Notify all other servers.
 +     *
 +     * @param channel The notification channel to notify on
 +     * @param data The data to notify other servers with
@@ -171,7 +172,7 @@ index 0000000000000000000000000000000000000000..d569e2c95f07e05d9fce019dafc33f9c
 +    void notify(String channel, byte[] data);
 +
 +    /**
-+     * Notify other servers.
++     * Notify all other servers.
 +     *
 +     * @param channel The notification channel to notify on
 +     * @param data The data to notify other servers with
@@ -198,6 +199,52 @@ index 0000000000000000000000000000000000000000..d569e2c95f07e05d9fce019dafc33f9c
 +     */
 +    default void notify(Chunk chunk, String channel, String data) {
 +        notify(chunk, channel, data.getBytes(StandardCharsets.UTF_8));
++    }
++
++    /**
++     * Notify the owning server of the specified chunk.
++     * This chunk must be loaded on this server.
++     * This will notify this server if this server is the owning server.
++     *
++     * @param chunk The loaded chunk with an owning server
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    void notifyOwningServer(Chunk chunk, String channel, byte[] data);
++
++    /**
++     * Notify the owning server of the specified chunk.
++     * This chunk must be loaded on this server.
++     * This will notify this server if this server is the owning server.
++     *
++     * @param chunk The loaded chunk with an owning server
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    default void notifyOwningServer(Chunk chunk, String channel, String data) {
++        notifyOwningServer(chunk, channel, data.getBytes(StandardCharsets.UTF_8));
++    }
++
++    /**
++     * Notify the owning server of the specified player.
++     * This will notify this server if this server is the owning server.
++     *
++     * @param player The player with an owning server
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    void notifyOwningServer(Player player, String channel, byte[] data);
++
++    /**
++     * Notify the owning server of the specified player.
++     * This will notify this server if this server is the owning server.
++     *
++     * @param player The player with an owning server
++     * @param channel The notification channel to notify on
++     * @param data The data to notify other servers with
++     */
++    default void notifyOwningServer(Player player, String channel, String data) {
++        notifyOwningServer(player, channel, data.getBytes(StandardCharsets.UTF_8));
 +    }
 +}
 diff --git a/src/main/java/org/bukkit/Server.java b/src/main/java/org/bukkit/Server.java
@@ -230,7 +277,7 @@ index aaef58468a3c31f35e5067ed4263e9dd3fbddddd..90473491298e519155d0444cc0828d1f
       * Gets a list of all worlds on this server.
       *
 diff --git a/src/main/java/org/bukkit/World.java b/src/main/java/org/bukkit/World.java
-index bf39c6602cfca70a6352519fa26059cd79143cdd..b0d22bdf4150115d685a0b14bf1bb9429b32765f 100644
+index 63bf1d70cce9176f47a158a4a767b1bf38d60dbd..b45339c1ba6c9dfd288a67d50d29c36808656aa2 100644
 --- a/src/main/java/org/bukkit/World.java
 +++ b/src/main/java/org/bukkit/World.java
 @@ -399,6 +399,26 @@ public interface World extends RegionAccessor, WorldInfo, PluginMessageRecipient
@@ -325,7 +372,7 @@ index 98de85d1382fe84cdc2e2c9db04bf1b4f157291c..36d21a3083db86b0d1ed586e62fb239d
       * Returns the entity's current fire ticks (ticks before the entity stops
       * being on fire).
 diff --git a/src/main/java/org/bukkit/entity/Player.java b/src/main/java/org/bukkit/entity/Player.java
-index 9193288438671409cc3cf92033ef7cb60d798b69..001ae49bbf59f575b2fff7fff058255427610f4f 100644
+index d3d5d2c78cc4ee36beaa355ef7e61ef13332abab..e19096451411b48222f9936ddbaf632e6c4c6558 100644
 --- a/src/main/java/org/bukkit/entity/Player.java
 +++ b/src/main/java/org/bukkit/entity/Player.java
 @@ -499,6 +499,84 @@ public interface Player extends HumanEntity, Conversable, OfflinePlayer, PluginM

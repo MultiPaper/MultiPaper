@@ -314,10 +314,10 @@ index f66134430bbb0fa3238c4bf53483ec80bd9943e9..1a6658c08a149e7f72d9d44c5e11e729
      @Override
 diff --git a/src/main/java/puregero/multipaper/CraftMultiPaperNotificationManager.java b/src/main/java/puregero/multipaper/CraftMultiPaperNotificationManager.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c22d22b81ca2d6ca2b7ebf02e73d3ad5b4aa3bef
+index 0000000000000000000000000000000000000000..ab8b060da2c43a59d60a4232a2a40989ca609ae4
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/CraftMultiPaperNotificationManager.java
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,122 @@
 +package puregero.multipaper;
 +
 +import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
@@ -325,11 +325,13 @@ index 0000000000000000000000000000000000000000..c22d22b81ca2d6ca2b7ebf02e73d3ad5
 +import org.bukkit.Chunk;
 +import org.bukkit.MultiPaperNotificationManager;
 +import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.entity.Player;
 +import org.bukkit.plugin.Plugin;
 +import puregero.multipaper.externalserverprotocol.PluginNotificationPacket;
 +
 +import java.lang.ref.WeakReference;
 +import java.util.ArrayList;
++import java.util.Collections;
 +import java.util.HashMap;
 +import java.util.Iterator;
 +import java.util.List;
@@ -368,6 +370,31 @@ index 0000000000000000000000000000000000000000..c22d22b81ca2d6ca2b7ebf02e73d3ad5
 +        MultiPaper.broadcastPacketToExternalServers(newChunkHolder.externalSubscribers, () -> new PluginNotificationPacket(channel, data));
 +    }
 +
++    @Override
++    public void notifyOwningServer(Chunk chunk, String channel, byte[] data) {
++        NewChunkHolder newChunkHolder = MultiPaper.getChunkHolder(((CraftWorld) chunk.getWorld()).getHandle(), chunk.getX(), chunk.getZ());
++
++        if (newChunkHolder == null) {
++            new IllegalStateException("Chunk " + chunk.getWorld().getName() + "," + chunk.getX() + "," + chunk.getZ() + " is not loaded, could not send notification").printStackTrace();
++            return;
++        }
++
++        if (newChunkHolder.externalOwner == null) {
++            onNotification(null, channel, data); // Send to ourselves
++        } else {
++            MultiPaper.broadcastPacketToExternalServers(Collections.singleton(newChunkHolder.externalOwner), () -> new PluginNotificationPacket(channel, data));
++        }
++    }
++
++    @Override
++    public void notifyOwningServer(Player player, String channel, byte[] data) {
++        if (player instanceof ExternalPlayer externalPlayer) {
++            MultiPaper.broadcastPacketToExternalServers(Collections.singleton(externalPlayer.externalServerConnection.externalServer), () -> new PluginNotificationPacket(channel, data));
++        } else {
++            onNotification(null, channel, data); // Send to ourselves
++        }
++    }
++
 +    public void onNotification(ExternalServerConnection sender, String channel, byte[] data) {
 +        List<Listener> listenerList = listeners.get(channel);
 +        if (listenerList != null) {
@@ -382,9 +409,15 @@ index 0000000000000000000000000000000000000000..c22d22b81ca2d6ca2b7ebf02e73d3ad5
 +                    iterator.remove();
 +                } else {
 +                    try {
-+                        listener.consumer.accept(data, (replyChannel, replyData) -> sender.send(new PluginNotificationPacket(replyChannel, replyData)));
++                        listener.consumer.accept(data, (replyChannel, replyData) -> {
++                            if (sender == null) {
++                                onNotification(null, replyChannel, replyData); // Replying to ourselves
++                            } else {
++                                sender.send(new PluginNotificationPacket(replyChannel, replyData));
++                            }
++                        });
 +                    } catch (Throwable ex) {
-+                        String msg = "Could not pass notification " + channel + " to " + plugin.getDescription().getFullName();
++                        String msg = "Could not pass notification " + channel + " to " + plugin.getName();
 +                        Bukkit.getLogger().log(Level.SEVERE, msg, ex);
 +                    }
 +                }

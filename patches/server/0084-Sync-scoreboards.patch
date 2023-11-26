@@ -127,10 +127,10 @@ index 1da0d84762fcc0566d47974db3d927735ff592f7..2441eb28b97f930d4ec798c5b35954b4
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..0a8ab55aefc35b6496045d46b079e506e063aeb3
+index 0000000000000000000000000000000000000000..a31139db7e5035f6e24b9675528381da5af0464d
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/ScoreboardUpdatePacket.java
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,166 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -240,14 +240,18 @@ index 0000000000000000000000000000000000000000..0a8ab55aefc35b6496045d46b079e506
 +            scoreboard.removePlayerTeam(team);
 +        }
 +
-+        if (setPlayerTeamPacket.getPlayerAction() == ClientboundSetPlayerTeamPacket.Action.ADD) {
-+            for (String player : setPlayerTeamPacket.getPlayers()) {
-+                scoreboard.addPlayerToTeam(player, team);
++        try {
++            if (setPlayerTeamPacket.getPlayerAction() == ClientboundSetPlayerTeamPacket.Action.ADD) {
++                for (String player : setPlayerTeamPacket.getPlayers()) {
++                    scoreboard.addPlayerToTeam(player, team);
++                }
++            } else if (setPlayerTeamPacket.getPlayerAction() == ClientboundSetPlayerTeamPacket.Action.REMOVE) {
++                for (String player : setPlayerTeamPacket.getPlayers()) {
++                    scoreboard.removePlayerFromTeam(player, team);
++                }
 +            }
-+        } else if (setPlayerTeamPacket.getPlayerAction() == ClientboundSetPlayerTeamPacket.Action.REMOVE) {
-+            for (String player : setPlayerTeamPacket.getPlayers()) {
-+                scoreboard.removePlayerFromTeam(player, team);
-+            }
++        } catch (Exception e) {
++            // These can be usually safely ignored, just an innocent race condition
 +        }
 +
 +        if (setPlayerTeamPacket.getParameters().isPresent()) {

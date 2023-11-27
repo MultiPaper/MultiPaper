@@ -5,7 +5,7 @@ Subject: [PATCH] Forward packets to the real player
 
 
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 3a0d3c035376d810caf00079ba601d27d5047138..aa1b0c76f0908ce2936833a788066a4621b2fedc 100644
+index 51be0878d6d61e6d2a1b8f2c65d5651ac19c2749..7d96fc78e49025fe9b5ccb7d101fe7d65115b580 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
 @@ -5,6 +5,7 @@ import net.minecraft.network.Connection;
@@ -43,7 +43,7 @@ index 3a0d3c035376d810caf00079ba601d27d5047138..aa1b0c76f0908ce2936833a788066a46
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/ExternalServerConnection.java b/src/main/java/puregero/multipaper/ExternalServerConnection.java
-index 7dc391159a2a6d116fd3d1ea34d7b766f9add714..83736cca003bf96271153700a89fcee3c43a63ff 100644
+index 7dc391159a2a6d116fd3d1ea34d7b766f9add714..9f1dca3645b4b9bf5eaf490cdde92abeac6a3c34 100644
 --- a/src/main/java/puregero/multipaper/ExternalServerConnection.java
 +++ b/src/main/java/puregero/multipaper/ExternalServerConnection.java
 @@ -7,6 +7,7 @@ import io.netty.channel.socket.SocketChannel;
@@ -72,7 +72,7 @@ index 7dc391159a2a6d116fd3d1ea34d7b766f9add714..83736cca003bf96271153700a89fcee3
  
      public ExternalServerConnection() {
  
-@@ -139,4 +142,32 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
+@@ -139,4 +142,38 @@ public class ExternalServerConnection extends ChannelInitializer<SocketChannel>
              });
          }
      }
@@ -101,12 +101,18 @@ index 7dc391159a2a6d116fd3d1ea34d7b766f9add714..83736cca003bf96271153700a89fcee3
 +                }
 +                return list;
 +            });
++            if (players.contains(player)) {
++                // Duplicate packet with the same message, flush the old one to maintain sending order
++                tick();
++                sendPacket(player, packet);
++                return;
++            }
 +            players.add(player);
 +        }
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 794f96048974381edd428ed69a550e818de63c5f..136a7bb726afef1ee199b066eec8ebecf7ef13b1 100644
+index 6183c21ec677d1a59e4d901ecc3e74b469dc89b4..652da57d6477fff4bfb2f9b5a43de1ac02a53d3a 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -44,6 +44,13 @@ public class MultiPaper {

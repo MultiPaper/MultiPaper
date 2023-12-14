@@ -63,7 +63,7 @@ public class MultiPaperBungee extends Plugin implements Listener {
 
     @EventHandler
     public void onChat(ChatEvent event) {
-        if (event.getMessage().startsWith("/server ") && event.getSender() instanceof ProxiedPlayer) {
+        if (event.getMessage().startsWith("/server ") && event.getSender() instanceof ProxiedPlayer proxiedPlayer && proxiedPlayer.hasPermission("multipaper.directserverconnect")) {
             usingServerCommand.add((ProxiedPlayer) event.getSender());
         }
     }

@@ -20,7 +20,7 @@ index 221e64a66ff12a8de5c75992fc26a54a03b317e7..bd593bb8a6039f9f8304d71739c14df7
          this.action = type;
          this.usingSecondaryAction = playerSneaking;
 diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
-index 76e1abcca021238c055fe573111ab5290f08514a..3f7e7dcf9ea28a8690026c24b1e1f38986d33fe4 100644
+index 21d961e0e7c4e897a36b0edc1d76f98b9254c0d9..99b0ccb1ca23d2eb84c2d825e05d429bee40ab50 100644
 --- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 +++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
 @@ -250,6 +250,7 @@ import org.bukkit.inventory.SmithingInventory;
@@ -41,7 +41,7 @@ index 76e1abcca021238c055fe573111ab5290f08514a..3f7e7dcf9ea28a8690026c24b1e1f389
                  return;
              }
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 579b8f4dbd67755e69e1d521054db6f40b34eb69..8ba3dd559e9a259b8361ab5be200e1c93b50c1c8 100644
+index 6025f87b0994c67c2bfe0c40ae8fb9831d412efe..0631623ef873c8eccf28615b353a8402ada54d0e 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -7,12 +7,14 @@ import com.google.common.collect.Lists;
@@ -98,21 +98,20 @@ index 579b8f4dbd67755e69e1d521054db6f40b34eb69..8ba3dd559e9a259b8361ab5be200e1c9
  // CraftBukkit end
  
  public abstract class Entity implements Nameable, EntityAccess, CommandSource {
-@@ -2925,6 +2934,13 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2925,6 +2934,12 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                  }).forEach((entity2) -> {
                      CriteriaTriggers.START_RIDING_TRIGGER.trigger((ServerPlayer) entity2);
                  });
 +                // MultiPaper start - inform the player's server that they are now riding an entity and hand them the entity's data
 +                Entity rootVehicle = this.getRootVehicle();
 +                if (MultiPaperEntitiesHandler.getControllingPassenger(rootVehicle) == this && MultiPaper.isChunkLocal(level.getChunkIfLoaded(rootVehicle.blockPosition)) && this instanceof ExternalPlayer player) {
-+                    player.externalServerConnection.send(new EntityUpdateNBTPacket(rootVehicle));
-+                    EntityUpdateWithDependenciesPacket.sendPassengersRecursive(player.externalServerConnection, rootVehicle);
++                    EntityUpdateWithDependenciesPacket.sendVehicleAndPassengersPacketsRecursivelyToServers(rootVehicle, List.of(player.externalServerConnection.externalServer));
 +                }
 +                // MultiPaper end - inform the player's server that they are now riding an entity and hand them the entity's data
                  return true;
              }
          }
-@@ -2952,10 +2968,27 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -2961,10 +2976,26 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
      public void stopRiding(boolean suppressCancellation) {
          // Paper end
          if (this.vehicle != null) {
@@ -128,13 +127,12 @@ index 579b8f4dbd67755e69e1d521054db6f40b34eb69..8ba3dd559e9a259b8361ab5be200e1c9
 +                // Any server might now be controlling this vehicle
 +                Set<ExternalServer> servers = new LinkedHashSet<>(newChunkHolder == null ? Collections.emptyList() : newChunkHolder.externalEntitiesSubscribers);
 +
-+                if (MultiPaperEntitiesHandler.getControllingPassenger(this.vehicle) instanceof ExternalPlayer newController) {
++                if (MultiPaperEntitiesHandler.getControllingPassenger(entity.getRootVehicle()) instanceof ExternalPlayer newController) {
 +                    // Make sure we send the vehicle to the new controlling passenger, even if they don't have the chunk loaded
 +                    servers.add(newController.externalServerConnection.externalServer);
 +                }
 +
-+                MultiPaper.broadcastPacketToExternalServers(servers, () -> new EntityUpdateNBTPacket(entity.getRootVehicle()));
-+                EntityUpdateWithDependenciesPacket.sendPassengersRecursive(packet -> MultiPaper.broadcastPacketToExternalServers(servers, packet), entity.getRootVehicle());
++                EntityUpdateWithDependenciesPacket.sendVehicleAndPassengersPacketsRecursivelyToServers(entity.getRootVehicle(), servers);
 +            }
 +            // MultiPaper end - inform other servers that the player is no longer riding the entity and hand them the entity's data
          }

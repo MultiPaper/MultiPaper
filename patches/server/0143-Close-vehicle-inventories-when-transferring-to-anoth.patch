@@ -5,7 +5,7 @@ Subject: [PATCH] Close vehicle inventories when transferring to another server
 
 
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index ba4fe7c97d42b1438a852d0134e1b084ed626261..6fa88190d911c37970f0b6b7b191ec3d32ffdbee 100644
+index dc69db75f8ecc1d66ec1768469df7778ed02ff07..ffa2b231541d54be68720aa5e58f6a0902a999d9 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -10,6 +10,8 @@ import com.mojang.logging.LogUtils;
@@ -34,15 +34,15 @@ index ba4fe7c97d42b1438a852d0134e1b084ed626261..6fa88190d911c37970f0b6b7b191ec3d
  import org.slf4j.Logger;
  import org.bukkit.Bukkit;
  import org.bukkit.Location;
-@@ -3106,6 +3111,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -3114,6 +3119,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
                      servers.add(newController.externalServerConnection.externalServer);
                  }
  
 +                closeInventoriesRecursive(entity.getRootVehicle()); // Close any open inventories on the vehicle
-                 MultiPaper.broadcastPacketToExternalServers(servers, () -> new EntityUpdateNBTPacket(entity.getRootVehicle()));
-                 EntityUpdateWithDependenciesPacket.sendPassengersRecursive(packet -> MultiPaper.broadcastPacketToExternalServers(servers, packet), entity.getRootVehicle());
+                 EntityUpdateWithDependenciesPacket.sendVehicleAndPassengersPacketsRecursivelyToServers(entity.getRootVehicle(), servers);
              }
-@@ -3114,6 +3120,25 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+             // MultiPaper end - inform other servers that the player is no longer riding the entity and hand them the entity's data
+@@ -3121,6 +3127,25 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      }
  

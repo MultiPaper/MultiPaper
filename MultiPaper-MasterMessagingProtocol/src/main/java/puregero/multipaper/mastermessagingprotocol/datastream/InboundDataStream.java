@@ -93,5 +93,4 @@ public class InboundDataStream {
         closeHandlers.forEach(Runnable::run);
         manager.inboundDataStreams.remove(streamId, this);
     }
-
 }

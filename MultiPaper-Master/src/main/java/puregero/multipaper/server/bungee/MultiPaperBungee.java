@@ -103,5 +103,4 @@ public class MultiPaperBungee extends Plugin implements Listener {
     private boolean isMultiPaperServer(String name) {
         return ServerConnection.getConnection(name) != null;
     }
-
 }

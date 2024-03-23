@@ -179,5 +179,4 @@ public class ProxyServer extends Thread {
         ServerConnection bestServer = connections.get((int) (Math.random() * connections.size()));
         return new InetSocketAddress(bestServer.getHost(), bestServer.getPort());
     }
-
 }

@@ -51,5 +51,4 @@ public abstract class MessageHandler<T extends Message> extends SimpleChannelInb
             message.handle(this);
         }
     }
-
 }

@@ -36,7 +36,8 @@ public class CallDataStorageHandler {
                 throw new IllegalArgumentException("Unexpected result: " + result + " (" + result.getClass().getName() + ")");
             }
         }).exceptionally(throwable -> {
-            throwable.printStackTrace();
+            log.error("Failed to handle message", throwable);
+
             return null;
         });
     }
@@ -128,7 +129,7 @@ public class CallDataStorageHandler {
                 Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Failed to save datastorage.yaml", e);
         }
     }
 
@@ -145,7 +146,7 @@ public class CallDataStorageHandler {
                 try (FileInputStream in = new FileInputStream(file)) {
                     yaml = new Yaml(new SafeConstructor()).load(in);
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    log.error("Failed to load datastorage.yaml", e);
                 }
             }
 

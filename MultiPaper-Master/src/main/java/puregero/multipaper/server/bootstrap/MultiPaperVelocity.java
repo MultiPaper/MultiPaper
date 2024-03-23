@@ -21,16 +21,14 @@ import java.nio.file.Path;
 import java.util.Collection;
 
 @Plugin(id = "multipaper-velocity",
-    name = "MultiPaper Velocity",
-    version = "1.0.0",
-    authors = { "PureGero" }
+        name = "MultiPaper Velocity",
+        version = "1.0.0",
+        authors = {"PureGero"}
 )
 public class MultiPaperVelocity {
     private final ProxyServer server;
     private final Logger logger;
     private final Path dataFolder;
-
-    private int port;
     private boolean balanceNodes;
 
     @Inject
@@ -44,10 +42,11 @@ public class MultiPaperVelocity {
     public void onProxyInitialization(ProxyInitializeEvent event) {
         Toml config = this.getConfig();
 
-        this.port = Math.toIntExact(config.getLong("port", Long.valueOf(MultiPaperServer.DEFAULT_PORT)));
+        int port = Math.toIntExact(config.getLong("port", Long.valueOf(MultiPaperServer.DEFAULT_PORT)));
+
         this.balanceNodes = config.getBoolean("balance-nodes", true);
 
-        new MultiPaperServer(this.port);
+        new MultiPaperServer(port);
     }
 
     @Subscribe
@@ -94,7 +93,7 @@ public class MultiPaperVelocity {
                     .getResourceAsStream("config.toml")) {
                 Files.copy(in, file.toPath());
             } catch (IOException e) {
-                e.printStackTrace();
+                logger.error("Failed to create config file", e);
             }
         }
 

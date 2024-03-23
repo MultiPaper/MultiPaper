@@ -1,5 +1,6 @@
 package puregero.multipaper.server.handlers;
 
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.ReadUidMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.DataMessageReply;
 import puregero.multipaper.server.ServerConnection;
@@ -10,7 +11,9 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.util.concurrent.CompletableFuture;
 
+@Slf4j
 public class ReadUidHandler {
+
     public static void handle(ServerConnection connection, ReadUidMessage message) {
         CompletableFuture.runAsync(() -> {
             try {
@@ -21,7 +24,7 @@ public class ReadUidHandler {
                     connection.sendReply(new DataMessageReply(new byte[0]), message);
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("Failed to read uid", e);
             }
         });
     }

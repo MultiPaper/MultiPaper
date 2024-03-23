@@ -66,7 +66,8 @@ public class RegionFileCache {
             // Remove any .'s and ..'s
             return new File(file.getCanonicalPath());
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Failed to get canonical path for " + file, e);
+
             return file;
         }
     }
@@ -126,7 +127,7 @@ public class RegionFileCache {
                 removeFile.close();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Failed to close region file", e);
         }
     }
 
@@ -186,6 +187,7 @@ public class RegionFileCache {
             r.putDeflatedBytes(chunkX, chunkZ, data);
         } catch (Throwable throwable) {
             log.error("Error when trying to write chunk " + chunkX + "," + chunkZ + " in " + basePath);
+
             throw throwable;
         }
     }

@@ -1,5 +1,6 @@
 package puregero.multipaper.server.handlers;
 
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteAdvancementsMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
 import puregero.multipaper.server.FileLocker;
@@ -9,7 +10,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
+@Slf4j
 public class WriteAdvancementsHandler {
+
     public static void handle(ServerConnection connection, WriteAdvancementsMessage message) {
         CompletableFuture.runAsync(() -> {
             try {
@@ -17,7 +20,7 @@ public class WriteAdvancementsHandler {
 
                 connection.sendReply(new BooleanMessageReply(true), message);
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("Failed to write advancements", e);
             }
         });
     }

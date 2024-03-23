@@ -46,7 +46,7 @@ public class ProxyServer extends Thread {
 
             acceptThread.start();
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Failed to open server", e);
         }
     }
 
@@ -90,7 +90,7 @@ public class ProxyServer extends Thread {
                 }
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Error in server thread", e);
         }
     }
 
@@ -134,7 +134,7 @@ public class ProxyServer extends Thread {
 
             log.info(socketChannel.getRemoteAddress() + " has connected to " + destinationChannel.getRemoteAddress());
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Error accepting connection", e);
 
             if (socketChannel != null) {
                 try {

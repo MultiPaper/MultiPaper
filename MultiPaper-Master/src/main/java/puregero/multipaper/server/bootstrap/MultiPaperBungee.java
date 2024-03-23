@@ -1,4 +1,4 @@
-package puregero.multipaper.server.bungee;
+package puregero.multipaper.server.bootstrap;
 
 import net.md_5.bungee.api.config.ServerInfo;
 import net.md_5.bungee.api.connection.ProxiedPlayer;

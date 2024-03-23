@@ -1,4 +1,4 @@
-package puregero.multipaper.server.velocity;
+package puregero.multipaper.server.bootstrap;
 
 import com.google.inject.Inject;
 import com.moandjiezana.toml.Toml;

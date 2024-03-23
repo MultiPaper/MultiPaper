@@ -1,5 +1,6 @@
 package puregero.multipaper.server.handlers;
 
+import lombok.extern.slf4j.Slf4j;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -18,6 +19,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 public class CallDataStorageHandler {
     private static Map<String, Object> yaml;
     private static CompletableFuture<Void> saveFuture;
@@ -88,13 +90,15 @@ public class CallDataStorageHandler {
             long a = Long.parseLong(A);
             long b = Long.parseLong(B);
             return Long.toString(a + b);
-        } catch (NumberFormatException ignored) {}
+        } catch (NumberFormatException ignored) {
+        }
 
         try {
             double a = Double.parseDouble(A);
             double b = Double.parseDouble(B);
             return Double.toString(a + b);
-        } catch (NumberFormatException ignored) {}
+        } catch (NumberFormatException ignored) {
+        }
 
         return B;
     }
@@ -158,7 +162,7 @@ public class CallDataStorageHandler {
             @Override
             public void run() {
                 if (saveFuture != null && !saveFuture.isDone()) {
-                    System.out.println("Saving unsaved datastorage.yaml...");
+                    log.info("Saving unsaved datastorage.yaml...");
                     saveYaml();
                 }
             }

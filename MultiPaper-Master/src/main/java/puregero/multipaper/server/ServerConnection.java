@@ -2,6 +2,7 @@ package puregero.multipaper.server;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.SocketChannel;
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.*;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.SetSecretMessage;
@@ -15,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
+@Slf4j
 public class ServerConnection extends MasterBoundMessageHandler {
     private final SocketChannel channel;
 
@@ -72,7 +74,7 @@ public class ServerConnection extends MasterBoundMessageHandler {
     }
 
     public void send(ServerBoundMessage message) {
-       channel.writeAndFlush(message);
+        channel.writeAndFlush(message);
     }
 
     public void send(ServerBoundMessage message, Consumer<MasterBoundMessage> callback) {
@@ -114,16 +116,16 @@ public class ServerConnection extends MasterBoundMessageHandler {
                     && oldConnectionWithSameName != null
                     && !oldConnectionWithSameName.uuid.equals(uuid)
                     && connections.contains(oldConnectionWithSameName)) {
-                System.out.println("# -------------------------------------------------------------------------- #");
-                System.out.println("  WARNING: Two servers have connected with the same name!");
-                System.out.println("  1. " + oldConnectionWithSameName.getBungeeCordName() + ": " + oldConnectionWithSameName.getHost() + " (" + oldConnectionWithSameName.uuid + ")");
-                System.out.println("  2. " + this.getBungeeCordName() + ": " + this.getHost() + " (" + this.uuid + ")");
-                System.out.println("  If this is expected, add -Dallow.multiple.connections to your command line");
-                System.out.println("# -------------------------------------------------------------------------- #");
+                log.info("# -------------------------------------------------------------------------- #");
+                log.info("  WARNING: Two servers have connected with the same name!");
+                log.info("  1. " + oldConnectionWithSameName.getBungeeCordName() + ": " + oldConnectionWithSameName.getHost() + " (" + oldConnectionWithSameName.uuid + ")");
+                log.info("  2. " + this.getBungeeCordName() + ": " + this.getHost() + " (" + this.uuid + ")");
+                log.info("  If this is expected, add -Dallow.multiple.connections to your command line");
+                log.info("# -------------------------------------------------------------------------- #");
             }
         }
 
-        System.out.println("Connection from " + getAddress() + " (" + name + ")");
+        log.info("Connection from " + getAddress() + " (" + name + ")");
 
         send(new SetSecretMessage(MultiPaperServer.SECRET));
     }
@@ -143,7 +145,7 @@ public class ServerConnection extends MasterBoundMessageHandler {
             connections.remove(this);
         }
 
-        System.out.println(ctx.channel().remoteAddress() + " (" + name + ") closed");
+        log.info(ctx.channel().remoteAddress() + " (" + name + ") closed");
     }
 
     public String getBungeeCordName() {

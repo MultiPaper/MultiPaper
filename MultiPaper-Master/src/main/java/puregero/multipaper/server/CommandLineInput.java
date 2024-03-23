@@ -1,7 +1,10 @@
 package puregero.multipaper.server;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.Scanner;
 
+@Slf4j
 public class CommandLineInput extends Thread {
 
     @Override
@@ -12,11 +15,11 @@ public class CommandLineInput extends Thread {
             String line = scanner.nextLine();
 
             if (line.equalsIgnoreCase("shutdown")) {
-                System.out.println("Shutting down servers...");
+                log.info("Shutting down servers...");
                 ServerConnection.shutdownAndWait();
                 System.exit(0);
             } else {
-                System.out.println("Unknown command, use 'shutdown' to shutdown all servers or ctrl+c to stop just this master server");
+                log.info("Unknown command, use 'shutdown' to shutdown all servers or ctrl+c to stop just this master server");
             }
         }
     }

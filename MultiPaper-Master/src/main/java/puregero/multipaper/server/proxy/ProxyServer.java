@@ -1,5 +1,6 @@
 package puregero.multipaper.server.proxy;
 
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.server.ServerConnection;
 
 import java.io.IOException;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+@Slf4j
 public class ProxyServer extends Thread {
 
     public static final int BUFFER_SIZE = Integer.parseInt(System.getProperty("proxyserver.buffersize", "32768"));
@@ -29,7 +31,7 @@ public class ProxyServer extends Thread {
             serverChannel.configureBlocking(false);
             serverChannel.socket().bind(new InetSocketAddress("0.0.0.0", port));
 
-            System.out.println("[ProxyServer] Listening on " + serverChannel.getLocalAddress());
+            log.info("[ProxyServer] Listening on " + serverChannel.getLocalAddress());
 
             Selector selector = Selector.open();
             serverChannel.register(selector, SelectionKey.OP_ACCEPT);
@@ -37,7 +39,7 @@ public class ProxyServer extends Thread {
             ProxyServer acceptThread = new ProxyServer(serverChannel, selector, "ProxyServer-Accept");
 
             acceptThread.workerSelectors = new Selector[Math.max(1, WORKER_THREADS)];
-            for (int i = 0; i < acceptThread.workerSelectors.length; i ++) {
+            for (int i = 0; i < acceptThread.workerSelectors.length; i++) {
                 acceptThread.workerSelectors[i] = Selector.open();
                 new ProxyServer(serverChannel, acceptThread.workerSelectors[i], "ProxyServer-Worker #" + (i + 1)).start();
             }
@@ -109,7 +111,7 @@ public class ProxyServer extends Thread {
             SocketAddress destinationAddress = getSuitableServer();
 
             if (destinationAddress == null) {
-                System.out.println("No available servers for " + socketChannel.getRemoteAddress() + " to connect to");
+                log.error("No available servers for " + socketChannel.getRemoteAddress() + " to connect to");
                 socketChannel.close();
                 return;
             }
@@ -130,7 +132,7 @@ public class ProxyServer extends Thread {
             socketChannel.register(workerSelector, SelectionKey.OP_READ, sourceConnection);
             workerSelector.wakeup();
 
-            System.out.println(socketChannel.getRemoteAddress() + " has connected to " + destinationChannel.getRemoteAddress());
+            log.info(socketChannel.getRemoteAddress() + " has connected to " + destinationChannel.getRemoteAddress());
         } catch (IOException e) {
             e.printStackTrace();
 

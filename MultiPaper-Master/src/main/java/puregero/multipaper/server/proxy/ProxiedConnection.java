@@ -1,5 +1,7 @@
 package puregero.multipaper.server.proxy;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -7,6 +9,7 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 
+@Slf4j
 public class ProxiedConnection {
 
     private final SocketChannel socketChannel;
@@ -114,7 +117,7 @@ public class ProxiedConnection {
                 buffer.position(0);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Failed to rewrite hello packet", e);
         }
 
         buffer.position(0);
@@ -126,7 +129,7 @@ public class ProxiedConnection {
                 socketChannel.close();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Failed to close socket channel", e);
         }
 
         try {
@@ -134,7 +137,7 @@ public class ProxiedConnection {
                 destinationChannel.close();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Failed to close destination channel", e);
         }
     }
 }

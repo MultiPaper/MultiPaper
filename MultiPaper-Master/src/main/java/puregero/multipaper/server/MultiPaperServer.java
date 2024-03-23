@@ -1,6 +1,7 @@
 package puregero.multipaper.server;
 
 import io.netty.channel.ChannelFuture;
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundProtocol;
@@ -11,6 +12,7 @@ import puregero.multipaper.server.proxy.ProxyServer;
 import java.io.IOException;
 import java.util.UUID;
 
+@Slf4j
 public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, ServerBoundMessage> {
 
     public static final int DEFAULT_PORT = 35353;
@@ -35,7 +37,7 @@ public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, Serve
             if (f.cause() != null) {
                 f.cause().printStackTrace();
             } else {
-                System.out.println("[MultiPaperMaster] Listening on " + (address == null ? "0.0.0.0" : address) + ":" + port);
+                log.info("Listening on " + (address == null ? "0.0.0.0" : address) + ":" + port);
             }
         });
     }

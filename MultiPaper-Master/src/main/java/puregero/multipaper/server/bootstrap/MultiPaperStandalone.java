@@ -1,9 +1,11 @@
 package puregero.multipaper.server.bootstrap;
 
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.server.CommandLineInput;
 import puregero.multipaper.server.MultiPaperServer;
 import puregero.multipaper.server.proxy.ProxyServer;
 
+@Slf4j
 public class MultiPaperStandalone {
 
     public static void main(String[] args) {
@@ -20,7 +22,8 @@ public class MultiPaperStandalone {
             try {
                 port = Integer.parseInt(args[0]);
             } catch (NumberFormatException e) {
-                System.err.println("Usage: java -jar MultiPaperServer.jar <[address:]port> [proxy port]");
+                log.error("Usage: java -jar MultiPaperServer.jar <[address:]port> [proxy port]");
+
                 System.exit(1);
             }
         }
@@ -29,7 +32,8 @@ public class MultiPaperStandalone {
             try {
                 ProxyServer.openServer(Integer.parseInt(args[1]));
             } catch (NumberFormatException e) {
-                System.err.println("Usage: java -jar MultiPaperServer.jar <[address:]port> [proxy port]");
+                log.error("Usage: java -jar MultiPaperServer.jar <[address:]port> [proxy port]");
+
                 System.exit(1);
             }
         }

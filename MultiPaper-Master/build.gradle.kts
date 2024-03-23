@@ -22,9 +22,13 @@ dependencies {
     implementation("org.yaml:snakeyaml:1.33")
     implementation("io.netty:netty-all:4.1.87.Final")
     implementation("se.llbit:jo-nbt:1.3.0")
+    implementation("ch.qos.logback:logback-classic:1.5.3")
+    implementation("org.slf4j:slf4j-api:2.0.12")
     compileOnly("net.md-5:bungeecord-api:1.16-R0.4")
     compileOnly("com.velocitypowered:velocity-api:3.0.1")
+    compileOnly("org.projectlombok:lombok:1.18.30")
     annotationProcessor("com.velocitypowered:velocity-api:3.0.1")
+    annotationProcessor("org.projectlombok:lombok:1.18.30")
 }
 
 tasks.jar {

@@ -1,5 +1,6 @@
 package puregero.multipaper.server.handlers;
 
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.ReadLevelMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.DataMessageReply;
 import puregero.multipaper.server.ServerConnection;
@@ -12,6 +13,7 @@ import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 public class ReadLevelHandler {
     private static final HashMap<String, Long> emptyLevelDatLockTimes = new HashMap<>();
     private static final HashMap<String, String> emptyLevelDatLocker = new HashMap<>();
@@ -26,12 +28,12 @@ public class ReadLevelHandler {
                     synchronized (emptyLevelDatLockTimes) {
                         if (!connection.getBungeeCordName().equals(emptyLevelDatLocker.get(message.world))) {
                             if (emptyLevelDatLockTimes.getOrDefault(message.world, 0L) > System.currentTimeMillis() - 120 * 1000L) {
-                                System.out.println(connection.getBungeeCordName() + " has requested " + message.world + "'s level.dat, but it is empty. Retying in 10 seconds once " + emptyLevelDatLocker.get(message.world) + " has generated it...");
+                                log.info(connection.getBungeeCordName() + " has requested " + message.world + "'s level.dat, but it is empty. Retying in 10 seconds once " + emptyLevelDatLocker.get(message.world) + " has generated it...");
                                 CompletableFuture.delayedExecutor(10, TimeUnit.SECONDS).execute(() -> handle(connection, message));
                                 return;
                             }
 
-                            System.out.println(connection.getBungeeCordName() + " has requested " + message.world + "'s level.dat, but it is empty. We will assume this server will generate it.");
+                            log.info(connection.getBungeeCordName() + " has requested " + message.world + "'s level.dat, but it is empty. We will assume this server will generate it.");
                             emptyLevelDatLockTimes.put(message.world, System.currentTimeMillis());
                             emptyLevelDatLocker.put(message.world, connection.getBungeeCordName());
                         }
@@ -40,7 +42,7 @@ public class ReadLevelHandler {
                     connection.sendReply(new DataMessageReply(new byte[0]), message);
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("Error reading level.dat", e);
             }
         });
     }

@@ -1,5 +1,6 @@
 package puregero.multipaper.server.bootstrap;
 
+import lombok.extern.slf4j.Slf4j;
 import net.md_5.bungee.api.config.ServerInfo;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.event.ChatEvent;
@@ -20,6 +21,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 
+@Slf4j
 public class MultiPaperBungee extends Plugin implements Listener {
 
     private final HashSet<ProxiedPlayer> usingServerCommand = new HashSet<>();
@@ -36,7 +38,7 @@ public class MultiPaperBungee extends Plugin implements Listener {
             try {
                 config.createNewFile();
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("Failed to create config file", e);
             }
         }
 
@@ -57,7 +59,7 @@ public class MultiPaperBungee extends Plugin implements Listener {
 
             new MultiPaperServer(configuration.getInt("port"));
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Failed to load config", e);
         }
     }
 

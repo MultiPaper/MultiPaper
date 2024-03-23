@@ -1,5 +1,6 @@
 package puregero.multipaper.server.handlers;
 
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.mastermessagingprotocol.ChunkKey;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.RequestChunkOwnershipMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
@@ -9,6 +10,7 @@ import puregero.multipaper.server.ServerConnection;
 import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 
+@Slf4j
 public class RequestChunkOwnershipHandler {
     public static void handle(ServerConnection connection, RequestChunkOwnershipMessage message) {
         boolean hasAtLeastOneChunkLocked = false;
@@ -18,7 +20,7 @@ public class RequestChunkOwnershipHandler {
             }
         }
 
-        System.out.println(connection.getBungeeCordName() + " is requesting " + Arrays.toString(message.chunks) + " " + hasAtLeastOneChunkLocked);
+        log.info(connection.getBungeeCordName() + " is requesting " + Arrays.toString(message.chunks) + " " + hasAtLeastOneChunkLocked);
 
         if (hasAtLeastOneChunkLocked) {
             for (ChunkKey key : message.chunks) {

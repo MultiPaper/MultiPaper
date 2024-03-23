@@ -25,11 +25,19 @@ package puregero.multipaper.server.util;
 
 // A simple cache and wrapper for efficiently multiple RegionFiles simultaneously.
 
-import java.io.*;
-import java.lang.ref.*;
-import java.util.*;
+import lombok.extern.slf4j.Slf4j;
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.lang.ref.Reference;
+import java.lang.ref.SoftReference;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+@Slf4j
 public class RegionFileCache {
 
     private static final int MAX_CACHE_SIZE = Integer.getInteger("max.regionfile.cache.size", 256);
@@ -58,11 +66,12 @@ public class RegionFileCache {
             // Remove any .'s and ..'s
             return new File(file.getCanonicalPath());
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Failed to get canonical path for " + file, e);
+
             return file;
         }
     }
-    
+
     private static File getFileForRegionFile(File regionDir, int chunkX, int chunkZ) {
         return new File(regionDir, "r." + (chunkX >> 5) + "." + (chunkZ >> 5) + ".mca");
     }
@@ -118,7 +127,7 @@ public class RegionFileCache {
                 removeFile.close();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Failed to close region file", e);
         }
     }
 
@@ -159,7 +168,7 @@ public class RegionFileCache {
                 return null;
             }
         } catch (Throwable throwable) {
-            System.err.println("Error when trying to read chunk " + chunkX + "," + chunkZ + " in " + basePath);
+            log.error("Error when trying to read chunk " + chunkX + "," + chunkZ + " in " + basePath);
             throw throwable;
         }
     }
@@ -177,7 +186,8 @@ public class RegionFileCache {
             RegionFile r = getRegionFile(basePath, chunkX, chunkZ);
             r.putDeflatedBytes(chunkX, chunkZ, data);
         } catch (Throwable throwable) {
-            System.err.println("Error when trying to write chunk " + chunkX + "," + chunkZ + " in " + basePath);
+            log.error("Error when trying to write chunk " + chunkX + "," + chunkZ + " in " + basePath);
+
             throw throwable;
         }
     }

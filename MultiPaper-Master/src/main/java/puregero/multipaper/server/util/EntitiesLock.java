@@ -17,5 +17,4 @@ public class EntitiesLock {
     public static Object getEntitiesLock(ChunkKey key) {
         return locks[key.hashCode() & LOCK_COUNT_MASK];
     }
-
 }

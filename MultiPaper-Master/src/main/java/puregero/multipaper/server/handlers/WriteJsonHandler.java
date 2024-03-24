@@ -1,5 +1,6 @@
 package puregero.multipaper.server.handlers;
 
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteJsonMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
 import puregero.multipaper.server.ServerConnection;
@@ -10,7 +11,9 @@ import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
 
+@Slf4j
 public class WriteJsonHandler {
+
     public static final HashMap<String, byte[]> writesInProgress = new HashMap<>();
     private static final Object writingLock = new Object();
 
@@ -31,7 +34,7 @@ public class WriteJsonHandler {
 
                 connection.sendReply(new BooleanMessageReply(true), message);
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("Failed to write json", e);
             }
         });
     }

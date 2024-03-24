@@ -1,5 +1,6 @@
 package puregero.multipaper.server.handlers;
 
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.mastermessagingprotocol.datastream.OutboundDataStream;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.UploadFileMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
@@ -12,7 +13,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
+@Slf4j
 public class UploadFileHandler {
+
     public static void handle(ServerConnection connection, UploadFileMessage message) {
         File file = new File("synced-server-files", message.path);
         FileLocker.createLockAsync(file).thenAcceptAsync(lock -> {
@@ -45,7 +48,8 @@ public class UploadFileHandler {
                     lock.complete(null);
                 });
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("Failed to write file", e);
+
                 lock.complete(null);
             }
         });

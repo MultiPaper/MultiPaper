@@ -36,5 +36,4 @@ public class EntitiesLockManager {
             callback.run();
         }
     }
-
 }

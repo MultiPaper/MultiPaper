@@ -19,7 +19,6 @@ public class Protocol<T extends Message<?>> {
     public int getMessageId(T message) {
         int id = MESSAGES.indexOf(message.getClass());
         if (id == -1) {
-            System.err.println("Unknown message " + message);
             throw new IllegalArgumentException("Unknown message " + message);
         }
         return id;

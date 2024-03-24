@@ -1,10 +1,13 @@
 package puregero.multipaper.server.proxy;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
+@Slf4j
 public class HelloPacket {
 
     private final int protocolVersion;
@@ -57,7 +60,7 @@ public class HelloPacket {
 
         int packetLength = buffer.position() - lengthPosition - 1;
         if (packetLength > 127) {
-            System.err.println("HelloPacket written length is " + packetLength + "!!!");
+            log.info("HelloPacket written length is " + packetLength + "!!!");
         }
 
         buffer.put(lengthPosition, (byte) packetLength);
@@ -105,7 +108,7 @@ public class HelloPacket {
         // Remove IPv6 scope if present
         if (addr.getAddress() instanceof Inet6Address) {
             int strip = string.indexOf('%');
-            return ( strip == -1 ) ? string : string.substring( 0, strip );
+            return (strip == -1) ? string : string.substring(0, strip);
         } else {
             return string;
         }

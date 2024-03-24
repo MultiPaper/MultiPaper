@@ -1,5 +1,6 @@
 package puregero.multipaper.server.handlers;
 
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.mastermessagingprotocol.datastream.OutboundDataStream;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.DownloadFileMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.FileContentMessage;
@@ -11,7 +12,9 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
+@Slf4j
 public class DownloadFileHandler {
+
     public static void handle(ServerConnection connection, DownloadFileMessage message) {
         OutboundDataStream dataStream = connection.getDataStreamManager().createOutboundDataStream(connection.getChannel());
         File file = new File("synced-server-files", message.path);
@@ -22,7 +25,7 @@ public class DownloadFileHandler {
                     lock.complete(null);
                 });
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("Failed to send file", e);
             }
         });
     }

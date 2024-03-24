@@ -1,5 +1,6 @@
 package puregero.multipaper.server.handlers;
 
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteDataMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.DataUpdateMessage;
@@ -10,7 +11,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
+@Slf4j
 public class WriteDataHandler {
+
     public static void handle(ServerConnection connection, WriteDataMessage message) {
         CompletableFuture.runAsync(() -> {
             try {
@@ -24,7 +27,7 @@ public class WriteDataHandler {
 
                 connection.broadcastOthers(new DataUpdateMessage(message.path, message.data));
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("Failed to write data", e);
             }
         });
     }

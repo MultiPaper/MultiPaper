@@ -17,5 +17,4 @@ public class ChunkLock {
     public static Object getChunkLock(ChunkKey key) {
         return locks[key.hashCode() & LOCK_COUNT_MASK];
     }
-
 }

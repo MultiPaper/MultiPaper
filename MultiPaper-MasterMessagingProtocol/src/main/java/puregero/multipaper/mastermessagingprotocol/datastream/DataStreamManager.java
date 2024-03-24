@@ -54,5 +54,4 @@ public class DataStreamManager<T extends Message> {
     public T createDataStreamMessage(int streamId, byte[] data, int offset, int length) {
         return messageHandler.createDataStreamMessage(streamId, data, offset, length);
     }
-
 }

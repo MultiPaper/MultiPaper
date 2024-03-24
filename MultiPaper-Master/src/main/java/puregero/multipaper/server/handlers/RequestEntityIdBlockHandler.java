@@ -1,5 +1,6 @@
 package puregero.multipaper.server.handlers;
 
+import lombok.extern.slf4j.Slf4j;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.RequestEntityIdBlock;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.IntegerPairMessageReply;
 import puregero.multipaper.server.ServerConnection;
@@ -11,7 +12,9 @@ import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
+@Slf4j
 public class RequestEntityIdBlockHandler {
+
     private static final int BLOCK_SIZE = Integer.getInteger("entityid.block.size", 4096);
     private static AtomicInteger lastBlock = null;
     private static volatile boolean queueLastBlockSave = true;
@@ -47,7 +50,7 @@ public class RequestEntityIdBlockHandler {
             return;
         } catch (NoSuchFileException ignored) {
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Failed to load last block", e);
         }
 
         lastBlock = new AtomicInteger(0);
@@ -59,7 +62,7 @@ public class RequestEntityIdBlockHandler {
             try {
                 Files.writeString(Path.of("lastblock.txt"), Integer.toString(lastBlock.get()));
             } catch (IOException e) {
-                e.printStackTrace();
+                log.error("Failed to save last block", e);
             }
         }
 

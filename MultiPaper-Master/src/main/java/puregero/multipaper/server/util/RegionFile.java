@@ -58,6 +58,8 @@ package puregero.multipaper.server.util;
 
  */
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -69,6 +71,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.zip.*;
 
+@Slf4j
 public class RegionFile {
 
     private static final byte VERSION_GZIP = 1;
@@ -149,7 +152,7 @@ public class RegionFile {
                 chunkTimestamps[i] = lastModValue;
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Failed to open region file", e);
         }
     }
 
@@ -157,12 +160,13 @@ public class RegionFile {
      * Run one task on this RegionFile at a time. This method ensures only one
      * task is being executed at a time, so that the CompletableFuture async
      * pool isn't full of tasks that are waiting upon a single RegionFile.
+     *
      * @param task The task to execute
      */
     public <T> CompletableFuture<T> submitTask(Function<RegionFile, T> task) {
         CompletableFuture<T> future = lastTaskInQueue.orTimeout(15, TimeUnit.SECONDS).exceptionally(e -> {
             if (e instanceof TimeoutException || e.getCause() instanceof TimeoutException) {
-                e.printStackTrace();
+                log.error("Timeout while waiting for previous task to finish", e);
             }
             return null;
         }).thenApplyAsync((value) -> task.apply(this));
@@ -322,13 +326,13 @@ public class RegionFile {
     }
 
     /* write a chunk at (x,z) with length bytes of data to disk */
-    protected synchronized void write(int x, int z, byte[] data, int length) {        
+    protected synchronized void write(int x, int z, byte[] data, int length) {
         try {
             if (length == 0) {
                 clear(x, z);
                 return;
             }
-            
+
             int offset = getOffset(x, z);
             int sectorNumber = offset >>> 8;
             int sectorsAllocated = offset & 0xFF;
@@ -397,7 +401,7 @@ public class RegionFile {
             }
             setTimestamp(x, z, (int) (System.currentTimeMillis() / 1000L));
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error("Failed to write chunk", e);
         }
     }
 

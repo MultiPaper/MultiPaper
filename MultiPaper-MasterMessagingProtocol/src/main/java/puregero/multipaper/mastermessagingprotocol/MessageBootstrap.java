@@ -97,5 +97,4 @@ public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extend
         socketChannel.pipeline().addLast(new MessageDecoder<>(this.inboundProtocol));
         setupChannel.accept(socketChannel);
     }
-
 }

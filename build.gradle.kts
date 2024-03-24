@@ -5,7 +5,7 @@ plugins {
     java
     `maven-publish`
     id("com.github.johnrengelman.shadow") version "8.1.1"
-    id("io.papermc.paperweight.patcher") version "2.0-SNAPSHOT"
+    id("io.papermc.paperweight.patcher") version "1.5.7-SNAPSHOT"
 }
 
 repositories {

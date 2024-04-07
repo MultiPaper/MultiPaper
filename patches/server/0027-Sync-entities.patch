@@ -866,10 +866,19 @@ index 0f9d51e2959a9bf2b3b31930c88a942a777a6d56..727b613ae30c3266c2fc5f5a13d2622f
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 7af8ebcc683a7b10f5bea3842191ed4d4c2f3bc5..ac91a14674bad0ebf16e41ea9497c4992c18cd96 100644
+index 7af8ebcc683a7b10f5bea3842191ed4d4c2f3bc5..6a05b0d682ec354288ee0dd232e3d28a6d5f96ba 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -302,6 +302,8 @@ public class MultiPaper {
+@@ -126,6 +126,8 @@ public class MultiPaper {
+                 broadcastPacketToExternalServers(new TimeUpdatePacket(level));
+             }
+         }
++
++        RequestEntityPacket.tick();
+     }
+ 
+     public static void sendTickTime(long time, double tps) {
+@@ -302,6 +304,8 @@ public class MultiPaper {
                          RequestChunkPacket.blocker = null;
                          future.complete(inputStream);
                      });
@@ -878,7 +887,7 @@ index 7af8ebcc683a7b10f5bea3842191ed4d4c2f3bc5..ac91a14674bad0ebf16e41ea9497c499
                  } else {
                      throw new IllegalArgumentException("Cannot load a " + path + " chunk from an external server");
                  }
-@@ -463,6 +465,7 @@ public class MultiPaper {
+@@ -463,6 +467,7 @@ public class MultiPaper {
  
      public static void unlockChunk(NewChunkHolder newChunkHolder, ChunkAccess chunkAccess, ChunkEntitySlices chunkEntitySlices) {
          if (chunkAccess instanceof LevelChunk levelChunk && MultiPaper.isChunkLocal(newChunkHolder)) {
@@ -886,7 +895,7 @@ index 7af8ebcc683a7b10f5bea3842191ed4d4c2f3bc5..ac91a14674bad0ebf16e41ea9497c499
              broadcastPacketToExternalServers(newChunkHolder.externalSubscribers, () -> new SendTickListPacket(levelChunk));
              for (BlockEntity blockEntity : levelChunk.getBlockEntities().values()) {
                  if (blockEntity instanceof Container container) {
-@@ -555,6 +558,10 @@ public class MultiPaper {
+@@ -555,6 +560,10 @@ public class MultiPaper {
          return level.chunkTaskScheduler.chunkHolderManager.getChunkHolder(x, z);
      }
  
@@ -1677,7 +1686,7 @@ index 0000000000000000000000000000000000000000..d5ab5d4174719dce268cf2e211a9b334
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..690b0556edbafc6db59b4618cada045df948a4e8
+index 0000000000000000000000000000000000000000..c3799fb4bd23a754ebf28d266dd7b0b17d93e337
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 @@ -0,0 +1,119 @@
@@ -1786,7 +1795,7 @@ index 0000000000000000000000000000000000000000..690b0556edbafc6db59b4618cada045d
 +                    if (depth >= 20) {
 +                        LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName() + ", requesting it");
 +                    }
-+                    connection.send(new RequestEntityPacket(world, uuid));
++                    RequestEntityPacket.requestEntity(connection, world, uuid);
 +                    return;
 +                }
 +
@@ -1802,7 +1811,7 @@ index 0000000000000000000000000000000000000000..690b0556edbafc6db59b4618cada045d
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..a50199fe29a8bd2f20dd276ac6912c46e0c42ce6
+index 0000000000000000000000000000000000000000..9a5c01a9fb8ff40f1d3ee870dea491d70794f77b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 @@ -0,0 +1,188 @@
@@ -1922,7 +1931,7 @@ index 0000000000000000000000000000000000000000..a50199fe29a8bd2f20dd276ac6912c46
 +
 +                if (depth > 5) {
 +                    LOGGER.warn("Could not find entity " + uuid + " for " + packet.getClass().getSimpleName() + ", requesting it");
-+                    connection.send(new RequestEntityPacket(world, uuid));
++                    RequestEntityPacket.requestEntity(connection, world, uuid);
 +                    return;
 +                }
 +
@@ -1944,7 +1953,7 @@ index 0000000000000000000000000000000000000000..a50199fe29a8bd2f20dd276ac6912c46
 +
 +                    if (depth > 5) {
 +                        LOGGER.warn("Could not find dependent entity " + uuids[i] + " for " + packet.getClass().getSimpleName() + ", requesting it");
-+                        connection.send(new RequestEntityPacket(world, uuids[i]));
++                        RequestEntityPacket.requestEntity(connection, world, uuids[i]);
 +                        return;
 +                    }
 +
@@ -2192,10 +2201,10 @@ index 0000000000000000000000000000000000000000..26df6c6d6052f71da435d4ef973d1bb1
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3e3434a650a014f4f08c040b42215f52410c3743
+index 0000000000000000000000000000000000000000..bf9f0bf5e24fe8c70fd7895df289421a38fa87b9
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,120 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
@@ -2206,6 +2215,7 @@ index 0000000000000000000000000000000000000000..3e3434a650a014f4f08c040b42215f52
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.level.entity.Visibility;
 +import org.apache.commons.lang3.tuple.Pair;
++import org.apache.commons.lang3.tuple.Triple;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
@@ -2213,22 +2223,46 @@ index 0000000000000000000000000000000000000000..3e3434a650a014f4f08c040b42215f52
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
++import java.util.HashMap;
++import java.util.HashSet;
 +import java.util.List;
 +import java.util.Map;
 +import java.util.Optional;
++import java.util.Set;
 +import java.util.UUID;
 +import java.util.concurrent.CompletableFuture;
-+import java.util.concurrent.ConcurrentHashMap;
 +import java.util.concurrent.TimeUnit;
 +
 +public class RequestEntityPacket extends ExternalServerPacket {
 +
 +    private static final Logger LOGGER = LogManager.getLogger(RequestEntityPacket.class.getSimpleName());
 +
++    private static final Map<Pair<UUID, ExternalServerConnection>, Integer> playerRequestCounts = new HashMap<>();
++    private static final Set<Triple<String, UUID, UUID>> requestedEntitiesThisTick = new HashSet<>();
++
 +    private final UUID world;
 +    private final UUID uuid;
 +
-+    public RequestEntityPacket(UUID world, UUID uuid) {
++    public static void tick() {
++        requestedEntitiesThisTick.clear();
++    }
++
++    public static void requestEntity(ExternalServerConnection connection, UUID world, UUID entity) {
++        if (!hasAlreadyRequestedThisTick(connection, world, entity)) {
++            connection.send(new RequestEntityPacket(world, entity));
++        }
++    }
++
++    private static boolean hasAlreadyRequestedThisTick(ExternalServerConnection connection, UUID world, UUID entity) {
++        if (!Bukkit.isPrimaryThread()) {
++            LOGGER.warn(new Exception("RequestEntityPacket.requestEntity called off main thread, sending packet async without checks"));
++            return false; // We can't check this async, so just send the packet anyway
++        } else {
++            return !requestedEntitiesThisTick.add(Triple.of(connection.externalServer.getName(), world, entity));
++        }
++    }
++
++    private RequestEntityPacket(UUID world, UUID uuid) {
 +        this.world = world;
 +        this.uuid = uuid;
 +    }
@@ -2243,8 +2277,6 @@ index 0000000000000000000000000000000000000000..3e3434a650a014f4f08c040b42215f52
 +        out.writeUUID(world);
 +        out.writeUUID(uuid);
 +    }
-+
-+    private static final Map<Pair<UUID, ExternalServerConnection>, Integer> playerRequestCounts = new ConcurrentHashMap<>();
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {

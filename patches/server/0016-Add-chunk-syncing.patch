@@ -145,7 +145,7 @@ index 2519ad2884b6c09b312432b933c31476b369e599..259c3a1c34f592bde4600ad2a057d4cc
          return Boolean.FALSE;
      });
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
-index 535ab99585cd4463d051334681bc80b5d20df7c0..8bc06e4499e64a0c43a33940fd768150a5211065 100644
+index 535ab99585cd4463d051334681bc80b5d20df7c0..65c444c0bb9adca2c8f0bf8545c5294e98a052be 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
 @@ -36,12 +36,21 @@ import net.minecraft.world.level.chunk.LevelChunk;
@@ -237,7 +237,15 @@ index 535ab99585cd4463d051334681bc80b5d20df7c0..8bc06e4499e64a0c43a33940fd768150
              this.saveEntities(entityChunk, true);
              // yes this is a hack to pass the compound tag through...
              final CompoundTag lastEntityUnload = this.lastEntityUnload;
-@@ -1569,6 +1604,7 @@ public final class NewChunkHolder {
+@@ -1229,6 +1264,7 @@ public final class NewChunkHolder {
+                 for (int dx = -NEIGHBOUR_RADIUS; dx <= NEIGHBOUR_RADIUS; ++dx) {
+                     final NewChunkHolder holder = (dx | dz) == 0 ? this : this.scheduler.chunkHolderManager.getChunkHolder(dx + this.chunkX, dz + this.chunkZ);
+                     if (loaded) {
++                        if (holder == null) LOGGER.warn("Holder for ({},{}) is null while updating full status for ({},{})", dx + this.chunkX, dz + this.chunkZ, this.chunkX, this.chunkZ); // MultiPaper
+                         if (holder.setNeighbourFullLoaded(-dx, -dz)) {
+                             changedFullStatus.add(holder);
+                         }
+@@ -1569,6 +1605,7 @@ public final class NewChunkHolder {
          this.currentChunk = newChunk;
          this.currentGenStatus = newStatus;
          this.lastChunkCompletion = new ChunkCompletion(newChunk, newStatus);
@@ -245,7 +253,7 @@ index 535ab99585cd4463d051334681bc80b5d20df7c0..8bc06e4499e64a0c43a33940fd768150
  
          final ChunkStatus requestedGenStatus = this.requestedGenStatus;
  
-@@ -1648,6 +1684,8 @@ public final class NewChunkHolder {
+@@ -1648,6 +1685,8 @@ public final class NewChunkHolder {
  
              this.scheduleNeighbours(needsScheduling, scheduleList);
          }
@@ -254,7 +262,7 @@ index 535ab99585cd4463d051334681bc80b5d20df7c0..8bc06e4499e64a0c43a33940fd768150
      }
  
      private void scheduleNeighbours(final List<NewChunkHolder> needsScheduling, final List<ChunkProgressionTask> scheduleList) {
-@@ -1862,6 +1900,7 @@ public final class NewChunkHolder {
+@@ -1862,6 +1901,7 @@ public final class NewChunkHolder {
          try {
              if (unloading) {
                  try {
@@ -262,7 +270,7 @@ index 535ab99585cd4463d051334681bc80b5d20df7c0..8bc06e4499e64a0c43a33940fd768150
                      final ChunkSerializer.AsyncSaveData asyncSaveData = ChunkSerializer.getAsyncSaveData(this.world, chunk);
  
                      final PrioritisedExecutor.PrioritisedTask task = this.scheduler.loadExecutor.createTask(new AsyncChunkSerializeTask(this.world, chunk, asyncSaveData, this));
-@@ -1870,7 +1909,7 @@ public final class NewChunkHolder {
+@@ -1870,7 +1910,7 @@ public final class NewChunkHolder {
  
                      task.queue();
  
@@ -271,7 +279,7 @@ index 535ab99585cd4463d051334681bc80b5d20df7c0..8bc06e4499e64a0c43a33940fd768150
  
                      return true;
                  } catch (final ThreadDeath death) {
-@@ -1881,6 +1920,7 @@ public final class NewChunkHolder {
+@@ -1881,6 +1921,7 @@ public final class NewChunkHolder {
                  }
              }
  
@@ -279,7 +287,7 @@ index 535ab99585cd4463d051334681bc80b5d20df7c0..8bc06e4499e64a0c43a33940fd768150
              final CompoundTag save = ChunkSerializer.saveChunk(this.world, chunk, null);
  
              if (unloading) {
-@@ -1890,7 +1930,7 @@ public final class NewChunkHolder {
+@@ -1890,7 +1931,7 @@ public final class NewChunkHolder {
              } else {
                  RegionFileIOThread.scheduleSave(this.world, this.chunkX, this.chunkZ, save, RegionFileIOThread.RegionFileType.CHUNK_DATA);
              }

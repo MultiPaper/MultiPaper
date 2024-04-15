@@ -1494,16 +1494,19 @@ index 0000000000000000000000000000000000000000..1b826e5e3194728467fdeb4cf0d87a25
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2497473778bce115a844cf1703eca53e56a8a13f
+index 0000000000000000000000000000000000000000..4899e5ed6988fcef9d86e5a1f070cfb6ab6c1a10
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,100 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.entity.player.Player;
++import net.minecraft.world.level.entity.Visibility;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.Logger;
 +import org.bukkit.Bukkit;
 +import org.bukkit.craftbukkit.CraftWorld;
 +import org.bukkit.craftbukkit.scheduler.CraftScheduler;
@@ -1515,6 +1518,8 @@ index 0000000000000000000000000000000000000000..2497473778bce115a844cf1703eca53e
 +import java.util.UUID;
 +
 +public class EntityRemovePacket extends ExternalServerPacket {
++
++    private static final Logger LOGGER = LogManager.getLogger(EntityRemovePacket.class.getSimpleName());
 +
 +    public static final HashMap<UUID, Entity.RemovalReason> removedEntities = new HashMap<>();
 +
@@ -1547,19 +1552,38 @@ index 0000000000000000000000000000000000000000..2497473778bce115a844cf1703eca53e
 +
 +    @Override
 +    public void handle(ExternalServerConnection connection) {
-+        MultiPaper.runSync(() -> {
-+            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
-+            Entity entity = level.getEntity(uuid);
++        MultiPaper.runSync(this::removeEntity);
++    }
++
++    private void removeEntity() {
++        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++
++        Entity entity = level.getEntity(uuid);
++        Visibility visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
++
++        if (entity != null || visibility != null) {
++            MultiPaperEntitiesHandler.removingEntity = true;
++            Entity.RemovalReason reason = entity instanceof Player ? Entity.RemovalReason.KILLED : Entity.RemovalReason.DISCARDED;
++            if (this.unloadedWithPlayer) reason = Entity.RemovalReason.UNLOADED_WITH_PLAYER;
++
 +            if (entity != null) {
-+                MultiPaperEntitiesHandler.removingEntity = true;
-+                Entity.RemovalReason reason = entity instanceof Player ? Entity.RemovalReason.KILLED : Entity.RemovalReason.DISCARDED;
-+                if (this.unloadedWithPlayer) reason = Entity.RemovalReason.UNLOADED_WITH_PLAYER;
 +                entity.setRemoved(reason);
-+                MultiPaperEntitiesHandler.removingEntity = false;
-+            } else if (!this.unloadedWithPlayer) {
-+                setEntityRemoved(uuid, Entity.RemovalReason.DISCARDED);
++            } else {
++                // Entity is not accessible, force its removal
++                level.getEntityLookup().forceRemove(uuid);
++                setEntityRemoved(uuid, reason);
 +            }
-+        });
++
++            MultiPaperEntitiesHandler.removingEntity = false;
++        } else if (!this.unloadedWithPlayer) {
++            setEntityRemoved(uuid, Entity.RemovalReason.DISCARDED);
++        }
++
++        // Check if the entity was actually removed
++        visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
++        if (visibility != null) {
++            LOGGER.warn("Tried to remove entity {} but it still exists with visibility {}: {}", uuid, visibility, entity);
++        }
 +    }
 +
 +    public static void setEntityRemoved(UUID uuid, Entity.RemovalReason reason) {

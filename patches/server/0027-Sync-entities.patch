@@ -5,7 +5,7 @@ Subject: [PATCH] Sync entities
 
 
 diff --git a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java b/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
-index ff7198a03ab0da79c98513f4a1507e854484f4c2..fd428b26de5c580460d4ed269244fe95875a984b 100644
+index ff7198a03ab0da79c98513f4a1507e854484f4c2..63cc75fc41693f024a5d57a1374f4d6bcd82b382 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
 @@ -74,6 +74,24 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
@@ -46,6 +46,28 @@ index ff7198a03ab0da79c98513f4a1507e854484f4c2..fd428b26de5c580460d4ed269244fe95
                  return false;
              }
              this.entityById.put(entity.getId(), entity);
+@@ -407,6 +427,21 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+         return slices == null || !slices.isPreventingStatusUpdates();
+     }
+ 
++    // MultiPaper start - force removal
++    public void forceRemove(UUID uuid) {
++        Entity entity;
++        this.entityByLock.readLock();
++        try {
++            entity = this.entityByUUID.get(uuid);
++        } finally {
++            this.entityByLock.tryUnlockRead();
++        }
++        if (entity != null) {
++            entity.forceRemove();
++        }
++    }
++    // MultiPaper end
++
+     private void removeEntity(final Entity entity) {
+         final int sectionX = entity.sectionX;
+         final int sectionY = entity.sectionY;
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
 index 65c444c0bb9adca2c8f0bf8545c5294e98a052be..834bf755736dfd59a93e9c080ac0f1b2a522ef08 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
@@ -422,7 +444,7 @@ index 0db98625eec0c5af4a44ccb620d543d20829b843..fc76f71e84ed638c8fd9957803b0a2da
                      serversToCreatePlayerOn.add(externalServer.getConnection());
                  } else if (subscribedToSoruce) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 84a3e09a408ea4d1f7ed03d1bc77533bbc31e0d7..6025f87b0994c67c2bfe0c40ae8fb9831d412efe 100644
+index 84a3e09a408ea4d1f7ed03d1bc77533bbc31e0d7..bc0d658165750280646d060a763b8c9798097608 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -146,7 +146,10 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -562,7 +584,26 @@ index 84a3e09a408ea4d1f7ed03d1bc77533bbc31e0d7..6025f87b0994c67c2bfe0c40ae8fb983
          if (this.removalReason == null) {
              this.removalReason = reason;
          }
-@@ -4857,7 +4879,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4836,6 +4858,18 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+         // Paper end - Folia schedulers
+     }
+ 
++    // MultiPaper start - force removal
++    public void forceRemove() {
++        io.papermc.paper.util.TickThread.ensureTickThread(this, "Cannot remove entity off-main");
++        if (!((ServerLevel)this.level).getEntityLookup().canRemoveEntity(this)) {
++            LOGGER.warn("forceRemove - Entity " + this + " is currently prevented from being removed from the world since it is processing section status updates", new Throwable());
++            return;
++        }
++
++        this.removalReason = RemovalReason.UNLOADED_TO_CHUNK;
++        this.levelCallback.onRemove(this.removalReason);
++    }
++
+     public void unsetRemoved() {
+         this.removalReason = null;
+     }
+@@ -4857,7 +4891,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      @Override
      public boolean shouldBeSaved() {
@@ -1535,10 +1576,10 @@ index 0000000000000000000000000000000000000000..2497473778bce115a844cf1703eca53e
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d5ab5d4174719dce268cf2e211a9b3348a639324
+index 0000000000000000000000000000000000000000..2853e8b960af569dcf7e7cacd5976554ac350b17
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,154 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1636,7 +1677,16 @@ index 0000000000000000000000000000000000000000..d5ab5d4174719dce268cf2e211a9b334
 +
 +        Entity entity = level.getEntity(uuid);
 +        Visibility visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
-+        if (visibility != null && !visibility.isAccessible()) return null;
++        if (visibility != null && !visibility.isAccessible()) {
++            level.getEntityLookup().forceRemove(uuid); // This entity is in an inaccessible area, so force its removal so that we can replace it
++            entity = level.getEntity(uuid);
++            visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
++        }
++
++        if (visibility != null && !visibility.isAccessible()) {
++            LOGGER.warn("Tried to load entity {} but its in an inaccessible area", uuid);
++            return null;
++        }
 +
 +        if (entity == null && visibility == null) {
 +            entity = EntityType.loadEntityRecursive(tag, level, entity2 -> {

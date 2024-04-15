@@ -50,10 +50,10 @@ index 8b9eeb12b2aac89ea8654163f63125b3356fddd9..3a4cf8f73164126ba06bd903136e1b78
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..290db4f39a05e5df2c8e3da06bddb931cc7151e6
+index 0000000000000000000000000000000000000000..164752ea0477a422534ddbb2a0f3870c630e31d6
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/MobSetNavigationGoalPacket.java
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,70 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.core.BlockPos;
@@ -106,6 +106,13 @@ index 0000000000000000000000000000000000000000..290db4f39a05e5df2c8e3da06bddb931
 +    public void handle(ExternalServerConnection connection) {
 +        MultiPaper.runSync(() -> {
 +            ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
++
++            if (!level.isLoaded(goal)) {
++                // Chunk is not loaded, don't bother since this will force the chunk to be loaded in sync,
++                // just find a new goal naturally
++                return;
++            }
++
 +            Entity entity = level.getEntity(uuid);
 +            if (entity instanceof Mob mob) {
 +                mob.goalSelector.getRunningGoals().forEach(WrappedGoal::stop);

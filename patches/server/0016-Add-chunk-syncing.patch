@@ -1158,23 +1158,24 @@ index 9f1dca3645b4b9bf5eaf490cdde92abeac6a3c34..0f9d51e2959a9bf2b3b31930c88a942a
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 652da57d6477fff4bfb2f9b5a43de1ac02a53d3a..9a5a2f1c1a744bdf477418fd741f68a0c98b167c 100644
+index bc92ede80abbb1f72fbc6f14caa9d9cc4cfff7a6..852e2caca506a053a131c302d5e53e553b11330b 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,25 +1,52 @@
+@@ -1,32 +1,58 @@
  package puregero.multipaper;
  
--import net.minecraft.server.MinecraftServer;
 +import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
 +import io.papermc.paper.world.ChunkEntitySlices;
 +import net.minecraft.core.registries.BuiltInRegistries;
- import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.Container;
 +import net.minecraft.world.level.block.entity.BlockEntity;
 +import net.minecraft.core.BlockPos;
 +import net.minecraft.server.MinecraftServer;
-+import net.minecraft.nbt.CompoundTag;
-+import net.minecraft.nbt.NbtIo;
+ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.nbt.NbtIo;
+-import net.minecraft.server.MinecraftServer;
+-import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.server.level.ServerLevel;
  import net.minecraft.world.entity.Entity;
 +import net.minecraft.world.level.ChunkPos;
@@ -1205,7 +1206,13 @@ index 652da57d6477fff4bfb2f9b5a43de1ac02a53d3a..9a5a2f1c1a744bdf477418fd741f68a0
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.DataMessageReply;
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
  
-+import java.io.*;
+ import java.io.ByteArrayInputStream;
+ import java.io.ByteArrayOutputStream;
++import java.io.DataInput;
+ import java.io.DataInputStream;
+ import java.io.DataOutputStream;
++import java.io.File;
+ import java.io.IOException;
  import java.net.InetSocketAddress;
  import java.net.SocketAddress;
 -import java.util.Collection;
@@ -1220,9 +1227,9 @@ index 652da57d6477fff4bfb2f9b5a43de1ac02a53d3a..9a5a2f1c1a744bdf477418fd741f68a0
  
  public class MultiPaper {
  
-@@ -157,4 +184,248 @@ public class MultiPaper {
-     public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
-         return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
+@@ -177,4 +203,235 @@ public class MultiPaper {
+     public static CompoundTag nbtFromBytes(byte[] data) throws IOException {
+         return NbtIo.read(new DataInputStream(new ByteArrayInputStream(data)));
      }
 +
 +    public static boolean isChunkExternal(Chunk chunk) {
@@ -1390,19 +1397,6 @@ index 652da57d6477fff4bfb2f9b5a43de1ac02a53d3a..9a5a2f1c1a744bdf477418fd741f68a0
 +        getConnection().send(new UnlockChunkMessage(newChunkHolder.world.getWorld().getName(), newChunkHolder.chunkX, newChunkHolder.chunkZ));
 +        newChunkHolder.externalOwner = null;
 +        newChunkHolder.hasExternalLockRequest = false;
-+    }
-+    
-+    public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
-+        if (compoundTag == null) {
-+            return new byte[0];
-+        }
-+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-+        NbtIo.write(compoundTag, new DataOutputStream(buffer));
-+        return buffer.toByteArray();
-+    }
-+
-+    public static CompoundTag nbtFromBytes(byte[] data) throws IOException {
-+        return NbtIo.read(new DataInputStream(new ByteArrayInputStream(data)));
 +    }
 +
 +    public static byte[] nbtCompressToBytes(CompoundTag compoundTag) throws IOException {

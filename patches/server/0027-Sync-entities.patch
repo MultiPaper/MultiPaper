@@ -800,10 +800,10 @@ index ef4b4e4e5ace31ef00a4700a6b7dea46f524f7ee..aecb8290bcbca856b2e166b490471098
          FRESH, PENDING, LOADED;
  
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 8d916c1e7ae67ba42e9a972b46c952df3056abbc..af607456caeba614420e383dc380162886d7c622 100644
+index e7085ebe21c98fbe3948681238fffedbbb10d56f..7078760981e3c74154f00275ac46c03d19bd0d50 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -6,6 +6,7 @@ import net.minecraft.network.PacketSendListener;
+@@ -7,6 +7,7 @@ import net.minecraft.network.PacketSendListener;
  import net.minecraft.network.protocol.Packet;
  import net.minecraft.network.protocol.PacketFlow;
  import net.minecraft.network.protocol.game.*;
@@ -811,7 +811,7 @@ index 8d916c1e7ae67ba42e9a972b46c952df3056abbc..af607456caeba614420e383dc3801628
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
  import net.minecraft.server.network.ServerGamePacketListenerImpl;
-@@ -15,10 +16,13 @@ import org.apache.logging.log4j.Logger;
+@@ -16,10 +17,13 @@ import org.apache.logging.log4j.Logger;
  import org.bukkit.Bukkit;
  import org.bukkit.craftbukkit.CraftServer;
  import org.bukkit.craftbukkit.CraftWorld;
@@ -825,15 +825,15 @@ index 8d916c1e7ae67ba42e9a972b46c952df3056abbc..af607456caeba614420e383dc3801628
  import java.util.UUID;
  
  public class ExternalPlayer extends ServerPlayer {
-@@ -29,6 +33,7 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -30,6 +34,7 @@ public class ExternalPlayer extends ServerPlayer {
      public ExternalServerConnection externalServerConnection;
      private final InetSocketAddress address;
      private boolean sendPackets = true;
 +    public boolean updatingData = false;
  
-     public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, String advancements, String stats) {
+     public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, CompoundTag saveData, String advancements, String stats) {
          loadedAdvancements.put(gameProfile.getId(), advancements);
-@@ -41,13 +46,23 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -45,13 +50,23 @@ public class ExternalPlayer extends ServerPlayer {
          this.externalServerConnection = externalServerConnection;
          this.address = address;
          this.isRealPlayer = true;
@@ -858,7 +858,7 @@ index 8d916c1e7ae67ba42e9a972b46c952df3056abbc..af607456caeba614420e383dc3801628
          getServer().getPlayerList().addPlayer(this);
          ((ServerLevel) level()).addNewPlayer(this);
          sendPackets = false;
-@@ -98,12 +113,15 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -103,12 +118,15 @@ public class ExternalPlayer extends ServerPlayer {
      }
  
      @Override
@@ -907,10 +907,10 @@ index 0f9d51e2959a9bf2b3b31930c88a942a777a6d56..727b613ae30c3266c2fc5f5a13d2622f
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 7af8ebcc683a7b10f5bea3842191ed4d4c2f3bc5..6a05b0d682ec354288ee0dd232e3d28a6d5f96ba 100644
+index d6c07b67eea4641066836e78ab2055532c8e5d5c..b2cabff15e0eacfb7296c17f860b289c266ef8e6 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -126,6 +126,8 @@ public class MultiPaper {
+@@ -132,6 +132,8 @@ public class MultiPaper {
                  broadcastPacketToExternalServers(new TimeUpdatePacket(level));
              }
          }
@@ -919,7 +919,7 @@ index 7af8ebcc683a7b10f5bea3842191ed4d4c2f3bc5..6a05b0d682ec354288ee0dd232e3d28a
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -302,6 +304,8 @@ public class MultiPaper {
+@@ -321,6 +323,8 @@ public class MultiPaper {
                          RequestChunkPacket.blocker = null;
                          future.complete(inputStream);
                      });
@@ -928,7 +928,7 @@ index 7af8ebcc683a7b10f5bea3842191ed4d4c2f3bc5..6a05b0d682ec354288ee0dd232e3d28a
                  } else {
                      throw new IllegalArgumentException("Cannot load a " + path + " chunk from an external server");
                  }
-@@ -463,6 +467,7 @@ public class MultiPaper {
+@@ -482,6 +486,7 @@ public class MultiPaper {
  
      public static void unlockChunk(NewChunkHolder newChunkHolder, ChunkAccess chunkAccess, ChunkEntitySlices chunkEntitySlices) {
          if (chunkAccess instanceof LevelChunk levelChunk && MultiPaper.isChunkLocal(newChunkHolder)) {
@@ -936,7 +936,7 @@ index 7af8ebcc683a7b10f5bea3842191ed4d4c2f3bc5..6a05b0d682ec354288ee0dd232e3d28a
              broadcastPacketToExternalServers(newChunkHolder.externalSubscribers, () -> new SendTickListPacket(levelChunk));
              for (BlockEntity blockEntity : levelChunk.getBlockEntities().values()) {
                  if (blockEntity instanceof Container container) {
-@@ -555,6 +560,10 @@ public class MultiPaper {
+@@ -561,6 +566,10 @@ public class MultiPaper {
          return level.chunkTaskScheduler.chunkHolderManager.getChunkHolder(x, z);
      }
  
@@ -2130,14 +2130,15 @@ index 2e51741d76d2d209accb673f8043ed99010125a3..fd2a81936f4fb19534d165ea96f88cc6
      }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index 3d2e875ae6da723785fe3f97842e3c8f04f0525f..3c7ae9ff419b8a86213184e873f9c050dd1c8fc7 100644
+index 1336577a2ee2c677365db61bbf44898a25f127fb..2b03890bb03ebe27e0191128aad728a38219caeb 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -1,10 +1,14 @@
+@@ -1,11 +1,15 @@
  package puregero.multipaper.externalserverprotocol;
  
  import com.mojang.authlib.GameProfile;
 +import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
+ import net.minecraft.nbt.CompoundTag;
  import net.minecraft.network.FriendlyByteBuf;
  import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 +import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
@@ -2148,7 +2149,7 @@ index 3d2e875ae6da723785fe3f97842e3c8f04f0525f..3c7ae9ff419b8a86213184e873f9c050
  import net.minecraft.world.level.GameType;
  import org.apache.logging.log4j.LogManager;
  import org.apache.logging.log4j.Logger;
-@@ -14,6 +18,8 @@ import puregero.multipaper.*;
+@@ -15,6 +19,8 @@ import puregero.multipaper.*;
  import java.net.InetAddress;
  import java.net.InetSocketAddress;
  import java.net.UnknownHostException;
@@ -2157,14 +2158,12 @@ index 3d2e875ae6da723785fe3f97842e3c8f04f0525f..3c7ae9ff419b8a86213184e873f9c050
  
  public class PlayerCreatePacket extends ExternalServerPacket {
  
-@@ -115,8 +121,30 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -120,5 +126,28 @@ public class PlayerCreatePacket extends ExternalServerPacket {
  
-         send(new PlayerCreatePacket(player), connections);
+         send(new PlayerCreatePacket(player, player.saveWithoutId(new CompoundTag())), connections);
          send(new PlayerActionPacket(player, new ServerboundSetCarriedItemPacket(player.getInventory().selected)), connections);
++
 +        send(new EntityUpdatePacket(player, new ClientboundSetEntityDataPacket(player.getId(), player.getEntityData().getAll())), connections);
- 
-         MultiPaperInventoryHandler.sendFullInventoryUpdate(player, connections);
-         MultiPaperEnderChestHandler.sendFullEnderChestUpdate(player, connections);
 +
 +        if (player.clientViewDistance != null) {
 +            send(new PlayerActionPacket(player, new ServerboundClientInformationPacket(

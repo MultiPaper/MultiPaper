@@ -394,10 +394,20 @@ index 50ea2bc3f785dabc686162c895590b7d7f15a93d..f74ab827fc65e155a155733a8f5d6b7f
  
      public void grow(int amount) {
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 46205e2a51f4c6f2ae4a58737cefc7469fae6893..8d916c1e7ae67ba42e9a972b46c952df3056abbc 100644
+index f7eca42db18350535739b5eee6ecd2764684617d..e7085ebe21c98fbe3948681238fffedbbb10d56f 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -101,4 +101,9 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -39,7 +39,9 @@ public class ExternalPlayer extends ServerPlayer {
+ 
+     public ExternalPlayer(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, CompoundTag saveData) {
+         super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), gameProfile);
++        MultiPaperInventoryHandler.updatingInventory = true;
+         this.load(saveData);
++        MultiPaperInventoryHandler.updatingInventory = false;
+         this.externalServerConnection = externalServerConnection;
+         this.address = address;
+         this.isRealPlayer = true;
+@@ -104,4 +106,9 @@ public class ExternalPlayer extends ServerPlayer {
      public boolean broadcastToPlayer(ServerPlayer spectator) {
          return false;
      }
@@ -408,10 +418,10 @@ index 46205e2a51f4c6f2ae4a58737cefc7469fae6893..8d916c1e7ae67ba42e9a972b46c952df
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index a18a46f343001dbc193bb199d9cc747fd2ef2f9c..6cbc2de9dfb44ec9d907f7c72d401bbaa365a8bf 100644
+index 7eb012e15e8092fb9c58c6db09584764b7a4c22f..75074265fd7226252679f39802a2f4e99b7a4372 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -80,6 +80,8 @@ public class MultiPaper {
+@@ -86,6 +86,8 @@ public class MultiPaper {
                      externalPlayer.containerUpdateDelay = externalPlayer.level().paperConfig().tickRates.containerUpdate;
                  }
                  // Copied from Paper end
@@ -420,7 +430,7 @@ index a18a46f343001dbc193bb199d9cc747fd2ef2f9c..6cbc2de9dfb44ec9d907f7c72d401bba
              }
          }
  
-@@ -116,6 +118,8 @@ public class MultiPaper {
+@@ -122,6 +124,8 @@ public class MultiPaper {
          });
  
          MultiPaperAckBlockChangesHandler.tick();
@@ -429,18 +439,9 @@ index a18a46f343001dbc193bb199d9cc747fd2ef2f9c..6cbc2de9dfb44ec9d907f7c72d401bba
      }
  
      public static void sendTickTime(long time, double tps) {
-@@ -471,7 +475,7 @@ public class MultiPaper {
-         newChunkHolder.externalOwner = null;
-         newChunkHolder.hasExternalLockRequest = false;
-     }
--    
-+
-     public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
-         if (compoundTag == null) {
-             return new byte[0];
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8d083ab12060016a7ca2ea5d693957be3320f02b
+index 0000000000000000000000000000000000000000..1f7f97112e3e367a277ec24ff64643d7a2592506
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 @@ -0,0 +1,377 @@
@@ -486,7 +487,7 @@ index 0000000000000000000000000000000000000000..8d083ab12060016a7ca2ea5d693957be
 +
 +    private static final Logger LOGGER = LogManager.getLogger(MultiPaperInventoryHandler.class.getSimpleName());
 +
-+    private static boolean updatingInventory = false;
++    public static boolean updatingInventory = false;
 +    private static final HashMap<UUID, ArrayList<AwaitingTeleport>> awaitingTeleports = new HashMap<>();
 +    private static final Set<NonNullListFilter<? extends ItemStack>> modifiedInventories = new LinkedHashSet<>();
 +
@@ -984,18 +985,18 @@ index 0000000000000000000000000000000000000000..2e51741d76d2d209accb673f8043ed99
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index 07be541eded9c434296d6e10cc3ae44f5b4a7e93..bcb17ae5b57131f6627aeecde4cec91c23bef215 100644
+index 6b6149102a3d6ecd0b6898d1ad149e8d742a86a1..2b0edb78ba68aa5d43b9832dddffffeb477a6f9f 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -2,6 +2,7 @@ package puregero.multipaper.externalserverprotocol;
- 
+@@ -3,6 +3,7 @@ package puregero.multipaper.externalserverprotocol;
  import com.mojang.authlib.GameProfile;
+ import net.minecraft.nbt.CompoundTag;
  import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
  import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.level.ServerPlayer;
  import net.minecraft.world.level.GameType;
-@@ -11,6 +12,7 @@ import org.bukkit.event.player.PlayerKickEvent;
+@@ -12,6 +13,7 @@ import org.bukkit.event.player.PlayerKickEvent;
  import puregero.multipaper.ExternalPlayer;
  import puregero.multipaper.ExternalServerConnection;
  import puregero.multipaper.MultiPaper;
@@ -1003,13 +1004,11 @@ index 07be541eded9c434296d6e10cc3ae44f5b4a7e93..bcb17ae5b57131f6627aeecde4cec91c
  
  import java.net.InetAddress;
  import java.net.InetSocketAddress;
-@@ -115,5 +117,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -120,5 +122,6 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          }
  
-         send(new PlayerCreatePacket(player), connections);
+         send(new PlayerCreatePacket(player, player.saveWithoutId(new CompoundTag())), connections);
 +        send(new PlayerActionPacket(player, new ServerboundSetCarriedItemPacket(player.getInventory().selected)), connections);
-+
-+        MultiPaperInventoryHandler.sendFullInventoryUpdate(player, connections);
      }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerInventoryUpdatePacket.java

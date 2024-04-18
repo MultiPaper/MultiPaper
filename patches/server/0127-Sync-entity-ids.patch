@@ -37,7 +37,7 @@ index 7febd8ea9f87be619acd521d9bf13ffebca2af44..7544a199d426009df9a70d7810a96561
              nbttagcompound2.put("Entity", nbttagcompound3);
              nbt.put("RootVehicle", nbttagcompound2);
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index e85cafea0f004331a524e5139153e89de46a4983..f4edf4505db4f92746d4397a6e2fd51858a6e7cc 100644
+index f8242d7e48b8bb7b73daefcd7af89fd18d7c7313..15e3812b2936dff789857bd2a117257962b51bea 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -156,6 +156,8 @@ import puregero.multipaper.ExternalServer;
@@ -126,10 +126,10 @@ index e85cafea0f004331a524e5139153e89de46a4983..f4edf4505db4f92746d4397a6e2fd518
              ListTag nbttaglist1 = nbt.getList("Motion", 6);
              ListTag nbttaglist2 = nbt.getList("Rotation", 5);
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 4e6db03cac76778c4150e1229b33fe2b90d37040..5370ffb23452f5e6eff9b2b3dd53c2c42f98cd2a 100644
+index c18cf9b2c97c2fed1be5896b6ccc6c0f487d1513..3cd1f7adfb5dd29328c21083e755ad92dd67b390 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -18,6 +18,7 @@ import org.bukkit.Bukkit;
+@@ -19,6 +19,7 @@ import org.bukkit.Bukkit;
  import org.bukkit.craftbukkit.CraftServer;
  import org.bukkit.craftbukkit.CraftWorld;
  import org.bukkit.craftbukkit.event.CraftEventFactory;
@@ -137,21 +137,24 @@ index 4e6db03cac76778c4150e1229b33fe2b90d37040..5370ffb23452f5e6eff9b2b3dd53c2c4
  import puregero.multipaper.externalserverprotocol.EntityUpdatePacket;
  import puregero.multipaper.externalserverprotocol.HurtEntityPacket;
  
-@@ -38,14 +39,22 @@ public class ExternalPlayer extends ServerPlayer {
+@@ -39,17 +40,25 @@ public class ExternalPlayer extends ServerPlayer {
      private boolean sendPackets = true;
      public boolean updatingData = false;
  
--    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, String advancements, String stats) {
-+    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, String advancements, String stats, int entityId) {
+-    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, CompoundTag saveData, String advancements, String stats) {
++    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, CompoundTag saveData, String advancements, String stats, int entityId) {
          loadedAdvancements.put(gameProfile.getId(), advancements);
          loadedStats.put(gameProfile.getId(), stats);
--        return new ExternalPlayer(externalServerConnection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address);
-+        return new ExternalPlayer(externalServerConnection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, entityId);
+-        return new ExternalPlayer(externalServerConnection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, saveData);
++        return new ExternalPlayer(externalServerConnection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, saveData, entityId);
      }
  
--    public ExternalPlayer(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address) {
-+    public ExternalPlayer(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, int entityId) {
+-    public ExternalPlayer(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, CompoundTag saveData) {
++    public ExternalPlayer(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, CompoundTag saveData, int entityId) {
          super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), gameProfile);
+         MultiPaperInventoryHandler.updatingInventory = true;
+         this.load(saveData);
+         MultiPaperInventoryHandler.updatingInventory = false;
 +
 +        if (MultiPaperConfiguration.get().syncSettings.syncEntityIds) {
 +            setId(entityId);
@@ -258,18 +261,18 @@ index 0000000000000000000000000000000000000000..a7d863e6ccbcff3ccc3ef73e7335ffdd
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index a2f20bea4c64ad13f254240ffbf5b742fc0f3486..9df799724fa82d17889e7df3d27f77d3ff4ea203 100644
+index 8696dda2e8f4f45cd79f70f6b29fad8215cd3ca1..1958d98d3489fb4e7fa3f22585c317ba3232fd18 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -43,6 +43,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -45,6 +45,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
      private final String stats;
      private final ConcurrentHashMap<String, String> data;
      private final ConcurrentHashMap<String, String> persistentData;
 +    private final int entityId;
  
-     private PlayerCreatePacket(ServerPlayer player) {
+     private PlayerCreatePacket(ServerPlayer player, CompoundTag saveData) {
          this.gameProfile = player.gameProfile;
-@@ -59,6 +60,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -62,6 +63,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          this.stats = player.getStats().toJson();
          this.data = player.getBukkitEntity().data;
          this.persistentData = player.getBukkitEntity().persistentData;
@@ -277,7 +280,7 @@ index a2f20bea4c64ad13f254240ffbf5b742fc0f3486..9df799724fa82d17889e7df3d27f77d3
      }
  
      public PlayerCreatePacket(FriendlyByteBuf in) {
-@@ -87,6 +89,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -91,6 +93,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          for (int i = 0; i < persistentDataLength; i++) {
              persistentData.put(in.readUtf(), in.readUtf());
          }
@@ -286,7 +289,7 @@ index a2f20bea4c64ad13f254240ffbf5b742fc0f3486..9df799724fa82d17889e7df3d27f77d3
      }
  
      @Override
-@@ -118,6 +122,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -123,6 +127,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
              out.writeUtf(entry.getKey());
              out.writeUtf(entry.getValue());
          }
@@ -295,12 +298,12 @@ index a2f20bea4c64ad13f254240ffbf5b742fc0f3486..9df799724fa82d17889e7df3d27f77d3
      }
  
      @Override
-@@ -137,7 +143,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -142,7 +148,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
                  e.printStackTrace();
              }
  
--            ExternalPlayer player = ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, advancements, stats);
-+            ExternalPlayer player = ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, advancements, stats, entityId);
+-            ExternalPlayer player = ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, saveData, advancements, stats);
++            ExternalPlayer player = ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, saveData, advancements, stats, entityId);
              player.getBukkitEntity().data = data;
              player.getBukkitEntity().persistentData = persistentData;
          });

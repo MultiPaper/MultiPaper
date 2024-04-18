@@ -392,13 +392,14 @@ index 824f31b68b38f2f8642fb9d59a123cfdaffbb7b2..30518e842c67ea383177d83b467ae2fe
              // CraftBukkit start
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..51be0878d6d61e6d2a1b8f2c65d5651ac19c2749
+index 0000000000000000000000000000000000000000..e9d8dfcdf3e374ea3471668c1bfe9cbceb4f5874
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,87 @@
 +package puregero.multipaper;
 +
 +import com.mojang.authlib.GameProfile;
++import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.network.Connection;
 +import net.minecraft.network.PacketSendListener;
 +import net.minecraft.network.protocol.Packet;
@@ -423,12 +424,13 @@ index 0000000000000000000000000000000000000000..51be0878d6d61e6d2a1b8f2c65d5651a
 +    private final InetSocketAddress address;
 +    private boolean sendPackets = true;
 +
-+    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address) {
-+        return new ExternalPlayer(externalServerConnection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address);
++    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, CompoundTag saveData) {
++        return new ExternalPlayer(externalServerConnection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, saveData);
 +    }
 +
-+    public ExternalPlayer(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address) {
++    public ExternalPlayer(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, CompoundTag saveData) {
 +        super(((CraftServer) Bukkit.getServer()).getServer(), ((CraftWorld) Bukkit.getWorld(world)).getHandle(), gameProfile);
++        this.load(saveData);
 +        this.externalServerConnection = externalServerConnection;
 +        this.address = address;
 +        this.isRealPlayer = true;
@@ -513,12 +515,14 @@ index 411dd31f7467769fbe0868c46244a219e1530b35..7dc391159a2a6d116fd3d1ea34d7b766
  
      public Channel getChannel() {
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index e09ad91c4c33e1dce449a765bcce33cbe3bdcc95..049e94daaff596cb8fa0bc56ecd62189508a2439 100644
+index fd1816f708ec99e52bdce3e3926d20a2d629a3f8..e6c410c8b0ab827b238ad732f8cc4df7abea72a1 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -1,9 +1,17 @@
+@@ -1,10 +1,25 @@
  package puregero.multipaper;
  
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.NbtIo;
  import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
@@ -532,9 +536,15 @@ index e09ad91c4c33e1dce449a765bcce33cbe3bdcc95..049e94daaff596cb8fa0bc56ecd62189
  import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WriteTickTimeMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
  
++import java.io.ByteArrayInputStream;
++import java.io.ByteArrayOutputStream;
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
  import java.net.InetSocketAddress;
  import java.net.SocketAddress;
-@@ -14,6 +22,7 @@ import java.util.function.Consumer;
+ import java.util.Collection;
+@@ -14,6 +29,7 @@ import java.util.function.Consumer;
  import java.util.function.Supplier;
  
  public class MultiPaper {
@@ -542,7 +552,7 @@ index e09ad91c4c33e1dce449a765bcce33cbe3bdcc95..049e94daaff596cb8fa0bc56ecd62189
      private static MultiPaperConnection multiPaperConnection = null;
  
      public static MultiPaperConnection getConnection() {
-@@ -24,10 +33,35 @@ public class MultiPaper {
+@@ -24,10 +40,35 @@ public class MultiPaper {
          return multiPaperConnection;
      }
  
@@ -578,7 +588,7 @@ index e09ad91c4c33e1dce449a765bcce33cbe3bdcc95..049e94daaff596cb8fa0bc56ecd62189
      public static void onStart(SocketAddress bindAddress) {
          getConnection().send(new StartMessage(
                  System.getProperty("server.address", ((InetSocketAddress) bindAddress).getAddress().getHostAddress()),
-@@ -75,4 +109,45 @@ public class MultiPaper {
+@@ -75,4 +116,58 @@ public class MultiPaper {
              }
          });
      }
@@ -622,6 +632,19 @@ index e09ad91c4c33e1dce449a765bcce33cbe3bdcc95..049e94daaff596cb8fa0bc56ecd62189
 +
 +    public static boolean isExternalPlayer(org.bukkit.entity.Entity bukkitEntity) {
 +        return isExternalPlayer(((CraftEntity) bukkitEntity).getHandle());
++    }
++
++    public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
++        if (compoundTag == null) {
++            return new byte[0];
++        }
++        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
++        NbtIo.write(compoundTag, new DataOutputStream(buffer));
++        return buffer.toByteArray();
++    }
++
++    public static CompoundTag nbtFromBytes(byte[] data) throws IOException {
++        return NbtIo.read(new DataInputStream(new ByteArrayInputStream(data)));
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java b/src/main/java/puregero/multipaper/externalserverprotocol/ExternalServerPacketSerializer.java
@@ -777,13 +800,14 @@ index 0000000000000000000000000000000000000000..d6d16bfeec41efd36c15812249d40ba3
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d2661f84dbd996db81b6d8daffb7e0a276369a81
+index 0000000000000000000000000000000000000000..ffad33ee86b671c39284558493dfa0b67abccbcd
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,114 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import com.mojang.authlib.GameProfile;
++import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.network.FriendlyByteBuf;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
@@ -813,8 +837,9 @@ index 0000000000000000000000000000000000000000..d2661f84dbd996db81b6d8daffb7e0a2
 +    private final GameType gamemode;
 +    private final byte[] ip;
 +    private final short port;
++    private final CompoundTag saveData;
 +
-+    private PlayerCreatePacket(ServerPlayer player) {
++    private PlayerCreatePacket(ServerPlayer player, CompoundTag saveData) {
 +        this.gameProfile = player.gameProfile;
 +        this.world = player.level().getWorld().getName();
 +        this.x = player.getX();
@@ -825,6 +850,7 @@ index 0000000000000000000000000000000000000000..d2661f84dbd996db81b6d8daffb7e0a2
 +        this.gamemode = player.gameMode.getGameModeForPlayer();
 +        this.ip = ((InetSocketAddress) player.connection.connection.address).getAddress().getAddress();
 +        this.port = (short) ((InetSocketAddress) player.connection.connection.address).getPort();
++        this.saveData = saveData;
 +    }
 +
 +    public PlayerCreatePacket(FriendlyByteBuf in) {
@@ -838,6 +864,7 @@ index 0000000000000000000000000000000000000000..d2661f84dbd996db81b6d8daffb7e0a2
 +        gamemode = GameType.byId(in.readByte());
 +        ip = in.readByteArray();
 +        port = in.readShort();
++        saveData = in.readNbt();
 +    }
 +
 +    @Override
@@ -852,6 +879,7 @@ index 0000000000000000000000000000000000000000..d2661f84dbd996db81b6d8daffb7e0a2
 +        out.writeByte(gamemode.getId());
 +        out.writeByteArray(ip);
 +        out.writeShort(port);
++        out.writeNbt(saveData);
 +    }
 +
 +    @Override
@@ -871,7 +899,7 @@ index 0000000000000000000000000000000000000000..d2661f84dbd996db81b6d8daffb7e0a2
 +                e.printStackTrace();
 +            }
 +
-+            ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address);
++            ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, saveData);
 +        });
 +    }
 +
@@ -887,7 +915,7 @@ index 0000000000000000000000000000000000000000..d2661f84dbd996db81b6d8daffb7e0a2
 +            return;
 +        }
 +
-+        send(new PlayerCreatePacket(player), connections);
++        send(new PlayerCreatePacket(player, player.saveWithoutId(new CompoundTag())), connections);
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerRemovePacket.java

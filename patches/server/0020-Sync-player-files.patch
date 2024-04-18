@@ -264,10 +264,10 @@ index 720a81da72a8002ff02cc39e5fca42354519c742..f66134430bbb0fa3238c4bf53483ec80
      }
  
 diff --git a/src/main/java/puregero/multipaper/ExternalPlayer.java b/src/main/java/puregero/multipaper/ExternalPlayer.java
-index 7d96fc78e49025fe9b5ccb7d101fe7d65115b580..46205e2a51f4c6f2ae4a58737cefc7469fae6893 100644
+index 491237ceccbfd536970137e69efdfa70ed593e0d..f7eca42db18350535739b5eee6ecd2764684617d 100644
 --- a/src/main/java/puregero/multipaper/ExternalPlayer.java
 +++ b/src/main/java/puregero/multipaper/ExternalPlayer.java
-@@ -18,15 +18,21 @@ import org.bukkit.craftbukkit.CraftWorld;
+@@ -19,15 +19,21 @@ import org.bukkit.craftbukkit.CraftWorld;
  
  import javax.annotation.Nullable;
  import java.net.InetSocketAddress;
@@ -283,18 +283,18 @@ index 7d96fc78e49025fe9b5ccb7d101fe7d65115b580..46205e2a51f4c6f2ae4a58737cefc746
      private final InetSocketAddress address;
      private boolean sendPackets = true;
  
--    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address) {
-+    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, String advancements, String stats) {
+-    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, CompoundTag saveData) {
++    public static ExternalPlayer create(ExternalServerConnection externalServerConnection, GameProfile gameProfile, String world, double x, double y, double z, float yaw, float pitch, GameType gamemode, InetSocketAddress address, CompoundTag saveData, String advancements, String stats) {
 +        loadedAdvancements.put(gameProfile.getId(), advancements);
 +        loadedStats.put(gameProfile.getId(), stats);
-         return new ExternalPlayer(externalServerConnection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address);
+         return new ExternalPlayer(externalServerConnection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, saveData);
      }
  
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 5e2a06b71d47cbedd3407e7d93ae6dab45505bd6..b596eabd5fa11ce68aa4eb68e1d0826a2f736b5a 100644
+index 0d7f28b2fa83a2e7eefa12fd6e415e3658506a02..f8a22bf74c5db89756e3c7f29c7750cf380650c7 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
-@@ -364,6 +364,34 @@ public class MultiPaper {
+@@ -383,6 +383,34 @@ public class MultiPaper {
          }
      }
  
@@ -330,53 +330,53 @@ index 5e2a06b71d47cbedd3407e7d93ae6dab45505bd6..b596eabd5fa11ce68aa4eb68e1d0826a
          do {
              path = path.getParentFile();
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-index d2661f84dbd996db81b6d8daffb7e0a276369a81..07be541eded9c434296d6e10cc3ae44f5b4a7e93 100644
+index ffad33ee86b671c39284558493dfa0b67abccbcd..6b6149102a3d6ecd0b6898d1ad149e8d742a86a1 100644
 --- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -30,6 +30,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-     private final GameType gamemode;
+@@ -32,6 +32,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
      private final byte[] ip;
      private final short port;
+     private final CompoundTag saveData;
 +    private final String advancements;
 +    private final String stats;
  
-     private PlayerCreatePacket(ServerPlayer player) {
+     private PlayerCreatePacket(ServerPlayer player, CompoundTag saveData) {
          this.gameProfile = player.gameProfile;
-@@ -42,6 +44,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         this.gamemode = player.gameMode.getGameModeForPlayer();
+@@ -45,6 +47,8 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          this.ip = ((InetSocketAddress) player.connection.connection.address).getAddress().getAddress();
          this.port = (short) ((InetSocketAddress) player.connection.connection.address).getPort();
+         this.saveData = saveData;
 +        this.advancements = player.getAdvancements().generateJson().toString();
 +        this.stats = player.getStats().toJson();
      }
  
      public PlayerCreatePacket(FriendlyByteBuf in) {
-@@ -55,6 +59,9 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         gamemode = GameType.byId(in.readByte());
+@@ -59,6 +63,9 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          ip = in.readByteArray();
          port = in.readShort();
+         saveData = in.readNbt();
 +
 +        advancements = in.readUtf(Integer.MAX_VALUE / 6); // divide by 6 cause mojang's code doesn't allow for a full 2^31-1 max length
 +        stats = in.readUtf(Integer.MAX_VALUE / 6);
      }
  
      @Override
-@@ -69,6 +76,9 @@ public class PlayerCreatePacket extends ExternalServerPacket {
-         out.writeByte(gamemode.getId());
+@@ -74,6 +81,9 @@ public class PlayerCreatePacket extends ExternalServerPacket {
          out.writeByteArray(ip);
          out.writeShort(port);
+         out.writeNbt(saveData);
 +
 +        out.writeUtf(advancements, Integer.MAX_VALUE / 6); // divide by 6 cause mojang's code doesn't allow for a full 2^31-1 max length
 +        out.writeUtf(stats, Integer.MAX_VALUE / 6);
      }
  
      @Override
-@@ -88,7 +98,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
+@@ -93,7 +103,7 @@ public class PlayerCreatePacket extends ExternalServerPacket {
                  e.printStackTrace();
              }
  
--            ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address);
-+            ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, advancements, stats);
+-            ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, saveData);
++            ExternalPlayer.create(connection, gameProfile, world, x, y, z, yaw, pitch, gamemode, address, saveData, advancements, stats);
          });
      }
  

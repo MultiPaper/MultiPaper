@@ -1074,10 +1074,10 @@ index 8fe8e8a4ba2764f3e91b6c90290bdcbb56402cd7..6044faafa283d4f50a1700330d1a444f
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7bff9bff9a73b193b3da2a876f09df68b34df3dc
+index 0000000000000000000000000000000000000000..3dbfd4bf13c5891fa23b73cbbab828286828d455
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
-@@ -0,0 +1,387 @@
+@@ -0,0 +1,388 @@
 +package puregero.multipaper;
 +
 +import com.mojang.datafixers.util.Pair;
@@ -1212,7 +1212,8 @@ index 0000000000000000000000000000000000000000..7bff9bff9a73b193b3da2a876f09df68
 +            return;
 +        }
 +
-+        if (MultiPaper.isChunkLocal(chunkFrom)) {
++        Entity controllingPassenger = getControllingPassenger(entity);
++        if (MultiPaper.isRealPlayer(controllingPassenger) || (MultiPaper.isChunkLocal(chunkFrom) && !MultiPaper.isExternalPlayer(controllingPassenger))) {
 +            if (!MultiPaper.isChunkLocal(chunkTo)) {
 +                // Leaving our jurisdiction, do a full entity update to ensure the new external server has all the required info
 +                if (!(entity instanceof ServerPlayer)) { // Ignore players as they aren't ticked by the new external server
@@ -1600,16 +1601,15 @@ index 0000000000000000000000000000000000000000..4899e5ed6988fcef9d86e5a1f070cfb6
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..2853e8b960af569dcf7e7cacd5976554ac350b17
+index 0000000000000000000000000000000000000000..dc7c7aa6a67e3a7107b6d8d1d6b2ad461e7d160d
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,149 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
 +import net.minecraft.nbt.ListTag;
 +import net.minecraft.network.FriendlyByteBuf;
-+import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
@@ -1621,14 +1621,10 @@ index 0000000000000000000000000000000000000000..2853e8b960af569dcf7e7cacd5976554
 +import org.bukkit.Bukkit;
 +import org.bukkit.World;
 +import org.bukkit.craftbukkit.CraftWorld;
-+import puregero.multipaper.ExternalServer;
 +import puregero.multipaper.ExternalServerConnection;
 +import puregero.multipaper.MultiPaper;
 +
 +import java.io.IOException;
-+import java.util.ArrayList;
-+import java.util.Collection;
-+import java.util.List;
 +import java.util.UUID;
 +
 +public class EntityUpdateNBTPacket extends ExternalServerPacket {

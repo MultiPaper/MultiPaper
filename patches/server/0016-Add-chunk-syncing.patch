@@ -337,7 +337,7 @@ index 3944852921335c78a04a9dc301882ab5b152b1ed..90107814a68a401bda71d66bbec50eff
  
      public static ClientboundBlockEntityDataPacket create(BlockEntity blockEntity) {
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index a8eb0db33a9b15b5b32d0533e6432a8d6d445fe2..828eec843d330d4e5d8b883a588b9684617cb025 100644
+index a8eb0db33a9b15b5b32d0533e6432a8d6d445fe2..eeff6d32e05833bd80893a6eabf53cc6c01464b6 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -3,9 +3,6 @@ package net.minecraft.server;
@@ -350,7 +350,15 @@ index a8eb0db33a9b15b5b32d0533e6432a8d6d445fe2..828eec843d330d4e5d8b883a588b9684
  import com.google.common.collect.Lists;
  import com.google.common.collect.Maps;
  import com.google.common.collect.Sets;
-@@ -86,7 +83,6 @@ import net.minecraft.server.level.ServerChunkCache;
+@@ -14,6 +11,7 @@ import com.mojang.authlib.GameProfileRepository;
+ import com.mojang.authlib.minecraft.MinecraftSessionService;
+ import com.mojang.datafixers.DataFixer;
+ import com.mojang.logging.LogUtils;
++import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
+ import it.unimi.dsi.fastutil.longs.LongIterator;
+ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+ import java.awt.image.BufferedImage;
+@@ -86,7 +84,6 @@ import net.minecraft.server.level.ServerChunkCache;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
  import net.minecraft.server.level.ServerPlayerGameMode;
@@ -358,7 +366,7 @@ index a8eb0db33a9b15b5b32d0533e6432a8d6d445fe2..828eec843d330d4e5d8b883a588b9684
  import net.minecraft.server.level.progress.ChunkProgressListener;
  import net.minecraft.server.level.progress.ChunkProgressListenerFactory;
  import net.minecraft.server.network.ServerConnectionListener;
-@@ -110,17 +106,14 @@ import net.minecraft.util.NativeModuleLister;
+@@ -110,17 +107,14 @@ import net.minecraft.util.NativeModuleLister;
  import net.minecraft.util.ProgressListener;
  import net.minecraft.util.RandomSource;
  import net.minecraft.util.SignatureValidator;
@@ -376,7 +384,7 @@ index a8eb0db33a9b15b5b32d0533e6432a8d6d445fe2..828eec843d330d4e5d8b883a588b9684
  import net.minecraft.util.profiling.metrics.profiling.MetricsRecorder;
  import net.minecraft.util.profiling.metrics.profiling.ServerMetricsSamplersProvider;
  import net.minecraft.util.profiling.metrics.storage.MetricsPersister;
-@@ -184,11 +177,6 @@ import net.minecraft.world.level.validation.ContentValidationException;
+@@ -184,11 +178,6 @@ import net.minecraft.world.level.validation.ContentValidationException;
  import net.minecraft.world.phys.Vec2;
  import net.minecraft.world.phys.Vec3;
  import org.bukkit.Bukkit;
@@ -388,7 +396,25 @@ index a8eb0db33a9b15b5b32d0533e6432a8d6d445fe2..828eec843d330d4e5d8b883a588b9684
  import org.bukkit.event.server.ServerLoadEvent;
  // CraftBukkit end
  
-@@ -1004,6 +992,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+@@ -961,6 +950,17 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+             this.getConnection().stop();
+         }
+ 
++        // MultiPaper start
++        for (ServerLevel world : this.getAllLevels()) {
++            world.getChunkSource().entityTickingChunks.unsafeIterator().forEachRemaining(chunk -> {
++                NewChunkHolder chunkHolder = chunk.getChunkHolder();
++                if (chunkHolder.hasExternalLockRequest) {
++                    MultiPaper.unlockChunk(chunkHolder, chunk, chunkHolder.getEntityChunk());
++                }
++            });
++        }
++        // MultiPaper end
++
+         this.isSaving = true;
+         if (this.playerList != null) {
+             MinecraftServer.LOGGER.info("Saving players");
+@@ -1004,6 +1004,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
          // Paper start - move final shutdown items here
          LOGGER.info("Flushing Chunk IO");
          io.papermc.paper.chunk.system.io.RegionFileIOThread.close(true); // Paper // Paper - rewrite chunk system

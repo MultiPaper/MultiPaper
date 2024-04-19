@@ -336,6 +336,67 @@ index 3944852921335c78a04a9dc301882ab5b152b1ed..90107814a68a401bda71d66bbec50eff
      }
  
      public static ClientboundBlockEntityDataPacket create(BlockEntity blockEntity) {
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index a8eb0db33a9b15b5b32d0533e6432a8d6d445fe2..828eec843d330d4e5d8b883a588b9684617cb025 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -3,9 +3,6 @@ package net.minecraft.server;
+ import com.google.common.base.Preconditions;
+ import com.google.common.base.Splitter;
+ import com.google.common.collect.ImmutableList;
+-import co.aikar.timings.Timings;
+-import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
+-import com.google.common.base.Stopwatch;
+ import com.google.common.collect.Lists;
+ import com.google.common.collect.Maps;
+ import com.google.common.collect.Sets;
+@@ -86,7 +83,6 @@ import net.minecraft.server.level.ServerChunkCache;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.server.level.ServerPlayerGameMode;
+-import net.minecraft.server.level.TicketType;
+ import net.minecraft.server.level.progress.ChunkProgressListener;
+ import net.minecraft.server.level.progress.ChunkProgressListenerFactory;
+ import net.minecraft.server.network.ServerConnectionListener;
+@@ -110,17 +106,14 @@ import net.minecraft.util.NativeModuleLister;
+ import net.minecraft.util.ProgressListener;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.util.SignatureValidator;
+-import net.minecraft.util.Unit;
+ import net.minecraft.util.datafix.DataFixers;
+ import net.minecraft.util.profiling.EmptyProfileResults;
+ import net.minecraft.util.profiling.ProfileResults;
+ import net.minecraft.util.profiling.ProfilerFiller;
+ import net.minecraft.util.profiling.ResultField;
+-import net.minecraft.util.profiling.SingleTickProfiler;
+ import net.minecraft.util.profiling.jfr.JvmProfiler;
+ import net.minecraft.util.profiling.jfr.callback.ProfiledDuration;
+ import net.minecraft.util.profiling.metrics.profiling.ActiveMetricsRecorder;
+-import net.minecraft.util.profiling.metrics.profiling.InactiveMetricsRecorder;
+ import net.minecraft.util.profiling.metrics.profiling.MetricsRecorder;
+ import net.minecraft.util.profiling.metrics.profiling.ServerMetricsSamplersProvider;
+ import net.minecraft.util.profiling.metrics.storage.MetricsPersister;
+@@ -184,11 +177,6 @@ import net.minecraft.world.level.validation.ContentValidationException;
+ import net.minecraft.world.phys.Vec2;
+ import net.minecraft.world.phys.Vec3;
+ import org.bukkit.Bukkit;
+-import org.bukkit.craftbukkit.CraftServer;
+-import org.bukkit.craftbukkit.Main;
+-import org.bukkit.craftbukkit.util.CraftChatMessage;
+-import org.bukkit.craftbukkit.util.LazyPlayerSet;
+-import org.bukkit.event.player.AsyncPlayerChatPreviewEvent;
+ import org.bukkit.event.server.ServerLoadEvent;
+ // CraftBukkit end
+ 
+@@ -1004,6 +992,8 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         // Paper start - move final shutdown items here
+         LOGGER.info("Flushing Chunk IO");
+         io.papermc.paper.chunk.system.io.RegionFileIOThread.close(true); // Paper // Paper - rewrite chunk system
++        LOGGER.info("Flushing MultiPaper Master connection"); // MultiPaper
++        MultiPaper.flushMasterConnectionAsync().join(); // MultiPaper
+         LOGGER.info("Closing Thread Pool");
+         Util.shutdownExecutors(); // Paper
+         LOGGER.info("Closing Server");
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
 index e2202389a2c4133a183cca59c4e909fc419379ab..72411e43a4c1da627ae1dec77a051476e12d0b58 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
@@ -1158,7 +1219,7 @@ index 9f1dca3645b4b9bf5eaf490cdde92abeac6a3c34..0f9d51e2959a9bf2b3b31930c88a942a
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index bc92ede80abbb1f72fbc6f14caa9d9cc4cfff7a6..852e2caca506a053a131c302d5e53e553b11330b 100644
+index bc92ede80abbb1f72fbc6f14caa9d9cc4cfff7a6..4fd5f0684af2c3b7893c9035e4ef6b87cedf6aba 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,32 +1,58 @@
@@ -1227,10 +1288,15 @@ index bc92ede80abbb1f72fbc6f14caa9d9cc4cfff7a6..852e2caca506a053a131c302d5e53e55
  
  public class MultiPaper {
  
-@@ -177,4 +203,235 @@ public class MultiPaper {
+@@ -177,4 +203,240 @@ public class MultiPaper {
      public static CompoundTag nbtFromBytes(byte[] data) throws IOException {
          return NbtIo.read(new DataInputStream(new ByteArrayInputStream(data)));
      }
++
++    public static CompletableFuture<Void> flushMasterConnectionAsync() {
++        // Just read some random json file to ensure that all the queued packets in both directions have been fully flushed and handled
++        return MultiPaper.getConnection().sendAndAwaitReply(new ReadJsonMessage("ops.json"), DataMessageReply.class).thenRun(() -> {});
++    }
 +
 +    public static boolean isChunkExternal(Chunk chunk) {
 +        return chunk != null && ((CraftChunk) chunk).getHandle(ChunkStatus.EMPTY) instanceof LevelChunk levelChunk && isChunkExternal(levelChunk);

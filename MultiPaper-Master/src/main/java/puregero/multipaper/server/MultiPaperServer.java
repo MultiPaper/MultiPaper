@@ -8,14 +8,17 @@ import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBo
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundProtocol;
 import puregero.multipaper.server.proxy.ProxyServer;
 
-import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
 import java.util.UUID;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.TimeUnit;
 
 public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, ServerBoundMessage> {
     public static final int DEFAULT_PORT = 35353;
     public static final String SECRET = UUID.randomUUID().toString();
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws InterruptedException {
         DAEMON = false;
 
         String address = null;
@@ -46,6 +49,31 @@ public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, Serve
         new MultiPaperServer(address, port);
 
         new CommandLineInput().run();
+
+        System.out.println("Exiting safely...");
+
+        awaitAsyncTasks();
+
+        System.out.println("Shutting down event loop...");
+        eventLoopGroup.shutdownGracefully().await();
+
+        awaitAsyncTasks();
+
+        System.exit(0);
+    }
+
+    private static void awaitAsyncTasks() {
+        System.out.println("Waiting for async tasks...");
+        if (!ForkJoinPool.commonPool().awaitQuiescence(10, TimeUnit.SECONDS)) {
+            System.out.println("Some tasks are taking a long time to complete.");
+            System.out.println("Thread list:");
+            ThreadInfo[] threads = ManagementFactory.getThreadMXBean().dumpAllThreads(true, true);
+            for (ThreadInfo thread : threads) {
+                System.out.println(thread);
+            }
+
+            ForkJoinPool.commonPool().awaitQuiescence(1, TimeUnit.HOURS);
+        }
     }
 
     public MultiPaperServer(int port) {

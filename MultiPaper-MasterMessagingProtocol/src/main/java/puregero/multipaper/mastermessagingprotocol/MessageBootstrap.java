@@ -32,7 +32,7 @@ public class MessageBootstrap<I extends Message<?>, O extends Message<?>> extend
         }
     };
 
-    private static EventLoopGroup eventLoopGroup;
+    public static EventLoopGroup eventLoopGroup;
     private static Class<? extends SocketChannel> socketChannelClass;
     private static Class<? extends ServerSocketChannel> serverSocketChannelClass;
 

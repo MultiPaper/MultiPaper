@@ -3,6 +3,8 @@ package puregero.multipaper.server;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
 
@@ -60,11 +62,31 @@ public class FileLocker {
 
         try {
             file.getParentFile().mkdirs();
-            Files.write(file.toPath(), bytes);
+            safeWrite(file, bytes);
         } finally {
             synchronized (beingWritten) {
                 beingWritten.remove(file);
             }
+        }
+    }
+
+    private static void safeWrite(File file, byte[] bytes) throws IOException {
+        File newFile = new File(file.getParentFile(), file.getName() + "_new");
+        File oldFile = new File(file.getParentFile(), file.getName() + "_old");
+
+        Files.write(newFile.toPath(), bytes);
+        safeReplaceFile(file.toPath(), newFile.toPath(), oldFile.toPath());
+    }
+
+    private static void safeReplaceFile(Path file, Path newFile, Path oldFile) throws IOException {
+        if (Files.exists(file)) {
+            Files.move(file, oldFile, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        Files.move(newFile, file, StandardCopyOption.REPLACE_EXISTING);
+
+        if (Files.exists(oldFile)) {
+            Files.delete(oldFile);
         }
     }
 }

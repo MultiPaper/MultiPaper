@@ -5,7 +5,7 @@ Subject: [PATCH] Sync experience
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 38a7ef6831d2ea020f3d709cbff16a469fd5e0d9..3901ebd2d8025aa20c757f56ead4caa1133a8814 100644
+index 38a7ef6831d2ea020f3d709cbff16a469fd5e0d9..930144d716030af4a0cce9a8df01dd21acd22b8c 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -187,10 +187,7 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
@@ -41,8 +41,22 @@ index 38a7ef6831d2ea020f3d709cbff16a469fd5e0d9..3901ebd2d8025aa20c757f56ead4caa1
      public void initMenu(AbstractContainerMenu screenHandler) {
          screenHandler.addSlotListener(this.containerListener);
          screenHandler.setSynchronizer(this.containerSynchronizer);
+@@ -2808,6 +2819,13 @@ public class ServerPlayer extends Player {
+         this.experienceLevel = this.newLevel;
+         this.totalExperience = this.newTotalExp;
+         this.experienceProgress = 0;
++        // MultiPaper start - don't sync experience for external players
++        if (MultiPaper.isExternalPlayer(this)) {
++            this.lastExperienceProgress = this.experienceProgress;
++            this.lastExperienceLevel = this.experienceLevel;
++            this.lastTotalExperience = this.totalExperience;
++        }
++        // MultiPaper end - don't sync experience for external players
+         this.deathTime = 0;
+         this.setArrowCount(0, true); // CraftBukkit - ArrowBodyCountChangeEvent
+         this.removeAllEffects(org.bukkit.event.entity.EntityPotionEffectEvent.Cause.DEATH);
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index bb4222c75b220829806c6ad9b2396523196e9205..dd24c87ae0b405cc43720dde136831d3cc1de6c9 100644
+index 8b634ebf690ef0d97c50ebc1b27db37c4ea71fc5..7f59eaf6fd07c4397e848462784a7a7a2425e238 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -92,6 +92,8 @@ public class MultiPaper {
@@ -66,6 +80,23 @@ index 565fccba27dcd221660965b9db6b023fd5ed77dd..f903a20532a9b4067e96d83e9962873d
      }
  
      private static void addPacket(Class<? extends ExternalServerPacket> clazz, Function<FriendlyByteBuf, ExternalServerPacket> deserializer) {
+diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java
+index e2fd0dcbbcd7b53783bec1799c701d22d65d208f..42fbce1e396a0bc2168ef09ce6971220005fd11d 100644
+--- a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java
++++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerChangeDimensionPacket.java
+@@ -61,6 +61,12 @@ public class PlayerChangeDimensionPacket extends ExternalServerPacket {
+             player.setPosRaw(x, y, z);
+ 
+             if (reset) {
++                player.keepLevel = false;
++                player.newLevel = 0;
++                player.newTotalExp = 0;
++                player.expToDrop = 0;
++                player.newExp = 0;
++
+                 player.reset();
+             }
+ 
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerExperienceUpdatePacket.java
 new file mode 100644
 index 0000000000000000000000000000000000000000..cb0f815c026ce2547a64cacef28e646d2ce44c81

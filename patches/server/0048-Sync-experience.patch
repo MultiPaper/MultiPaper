@@ -5,7 +5,7 @@ Subject: [PATCH] Sync experience
 
 
 diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
-index 38a7ef6831d2ea020f3d709cbff16a469fd5e0d9..930144d716030af4a0cce9a8df01dd21acd22b8c 100644
+index 38a7ef6831d2ea020f3d709cbff16a469fd5e0d9..6fd35e84462725dd446f2899c3d2713c080cd472 100644
 --- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
 +++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
 @@ -187,10 +187,7 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
@@ -41,20 +41,26 @@ index 38a7ef6831d2ea020f3d709cbff16a469fd5e0d9..930144d716030af4a0cce9a8df01dd21
      public void initMenu(AbstractContainerMenu screenHandler) {
          screenHandler.addSlotListener(this.containerListener);
          screenHandler.setSynchronizer(this.containerSynchronizer);
-@@ -2808,6 +2819,13 @@ public class ServerPlayer extends Player {
-         this.experienceLevel = this.newLevel;
-         this.totalExperience = this.newTotalExp;
-         this.experienceProgress = 0;
-+        // MultiPaper start - don't sync experience for external players
-+        if (MultiPaper.isExternalPlayer(this)) {
+@@ -2823,6 +2834,19 @@ public class ServerPlayer extends Player {
+             this.giveExperiencePoints(this.newExp);
+         }
+         this.keepLevel = false;
++        // MultiPaper start - Syncing experience after reset
++        if (MultiPaper.isRealPlayer(this)) {
++            // Force resync of local player experience onto other servers if it's non-zero
++            this.lastExperienceProgress = 0;
++            this.lastExperienceLevel = 0;
++            this.lastTotalExperience = 0;
++        } else {
++            // Don't sync experience for external players
 +            this.lastExperienceProgress = this.experienceProgress;
 +            this.lastExperienceLevel = this.experienceLevel;
 +            this.lastTotalExperience = this.totalExperience;
 +        }
-+        // MultiPaper end - don't sync experience for external players
-         this.deathTime = 0;
-         this.setArrowCount(0, true); // CraftBukkit - ArrowBodyCountChangeEvent
-         this.removeAllEffects(org.bukkit.event.entity.EntityPotionEffectEvent.Cause.DEATH);
++        // MultiPaper end - Syncing experience after reset
+         this.setDeltaMovement(0, 0, 0); // CraftBukkit - SPIGOT-6948: Reset velocity on death
+     }
+ 
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
 index 8b634ebf690ef0d97c50ebc1b27db37c4ea71fc5..7f59eaf6fd07c4397e848462784a7a7a2425e238 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java

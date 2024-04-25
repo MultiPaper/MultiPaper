@@ -3,6 +3,7 @@ From: PureGero <puregero@gmail.com>
 Date: Thu, 25 Nov 2021 00:20:51 +1000
 Subject: [PATCH] Add /servers
 
+* Optimise Command
 
 diff --git a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
 index 2fd69c0f915f1c3cb1c410d5dab0498f05d5c888..fa03c956d06f3b093545e2861a23c67b3cfff8f5 100644
@@ -39,12 +40,13 @@ index 2fd69c0f915f1c3cb1c410d5dab0498f05d5c888..fa03c956d06f3b093545e2861a23c67b
      }
 diff --git a/src/main/java/puregero/multipaper/commands/ServersCommand.java b/src/main/java/puregero/multipaper/commands/ServersCommand.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..e29965bb7518fa4b22f2a73bcd8db02d4e00f395
+index 0000000000000000000000000000000000000000..86f06ca24c7102fc887d3498463e3dfa38996b57
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/commands/ServersCommand.java
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,63 @@
 +package puregero.multipaper.commands;
 +
++import net.kyori.adventure.text.minimessage.MiniMessage;
 +import net.minecraft.server.MinecraftServer;
 +import net.minecraft.server.level.ServerPlayer;
 +import org.bukkit.ChatColor;
@@ -64,16 +66,17 @@ index 0000000000000000000000000000000000000000..e29965bb7518fa4b22f2a73bcd8db02d
 +    public boolean execute(CommandSender sender, String commandLabel, String[] args) {
 +        if (!testPermission(sender)) return false;
 +
-+        sender.sendMessage(ChatColor.GRAY + "[Servers] (Avg Tick Time / Tps / Player Count)");
++        StringBuilder stringBuilder = new StringBuilder();
++        stringBuilder.append("<gray>[Servers] (Avg Tick Time / Tps / Player Count)");
 +
 +        for (ExternalServer server : MultiPaper.getConnection().getServersMap().values()) {
 +            String tickTime = server.getAverageTickTime() + "ms";
 +            if (server.getTps() >= 19.9) {
-+                tickTime = ChatColor.GREEN + tickTime;
++                tickTime = "<green>" +tickTime;
 +            } else if (server.getTps() >= 17.5) {
-+                tickTime = ChatColor.YELLOW + tickTime;
++                tickTime = "<yellow>" + tickTime;
 +            } else {
-+                tickTime = ChatColor.RED + tickTime;
++                tickTime = "<red>" + tickTime;
 +            }
 +
 +            String tpsString = String.format("%.1f tps", server.getTps());
@@ -93,12 +96,14 @@ index 0000000000000000000000000000000000000000..e29965bb7518fa4b22f2a73bcd8db02d
 +            }
 +
 +            if (!server.isAlive()) {
-+                sender.sendMessage(ChatColor.DARK_GRAY + "[" + server.getName() + "] " + server.getAverageTickTime() + "ms, " + tpsString + ", " + playersString);
++                stringBuilder.append(String.format("<dark_gray>[%s] %sms, %s, %s", server.getName(), server.getAverageTickTime(), tpsString, playersString));
 +            } else {
-+                sender.sendMessage(ChatColor.GREEN + "[" + (server.isMe() ? ChatColor.GOLD : "") + server.getName() + ChatColor.GREEN + "] " + tickTime + ", " + tpsString + ", " + playersString);
++                stringBuilder.append(String.format("<green>[%s<green>] %sms, %s, %s",
++                        (server.isMe() ? "<gold>" : "") + server.getName(), tickTime, tpsString, playersString));
 +            }
 +        }
 +
++        sender.sendMessage(MiniMessage.miniMessage().deserialize(stringBuilder.toString()));
 +        return true;
 +    }
 +}

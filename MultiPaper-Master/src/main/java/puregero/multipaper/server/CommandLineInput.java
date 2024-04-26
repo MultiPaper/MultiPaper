@@ -16,6 +16,15 @@ public class CommandLineInput extends Thread {
                 ServerConnection.shutdownAndWait();
                 System.out.println("Shutdown complete");
                 return;
+            } else if (line.equalsIgnoreCase("threaddump")) {
+                System.out.println("Printing thread dump...");
+                for (Thread thread : Thread.getAllStackTraces().keySet()) {
+                    System.out.println();
+                    System.out.println(thread.getName() + " " + thread.getState());
+                    for (StackTraceElement element : thread.getStackTrace()) {
+                        System.out.println("    " + element);
+                    }
+                }
             } else {
                 System.out.println("Unknown command, use 'shutdown' to shutdown all servers or ctrl+c to stop just this master server");
             }

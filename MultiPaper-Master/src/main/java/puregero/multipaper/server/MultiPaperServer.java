@@ -7,6 +7,7 @@ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBo
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundProtocol;
 import puregero.multipaper.server.proxy.ProxyServer;
+import puregero.multipaper.server.util.LogToFile;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
@@ -23,6 +24,10 @@ public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, Serve
 
         String address = null;
         int port = DEFAULT_PORT;
+
+        if ("true".equalsIgnoreCase(System.getProperty("logging.enabled", "true"))) {
+            LogToFile.init(); // TODO Use log4j instead
+        }
 
         if (args.length > 0) {
             if (args[0].contains(":")) {

@@ -48,7 +48,11 @@ public abstract class MessageHandler<T extends Message> extends SimpleChannelInb
         }
 
         if (!onMessage(message)) {
-            message.handle(this);
+            try {
+                message.handle(this);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 

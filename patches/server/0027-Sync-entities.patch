@@ -5,35 +5,56 @@ Subject: [PATCH] Sync entities
 
 
 diff --git a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java b/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
-index ff7198a03ab0da79c98513f4a1507e854484f4c2..63cc75fc41693f024a5d57a1374f4d6bcd82b382 100644
+index ff7198a03ab0da79c98513f4a1507e854484f4c2..4fa5b1bed4380b930eb69c811f041f981c03d82c 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/entity/EntityLookup.java
-@@ -74,6 +74,24 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+@@ -17,6 +17,7 @@ import net.minecraft.util.AbortableIterationConsumer;
+ import net.minecraft.util.Mth;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.entity.EntityInLevelCallback;
+ import net.minecraft.world.level.entity.EntityTypeTest;
+ import net.minecraft.world.level.entity.LevelCallback;
+@@ -74,6 +75,37 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
          return visibility.isAccessible() ? entity : null;
      }
  
 +    // MultiPaper start
 +    @Nullable
-+    public Visibility getEntityStatusByUUID(UUID uuid) {
-+        Entity entity;
++    public Entity getEntityIgnoringAccessible(UUID uuid) {
++        final long attempt = this.entityByLock.tryOptimisticRead();
++        if (attempt != 0L) {
++            try {
++                final Entity ret = this.entityByUUID.get(uuid);
++
++                if (this.entityByLock.validate(attempt)) {
++                    return ret;
++                }
++            } catch (final Error error) {
++                throw error;
++            } catch (final Throwable thr) {
++                // ignore
++            }
++        }
++
 +        this.entityByLock.readLock();
 +        try {
-+             entity = (this.entityByUUID.get(uuid));
++            return this.entityByUUID.get(uuid);
 +        } finally {
 +            this.entityByLock.tryUnlockRead();
 +        }
-+        if (entity != null) {
-+            return getEntityStatus(entity);
-+        } else {
-+            return null;
-+        }
 +    }
-+    // MultiPaper stop
++
++    public boolean isChunkLoaded(ChunkPos chunkPos) {
++        return getChunk(chunkPos.x, chunkPos.z) != null;
++    }
++    // MultiPaper end
 +
      @Nullable
      @Override
      public Entity get(final int id) {
-@@ -369,10 +387,12 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
+@@ -369,10 +401,12 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
          try {
              if (this.entityById.containsKey(entity.getId())) {
                  LOGGER.warn("Entity id already exists: " + entity.getId() + ", mapped to " + this.entityById.get(entity.getId()) + ", can't add " + entity);
@@ -46,28 +67,6 @@ index ff7198a03ab0da79c98513f4a1507e854484f4c2..63cc75fc41693f024a5d57a1374f4d6b
                  return false;
              }
              this.entityById.put(entity.getId(), entity);
-@@ -407,6 +427,21 @@ public final class EntityLookup implements LevelEntityGetter<Entity> {
-         return slices == null || !slices.isPreventingStatusUpdates();
-     }
- 
-+    // MultiPaper start - force removal
-+    public void forceRemove(UUID uuid) {
-+        Entity entity;
-+        this.entityByLock.readLock();
-+        try {
-+            entity = this.entityByUUID.get(uuid);
-+        } finally {
-+            this.entityByLock.tryUnlockRead();
-+        }
-+        if (entity != null) {
-+            entity.forceRemove();
-+        }
-+    }
-+    // MultiPaper end
-+
-     private void removeEntity(final Entity entity) {
-         final int sectionX = entity.sectionX;
-         final int sectionY = entity.sectionY;
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
 index 65c444c0bb9adca2c8f0bf8545c5294e98a052be..834bf755736dfd59a93e9c080ac0f1b2a522ef08 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/NewChunkHolder.java
@@ -444,7 +443,7 @@ index 0db98625eec0c5af4a44ccb620d543d20829b843..fc76f71e84ed638c8fd9957803b0a2da
                      serversToCreatePlayerOn.add(externalServer.getConnection());
                  } else if (subscribedToSoruce) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
-index 84a3e09a408ea4d1f7ed03d1bc77533bbc31e0d7..bc0d658165750280646d060a763b8c9798097608 100644
+index 84a3e09a408ea4d1f7ed03d1bc77533bbc31e0d7..6025f87b0994c67c2bfe0c40ae8fb9831d412efe 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
 +++ b/src/main/java/net/minecraft/world/entity/Entity.java
 @@ -146,7 +146,10 @@ import org.bukkit.event.entity.EntityPortalEvent;
@@ -584,26 +583,7 @@ index 84a3e09a408ea4d1f7ed03d1bc77533bbc31e0d7..bc0d658165750280646d060a763b8c97
          if (this.removalReason == null) {
              this.removalReason = reason;
          }
-@@ -4836,6 +4858,18 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
-         // Paper end - Folia schedulers
-     }
- 
-+    // MultiPaper start - force removal
-+    public void forceRemove() {
-+        io.papermc.paper.util.TickThread.ensureTickThread(this, "Cannot remove entity off-main");
-+        if (!((ServerLevel)this.level).getEntityLookup().canRemoveEntity(this)) {
-+            LOGGER.warn("forceRemove - Entity " + this + " is currently prevented from being removed from the world since it is processing section status updates", new Throwable());
-+            return;
-+        }
-+
-+        this.removalReason = RemovalReason.UNLOADED_TO_CHUNK;
-+        this.levelCallback.onRemove(this.removalReason);
-+    }
-+
-     public void unsetRemoved() {
-         this.removalReason = null;
-     }
-@@ -4857,7 +4891,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
+@@ -4857,7 +4879,7 @@ public abstract class Entity implements Nameable, EntityAccess, CommandSource {
  
      @Override
      public boolean shouldBeSaved() {
@@ -1074,7 +1054,7 @@ index 8fe8e8a4ba2764f3e91b6c90290bdcbb56402cd7..6044faafa283d4f50a1700330d1a444f
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..3dbfd4bf13c5891fa23b73cbbab828286828d455
+index 0000000000000000000000000000000000000000..9df5cd764adfb07c53988a67406e9bc1307844f5
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperEntitiesHandler.java
 @@ -0,0 +1,388 @@
@@ -1258,7 +1238,7 @@ index 0000000000000000000000000000000000000000..3dbfd4bf13c5891fa23b73cbbab82828
 +            VecDeltaCodec vecDeltaCodec = new VecDeltaCodec();
 +            vecDeltaCodec.setBase(entity.position());
 +            Vec3 vector = vecDeltaCodec.decode(moveEntityPacket.getXa(), moveEntityPacket.getYa(), moveEntityPacket.getZa());
-+            if (!(entity instanceof ServerPlayer) && !((ServerLevel) entity.level()).areEntitiesLoaded(new ChunkPos(new BlockPos((int) vector.x, (int) vector.y, (int) vector.z)).longKey)) {
++            if (!(entity instanceof ServerPlayer) && !((ServerLevel) entity.level()).getEntityLookup().isChunkLoaded(new ChunkPos(new BlockPos((int) vector.x, (int) vector.y, (int) vector.z)))) {
 +                setRemovedRecursive(entity);
 +                return;
 +            }
@@ -1272,7 +1252,7 @@ index 0000000000000000000000000000000000000000..3dbfd4bf13c5891fa23b73cbbab82828
 +            }
 +            entity.onGround = moveEntityPacket.isOnGround();
 +        } else if (packet instanceof ClientboundTeleportEntityPacket teleportEntityPacket) {
-+            if (!(entity instanceof ServerPlayer) &&!((ServerLevel) entity.level()).areEntitiesLoaded(new ChunkPos(new BlockPos((int) teleportEntityPacket.getX(), (int) teleportEntityPacket.getY(), (int) teleportEntityPacket.getZ())).longKey)) {
++            if (!(entity instanceof ServerPlayer) &&!((ServerLevel) entity.level()).getEntityLookup().isChunkLoaded(new ChunkPos(new BlockPos((int) teleportEntityPacket.getX(), (int) teleportEntityPacket.getY(), (int) teleportEntityPacket.getZ())))) {
 +                setRemovedRecursive(entity);
 +                return;
 +            }
@@ -1495,10 +1475,10 @@ index 0000000000000000000000000000000000000000..1b826e5e3194728467fdeb4cf0d87a25
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..4899e5ed6988fcef9d86e5a1f070cfb6ab6c1a10
+index 0000000000000000000000000000000000000000..40b6e6ed16c4a56f80ac32bf17b68ddb5a821610
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityRemovePacket.java
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,87 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.network.FriendlyByteBuf;
@@ -1559,31 +1539,18 @@ index 0000000000000000000000000000000000000000..4899e5ed6988fcef9d86e5a1f070cfb6
 +    private void removeEntity() {
 +        ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
 +
-+        Entity entity = level.getEntity(uuid);
-+        Visibility visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
++        Entity entity = level.getEntityLookup().getEntityIgnoringAccessible(uuid);
 +
-+        if (entity != null || visibility != null) {
++        if (entity != null) {
 +            MultiPaperEntitiesHandler.removingEntity = true;
 +            Entity.RemovalReason reason = entity instanceof Player ? Entity.RemovalReason.KILLED : Entity.RemovalReason.DISCARDED;
 +            if (this.unloadedWithPlayer) reason = Entity.RemovalReason.UNLOADED_WITH_PLAYER;
 +
-+            if (entity != null) {
-+                entity.setRemoved(reason);
-+            } else {
-+                // Entity is not accessible, force its removal
-+                level.getEntityLookup().forceRemove(uuid);
-+                setEntityRemoved(uuid, reason);
-+            }
++            entity.setRemoved(reason);
 +
 +            MultiPaperEntitiesHandler.removingEntity = false;
 +        } else if (!this.unloadedWithPlayer) {
 +            setEntityRemoved(uuid, Entity.RemovalReason.DISCARDED);
-+        }
-+
-+        // Check if the entity was actually removed
-+        visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
-+        if (visibility != null) {
-+            LOGGER.warn("Tried to remove entity {} but it still exists with visibility {}: {}", uuid, visibility, entity);
 +        }
 +    }
 +
@@ -1601,10 +1568,10 @@ index 0000000000000000000000000000000000000000..4899e5ed6988fcef9d86e5a1f070cfb6
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..dc7c7aa6a67e3a7107b6d8d1d6b2ad461e7d160d
+index 0000000000000000000000000000000000000000..d8577ae2759359324384c59d433ba12fc204cb4a
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateNBTPacket.java
-@@ -0,0 +1,149 @@
+@@ -0,0 +1,129 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import net.minecraft.nbt.CompoundTag;
@@ -1693,37 +1660,17 @@ index 0000000000000000000000000000000000000000..dc7c7aa6a67e3a7107b6d8d1d6b2ad46
 +            return null;
 +        }
 +
++        Entity entity = level.getEntityLookup().getEntityIgnoringAccessible(uuid);
 +
-+
-+        Entity entity = level.getEntity(uuid);
-+        Visibility visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
-+        if (visibility != null && !visibility.isAccessible()) {
-+            level.getEntityLookup().forceRemove(uuid); // This entity is in an inaccessible area, so force its removal so that we can replace it
-+            entity = level.getEntity(uuid);
-+            visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
-+        }
-+
-+        if (visibility != null && !visibility.isAccessible()) {
-+            LOGGER.warn("Tried to load entity {} but its in an inaccessible area", uuid);
-+            return null;
-+        }
-+
-+        if (entity == null && visibility == null) {
++        if (entity == null) {
 +            entity = EntityType.loadEntityRecursive(tag, level, entity2 -> {
-+                if (level.areEntitiesLoaded(entity2.chunkPosition().longKey)) {
++                if (level.getEntityLookup().isChunkLoaded(entity2.chunkPosition())) {
 +                    level.getEntityLookup().addNewEntity(entity2);
 +                    if (entity2 instanceof Mob mob) mob.restoreLeashFromSave();
 +                    return entity2;
 +                } else {
 +                    EntityRemovePacket.setEntityRemoved(uuid, Entity.RemovalReason.UNLOADED_TO_CHUNK, 20);
-+                    /*
-+                     * disable this not needed warn,
-+                     * since chunk system rewrite, chunk system is now true async which can unload/load without main thread knowing?
-+                     * since spawning is executed on the main thread (this),
-+                     * not sure if this is right explanation about chunk system rewrite.
-+                     * - Ham1255
-+                     */
-+                    // LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk aren't loaded: " + entity2);
++                    LOGGER.warn("Tried to create an entity from nbt, but the entities for that chunk aren't loaded: " + entity2); // Warnings are there for a reason
 +                    return null;
 +                }
 +            });
@@ -1756,10 +1703,10 @@ index 0000000000000000000000000000000000000000..dc7c7aa6a67e3a7107b6d8d1d6b2ad46
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c3799fb4bd23a754ebf28d266dd7b0b17d93e337
+index 0000000000000000000000000000000000000000..4e7d66ad3a0eb32e0bdc1c14d659fc9fafc00609
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdatePacket.java
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,116 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1770,6 +1717,7 @@ index 0000000000000000000000000000000000000000..c3799fb4bd23a754ebf28d266dd7b0b1
 +import net.minecraft.network.protocol.PacketFlow;
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.entity.Visibility;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
@@ -1843,12 +1791,8 @@ index 0000000000000000000000000000000000000000..c3799fb4bd23a754ebf28d266dd7b0b1
 +
 +        if (bukkitWorld instanceof CraftWorld craftWorld) {
 +            ServerLevel level = craftWorld.getHandle();
-+            Entity entity = level.getEntity(uuid);
-+            Visibility visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
-+            if (visibility != null && !visibility.isAccessible()) {
-+                return;
-+            }
-+            if (entity == null && visibility == null) {
++            Entity entity = level.getEntityLookup().getEntityIgnoringAccessible(uuid);
++            if (entity == null) {
 +                if (EntityRemovePacket.removedEntities.containsKey(uuid)) {
 +                    return;
 +                }
@@ -1857,7 +1801,7 @@ index 0000000000000000000000000000000000000000..c3799fb4bd23a754ebf28d266dd7b0b1
 +                // the spawn entity packet is probably coming later
 +
 +                // first we check if we really need to request the entity by checking if entity's chunk is loaded
-+                if (!level.areEntitiesLoaded(this.chunkPos)) {
++                if (!level.getEntityLookup().isChunkLoaded(new ChunkPos(this.chunkPos))) {
 +                    return;
 +                }
 +
@@ -1881,10 +1825,10 @@ index 0000000000000000000000000000000000000000..c3799fb4bd23a754ebf28d266dd7b0b1
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..9a5c01a9fb8ff40f1d3ee870dea491d70794f77b
+index 0000000000000000000000000000000000000000..a8bc60d3cddaaee3d23c0693f7f5b720cab4ac0a
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/EntityUpdateWithDependenciesPacket.java
-@@ -0,0 +1,188 @@
+@@ -0,0 +1,185 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.netty.buffer.ByteBuf;
@@ -1897,6 +1841,7 @@ index 0000000000000000000000000000000000000000..9a5c01a9fb8ff40f1d3ee870dea491d7
 +import net.minecraft.server.level.ServerLevel;
 +import net.minecraft.server.level.ServerPlayer;
 +import net.minecraft.world.entity.Entity;
++import net.minecraft.world.level.ChunkPos;
 +import net.minecraft.world.level.entity.Visibility;
 +import org.apache.logging.log4j.LogManager;
 +import org.apache.logging.log4j.Logger;
@@ -1981,12 +1926,8 @@ index 0000000000000000000000000000000000000000..9a5c01a9fb8ff40f1d3ee870dea491d7
 +
 +        if (bukkitWorld instanceof CraftWorld craftWorld) {
 +            ServerLevel level = craftWorld.getHandle();
-+            Entity entity = level.getEntity(uuid);
-+            Visibility visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
-+            if (visibility != null && !visibility.isAccessible()) {
-+                return;
-+            }
-+            if (entity == null && visibility == null) {
++            Entity entity = level.getEntityLookup().getEntityIgnoringAccessible(uuid);
++            if (entity == null) {
 +                if (EntityRemovePacket.removedEntities.containsKey(uuid)) {
 +                    return;
 +                }
@@ -1995,7 +1936,7 @@ index 0000000000000000000000000000000000000000..9a5c01a9fb8ff40f1d3ee870dea491d7
 +                // the spawn entity packet is probably coming later
 +
 +                // first we check if we really need to request the entity by checking if entity's chunk is loaded
-+                if (!level.areEntitiesLoaded(this.chunkPos)) {
++                if (!level.getEntityLookup().isChunkLoaded(new ChunkPos(this.chunkPos))) {
 +                    return;
 +                }
 +
@@ -2014,7 +1955,7 @@ index 0000000000000000000000000000000000000000..9a5c01a9fb8ff40f1d3ee870dea491d7
 +            Entity[] entities = new Entity[uuids.length];
 +
 +            for (int i = 0; i < uuids.length; i++) {
-+                entities[i] = level.getEntity(uuids[i]);
++                entities[i] = level.getEntityLookup().getEntityIgnoringAccessible(uuids[i]);
 +
 +                if (entities[i] == null) {
 +                    if (EntityRemovePacket.removedEntities.containsKey(uuids[i])) {
@@ -2270,10 +2211,10 @@ index 0000000000000000000000000000000000000000..26df6c6d6052f71da435d4ef973d1bb1
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..bf9f0bf5e24fe8c70fd7895df289421a38fa87b9
+index 0000000000000000000000000000000000000000..26defc673cbb481f3d60eefd8fdabc346ea2753e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/RequestEntityPacket.java
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,119 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
@@ -2353,9 +2294,8 @@ index 0000000000000000000000000000000000000000..bf9f0bf5e24fe8c70fd7895df289421a
 +            CraftWorld craftWorld = ((CraftWorld) Bukkit.getWorld(world));
 +            if (craftWorld == null) return;
 +            ServerLevel level = craftWorld.getHandle();
-+            Entity entity = level.getEntity(uuid);
-+            Visibility visibility = level.getEntityLookup().getEntityStatusByUUID(uuid);
-+            if (entity != null && visibility != null && visibility.isAccessible()) {
++            Entity entity = level.getEntityLookup().getEntityIgnoringAccessible(uuid);
++            if (entity != null) {
 +                if (entity instanceof ServerPlayer serverPlayer) {
 +                    triedToRequestPlayer(connection, serverPlayer);
 +                    return;
@@ -2396,7 +2336,7 @@ index 0000000000000000000000000000000000000000..bf9f0bf5e24fe8c70fd7895df289421a
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..81a6e4083284600aadc9372f81e40b6bcd5b670e
+index 0000000000000000000000000000000000000000..8842391e3949104b0a77959327597e656a6eafca
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/SendEntitiesPacket.java
 @@ -0,0 +1,155 @@
@@ -2534,7 +2474,7 @@ index 0000000000000000000000000000000000000000..81a6e4083284600aadc9372f81e40b6b
 +                ChunkPos pos = new ChunkPos(cx, cz);
 +                ServerLevel level = ((CraftWorld) Bukkit.getWorld(world)).getHandle();
 +                // Check that we have these entities loaded in the first place
-+                if (level.areEntitiesLoaded(pos.longKey)) {
++                if (level.getEntityLookup().isChunkLoaded(pos)) {
 +                    CompoundTag tag = MultiPaper.nbtFromBytes(data);
 +                    ListTag entities = tag == null ? new ListTag() : tag.getList("Entities", Tag.TAG_COMPOUND);
 +                    MultiPaper.runSync(() -> {

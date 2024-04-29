@@ -1,0 +1,83 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Mon, 29 Apr 2024 19:54:10 +0900
+Subject: [PATCH] Add /entitiesmap
+
+Useful for debugging and testing entity syncing issues.
+OP-only command by default as it can be exploited by players to
+find entities.
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+index 75c47d4c51e41cce641d79b5cd3d0bb4eccd5cff..33c16e50e1dacfc8cd4a21e6da714df29a75fc9b 100644
+--- a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
++++ b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+@@ -4,6 +4,7 @@ import java.util.Map;
+ import org.bukkit.Server;
+ import org.bukkit.command.Command;
+ import org.bukkit.command.SimpleCommandMap;
++import puregero.multipaper.commands.EntitiesMapCommand;
+ import puregero.multipaper.commands.MPDebugCommand;
+ import puregero.multipaper.commands.MPMapCommand;
+ import puregero.multipaper.commands.SListCommand;
+@@ -29,6 +30,7 @@ public class CraftCommandMap extends SimpleCommandMap {
+         register("multipaper", new ServersCommand("servers"));
+         register("multipaper", new MPMapCommand("mpmap"));
+         register("multipaper", new SListCommand("slist"));
++        register("multipaper", new EntitiesMapCommand("entitiesmap"));
+     }
+     // MultiPaper end
+ 
+diff --git a/src/main/java/puregero/multipaper/commands/EntitiesMapCommand.java b/src/main/java/puregero/multipaper/commands/EntitiesMapCommand.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..f9cd928a931ddd21f4a420058486d006f342d2d8
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/commands/EntitiesMapCommand.java
+@@ -0,0 +1,36 @@
++package puregero.multipaper.commands;
++
++import io.papermc.paper.world.ChunkEntitySlices;
++import net.kyori.adventure.text.format.NamedTextColor;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.ChunkPos;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.entity.Player;
++
++public class EntitiesMapCommand extends MapCommandBase {
++
++    private static final ChunkStatus UNLOADED = new ChunkStatus(NamedTextColor.DARK_GRAY, "Unloaded");
++    private static final ChunkStatus TRANSIENT = new ChunkStatus(NamedTextColor.RED, "Transient (Not loaded, but has entities)");
++    private static final ChunkStatus EMPTY = new ChunkStatus(NamedTextColor.WHITE, "Empty (Loaded, but has no entities)");
++    private static final ChunkStatus LOADED = new ChunkStatus(NamedTextColor.GREEN, "Loaded (Loaded, and has entities)");
++
++    public EntitiesMapCommand(String command) {
++        super(command);
++        setPermission("multipaper.command.entitiesmap");
++    }
++
++    @Override
++    protected ChunkStatus getStatus(Player player, ChunkPos chunkPos) {
++        ServerLevel level = ((CraftPlayer) player).getHandle().serverLevel();
++
++        ChunkEntitySlices chunk = level.getEntityLookup().getChunk(chunkPos.x, chunkPos.z);
++
++        if (chunk == null) return UNLOADED;
++
++        if (chunk.isTransient()) return TRANSIENT;
++
++        if (chunk.isEmpty()) return EMPTY;
++
++        return LOADED;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java b/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java
+index a21628f28a803ca2329b7f63257dad16829fe7f6..fd646fda87471b37e7a121340563dd14a44b123c 100644
+--- a/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java
++++ b/src/main/java/puregero/multipaper/permissions/MultiPaperCommandPermissions.java
+@@ -15,6 +15,7 @@ public class MultiPaperCommandPermissions {
+         DefaultPermissions.registerPermission(PREFIX + "servers", "List details about servers running on this MultiPaper network", PermissionDefault.TRUE, commands);
+         DefaultPermissions.registerPermission(PREFIX + "mpdebug", "MPDebug command", PermissionDefault.TRUE, commands);
+         DefaultPermissions.registerPermission(PREFIX + "mpmap", "MPMap command", PermissionDefault.TRUE, commands);
++        DefaultPermissions.registerPermission(PREFIX + "entitiesmap", "Entitiesmap command", PermissionDefault.OP, commands);
+ 
+         commands.recalculatePermissibles();
+     }

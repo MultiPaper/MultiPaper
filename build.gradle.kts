@@ -5,7 +5,7 @@ plugins {
     java
     `maven-publish`
     id("com.github.johnrengelman.shadow") version "8.1.1"
-    id("io.papermc.paperweight.patcher") version "1.5.7-SNAPSHOT"
+    id("io.papermc.paperweight.patcher") version "1.6.3"
 }
 
 repositories {
@@ -16,8 +16,8 @@ repositories {
 }
 
 dependencies {
-    remapper("net.fabricmc:tiny-remapper:0.8.6:fat")
-    decompiler("net.minecraftforge:forgeflower:2.0.627.2")
+    remapper("net.fabricmc:tiny-remapper:0.10.1:fat")
+    decompiler("org.vineflower:vineflower:1.10.1")
     paperclip("io.papermc:paperclip:3.0.3")
 }
 
@@ -27,7 +27,7 @@ allprojects {
 
     java {
         toolchain {
-            languageVersion.set(JavaLanguageVersion.of(17))
+            languageVersion.set(JavaLanguageVersion.of(21))
         }
     }
 }
@@ -35,7 +35,7 @@ allprojects {
 subprojects {
     tasks.withType<JavaCompile> {
         options.encoding = Charsets.UTF_8.name()
-        options.release.set(17)
+        options.release.set(21)
     }
     tasks.withType<Javadoc> {
         options.encoding = Charsets.UTF_8.name()
@@ -88,7 +88,7 @@ paperweight {
             )
 
             val purpurLatestCommitJson = layout.cache.resolve("purpurLatestCommit.json");
-            download.get().download("https://api.github.com/repos/PurpurMC/Purpur/commits/ver/1.20.1", purpurLatestCommitJson);
+            download.get().download("https://api.github.com/repos/PurpurMC/Purpur/commits/ver/1.20.6", purpurLatestCommitJson);
             val purpurLatestCommit = gson.fromJson<paper.libs.com.google.gson.JsonObject>(purpurLatestCommitJson)["sha"].asString;
 
             copy {

@@ -4,48 +4,11 @@ Date: Fri, 4 Mar 2022 20:33:33 +1000
 Subject: [PATCH] MultiPaper config file
 
 
-diff --git a/src/main/java/io/papermc/paper/configuration/ConfigurationPart.java b/src/main/java/io/papermc/paper/configuration/ConfigurationPart.java
-index 7a4a7a654fe2516ed894a68f2657344df9d70f4c..1a3f39379359f7d26bcf72f692247fd46e79bf0d 100644
---- a/src/main/java/io/papermc/paper/configuration/ConfigurationPart.java
-+++ b/src/main/java/io/papermc/paper/configuration/ConfigurationPart.java
-@@ -1,6 +1,6 @@
- package io.papermc.paper.configuration;
- 
--abstract class ConfigurationPart {
-+public abstract class ConfigurationPart {
- 
-     public static abstract class Post extends ConfigurationPart {
- 
-diff --git a/src/main/java/io/papermc/paper/configuration/InnerClassFieldDiscoverer.java b/src/main/java/io/papermc/paper/configuration/InnerClassFieldDiscoverer.java
-index a0aa1f1a7adf986d500a2135aa42e138aa3c4f08..8f2c9337bfb6568abe3d5c958bb4500b7572d43b 100644
---- a/src/main/java/io/papermc/paper/configuration/InnerClassFieldDiscoverer.java
-+++ b/src/main/java/io/papermc/paper/configuration/InnerClassFieldDiscoverer.java
-@@ -17,7 +17,7 @@ import java.util.Map;
- 
- import static io.leangen.geantyref.GenericTypeReflector.erase;
- 
--final class InnerClassFieldDiscoverer implements FieldDiscoverer<Map<Field, Object>> {
-+public final class InnerClassFieldDiscoverer implements FieldDiscoverer<Map<Field, Object>> { // MultiPaper - make public
- 
-     private final Map<Class<?>, Object> instanceMap = new HashMap<>();
-     private final Map<Class<?>, Object> overrides;
-@@ -55,9 +55,9 @@ final class InnerClassFieldDiscoverer implements FieldDiscoverer<Map<Field, Obje
-         }
-     }, "Object must be a unique ConfigurationPart");
- 
--    InnerClassFieldDiscoverer(Map<Class<?>, Object> overrides) {
-+    public InnerClassFieldDiscoverer(Map<Class<?>, Object> overrides) {
-         this.overrides = overrides;
--    }
-+    } // MultiPaper - make public
- 
-     @Override
-     public @Nullable <V> InstanceFactory<Map<Field, Object>> discover(AnnotatedType target, FieldCollector<Map<Field, Object>, V> collector) throws SerializationException {
 diff --git a/src/main/java/net/minecraft/server/Main.java b/src/main/java/net/minecraft/server/Main.java
-index a7ebf851a65231074c89a24f30de4ac2fb5b63e4..1d8f746e69ff149962e10aada28f56575e7a2b1d 100644
+index 411f1f8c6be072cfc5ba88cbec38dbc4300a41d1..7f2d0e52cd03b498b437350a1f972df7c09178a8 100644
 --- a/src/main/java/net/minecraft/server/Main.java
 +++ b/src/main/java/net/minecraft/server/Main.java
-@@ -73,6 +73,9 @@ import net.minecraft.SharedConstants;
+@@ -69,6 +69,9 @@ import net.minecraft.SharedConstants;
  import org.bukkit.configuration.file.YamlConfiguration;
  // CraftBukkit end
  
@@ -55,21 +18,21 @@ index a7ebf851a65231074c89a24f30de4ac2fb5b63e4..1d8f746e69ff149962e10aada28f5657
  public class Main {
  
      private static final Logger LOGGER = LogUtils.getLogger();
-@@ -134,6 +137,9 @@ public class Main {
+@@ -119,6 +122,9 @@ public class Main {
                  JvmProfiler.INSTANCE.start(Environment.SERVER);
              }
  
 +            MultiPaperConfigurationLoader.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper
 +            System.setProperty("multipaper.master-connection.my-name", MultiPaperConfiguration.get().masterConnection.myName); // MultiPaper - remember this property even after config reloads
 +
-             io.papermc.paper.plugin.PluginInitializerManager.load(optionset); // Paper
-             Bootstrap.bootStrap();
-             Bootstrap.validate();
+             // Purpur start - load config files early
+             org.bukkit.configuration.file.YamlConfiguration purpurConfiguration = io.papermc.paper.configuration.PaperConfigurations.loadLegacyConfigFile((File) optionset.valueOf("purpur-settings"));
+             org.purpurmc.purpur.PurpurConfig.clampEnchantLevels = purpurConfiguration.getBoolean("settings.enchantment.clamp-levels");
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 563ee789b44fd99f03dfa0bd741abf3bb4cceb4e..7929d0bc81afc59441ad40b2e4f0574655c0dbab 100644
+index 1547547f51b91fad1aa7f0d6a462aacf0b21dfba..dff415eec1d71d05152ce5bf1230fe3a27d88800 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -260,6 +260,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
+@@ -263,6 +263,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  import org.yaml.snakeyaml.error.MarkedYAMLException;
  
  import net.md_5.bungee.api.chat.BaseComponent; // Spigot
@@ -77,7 +40,7 @@ index 563ee789b44fd99f03dfa0bd741abf3bb4cceb4e..7929d0bc81afc59441ad40b2e4f05746
  
  import javax.annotation.Nullable; // Paper
  import javax.annotation.Nonnull; // Paper
-@@ -577,6 +578,7 @@ public final class CraftServer implements Server {
+@@ -575,6 +576,7 @@ public final class CraftServer implements Server {
              this.commandMap.registerServerAliases();
              DefaultPermissions.registerCorePermissions();
              CraftDefaultPermissions.registerCorePermissions();
@@ -86,11 +49,11 @@ index 563ee789b44fd99f03dfa0bd741abf3bb4cceb4e..7929d0bc81afc59441ad40b2e4f05746
              this.helpMap.initializeCommands();
              this.syncCommands();
 diff --git a/src/main/java/org/bukkit/craftbukkit/Main.java b/src/main/java/org/bukkit/craftbukkit/Main.java
-index 4bc0a370c7aec06d30b4ebf7fa7d73263d0543bc..b1a6ceb41ed128c652f1fa16e73a1144cd138703 100644
+index 222865a3cee62f244a566092a7d814efe478ee01..9ff77eccb2747847df85b513e84f5fa26b257b6e 100644
 --- a/src/main/java/org/bukkit/craftbukkit/Main.java
 +++ b/src/main/java/org/bukkit/craftbukkit/Main.java
-@@ -187,6 +187,14 @@ public class Main {
-                         .describedAs("Yml file");
+@@ -183,6 +183,14 @@ public class Main {
+                     .describedAs("Yml file");
                  // Purpur end
  
 +                // MultiPaper start
@@ -120,10 +83,10 @@ index 0000000000000000000000000000000000000000..7cdf20efd4f220f55d7b86abce19e84f
 +}
 diff --git a/src/main/java/puregero/multipaper/config/MultiPaperConfiguration.java b/src/main/java/puregero/multipaper/config/MultiPaperConfiguration.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d9ae084270c4259371e84246dbc68841ace99d18
+index 0000000000000000000000000000000000000000..65d7ce213a0f06e6a2335c6cc8c09e1bf48b099e
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/config/MultiPaperConfiguration.java
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,66 @@
 +package puregero.multipaper.config;
 +
 +import io.papermc.paper.configuration.ConfigurationPart;
@@ -138,7 +101,7 @@ index 0000000000000000000000000000000000000000..d9ae084270c4259371e84246dbc68841
 +            This is the main configuration file for MultiPaper.
 +            There's quite alot to configure. Read the docs for more information.
 +
-+            Docs: https://github.com/PureGero/MultiPaper/blob/main/MULTIPAPER_YAML.md\s
++            Docs: https://github.com/MultiPaper/MultiPaper/blob/main/MULTIPAPER_YAML.md\s
 +            """;
 +
 +    private static MultiPaperConfiguration instance;
@@ -173,33 +136,9 @@ index 0000000000000000000000000000000000000000..d9ae084270c4259371e84246dbc68841
 +        public String myName = "server" + Double.toString(Math.random()).substring(2, 7);
 +    }
 +
-+    public PeerConnection peerConnection;
-+
-+    public class PeerConnection extends ConfigurationPart {
-+        public int compressionThreshold = 0;
-+        public int consolidationDelay = 0;
-+    }
-+
-+    public Optimizations optimizations;
-+
-+    public class Optimizations extends ConfigurationPart  {
-+        public boolean dontSaveJustForLightingUpdates = false;
-+        public int maxFootstepPacketsSentPerPlayer = -1;
-+        public boolean reducePlayerPositionUpdatesInUnloadedChunks = false;
-+        public int ticksPerInactiveEntityTracking = 1;
-+        public boolean useEventBasedIo = true;
-+    }
-+
 +    public SyncSettings syncSettings;
 +
 +    public class SyncSettings extends ConfigurationPart  {
-+        public boolean syncEntityIds = true;
-+        public boolean syncJsonFiles = true;
-+        public boolean syncPermissions = false;
-+        public boolean syncScoreboards = true;
-+        public boolean useLocalPlayerCountForServerIsFullKick = false;
-+        public boolean persistentPlayerEntityIds = true;
-+        public int persistentVehicleEntityIdsSeconds = 15;
 +
 +        public Files files;
 +

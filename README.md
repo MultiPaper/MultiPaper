@@ -217,6 +217,15 @@ Build instructions:
 ## Publishing to maven local
 Publish to your local maven repository with: `./gradlew publishToMavenLocal`
 
+Note for mac users: The latest macOS version includes an incompatible version of
+diff and you'll need to install a compatible one. Use `brew install diffutils`
+to install it, and then reopen the terminal window.
+
+If `diff --version` returns the following, it is incompatible and will not work:
+```
+Apple diff (based on FreeBSD diff)
+```
+
 ### Licensing
 
 All code is licensed under [GPLv3](LICENSE.txt) excluding MultiPaper-Master

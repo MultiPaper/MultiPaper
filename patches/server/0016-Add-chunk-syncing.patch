@@ -1197,7 +1197,7 @@ index 9f1dca3645b4b9bf5eaf490cdde92abeac6a3c34..0f9d51e2959a9bf2b3b31930c88a942a
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index bc92ede80abbb1f72fbc6f14caa9d9cc4cfff7a6..4fd5f0684af2c3b7893c9035e4ef6b87cedf6aba 100644
+index bc92ede80abbb1f72fbc6f14caa9d9cc4cfff7a6..cabe13a034e4ef1d5092df2d54cad63b5b50cbcf 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -1,32 +1,58 @@
@@ -1272,8 +1272,8 @@ index bc92ede80abbb1f72fbc6f14caa9d9cc4cfff7a6..4fd5f0684af2c3b7893c9035e4ef6b87
      }
 +
 +    public static CompletableFuture<Void> flushMasterConnectionAsync() {
-+        // Just read some random json file to ensure that all the queued packets in both directions have been fully flushed and handled
-+        return MultiPaper.getConnection().sendAndAwaitReply(new ReadJsonMessage("ops.json"), DataMessageReply.class).thenRun(() -> {});
++        // Send and await a ping packet to ensure that all the queued packets in both directions have been fully flushed and handled
++        return MultiPaper.getConnection().sendAndAwaitReply(new PingMessage(), BooleanMessageReply.class).thenRun(() -> {});
 +    }
 +
 +    public static boolean isChunkExternal(Chunk chunk) {
@@ -1765,10 +1765,10 @@ index 0000000000000000000000000000000000000000..71d18b7b85c4df18b8d7e3fc959be676
 +    }
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index a9ecd0c2f8554970544e505d0099b8dc01644753..47aec762c8583f0f5af89ce13eb5e5be626249c0 100644
+index 541cb73f572c8f63d39e158e50541469343e3c2c..91871e023e43ae62a4ca0051e9b3271d37ce8629 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -9,16 +9,23 @@ import io.netty.channel.epoll.EpollEventLoopGroup;
+@@ -9,17 +9,23 @@ import io.netty.channel.epoll.EpollEventLoopGroup;
  import io.netty.channel.epoll.EpollSocketChannel;
  import io.netty.channel.socket.SocketChannel;
  import io.netty.channel.socket.nio.NioSocketChannel;
@@ -1788,6 +1788,7 @@ index a9ecd0c2f8554970544e505d0099b8dc01644753..47aec762c8583f0f5af89ce13eb5e5be
 -import puregero.multipaper.mastermessagingprotocol.messages.masterbound.HelloMessage;
 -import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundMessage;
 -import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundProtocol;
+-import puregero.multipaper.mastermessagingprotocol.messages.masterbound.PingMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.*;
  import puregero.multipaper.mastermessagingprotocol.messages.serverbound.*;
  
@@ -1795,14 +1796,19 @@ index a9ecd0c2f8554970544e505d0099b8dc01644753..47aec762c8583f0f5af89ce13eb5e5be
  import java.util.Map;
  import java.util.Set;
  import java.util.UUID;
-@@ -81,6 +88,14 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
-             channel.write(unhandledRequest);
+@@ -86,6 +92,19 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
          }
  
+         lastPingReceived = System.currentTimeMillis();
++
 +        if (MinecraftServer.getServer() != null) {
 +            for (ServerLevel level : MinecraftServer.getServer().getAllLevels()) {
 +                level.chunkTaskScheduler.chunkHolderManager.getChunkHolders().forEach(chunkHolder -> {
++                    chunkHolder.externalSubscribers.clear();
 +                    channel.write(new SubscribeChunkMessage(level.getWorld().getName(), chunkHolder.chunkX, chunkHolder.chunkZ));
++                    if (chunkHolder.hasExternalLockRequest) {
++                        channel.write(new LockChunkMessage(chunkHolder.world.getWorld().getName(), chunkHolder.chunkX, chunkHolder.chunkZ));
++                    }
 +                });
 +            }
 +        }
@@ -1810,7 +1816,7 @@ index a9ecd0c2f8554970544e505d0099b8dc01644753..47aec762c8583f0f5af89ce13eb5e5be
          channelActive = true;
          channel.flush();
      }
-@@ -117,6 +132,20 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -137,6 +156,20 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
          }));
      }
  
@@ -1831,7 +1837,7 @@ index a9ecd0c2f8554970544e505d0099b8dc01644753..47aec762c8583f0f5af89ce13eb5e5be
      public Map<String, ExternalServer> getServersMap() {
          return serversMap;
      }
-@@ -163,4 +192,104 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -183,4 +216,104 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
              }
          });
      }

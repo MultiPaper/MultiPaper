@@ -9,7 +9,6 @@ public class SubscribeEntitiesMessage extends MasterBoundMessage {
     public final int cz;
 
     public SubscribeEntitiesMessage(String world, int cx, int cz) {
-        new Exception("Creating SubscribeEntitiesMessage " + world + "," + cx + "," + cz).printStackTrace();
         this.world = world;
         this.cx = cx;
         this.cz = cz;

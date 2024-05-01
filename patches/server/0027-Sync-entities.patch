@@ -887,7 +887,7 @@ index 0f9d51e2959a9bf2b3b31930c88a942a777a6d56..727b613ae30c3266c2fc5f5a13d2622f
 +    }
  }
 diff --git a/src/main/java/puregero/multipaper/MultiPaper.java b/src/main/java/puregero/multipaper/MultiPaper.java
-index 9826700f9f9c1c02c379bd2b175ec844aa1bc637..d544e7ccf66f4754863e2057de93c17b3ab0e382 100644
+index e3ba9fa909efd1801e4d41c439d0b79c36f848b7..16b594e6e1e98dd0cb36de883e1b89fa8f6106e3 100644
 --- a/src/main/java/puregero/multipaper/MultiPaper.java
 +++ b/src/main/java/puregero/multipaper/MultiPaper.java
 @@ -132,6 +132,8 @@ public class MultiPaper {
@@ -928,7 +928,7 @@ index 9826700f9f9c1c02c379bd2b175ec844aa1bc637..d544e7ccf66f4754863e2057de93c17b
          getConnection().send(new ChunkChangedStatusMessage(level.getWorld().getName(), pos.x, pos.z, BuiltInRegistries.CHUNK_STATUS.getKey(status).toString()));
      }
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 8fe8e8a4ba2764f3e91b6c90290bdcbb56402cd7..6044faafa283d4f50a1700330d1a444f9ba24143 100644
+index b8c9b033962e2994b804f4f888f75ec7d366a7a4..39dbf785a45b51d0a56c21699cace7bde9be6593 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 @@ -12,9 +12,13 @@ import io.netty.channel.socket.SocketChannel;
@@ -965,17 +965,18 @@ index 8fe8e8a4ba2764f3e91b6c90290bdcbb56402cd7..6044faafa283d4f50a1700330d1a444f
  import java.util.Map;
  import java.util.Set;
  import java.util.UUID;
-@@ -98,6 +107,9 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
-             for (ServerLevel level : MinecraftServer.getServer().getAllLevels()) {
+@@ -104,6 +113,10 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
                  level.chunkTaskScheduler.chunkHolderManager.getChunkHolders().forEach(chunkHolder -> {
+                     chunkHolder.externalSubscribers.clear();
                      channel.write(new SubscribeChunkMessage(level.getWorld().getName(), chunkHolder.chunkX, chunkHolder.chunkZ));
 +                    if (chunkHolder.getEntityChunk() != null) {
++                        chunkHolder.externalEntitiesSubscribers.clear();
 +                        channel.write(new SubscribeEntitiesMessage(level.getWorld().getName(), chunkHolder.chunkX, chunkHolder.chunkZ));
 +                    }
-                 });
-             }
-         }
-@@ -207,6 +219,7 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+                     if (chunkHolder.hasExternalLockRequest) {
+                         channel.write(new LockChunkMessage(chunkHolder.world.getWorld().getName(), chunkHolder.chunkX, chunkHolder.chunkZ));
+                     }
+@@ -231,6 +244,7 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
          if (newChunkHolder != null) {
              if (newChunkHolder.externalOwner != null && newChunkHolder.externalOwner.isMe() && server != null && !server.isMe()) {
                  if (newChunkHolder.getCurrentChunk() instanceof LevelChunk levelChunk) {
@@ -983,7 +984,7 @@ index 8fe8e8a4ba2764f3e91b6c90290bdcbb56402cd7..6044faafa283d4f50a1700330d1a444f
                      server.getConnection().send(new SendTickListPacket(levelChunk));
                  } else {
                      LOGGER.warn("Chunk " + message.cx + ", " + message.cz + " in world " + message.world + " is not a level chunk, but we own it and want to send tick list to " + server.getName());
-@@ -322,4 +335,68 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+@@ -346,4 +360,68 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
              }
          });
      }

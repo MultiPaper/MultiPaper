@@ -13,6 +13,8 @@ public abstract class MasterBoundMessageHandler extends MessageHandler<MasterBou
 
     public abstract void handle(HelloMessage message);
 
+    public abstract void handle(PingMessage pingMessage);
+
     public abstract void handle(CallDataStorageMessage message);
 
     public abstract void handle(ChunkChangedStatusMessage message);

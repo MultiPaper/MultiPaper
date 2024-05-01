@@ -11,6 +11,7 @@ public class MasterBoundProtocol extends Protocol<MasterBoundMessage> {
         addMessage(DownloadFileMessage.class, DownloadFileMessage::new);
         addMessage(ForceReadChunkMessage.class, ForceReadChunkMessage::new);
         addMessage(HelloMessage.class, HelloMessage::new);
+        addMessage(PingMessage.class, PingMessage::new);
         addMessage(LockChunkMessage.class, LockChunkMessage::new);
         addMessage(PlayerConnectMessage.class, PlayerConnectMessage::new);
         addMessage(PlayerDisconnectMessage.class, PlayerDisconnectMessage::new);

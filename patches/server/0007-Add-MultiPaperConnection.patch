@@ -5,7 +5,7 @@ Subject: [PATCH] Add MultiPaperConnection
 
 
 diff --git a/build.gradle.kts b/build.gradle.kts
-index 2d2664b8e2394fd102c975776b34195381b83ac2..5981602c006e5d3762ff9d906c145f14c5e1367d 100644
+index 76ccc9db1503b60ab89f625915b1274e1c8a82e9..a4654ae75a8b103b52ca2d5c24d3eefad3e598e4 100644
 --- a/build.gradle.kts
 +++ b/build.gradle.kts
 @@ -13,6 +13,7 @@ configurations.named(log4jPlugins.compileClasspathConfigurationName) {
@@ -17,7 +17,7 @@ index 2d2664b8e2394fd102c975776b34195381b83ac2..5981602c006e5d3762ff9d906c145f14
      implementation(project(":multipaper-api")) // MultiPaper // Purpur
      implementation("io.papermc.paper:paper-mojangapi:${project.version}") {
 diff --git a/src/main/java/net/minecraft/server/Main.java b/src/main/java/net/minecraft/server/Main.java
-index 86c61c0f0b5cba03fe76044db7184225fab2ba4a..2dca83f5be65d8f7e1418b217e9ce6ca5c342327 100644
+index 1d8f746e69ff149962e10aada28f56575e7a2b1d..55d716fb281b8e3c4dc9e3ea5f5b683c515eb596 100644
 --- a/src/main/java/net/minecraft/server/Main.java
 +++ b/src/main/java/net/minecraft/server/Main.java
 @@ -75,6 +75,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
@@ -125,10 +125,10 @@ index 0000000000000000000000000000000000000000..d9fa811b2a0b5f8402ae0e811b09ddbd
 +}
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..77fb1d267595b7ece91793b58e86a377f6154dea
+index 0000000000000000000000000000000000000000..784ed3647536dae2ea02494aca8a9e6840220d0c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,139 @@
 +package puregero.multipaper;
 +
 +import io.netty.channel.Channel;
@@ -142,6 +142,7 @@ index 0000000000000000000000000000000000000000..77fb1d267595b7ece91793b58e86a377
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.HelloMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundProtocol;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.PingMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessageHandler;
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundProtocol;
@@ -160,11 +161,13 @@ index 0000000000000000000000000000000000000000..77fb1d267595b7ece91793b58e86a377
 +
 +    private static final Logger LOGGER = LogManager.getLogger(MultiPaperConnection.class.getSimpleName());
 +    private static final UUID thisServersUuid = UUID.randomUUID();
++    private static final long PING_TIMEOUT = Long.getLong("multipaper.master.pingtimeout", 60 * 1000L);
 +
 +    private final String myName;
 +    private final MessageBootstrap<ServerBoundMessage, MasterBoundMessage> bootstrap;
 +    private SocketChannel channel;
 +    private boolean channelActive = false;
++    private long lastPingReceived;
 +    private final Set<MasterBoundMessage> unhandledRequests = ConcurrentHashMap.newKeySet();
 +    private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
 +
@@ -172,6 +175,7 @@ index 0000000000000000000000000000000000000000..77fb1d267595b7ece91793b58e86a377
 +        System.setProperty("multipaper.netty.threads", System.getProperty("multipaper.netty.threads", Integer.toString(Math.min(Runtime.getRuntime().availableProcessors(), 3))));
 +        myName = MultiPaperConfiguration.get().masterConnection.myName;
 +        bootstrap = new MessageBootstrap<>(new ServerBoundProtocol(), new MasterBoundProtocol(), channel -> channel.pipeline().addLast(this));
++        MessageBootstrap.getEventLoopGroup().scheduleAtFixedRate(this::ping, 0, PING_TIMEOUT / 4, TimeUnit.MILLISECONDS);
 +        connect();
 +    }
 +
@@ -200,6 +204,7 @@ index 0000000000000000000000000000000000000000..77fb1d267595b7ece91793b58e86a377
 +            channel.write(unhandledRequest);
 +        }
 +
++        lastPingReceived = System.currentTimeMillis();
 +        channelActive = true;
 +        channel.flush();
 +    }
@@ -220,6 +225,21 @@ index 0000000000000000000000000000000000000000..77fb1d267595b7ece91793b58e86a377
 +                e.printStackTrace();
 +            }
 +        }
++    }
++
++    public void ping() {
++        if (!channelActive) return;
++
++        if (System.currentTimeMillis() - lastPingReceived > PING_TIMEOUT) {
++            LOGGER.error("Keep-alive ping timed out after {}ms, initiating master reconnect...", System.currentTimeMillis() - lastPingReceived);
++            channelActive = false;
++            channel.close();
++            return;
++        }
++
++        send(new PingMessage(), message -> {
++            lastPingReceived = System.currentTimeMillis();
++        });
 +    }
 +
 +    public void send(MasterBoundMessage message) {

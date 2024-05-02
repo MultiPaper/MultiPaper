@@ -155,17 +155,17 @@ index 0000000000000000000000000000000000000000..65d7ce213a0f06e6a2335c6cc8c09e1b
 +}
 diff --git a/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java b/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..f0ec43cb2051ee6c74856cf24c8d26bec1dd61a3
+index 0000000000000000000000000000000000000000..8ec8815b011917ba7c285ff5943ac147adce844c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java
-@@ -0,0 +1,148 @@
+@@ -0,0 +1,135 @@
 +package puregero.multipaper.config;
 +
 +import io.papermc.paper.configuration.ConfigurationLoaders;
 +import io.papermc.paper.configuration.ConfigurationPart;
-+import io.papermc.paper.configuration.InnerClassFieldDiscoverer;
 +import io.papermc.paper.configuration.constraint.Constraint;
 +import io.papermc.paper.configuration.constraint.Constraints;
++import io.papermc.paper.configuration.mapping.InnerClassFieldDiscoverer;
 +import org.spongepowered.configurate.BasicConfigurationNode;
 +import org.spongepowered.configurate.CommentedConfigurationNode;
 +import org.spongepowered.configurate.ConfigurateException;
@@ -178,7 +178,6 @@ index 0000000000000000000000000000000000000000..f0ec43cb2051ee6c74856cf24c8d26be
 +import java.io.File;
 +import java.nio.file.Files;
 +import java.nio.file.Path;
-+import java.util.Collections;
 +import java.util.Map;
 +import java.util.function.UnaryOperator;
 +
@@ -242,7 +241,7 @@ index 0000000000000000000000000000000000000000..f0ec43cb2051ee6c74856cf24c8d26be
 +        return ObjectMapper.factoryBuilder()
 +                .addConstraint(Constraint.class, new Constraint.Factory())
 +                .addConstraint(Constraints.Min.class, Number.class, new Constraints.Min.Factory())
-+                .addDiscoverer(new InnerClassFieldDiscoverer(Collections.emptyMap()));
++                .addDiscoverer(InnerClassFieldDiscoverer.globalConfig());
 +    }
 +
 +    private static UnaryOperator<ConfigurationOptions> applyObjectMapperFactory(final ObjectMapper.Factory factory) {
@@ -254,24 +253,12 @@ index 0000000000000000000000000000000000000000..f0ec43cb2051ee6c74856cf24c8d26be
 +    private static void transformLegacyConfig(ConfigurationNode node, MultiPaperConfiguration config) {
 +        getAndRemove(node, "bungeecordName", value -> config.masterConnection.myName = value.getString());
 +        getAndRemove(node, "multipaperMasterAddress", value -> config.masterConnection.masterAddress = value.getString());
-+        getAndRemove(node, "syncJsonFiles", value -> config.syncSettings.syncJsonFiles = value.getBoolean());
 +        getAndRemove(node, "advertiseToBuiltInProxy", value -> config.masterConnection.advertiseToBuiltInProxy = value.getBoolean());
-+        getAndRemove(node, "syncScoreboards", value -> config.syncSettings.syncScoreboards = value.getBoolean());
 +        getAndRemove(node, "logFileSyncing", value -> config.syncSettings.files.logFileSyncs = value.getBoolean());
 +        getAndRemove(node, "filesToSyncOnStartup", value -> config.syncSettings.files.filesToSyncOnStartup = value.getList(String.class));
 +        getAndRemove(node, "filesToSyncInRealTime", value -> config.syncSettings.files.filesToSyncInRealTime = value.getList(String.class));
 +        getAndRemove(node, "filesToOnlyUploadOnServerStop", value -> config.syncSettings.files.filesToOnlyUploadOnServerStop = value.getList(String.class));
 +        getAndRemove(node, "filesToNotSync", value -> config.syncSettings.files.filesToNotSync = value.getList(String.class));
-+        getAndRemove(node, "ticksPerInactiveEntityTracking", value -> config.optimizations.ticksPerInactiveEntityTracking = value.getInt());
-+        getAndRemove(node, "optimizations.ticksPerInactiveEntityTracking", value -> config.optimizations.ticksPerInactiveEntityTracking = value.getInt());
-+        getAndRemove(node, "interServerCompressionThreshold", value -> config.peerConnection.compressionThreshold = value.getInt());
-+        getAndRemove(node, "interServerConsolidationDelay", value -> config.peerConnection.consolidationDelay = value.getInt());
-+        getAndRemove(node, "useLocalPlayerCountForServerIsFullKick", value -> config.syncSettings.useLocalPlayerCountForServerIsFullKick = value.getBoolean());
-+        getAndRemove(node, "syncPermissions", value -> config.syncSettings.syncPermissions = value.getBoolean());
-+        getAndRemove(node, "optimizations.reducePlayerPositionUpdatesInUnloadedChunks", value -> config.optimizations.reducePlayerPositionUpdatesInUnloadedChunks = value.getBoolean());
-+        getAndRemove(node, "optimizations.dontSaveLightingUpdates", value -> config.optimizations.dontSaveJustForLightingUpdates = value.getBoolean());
-+        getAndRemove(node, "optimizations.useFutureBasedIO", value -> config.optimizations.useEventBasedIo = value.getBoolean());
-+        getAndRemove(node, "optimizations.disableRedstoneSafetySync", value -> { /* removed */ });
 +    }
 +
 +    private static void getAndRemove(ConfigurationNode node, String key, ExceptionableConsumer<ConfigurationNode> consumer) {

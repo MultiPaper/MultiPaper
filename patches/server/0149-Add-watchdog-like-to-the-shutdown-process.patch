@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 4 May 2024 15:33:31 +0900
+Subject: [PATCH] Add watchdog-like to the shutdown process
+
+
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index daedce89005a13226c354ce8f5bcaec2f1f3ed6d..c103f6e8d17b9a52af80c11978ef05f2cea382e5 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -945,6 +945,42 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+             this.cancelRecordingMetrics();
+         }*/ // Purpur
+ 
++        // MultiPaper start - add a watchdog to the server stopping
++        Thread shutdownWatchdog = new Thread(() -> {
++            long start = System.currentTimeMillis();
++            int count = 0;
++            while (true) {
++                try {
++                    Thread.sleep(10000);
++                } catch (InterruptedException e) {
++                    e.printStackTrace();
++                }
++                LOGGER.error("The server has not stopped after {} seconds! Creating thread dump", (System.currentTimeMillis() - start) / 1000);
++                if (shutdownThread.isAlive()) {
++                    LOGGER.error("{} Stack:", shutdownThread.getName());
++                    for (StackTraceElement element : io.papermc.paper.util.StacktraceDeobfuscator.INSTANCE.deobfuscateStacktrace(shutdownThread.getStackTrace())) {
++                        LOGGER.error("\t{}", element);
++                    }
++                } else {
++                    LOGGER.error("\tThe shutdown thread isn't alive!!!");
++                }
++
++                if ((++count) % 6 == 0) {
++                    LOGGER.error("All thread stacks:");
++                    for (Map.Entry<Thread, StackTraceElement[]> entry : Thread.getAllStackTraces().entrySet()) {
++                        Thread thread = entry.getKey();
++                        LOGGER.error("\t{} Stack:", thread.getName());
++                        for (StackTraceElement element : io.papermc.paper.util.StacktraceDeobfuscator.INSTANCE.deobfuscateStacktrace(entry.getValue())) {
++                            LOGGER.error("\t\t{}", element);
++                        }
++                    }
++                }
++            }
++        }, "Stopping-Watchdog");
++        shutdownWatchdog.setDaemon(true);
++        shutdownWatchdog.start();
++        // MultiPaper end
++
+         MinecraftServer.LOGGER.info("Stopping server");
+         Commands.COMMAND_SENDING_POOL.shutdownNow(); // Paper - Shutdown and don't bother finishing
+         MinecraftTimings.stopServer(); // Paper

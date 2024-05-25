@@ -1,0 +1,480 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 4 May 2024 23:10:00 +0900
+Subject: [PATCH] Multithread chunk ticking
+
+
+diff --git a/src/main/java/io/papermc/paper/chunk/system/ChunkSystem.java b/src/main/java/io/papermc/paper/chunk/system/ChunkSystem.java
+index e3f56908cc8a9c3f4580def50fcfdc61bd495a71..2fd1f1d668d71ad9d7cde8566cbc38b41691cd9a 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/ChunkSystem.java
++++ b/src/main/java/io/papermc/paper/chunk/system/ChunkSystem.java
+@@ -101,23 +101,25 @@ public final class ChunkSystem {
+     }
+ 
+     public static void onChunkTicking(final LevelChunk chunk, final ChunkHolder holder) {
+-        chunk.level.getChunkSource().tickingChunks.add(chunk);
++        // chunk.level.getChunkSource().tickingChunks.add(chunk); // MultiPaper - unused, replaced by tickingRegions
+         chunk.chunkStatus = net.minecraft.server.level.FullChunkStatus.BLOCK_TICKING;
+         chunk.level.chunkSource.chunkMap.tickingGenerated.incrementAndGet();
++        chunk.level.getChunkSource().tickingRegions.addTickingChunk(chunk); // MultiPaper
+     }
+ 
+     public static void onChunkNotTicking(final LevelChunk chunk, final ChunkHolder holder) {
+-        chunk.level.getChunkSource().tickingChunks.remove(chunk);
++        // chunk.level.getChunkSource().tickingChunks.remove(chunk); // MultiPaper - unused, replaced by tickingRegions
+         chunk.chunkStatus = net.minecraft.server.level.FullChunkStatus.FULL;
++        chunk.level.getChunkSource().tickingRegions.removeTickingChunk(chunk); // MultiPaper
+     }
+ 
+     public static void onChunkEntityTicking(final LevelChunk chunk, final ChunkHolder holder) {
+-        chunk.level.getChunkSource().entityTickingChunks.add(chunk);
++        // chunk.level.getChunkSource().entityTickingChunks.add(chunk); // MultiPaper - unused, replaced by tickingRegions
+         chunk.chunkStatus = net.minecraft.server.level.FullChunkStatus.ENTITY_TICKING;
+     }
+ 
+     public static void onChunkNotEntityTicking(final LevelChunk chunk, final ChunkHolder holder) {
+-        chunk.level.getChunkSource().entityTickingChunks.remove(chunk);
++        // chunk.level.getChunkSource().entityTickingChunks.remove(chunk); // MultiPaper - unused, replaced by tickingRegions
+         chunk.chunkStatus = net.minecraft.server.level.FullChunkStatus.BLOCK_TICKING;
+     }
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ServerChunkCache.java b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+index 476a04d87a61b021816d2970e86042bde32d95a2..84677d254e9b5c1bbb5100e8d5e10002aae3cfcb 100644
+--- a/src/main/java/net/minecraft/server/level/ServerChunkCache.java
++++ b/src/main/java/net/minecraft/server/level/ServerChunkCache.java
+@@ -1,12 +1,10 @@
+ package net.minecraft.server.level;
+ 
+ import com.google.common.annotations.VisibleForTesting;
+-import com.google.common.collect.Lists;
+ import com.mojang.datafixers.DataFixer;
+ import java.io.File;
+ import java.io.IOException;
+ import java.util.Arrays;
+-import java.util.Iterator;
+ import java.util.List;
+ import java.util.Objects;
+ import java.util.concurrent.CompletableFuture;
+@@ -21,7 +19,6 @@ import net.minecraft.core.SectionPos;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.server.level.progress.ChunkProgressListener;
+ import net.minecraft.util.VisibleForDebug;
+-import net.minecraft.util.profiling.ProfilerFiller;
+ import net.minecraft.util.thread.BlockableEventLoop;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.ai.village.poi.PoiManager;
+@@ -44,6 +41,8 @@ import net.minecraft.world.level.levelgen.RandomState;
+ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
+ import net.minecraft.world.level.storage.DimensionDataStorage;
+ import net.minecraft.world.level.storage.LevelStorageSource;
++import puregero.multipaper.region.LevelChunkRegionMap;
++import puregero.multipaper.threading.MultiPaperChunkTicker;
+ 
+ public class ServerChunkCache extends ChunkSource {
+ 
+@@ -67,8 +66,9 @@ public class ServerChunkCache extends ChunkSource {
+     @VisibleForDebug
+     private NaturalSpawner.SpawnState lastSpawnState;
+     // Paper start
+-    public final io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<LevelChunk> tickingChunks = new io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<>(4096, 0.75f, 4096, 0.15, true);
+-    public final io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<LevelChunk> entityTickingChunks = new io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<>(4096, 0.75f, 4096, 0.15, true);
++    public final LevelChunkRegionMap tickingRegions; // MultiPaper
++    // public final io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<LevelChunk> tickingChunks = new io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<>(4096, 0.75f, 4096, 0.15, true); // MultiPaper - unused, ensure it remains that way
++    // public final io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<LevelChunk> entityTickingChunks = new io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet<>(4096, 0.75f, 4096, 0.15, true); // MultiPaper - unused, ensure it remains that way
+     final com.destroystokyo.paper.util.concurrent.WeakSeqLock loadedChunkMapSeqLock = new com.destroystokyo.paper.util.concurrent.WeakSeqLock();
+     final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<LevelChunk> loadedChunkMap = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>(8192, 0.5f);
+     final java.util.concurrent.atomic.AtomicLong chunkFutureAwaitCounter = new java.util.concurrent.atomic.AtomicLong(); // Paper - chunk system rewrite
+@@ -77,6 +77,7 @@ public class ServerChunkCache extends ChunkSource {
+ 
+     public ServerChunkCache(ServerLevel world, LevelStorageSource.LevelStorageAccess session, DataFixer dataFixer, StructureTemplateManager structureTemplateManager, Executor workerExecutor, ChunkGenerator chunkGenerator, int viewDistance, int simulationDistance, boolean dsync, ChunkProgressListener worldGenerationProgressListener, ChunkStatusUpdateListener chunkStatusChangeListener, Supplier<DimensionDataStorage> persistentStateManagerFactory) {
+         this.level = world;
++        this.tickingRegions = new LevelChunkRegionMap(this.level); // MultiPaper
+         this.mainThreadProcessor = new ServerChunkCache.MainThreadExecutor(world);
+         this.mainThread = Thread.currentThread();
+         File file = session.getDimensionPath(world.dimension()).resolve("data").toFile();
+@@ -583,68 +584,69 @@ public class ServerChunkCache extends ChunkSource {
+                 // Paper - optimise chunk tick iteration
+ 
+                 int chunksTicked = 0; // Paper
++                MultiPaperChunkTicker.tickChunks(level, spawnercreature_d); // MultiPaper
+                 // Paper start - optimise chunk tick iteration
+-                io.papermc.paper.util.player.NearbyPlayers nearbyPlayers = this.chunkMap.getNearbyPlayers(); // Paper - optimise chunk tick iteration
+-                Iterator<LevelChunk> chunkIterator;
+-                if (this.level.paperConfig().entities.spawning.perPlayerMobSpawns) {
+-                    chunkIterator = this.tickingChunks.iterator();
+-                } else {
+-                    chunkIterator = this.tickingChunks.unsafeIterator();
+-                    List<LevelChunk> shuffled = Lists.newArrayListWithCapacity(this.tickingChunks.size());
+-                    while (chunkIterator.hasNext()) {
+-                        shuffled.add(chunkIterator.next());
+-                    }
+-                    Util.shuffle(shuffled, this.level.random);
+-                    chunkIterator = shuffled.iterator();
+-                }
+-                try {
+-                // Paper end - optimise chunk tick iteration
+-                while (chunkIterator.hasNext()) {
+-                    LevelChunk chunk1 = chunkIterator.next();
+-                    // Paper end - optimise chunk tick iteration
+-                    ChunkPos chunkcoordintpair = chunk1.getPos();
+-
+-                    // Paper start - optimise chunk tick iteration
+-                    com.destroystokyo.paper.util.maplist.ReferenceList<ServerPlayer> playersNearby
+-                        = nearbyPlayers.getPlayers(chunkcoordintpair, io.papermc.paper.util.player.NearbyPlayers.NearbyMapType.SPAWN_RANGE);
+-                    if (playersNearby == null) {
+-                        continue;
+-                    }
+-                    Object[] rawData = playersNearby.getRawData();
+-                    boolean spawn = false;
+-                    boolean tick = false;
+-                    for (int itr = 0, len = playersNearby.size(); itr < len; ++itr) {
+-                        ServerPlayer player = (ServerPlayer)rawData[itr];
+-                        if (player.isSpectator()) {
+-                            continue;
+-                        }
+-
+-                        double distance = ChunkMap.euclideanDistanceSquared(chunkcoordintpair, player);
+-                        spawn |= player.lastEntitySpawnRadiusSquared >= distance;
+-                        tick |= ((double)io.papermc.paper.util.player.NearbyPlayers.SPAWN_RANGE_VIEW_DISTANCE_BLOCKS) * ((double)io.papermc.paper.util.player.NearbyPlayers.SPAWN_RANGE_VIEW_DISTANCE_BLOCKS) >= distance;
+-                        if (spawn & tick) {
+-                            break;
+-                        }
+-                    }
+-                    if (tick && chunk1.chunkStatus.isOrAfter(net.minecraft.server.level.FullChunkStatus.ENTITY_TICKING)) {
+-                        // Paper end - optimise chunk tick iteration
+-                        chunk1.incrementInhabitedTime(j);
+-                        if (spawn && flag && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair)) { // Spigot // Paper - optimise chunk tick iteration
+-                            NaturalSpawner.spawnForChunk(this.level, chunk1, spawnercreature_d, this.spawnFriendlies, this.spawnEnemies, flag1);
+-                        }
+-
+-                        if (true || this.level.shouldTickBlocksAt(chunkcoordintpair.toLong())) { // Paper - optimise chunk tick iteration
+-                            this.level.tickChunk(chunk1, l);
+-                            if ((chunksTicked++ & 1) == 0) net.minecraft.server.MinecraftServer.getServer().executeMidTickTasks(); // Paper
+-                        }
+-                    }
+-                }
+-                // Paper start - optimise chunk tick iteration
+-                } finally {
+-                    if (chunkIterator instanceof io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet.Iterator safeIterator) {
+-                        safeIterator.finishedIterating();
+-                    }
+-                }
++//                io.papermc.paper.util.player.NearbyPlayers nearbyPlayers = this.chunkMap.getNearbyPlayers(); // Paper - optimise chunk tick iteration
++//                Iterator<LevelChunk> chunkIterator;
++//                if (this.level.paperConfig().entities.spawning.perPlayerMobSpawns) {
++//                    chunkIterator = this.tickingChunks.iterator();
++//                } else {
++//                    chunkIterator = this.tickingChunks.unsafeIterator();
++//                    List<LevelChunk> shuffled = Lists.newArrayListWithCapacity(this.tickingChunks.size());
++//                    while (chunkIterator.hasNext()) {
++//                        shuffled.add(chunkIterator.next());
++//                    }
++//                    Util.shuffle(shuffled, this.level.random);
++//                    chunkIterator = shuffled.iterator();
++//                }
++//                try {
++//                // Paper end - optimise chunk tick iteration
++//                while (chunkIterator.hasNext()) {
++//                    LevelChunk chunk1 = chunkIterator.next();
++//                    // Paper end - optimise chunk tick iteration
++//                    ChunkPos chunkcoordintpair = chunk1.getPos();
++//
++//                    // Paper start - optimise chunk tick iteration
++//                    com.destroystokyo.paper.util.maplist.ReferenceList<ServerPlayer> playersNearby
++//                        = nearbyPlayers.getPlayers(chunkcoordintpair, io.papermc.paper.util.player.NearbyPlayers.NearbyMapType.SPAWN_RANGE);
++//                    if (playersNearby == null) {
++//                        continue;
++//                    }
++//                    Object[] rawData = playersNearby.getRawData();
++//                    boolean spawn = false;
++//                    boolean tick = false;
++//                    for (int itr = 0, len = playersNearby.size(); itr < len; ++itr) {
++//                        ServerPlayer player = (ServerPlayer)rawData[itr];
++//                        if (player.isSpectator()) {
++//                            continue;
++//                        }
++//
++//                        double distance = ChunkMap.euclideanDistanceSquared(chunkcoordintpair, player);
++//                        spawn |= player.lastEntitySpawnRadiusSquared >= distance;
++//                        tick |= ((double)io.papermc.paper.util.player.NearbyPlayers.SPAWN_RANGE_VIEW_DISTANCE_BLOCKS) * ((double)io.papermc.paper.util.player.NearbyPlayers.SPAWN_RANGE_VIEW_DISTANCE_BLOCKS) >= distance;
++//                        if (spawn & tick) {
++//                            break;
++//                        }
++//                    }
++//                    if (tick && chunk1.chunkStatus.isOrAfter(net.minecraft.server.level.FullChunkStatus.ENTITY_TICKING)) {
++//                        // Paper end - optimise chunk tick iteration
++//                        chunk1.incrementInhabitedTime(j);
++//                        if (spawn && flag && (this.spawnEnemies || this.spawnFriendlies) && this.level.getWorldBorder().isWithinBounds(chunkcoordintpair)) { // Spigot // Paper - optimise chunk tick iteration
++//                            NaturalSpawner.spawnForChunk(this.level, chunk1, spawnercreature_d, this.spawnFriendlies, this.spawnEnemies, flag1);
++//                        }
++//
++//                        if (true || this.level.shouldTickBlocksAt(chunkcoordintpair.toLong())) { // Paper - optimise chunk tick iteration
++//                            this.level.tickChunk(chunk1, l);
++//                            if ((chunksTicked++ & 1) == 0) net.minecraft.server.MinecraftServer.getServer().executeMidTickTasks(); // Paper
++//                        }
++//                    }
++//                }
++//                // Paper start - optimise chunk tick iteration
++//                } finally {
++//                    if (chunkIterator instanceof io.papermc.paper.util.maplist.IteratorSafeOrderedReferenceSet.Iterator safeIterator) {
++//                        safeIterator.finishedIterating();
++//                    }
++//                }
+                 // Paper end - optimise chunk tick iteration
+                 // this.level.timings.chunkTicks.stopTiming(); // Paper // Purpur
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index 5aa9a56a530d40bd61c813c39cf5c60be4815429..21d27f95247270c3c78d630cd76e02af57f9e84a 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -1020,7 +1020,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+         });
+     }
+     // Paper start - optimise random block ticking
+-    private final BlockPos.MutableBlockPos chunkTickMutablePosition = new BlockPos.MutableBlockPos();
++    private final ThreadLocal<BlockPos.MutableBlockPos> chunkTickMutablePosition = ThreadLocal.withInitial(BlockPos.MutableBlockPos::new); // MultiPaper - Needs to be thread-specific otherwise many threads will all try modifying the same position
+     private final io.papermc.paper.util.math.ThreadUnsafeRandom randomTickRandom = new io.papermc.paper.util.math.ThreadUnsafeRandom(this.random.nextLong());
+     // Paper end
+ 
+@@ -1032,7 +1032,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+         //ProfilerFiller gameprofilerfiller = this.getProfiler(); // Purpur
+ 
+         //gameprofilerfiller.push("thunder"); // Purpur
+-        final BlockPos.MutableBlockPos blockposition = this.chunkTickMutablePosition; // Paper - use mutable to reduce allocation rate, final to force compile fail on change
++        final BlockPos.MutableBlockPos blockposition = this.chunkTickMutablePosition.get(); // Paper - use mutable to reduce allocation rate, final to force compile fail on change // MultiPaper - is this really that necessary?
+ 
+         if (!this.paperConfig().environment.disableThunder && flag && this.isThundering() && this.spigotConfig.thunderChance > 0 && this.random.nextInt(this.spigotConfig.thunderChance) == 0) { // Spigot // Paper - Option to disable thunder
+             blockposition.set(this.findLightningTargetAround(this.getBlockRandomPos(j, 0, k, 15))); // Paper
+diff --git a/src/main/java/puregero/multipaper/region/LevelChunkRegion.java b/src/main/java/puregero/multipaper/region/LevelChunkRegion.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..96851c9fa41c3f146feb33c00b4e942367d81294
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/region/LevelChunkRegion.java
+@@ -0,0 +1,53 @@
++package puregero.multipaper.region;
++
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.chunk.LevelChunk;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.function.Consumer;
++
++public class LevelChunkRegion {
++
++    private final ServerLevel level;
++    private final RegionPos regionPos;
++    private final List<LevelChunk> levelChunks = new ArrayList<>(RegionPos.REGION_SIZE * RegionPos.REGION_SIZE);
++
++    public LevelChunkRegion(ServerLevel level, RegionPos regionPos) {
++        this.level = level;
++        this.regionPos = regionPos;
++    }
++
++    public synchronized void add(LevelChunk levelChunk) {
++        levelChunks.add(levelChunk);
++    }
++
++    public synchronized void remove(LevelChunk levelChunk) {
++        if (!levelChunks.remove(levelChunk)) {
++            throw new IllegalStateException("Tried to remove a chunk that wasn't in the region: " + levelChunk.getPos());
++        }
++    }
++
++    public RegionPos getRegionPos() {
++        return regionPos;
++    }
++
++    public void forEach(Consumer<LevelChunk> consumer) {
++        // This method has the chance of skipping a chunk if a chunk is removed via another thread during this iteration
++        for (int i = 0; i < levelChunks.size(); i++) {
++            try {
++                LevelChunk levelChunk = levelChunks.get(i);
++                if (levelChunk != null) {
++                    consumer.accept(levelChunk);
++                }
++            } catch (IndexOutOfBoundsException e) {
++                // Ignore - multithreaded modification
++            }
++        }
++    }
++
++    public boolean isEmpty() {
++        return levelChunks.isEmpty();
++    }
++
++}
+diff --git a/src/main/java/puregero/multipaper/region/LevelChunkRegionMap.java b/src/main/java/puregero/multipaper/region/LevelChunkRegionMap.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..ccda9c9f240205d744e9e7beb68bf7a340598ef1
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/region/LevelChunkRegionMap.java
+@@ -0,0 +1,60 @@
++package puregero.multipaper.region;
++
++import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.world.level.chunk.LevelChunk;
++import puregero.multipaper.util.SimpleStampedLock;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.function.Consumer;
++
++public class LevelChunkRegionMap {
++
++    private final ServerLevel level;
++    private final SimpleStampedLock regionsLock = new SimpleStampedLock();
++    private final Long2ObjectOpenHashMap<LevelChunkRegion> regions = new Long2ObjectOpenHashMap<>(2048, 0.5f);
++
++    public LevelChunkRegionMap(ServerLevel level) {
++        this.level = level;
++    }
++
++    public LevelChunkRegion getOrCreate(RegionPos regionPos) {
++        LevelChunkRegion levelChunkRegion = get(regionPos);
++
++        if (levelChunkRegion != null) {
++            return levelChunkRegion;
++        }
++
++        return regionsLock.write(() -> regions.computeIfAbsent(regionPos.longKey, k -> new LevelChunkRegion(level, regionPos)));
++    }
++
++    public LevelChunkRegion get(RegionPos regionPos) {
++        return regionsLock.optimisticRead(() -> regions.get(regionPos.longKey));
++    }
++
++    public void remove(RegionPos regionPos) {
++        regionsLock.write(() -> {
++            LevelChunkRegion region = regions.remove(regionPos.longKey);
++            if (!region.isEmpty()) {
++                // Guess this region has been modified by another thread, re-add it
++                regions.put(regionPos.longKey, region);
++            }
++        });
++    }
++
++    public void addTickingChunk(LevelChunk levelChunk) {
++        getOrCreate(RegionPos.forChunk(levelChunk.getPos())).add(levelChunk);
++    }
++
++    public void removeTickingChunk(LevelChunk levelChunk) {
++        getOrCreate(RegionPos.forChunk(levelChunk.getPos())).remove(levelChunk);
++    }
++
++    public void forEach(Consumer<LevelChunkRegion> consumer) {
++        List<LevelChunkRegion> regionsCopy = new ArrayList<>(regions.size());
++        regionsLock.read(() -> regionsCopy.addAll(regions.values()));
++        regionsCopy.forEach(consumer);
++    }
++
++}
+\ No newline at end of file
+diff --git a/src/main/java/puregero/multipaper/threading/MultiPaperChunkTicker.java b/src/main/java/puregero/multipaper/threading/MultiPaperChunkTicker.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..9cc226c540cb13fa2ee04ccdb92efadb21edbef7
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/threading/MultiPaperChunkTicker.java
+@@ -0,0 +1,101 @@
++package puregero.multipaper.threading;
++
++import com.mojang.logging.LogUtils;
++import io.papermc.paper.util.player.NearbyPlayers;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ChunkMap;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.level.ChunkPos;
++import net.minecraft.world.level.GameRules;
++import net.minecraft.world.level.NaturalSpawner;
++import net.minecraft.world.level.chunk.LevelChunk;
++import puregero.multipaper.region.LevelChunkRegion;
++
++import java.util.ArrayList;
++import java.util.List;
++import java.util.concurrent.CompletableFuture;
++
++public class MultiPaperChunkTicker {
++
++    public static void tickChunks(ServerLevel level, NaturalSpawner.SpawnState spawnercreature_d) {
++        List<CompletableFuture<Void>> futures = new ArrayList<>();
++
++        MinecraftServer.getServer().executeMidTickTasks();
++
++        level.chunkSource.tickingRegions.forEach(
++                region -> futures.add(tickRegion(level, region, spawnercreature_d))
++        );
++
++        for (CompletableFuture<Void> future : futures) {
++            if (!future.isDone()) {
++                level.getChunkSource().mainThreadProcessor.managedBlock(future::isDone);
++            }
++        }
++
++        MinecraftServer.getServer().executeMidTickTasks();
++    }
++
++    public static CompletableFuture<Void> tickRegion(ServerLevel level, LevelChunkRegion region, NaturalSpawner.SpawnState spawnercreature_d) {
++        return level.chunkScheduler.schedule(region.getRegionPos(), () -> _tickRegion(level, region, spawnercreature_d)).exceptionally(e -> {
++            LogUtils.getClassLogger().error("Exception ticking region {}", region.getRegionPos(), e);
++            MinecraftServer.chunkSystemCrash = new RuntimeException("Ticking thread crash while ticking region " + region.getRegionPos(), e);
++            return null;
++        });
++    }
++
++    private static void _tickRegion(ServerLevel level, LevelChunkRegion region, NaturalSpawner.SpawnState spawnercreature_d) {
++        region.forEach(chunk -> _tickChunk(level, chunk, spawnercreature_d));
++
++        if (region.isEmpty()) {
++            level.chunkSource.tickingRegions.remove(region.getRegionPos());
++        }
++    }
++
++    private static void _tickChunk(ServerLevel level, LevelChunk chunk1, NaturalSpawner.SpawnState spawnercreature_d) {
++        // Start - Import the same variables as the original chunk ticking method to make copying new changes easier
++        int j = 1; // Inhabited time increment in ticks
++        boolean flag = level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING) && !level.players().isEmpty(); // Should run mob spawning code
++        NearbyPlayers nearbyPlayers = level.chunkSource.chunkMap.getNearbyPlayers();
++        ChunkPos chunkcoordintpair = chunk1.getPos();
++        boolean flag1 = level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) != 0L && level.getLevelData().getGameTime() % level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) == 0L;
++        int l = level.getGameRules().getInt(GameRules.RULE_RANDOMTICKING);
++        // End
++
++        // Paper start - optimise chunk tick iteration
++        com.destroystokyo.paper.util.maplist.ReferenceList<ServerPlayer> playersNearby
++                = nearbyPlayers.getPlayers(chunkcoordintpair, io.papermc.paper.util.player.NearbyPlayers.NearbyMapType.SPAWN_RANGE);
++        if (playersNearby == null) {
++            return;
++        }
++        Object[] rawData = playersNearby.getRawData();
++        boolean spawn = false;
++        boolean tick = false;
++        for (int itr = 0, len = playersNearby.size(); itr < len; ++itr) {
++            ServerPlayer player = (ServerPlayer)rawData[itr];
++            if (player.isSpectator()) {
++                continue;
++            }
++
++            double distance = ChunkMap.euclideanDistanceSquared(chunkcoordintpair, player);
++            spawn |= player.lastEntitySpawnRadiusSquared >= distance;
++            tick |= ((double)io.papermc.paper.util.player.NearbyPlayers.SPAWN_RANGE_VIEW_DISTANCE_BLOCKS) * ((double)io.papermc.paper.util.player.NearbyPlayers.SPAWN_RANGE_VIEW_DISTANCE_BLOCKS) >= distance;
++            if (spawn & tick) {
++                break;
++            }
++        }
++        if (tick && chunk1.chunkStatus.isOrAfter(net.minecraft.server.level.FullChunkStatus.ENTITY_TICKING)) {
++            // Paper end - optimise chunk tick iteration
++            chunk1.incrementInhabitedTime(j);
++            if (spawn && flag && (level.chunkSource.spawnEnemies || level.chunkSource.spawnFriendlies) && level.getWorldBorder().isWithinBounds(chunkcoordintpair)) { // Spigot // Paper - optimise chunk tick iteration
++                NaturalSpawner.spawnForChunk(level, chunk1, spawnercreature_d, level.chunkSource.spawnFriendlies, level.chunkSource.spawnEnemies, flag1);
++            }
++
++            if (true || level.shouldTickBlocksAt(chunkcoordintpair.toLong())) { // Paper - optimise chunk tick iteration
++                level.tickChunk(chunk1, l);
++                // if ((chunksTicked++ & 1) == 0) net.minecraft.server.MinecraftServer.getServer().executeMidTickTasks(); // Paper // MultiPaper - does this need to be implemented??
++            }
++        }
++    }
++
++}

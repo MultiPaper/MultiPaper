@@ -5,7 +5,7 @@ plugins {
     java
     `maven-publish`
     id("io.github.goooler.shadow") version "8.1.7"
-    id("io.papermc.paperweight.patcher") version "1.6.3"
+    id("io.papermc.paperweight.patcher") version "1.7.1"
 }
 
 repositories {
@@ -119,7 +119,6 @@ paperweight {
 
 tasks.generateDevelopmentBundle {
     apiCoordinates.set("puregero.multipaper:MultiPaper-API")
-    mojangApiCoordinates.set("io.papermc.paper:paper-mojangapi")
     libraryRepositories.set(
         listOf(
             "https://repo.maven.apache.org/maven2/",

@@ -1,0 +1,121 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 25 May 2024 12:05:30 +0900
+Subject: [PATCH] Teleportation
+
+
+diff --git a/src/main/java/net/minecraft/server/commands/TeleportCommand.java b/src/main/java/net/minecraft/server/commands/TeleportCommand.java
+index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..137e7c768693226e21fdb43b1956602ddad8a1be 100644
+--- a/src/main/java/net/minecraft/server/commands/TeleportCommand.java
++++ b/src/main/java/net/minecraft/server/commands/TeleportCommand.java
+@@ -12,7 +12,10 @@ import java.util.EnumSet;
+ import java.util.Iterator;
+ import java.util.Locale;
+ import java.util.Set;
++import java.util.concurrent.CompletableFuture;
+ import javax.annotation.Nullable;
++
++import io.papermc.paper.util.TickThread;
+ import net.minecraft.commands.CommandSourceStack;
+ import net.minecraft.commands.arguments.EntityAnchorArgument;
+ import net.minecraft.commands.arguments.EntityArgument;
+@@ -29,6 +32,7 @@ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.LivingEntity;
+ import net.minecraft.world.entity.PathfinderMob;
+ import net.minecraft.world.entity.RelativeMovement;
++import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.phys.Vec2;
+ import net.minecraft.world.phys.Vec3;
+@@ -37,6 +41,7 @@ import org.bukkit.Location;
+ import org.bukkit.craftbukkit.CraftWorld;
+ import org.bukkit.event.entity.EntityTeleportEvent;
+ import org.bukkit.event.player.PlayerTeleportEvent;
++import puregero.multipaper.region.RegionPos;
+ // CraftBukkit end
+ 
+ public class TeleportCommand {
+@@ -162,9 +167,19 @@ public class TeleportCommand {
+             float f3 = Mth.wrapDegrees(pitch);
+ 
+             // CraftBukkit start - Teleport event
+-            boolean result;
++            // MultiPaper start - Run teleports on the correct thread
++            CompletableFuture<Boolean> result = new CompletableFuture<>();
+             if (target instanceof ServerPlayer player) {
+-                result = player.teleportTo(world, x, y, z, movementFlags, f2, f3, PlayerTeleportEvent.TeleportCause.COMMAND);
++                ChunkPos toPos = new ChunkPos(new BlockPos((int) x, (int) y, (int) z));
++                Runnable task = () -> {
++                    result.complete(player.teleportTo(world, x, y, z, movementFlags, f2, f3, PlayerTeleportEvent.TeleportCause.COMMAND));
++                };
++                if (TickThread.isTickThreadFor(target) && TickThread.isTickThreadFor(world, toPos)) {
++                    task.run();
++                } else {
++                    world.chunkScheduler.scheduleOnMany(task, RegionPos.forChunk(target.chunkPosition()), RegionPos.forChunk(toPos));
++                }
++                // MultiPaper end - Run teleports on the correct thread
+             } else {
+                 Location to = new Location(world.getWorld(), x, y, z, f2, f3);
+                 EntityTeleportEvent event = new EntityTeleportEvent(target.getBukkitEntity(), target.getBukkitEntity().getLocation(), to);
+@@ -174,17 +189,29 @@ public class TeleportCommand {
+                 }
+                 to = event.getTo(); // Paper - actually track new location
+ 
+-                x = to.getX();
+-                y = to.getY();
+-                z = to.getZ();
+-                f2 = to.getYaw();
+-                f3 = to.getPitch();
+-                world = ((CraftWorld) to.getWorld()).getHandle();
+-
+-                result = target.teleportTo(world, x, y, z, movementFlags, f2, f3);
++                // MultiPaper start - Run teleports on the correct thread
++                double finalX = to.getX();
++                double finalY = to.getY();
++                double finalZ = to.getZ();
++                float finalF2 = to.getYaw();
++                float finalF3 = to.getPitch();
++                ServerLevel finalWorld = ((CraftWorld) to.getWorld()).getHandle();
++
++                ChunkPos toPos = new ChunkPos(new BlockPos((int) finalX, (int) finalY, (int) finalZ));
++                Runnable task = () -> {
++                    result.complete(target.teleportTo(finalWorld, finalX, finalY, finalZ, movementFlags, finalF2, finalF3));
++                };
++                if (TickThread.isTickThreadFor(target) && TickThread.isTickThreadFor(world, toPos)) {
++                    task.run();
++                } else {
++                    world.chunkScheduler.scheduleOnMany(task, RegionPos.forChunk(target.chunkPosition()), RegionPos.forChunk(toPos));
++                }
++                // MultiPaper end - Run teleports on the correct thread
+             }
+ 
+-            if (result) {
++            result.thenAccept(success -> { // MultiPaper
++                if (!success) return; // MultiPaper
++
+                 // CraftBukkit end
+                 if (facingLocation != null) {
+                     facingLocation.perform(source, target);
+@@ -209,8 +236,7 @@ public class TeleportCommand {
+ 
+                     entitycreature.getNavigation().stop();
+                 }
+-
+-            }
++            }); // MultiPaper
+         }
+     }
+ 
+diff --git a/src/main/java/net/minecraft/server/level/ServerPlayer.java b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+index 162087bd74f53dce7eef9efa7e85c83538db23a7..ff841b91a4c3f41bc39781339dbf639a720464dd 100644
+--- a/src/main/java/net/minecraft/server/level/ServerPlayer.java
++++ b/src/main/java/net/minecraft/server/level/ServerPlayer.java
+@@ -2170,6 +2170,8 @@ public class ServerPlayer extends Player {
+     }
+ 
+     public boolean teleportTo(ServerLevel worldserver, double d0, double d1, double d2, Set<RelativeMovement> set, float f, float f1, TeleportCause cause) {
++        TickThread.ensureTickThread(this, "Cannot teleport player async"); // MultiPaper
++        TickThread.ensureTickThread(worldserver, d0, d2, "Cannot teleport player to async destination"); // MultiPaper
+         // CraftBukkit end
+         ChunkPos chunkcoordintpair = new ChunkPos(BlockPos.containing(d0, d1, d2));
+ 

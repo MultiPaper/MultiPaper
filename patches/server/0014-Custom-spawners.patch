@@ -1,0 +1,159 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 18 May 2024 09:52:50 +0900
+Subject: [PATCH] Custom spawners
+
+S
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index 2c4aa7a10f073227fbb98fa419e224a4caab4693..8534e378cc9edf232cb58ff8d2a3723c85033b74 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -1008,7 +1008,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+         while (iterator.hasNext()) {
+             CustomSpawner mobspawner = (CustomSpawner) iterator.next();
+ 
+-            mobspawner.tick(this, spawnMonsters, spawnAnimals);
++            mobspawner.tick(this, spawnMonsters, spawnAnimals); // MultiPaper - ensure return value remains unused
+         }
+ 
+     }
+diff --git a/src/main/java/net/minecraft/world/entity/ai/village/VillageSiege.java b/src/main/java/net/minecraft/world/entity/ai/village/VillageSiege.java
+index 36dec6cd78a0990ba3c09a4a748c259ef5c0a2ff..421f3d789c08fba9116055c97019f58d74c8809f 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/village/VillageSiege.java
++++ b/src/main/java/net/minecraft/world/entity/ai/village/VillageSiege.java
+@@ -17,6 +17,7 @@ import net.minecraft.world.level.CustomSpawner;
+ import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.phys.Vec3;
+ import org.slf4j.Logger;
++import puregero.multipaper.MultiPaper;
+ 
+ public class VillageSiege implements CustomSpawner {
+ 
+@@ -110,6 +111,7 @@ public class VillageSiege implements CustomSpawner {
+         Vec3 vec3d = this.findRandomSpawnPos(world, new BlockPos(this.spawnX, this.spawnY, this.spawnZ));
+ 
+         if (vec3d != null) {
++            MultiPaper.runSync(world, new BlockPos((int) vec3d.x, (int) vec3d.y, (int) vec3d.z), () -> { // MultiPaper - run on block's thread
+             Zombie entityzombie;
+ 
+             try {
+@@ -123,6 +125,7 @@ public class VillageSiege implements CustomSpawner {
+ 
+             entityzombie.moveTo(vec3d.x, vec3d.y, vec3d.z, world.random.nextFloat() * 360.0F, 0.0F);
+             world.addFreshEntityWithPassengers(entityzombie, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.VILLAGE_INVASION); // CraftBukkit
++            }); // MultiPaper - run on block's thread
+         }
+     }
+ 
+diff --git a/src/main/java/net/minecraft/world/entity/npc/CatSpawner.java b/src/main/java/net/minecraft/world/entity/npc/CatSpawner.java
+index d503d7a5837dbeb98e58dbe8f7e5de45f6d88990..14c1c9ff80fad6dd9a547db12b60f933f45c2262 100644
+--- a/src/main/java/net/minecraft/world/entity/npc/CatSpawner.java
++++ b/src/main/java/net/minecraft/world/entity/npc/CatSpawner.java
+@@ -32,6 +32,7 @@ public class CatSpawner implements CustomSpawner {
+                 if (player == null) {
+                     return 0;
+                 } else {
++                    player.getBukkitEntity().taskScheduler.schedule(e -> CustomSpawner.voidReturnValue(() -> { // MultiPaper - run on entity's thread
+                     RandomSource randomSource = world.random;
+                     int i = (8 + randomSource.nextInt(24)) * (randomSource.nextBoolean() ? -1 : 1);
+                     int j = (8 + randomSource.nextInt(24)) * (randomSource.nextBoolean() ? -1 : 1);
+@@ -52,6 +53,8 @@ public class CatSpawner implements CustomSpawner {
+ 
+                         return 0;
+                     }
++                    }), e -> {}, 1); // MultiPaper - run on entity's thread
++                    return 1; // MultiPaper - return value is unused, let's just say 1
+                 }
+             }
+         } else {
+diff --git a/src/main/java/net/minecraft/world/entity/npc/WanderingTraderSpawner.java b/src/main/java/net/minecraft/world/entity/npc/WanderingTraderSpawner.java
+index 96e9fce5f9084737d2fcf4deb83305733b480179..67c0aa6ffbd8e91dd78f9f8f6adf8ee2bdb28123 100644
+--- a/src/main/java/net/minecraft/world/entity/npc/WanderingTraderSpawner.java
++++ b/src/main/java/net/minecraft/world/entity/npc/WanderingTraderSpawner.java
+@@ -104,6 +104,7 @@ public class WanderingTraderSpawner implements CustomSpawner {
+         } else if (this.random.nextInt(10) != 0) {
+             return false;
+         } else {
++            entityplayer.getBukkitEntity().taskScheduler.schedule(e -> CustomSpawner.voidReturnValue(() -> { // MultiPaper - run on entity's thread
+             BlockPos blockposition = entityplayer.blockPosition();
+             boolean flag = true;
+             PoiManager villageplace = world.getPoiManager();
+@@ -136,6 +137,8 @@ public class WanderingTraderSpawner implements CustomSpawner {
+             }
+ 
+             return false;
++            }), e -> {}, 1); // MultiPaper - run on entity's thread
++            return true; // MultiPaper - assume success?
+         }
+     }
+ 
+diff --git a/src/main/java/net/minecraft/world/level/CustomSpawner.java b/src/main/java/net/minecraft/world/level/CustomSpawner.java
+index 537efd59aedc42b88d24662d5018f7103fd6dc25..87efb0e52797c24a87da00c3db996cd582ab03a5 100644
+--- a/src/main/java/net/minecraft/world/level/CustomSpawner.java
++++ b/src/main/java/net/minecraft/world/level/CustomSpawner.java
+@@ -2,6 +2,14 @@ package net.minecraft.world.level;
+ 
+ import net.minecraft.server.level.ServerLevel;
+ 
++import java.util.function.Supplier;
++
+ public interface CustomSpawner {
+     int tick(ServerLevel world, boolean spawnMonsters, boolean spawnAnimals);
++
++    // MultiPaper start
++    public static void voidReturnValue(Supplier<?> supplier) {
++        supplier.get();
++    }
++    // MultiPaper end
+ }
+diff --git a/src/main/java/net/minecraft/world/level/levelgen/PatrolSpawner.java b/src/main/java/net/minecraft/world/level/levelgen/PatrolSpawner.java
+index 1741360aa3f2409b1a8ddf1d4602ffe57651a586..00094e25edc956b2c182c60d67824704104f6a27 100644
+--- a/src/main/java/net/minecraft/world/level/levelgen/PatrolSpawner.java
++++ b/src/main/java/net/minecraft/world/level/levelgen/PatrolSpawner.java
+@@ -56,6 +56,7 @@ public class PatrolSpawner implements CustomSpawner {
+             if (patrolSpawnDelay > 0) {
+                 return 0;
+             } else {
++                entityhuman.getBukkitEntity().taskScheduler.schedule(e -> CustomSpawner.voidReturnValue(() -> { // MultiPaper - run on entity's thread
+                 long days;
+                 if (world.paperConfig().entities.behavior.pillagerPatrols.start.perPlayer) {
+                     days = entityhuman.getStats().getValue(net.minecraft.stats.Stats.CUSTOM.get(net.minecraft.stats.Stats.PLAY_TIME)) / 24000L; // PLAY_ONE_MINUTE is actually counting in ticks, a misnomer by Mojang
+@@ -123,6 +124,8 @@ public class PatrolSpawner implements CustomSpawner {
+                 } else {
+                     return 0;
+                 }
++                }), e -> {}, 1); // MultiPaper - run on entity's thread
++                return 1; // MultiPaper - return value is unused, let's just say 1
+             }
+         }
+     }
+diff --git a/src/main/java/net/minecraft/world/level/levelgen/PhantomSpawner.java b/src/main/java/net/minecraft/world/level/levelgen/PhantomSpawner.java
+index 04f67f7b43d2f461c776c76614dc3e5f060aea63..c201fb25898e819e70868a7d7b6aa6de588aebcd 100644
+--- a/src/main/java/net/minecraft/world/level/levelgen/PhantomSpawner.java
++++ b/src/main/java/net/minecraft/world/level/levelgen/PhantomSpawner.java
+@@ -57,6 +57,7 @@ public class PhantomSpawner implements CustomSpawner {
+                     while (iterator.hasNext()) {
+                         ServerPlayer entityplayer = (ServerPlayer) iterator.next();
+ 
++                        entityplayer.getBukkitEntity().taskScheduler.schedule(e -> { // MultiPaper - run on entity's thread
+                         if (!entityplayer.isSpectator() && (!world.paperConfig().entities.behavior.phantomsDoNotSpawnOnCreativePlayers || !entityplayer.isCreative())) { // Paper - Add phantom creative and insomniac controls
+                             BlockPos blockposition = entityplayer.blockPosition();
+ 
+@@ -94,7 +95,7 @@ public class PhantomSpawner implements CustomSpawner {
+                                                     entityphantom.moveTo(blockposition1, 0.0F, 0.0F);
+                                                     groupdataentity = entityphantom.finalizeSpawn(world, difficultydamagescaler, MobSpawnType.NATURAL, groupdataentity);
+                                                     world.addFreshEntityWithPassengers(entityphantom, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.NATURAL); // CraftBukkit
+-                                                    ++i;
++                                                    // ++i; // MultiPaper - value is unused
+                                                 }
+                                             }
+                                         }
+@@ -102,6 +103,7 @@ public class PhantomSpawner implements CustomSpawner {
+                                 }
+                             }
+                         }
++                        }, e -> {}, 1); // MultiPaper - run on entity's thread
+                     }
+ 
+                     return i;

@@ -1,0 +1,288 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 25 May 2024 14:36:09 +0900
+Subject: [PATCH] NearbyPlayers
+
+
+diff --git a/src/main/java/io/papermc/paper/util/player/NearbyPlayers.java b/src/main/java/io/papermc/paper/util/player/NearbyPlayers.java
+index f164256d59b761264876ca0c85f812d101bfd5de..f767716b0cefbba05f14a3d1ab2faa4ca9fcfa72 100644
+--- a/src/main/java/io/papermc/paper/util/player/NearbyPlayers.java
++++ b/src/main/java/io/papermc/paper/util/player/NearbyPlayers.java
+@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.level.ChunkPos;
++import puregero.multipaper.util.SimpleStampedLock;
+ 
+ public final class NearbyPlayers {
+ 
+@@ -36,7 +37,9 @@ public final class NearbyPlayers {
+ 
+     private final ServerLevel world;
+     private final Reference2ReferenceOpenHashMap<ServerPlayer, TrackedPlayer[]> players = new Reference2ReferenceOpenHashMap<>();
++    private final SimpleStampedLock playersLock = new SimpleStampedLock(); // MultiPaper
+     private final Long2ReferenceOpenHashMap<TrackedChunk> byChunk = new Long2ReferenceOpenHashMap<>();
++    private final SimpleStampedLock byChunkLock = new SimpleStampedLock(); // MultiPaper
+ 
+     public NearbyPlayers(final ServerLevel world) {
+         this.world = world;
+@@ -44,9 +47,11 @@ public final class NearbyPlayers {
+ 
+     public void addPlayer(final ServerPlayer player) {
+         final TrackedPlayer[] newTrackers = new TrackedPlayer[TOTAL_MAP_TYPES];
++        this.playersLock.write(() -> { // MultiPaper
+         if (this.players.putIfAbsent(player, newTrackers) != null) {
+             throw new IllegalStateException("Already have player " + player);
+         }
++        }); // MultiPaper
+ 
+         final ChunkPos chunk = player.chunkPosition();
+ 
+@@ -60,7 +65,7 @@ public final class NearbyPlayers {
+     }
+ 
+     public void removePlayer(final ServerPlayer player) {
+-        final TrackedPlayer[] players = this.players.remove(player);
++        final TrackedPlayer[] players = this.playersLock.write(() -> this.players.remove(player)); // MultiPaper
+         if (players == null) {
+             return; // May be called during teleportation before the player is actually placed
+         }
+@@ -71,7 +76,7 @@ public final class NearbyPlayers {
+     }
+ 
+     public void tickPlayer(final ServerPlayer player) {
+-        final TrackedPlayer[] players = this.players.get(player);
++        final TrackedPlayer[] players = this.playersLock.optimisticRead(() -> this.players.get(player)); // MultiPaper
+         if (players == null) {
+             throw new IllegalStateException("Don't have player " + player);
+         }
+@@ -87,33 +92,33 @@ public final class NearbyPlayers {
+     }
+ 
+     public TrackedChunk getChunk(final ChunkPos pos) {
+-        return this.byChunk.get(CoordinateUtils.getChunkKey(pos));
++        return byChunkLock.optimisticRead(() -> this.byChunk.get(CoordinateUtils.getChunkKey(pos))); // MultiPaper
+     }
+ 
+     public TrackedChunk getChunk(final BlockPos pos) {
+-        return this.byChunk.get(CoordinateUtils.getChunkKey(pos));
++        return byChunkLock.optimisticRead(() -> this.byChunk.get(CoordinateUtils.getChunkKey(pos))); // MultiPaper
+     }
+ 
+     public ReferenceList<ServerPlayer> getPlayers(final BlockPos pos, final NearbyMapType type) {
+-        final TrackedChunk chunk = this.byChunk.get(CoordinateUtils.getChunkKey(pos));
++        final TrackedChunk chunk = byChunkLock.optimisticRead(() -> this.byChunk.get(CoordinateUtils.getChunkKey(pos))); // MultiPaper
+ 
+         return chunk == null ? null : chunk.players[type.ordinal()];
+     }
+ 
+     public ReferenceList<ServerPlayer> getPlayers(final ChunkPos pos, final NearbyMapType type) {
+-        final TrackedChunk chunk = this.byChunk.get(CoordinateUtils.getChunkKey(pos));
++        final TrackedChunk chunk = byChunkLock.optimisticRead(() -> this.byChunk.get(CoordinateUtils.getChunkKey(pos))); // MultiPaper
+ 
+         return chunk == null ? null : chunk.players[type.ordinal()];
+     }
+ 
+     public ReferenceList<ServerPlayer> getPlayersByChunk(final int chunkX, final int chunkZ, final NearbyMapType type) {
+-        final TrackedChunk chunk = this.byChunk.get(CoordinateUtils.getChunkKey(chunkX, chunkZ));
++        final TrackedChunk chunk = byChunkLock.optimisticRead(() -> this.byChunk.get(CoordinateUtils.getChunkKey(chunkX, chunkZ))); // MultiPaper
+ 
+         return chunk == null ? null : chunk.players[type.ordinal()];
+     }
+ 
+     public ReferenceList<ServerPlayer> getPlayersByBlock(final int blockX, final int blockZ, final NearbyMapType type) {
+-        final TrackedChunk chunk = this.byChunk.get(CoordinateUtils.getChunkKey(blockX >> 4, blockZ >> 4));
++        final TrackedChunk chunk = byChunkLock.optimisticRead(() -> this.byChunk.get(CoordinateUtils.getChunkKey(blockX >> 4, blockZ >> 4))); // MultiPaper
+ 
+         return chunk == null ? null : chunk.players[type.ordinal()];
+     }
+@@ -136,7 +141,7 @@ public final class NearbyPlayers {
+             return this.players[type.ordinal()];
+         }
+ 
+-        public void addPlayer(final ServerPlayer player, final NearbyMapType type) {
++        public synchronized void addPlayer(final ServerPlayer player, final NearbyMapType type) { // MultiPaper
+             ++this.updateCount;
+             final int idx = type.ordinal();
+             final ReferenceList<ServerPlayer> list = this.players[idx];
+@@ -151,7 +156,7 @@ public final class NearbyPlayers {
+             }
+         }
+ 
+-        public void removePlayer(final ServerPlayer player, final NearbyMapType type) {
++        public synchronized void removePlayer(final ServerPlayer player, final NearbyMapType type) { // MultiPaper
+             ++this.updateCount;
+             final int idx = type.ordinal();
+             final ReferenceList<ServerPlayer> list = this.players[idx];
+@@ -183,24 +188,45 @@ public final class NearbyPlayers {
+         protected void addCallback(final ServerPlayer parameter, final int chunkX, final int chunkZ) {
+             final long chunkKey = CoordinateUtils.getChunkKey(chunkX, chunkZ);
+ 
+-            NearbyPlayers.this.byChunk.computeIfAbsent(chunkKey, (final long keyInMap) -> {
+-                return new TrackedChunk();
+-            }).addPlayer(parameter, this.type);
++            // MultiPaper start
++            TrackedChunk chunk = NearbyPlayers.this.byChunkLock.optimisticRead(() -> NearbyPlayers.this.byChunk.get(chunkKey));
++
++            if (chunk == null) {
++                chunk = NearbyPlayers.this.byChunkLock.write(() -> {
++                    return NearbyPlayers.this.byChunk.computeIfAbsent(chunkKey, (final long keyInMap) -> {
++                        return new TrackedChunk();
++                    });
++                });
++            }
++
++            chunk.addPlayer(parameter, this.type);
++
++            if (NearbyPlayers.this.byChunkLock.optimisticRead(() -> NearbyPlayers.this.byChunk.get(chunkKey)) != chunk) {
++                // Chunk was removed by another thread, retry
++                this.addCallback(parameter, chunkX, chunkZ);
++            }
++            // MultiPaper end
+         }
+ 
+         @Override
+         protected void removeCallback(final ServerPlayer parameter, final int chunkX, final int chunkZ) {
+             final long chunkKey = CoordinateUtils.getChunkKey(chunkX, chunkZ);
+ 
+-            final TrackedChunk chunk = NearbyPlayers.this.byChunk.get(chunkKey);
++            final TrackedChunk chunk = NearbyPlayers.this.byChunkLock.optimisticRead(() -> NearbyPlayers.this.byChunk.get(chunkKey)); // MultiPaper
+             if (chunk == null) {
+                 throw new IllegalStateException("Chunk should exist at " + new ChunkPos(chunkKey));
+             }
+ 
+             chunk.removePlayer(parameter, this.type);
+ 
+-            if (chunk.isEmpty()) {
+-                NearbyPlayers.this.byChunk.remove(chunkKey);
++            // MultiPaper start
++            if (chunk.isEmpty()) { // Optimistic empty check to avoid locking
++                NearbyPlayers.this.byChunkLock.write(() -> {
++                    if (chunk.isEmpty()) { // Double-check it's still empty within the lock
++                        NearbyPlayers.this.byChunk.remove(chunkKey);
++                    }
++                });
++                // MultiPaper end
+             }
+         }
+     }
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index ec789b9391cc311fad435b4bc46d2c5fcdb4532f..05cb2f1830c75643a8c1ee19172d97b06197c032 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -391,7 +391,9 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         }
+         final Object[] backingSet = inRange.getRawData();
+         for (int i = 0, len = inRange.size(); i < len; i++) {
++            try { // MultiPaper - concurrent modification
+             ++((ServerPlayer)backingSet[i]).mobCounts[index];
++            } catch (IndexOutOfBoundsException | NullPointerException ignored) {} // MultiPaper - concurrent modification
+         }
+     }
+ 
+@@ -408,7 +410,9 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         }
+         final Object[] backingSet = inRange.getRawData();
+         for (int i = 0, len = inRange.size(); i < len; i++) {
++            try { // MultiPaper - concurrent modification
+             ++((ServerPlayer)backingSet[i]).mobBackoffCounts[idx];
++            } catch (IndexOutOfBoundsException | NullPointerException ignored) {} // MultiPaper - concurrent modification
+         }
+     }
+     // Paper end - per player mob count backoff
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index f7f51b82d5140222ebaf1ee4e29db53b258f1db3..880591f1918a3c61518e5fbe88cf4aee277d091b 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -611,7 +611,9 @@ public class ServerLevel extends Level implements WorldGenLevel {
+             double nearestDist = maxDistance * maxDistance;
+             Object[] rawData = nearby.getRawData();
+             for (int i = 0, len = nearby.size(); i < len; ++i) {
++                try { // MultiPaper - concurrent modification
+                 ServerPlayer player = (ServerPlayer)rawData[i];
++                if (player == null) continue; // MultiPaper - concurrent modification
+                 double dist = player.distanceToSqr(x, y, z);
+                 if (dist >= nearestDist) {
+                     continue;
+@@ -621,6 +623,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+                     nearest = player;
+                     nearestDist = dist;
+                 }
++                } catch (IndexOutOfBoundsException ignored) {} // MultiPaper - concurrent modification
+             }
+ 
+             return nearest;
+@@ -670,7 +673,9 @@ public class ServerLevel extends Level implements WorldGenLevel {
+             double nearestDist = Double.MAX_VALUE;
+             Object[] rawData = nearby.getRawData();
+             for (int i = 0, len = nearby.size(); i < len; ++i) {
++                try { // MultiPaper - concurrent modification
+                 ServerPlayer player = (ServerPlayer)rawData[i];
++                if (player == null) continue; // MultiPaper - concurrent modification
+                 double dist = player.distanceToSqr(x, y, z);
+                 if (dist >= nearestDist) {
+                     continue;
+@@ -680,6 +685,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+                     nearest = player;
+                     nearestDist = dist;
+                 }
++                } catch (IndexOutOfBoundsException ignored) {} // MultiPaper - concurrent modification
+             }
+ 
+             return nearest;
+diff --git a/src/main/java/net/minecraft/world/entity/ai/sensing/PlayerSensor.java b/src/main/java/net/minecraft/world/entity/ai/sensing/PlayerSensor.java
+index 65cd42ce9f553e0aa5bf248bdbf902f9d1f55460..0fd3a8dba0234d71352ab28c5f7cbbce2ca48a73 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/sensing/PlayerSensor.java
++++ b/src/main/java/net/minecraft/world/entity/ai/sensing/PlayerSensor.java
+@@ -34,6 +34,7 @@ public class PlayerSensor extends Sensor<LivingEntity> {
+         if (nearby != null) {
+             Object[] rawData = nearby.getRawData();
+             for (int index = 0, len = nearby.size(); index < len; ++index) {
++                try { // MultiPaper - concurrent modification
+                 net.minecraft.server.level.ServerPlayer player = (net.minecraft.server.level.ServerPlayer) rawData[index];
+                 if (player.isSpectator()) {
+                     continue;
+@@ -42,6 +43,7 @@ public class PlayerSensor extends Sensor<LivingEntity> {
+                     continue;
+                 }
+                 players.add(player);
++                } catch (IndexOutOfBoundsException | NullPointerException ignored) {} // MultiPaper - concurrent modification
+             }
+         }
+         players.sort(Comparator.comparingDouble(entity::distanceToSqr));
+diff --git a/src/main/java/net/minecraft/world/level/NaturalSpawner.java b/src/main/java/net/minecraft/world/level/NaturalSpawner.java
+index 0f90a6803851eba51e164772c984b1cd1193d882..f31a9dea92e6035361962a19be3e5d4683a7f677 100644
+--- a/src/main/java/net/minecraft/world/level/NaturalSpawner.java
++++ b/src/main/java/net/minecraft/world/level/NaturalSpawner.java
+@@ -161,7 +161,9 @@ public final class NaturalSpawner {
+                 if (inRange != null) {
+                     final Object[] backingSet = inRange.getRawData();
+                     for (int k = 0, len = inRange.size(); k < len; k++) {
++                        try { // MultiPaper - concurrent modification
+                         minDiff = Math.min(limit - world.getChunkSource().chunkMap.getMobCountNear((net.minecraft.server.level.ServerPlayer)backingSet[k], enumcreaturetype), minDiff);
++                        } catch (IndexOutOfBoundsException | NullPointerException ignored) {} // MultiPaper - concurrent modification
+                     }
+                 }
+                 difference = (minDiff == Integer.MAX_VALUE) ? 0 : minDiff;
+diff --git a/src/main/java/puregero/multipaper/threading/MultiPaperChunkTicker.java b/src/main/java/puregero/multipaper/threading/MultiPaperChunkTicker.java
+index 21042d0412846794ae20e233e7accb52177d110f..9880dc26a676be0c66fce9e4f27c04e20740e6d0 100644
+--- a/src/main/java/puregero/multipaper/threading/MultiPaperChunkTicker.java
++++ b/src/main/java/puregero/multipaper/threading/MultiPaperChunkTicker.java
+@@ -94,7 +94,9 @@ public class MultiPaperChunkTicker {
+         boolean spawn = false;
+         boolean tick = false;
+         for (int itr = 0, len = playersNearby.size(); itr < len; ++itr) {
++            try { // MultiPaper - concurrent modification
+             ServerPlayer player = (ServerPlayer)rawData[itr];
++            if (player == null) continue; // MultiPaper - concurrent modification
+             if (player.isSpectator()) {
+                 continue;
+             }
+@@ -105,6 +107,7 @@ public class MultiPaperChunkTicker {
+             if (spawn & tick) {
+                 break;
+             }
++            } catch (IndexOutOfBoundsException ignored) {} // MultiPaper - concurrent modification
+         }
+         if (tick && chunk1.chunkStatus.isOrAfter(net.minecraft.server.level.FullChunkStatus.ENTITY_TICKING)) {
+             // Paper end - optimise chunk tick iteration

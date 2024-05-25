@@ -1,0 +1,220 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 25 May 2024 19:27:42 +0900
+Subject: [PATCH] Run unsupported plugins in sync
+
+
+diff --git a/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java b/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
+index 02597f890ac7f2dc12c94c283356b8309638dd17..0cba394d9c2cb9ab97f880e38bcfca069f8cacac 100644
+--- a/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
++++ b/src/main/java/io/papermc/paper/command/brigadier/bukkit/BukkitCommandNode.java
+@@ -17,6 +17,9 @@ import org.bukkit.Location;
+ import org.bukkit.command.Command;
+ import org.bukkit.command.CommandException;
+ import org.bukkit.command.CommandSender;
++import org.bukkit.command.PluginCommand;
++import puregero.multipaper.threading.SynchronousPluginExecution;
++import puregero.multipaper.util.ObjectHolder;
+ 
+ import java.util.Arrays;
+ import java.util.List;
+@@ -83,7 +86,20 @@ public class BukkitCommandNode extends LiteralCommandNode<CommandSourceStack> {
+ 
+             //try (Timing ignored = this.command.timings.startTiming()) { // Purpur
+                 // Note: we don't return the result of target.execute as thats success / failure, we return handled (true) or not handled (false)
+-                this.command.execute(sender, this.literal, Arrays.copyOfRange(args, 1, args.length));
++                // MultiPaper start - run unsupported plugins in sync
++                try {
++                    SynchronousPluginExecution.RunnableWithException runnable = () -> this.command.execute(sender, this.literal, Arrays.copyOfRange(args, 1, args.length));
++                    if (this.command instanceof PluginCommand pluginCommand) {
++                        SynchronousPluginExecution.execute(pluginCommand.getPlugin(), runnable);
++                    } else {
++                        runnable.run();
++                    }
++                } catch (Error | RuntimeException e) {
++                    throw e;
++                } catch (Exception e) {
++                    throw new RuntimeException(e);
++                }
++                // MultiPaper end
+             //} // Purpur
+ 
+             // return true as command was handled
+@@ -107,24 +123,37 @@ public class BukkitCommandNode extends LiteralCommandNode<CommandSourceStack> {
+             org.bukkit.command.CommandSender sender = context.getSource().getSender();
+             String[] args = builder.getRemaining().split(" ", -1); // We need the command included -- Set limit to -1, allow for trailing spaces
+ 
+-            List<String> results = null;
++            ObjectHolder<List<String>> results = new ObjectHolder<>(); // MultiPaper
+             Location pos = context.getSource().getLocation();
+             try {
+-                results = this.command.tabComplete(sender, this.literal, args, pos.clone());
++                // MultiPaper start - run unsupported plugins in sync
++                try {
++                    SynchronousPluginExecution.RunnableWithException runnable = () -> results.value(this.command.tabComplete(sender, this.literal, args, pos.clone()));
++                    if (this.command instanceof PluginCommand pluginCommand) {
++                        SynchronousPluginExecution.execute(pluginCommand.getPlugin(), runnable);
++                    } else {
++                        runnable.run();
++                    }
++                } catch (Error | RuntimeException e) {
++                    throw e;
++                } catch (Exception e) {
++                    throw new RuntimeException(e);
++                }
++                // MultiPaper end
+             } catch (CommandException ex) {
+                 sender.sendMessage(ChatColor.RED + "An internal error occurred while attempting to tab-complete this command");
+                 Bukkit.getServer().getLogger().log(Level.SEVERE, "Exception when " + sender.getName() + " attempted to tab complete " + builder.getRemaining(), ex);
+             }
+ 
+             // Paper end
+-            if (results == null) {
++            if (results.value() == null) { // MultiPaper
+                 return builder.buildFuture();
+             }
+ 
+             // Defaults to sub nodes, but we have just one giant args node, so offset accordingly
+             builder = builder.createOffset(builder.getInput().lastIndexOf(' ') + 1);
+ 
+-            for (String s : results) {
++            for (String s : results.value()) { // MultiPaper
+                 builder.suggest(s);
+             }
+ 
+diff --git a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
+index 7ce9ebba8ce304d1f3f21d4f15ee5f3560d7700b..2000c41f8e71318541618918738364421e83ae40 100644
+--- a/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
++++ b/src/main/java/io/papermc/paper/plugin/manager/PaperEventManager.java
+@@ -17,6 +17,8 @@ import org.bukkit.plugin.IllegalPluginAccessException;
+ import org.bukkit.plugin.Plugin;
+ import org.bukkit.plugin.RegisteredListener;
+ import org.jetbrains.annotations.NotNull;
++import puregero.multipaper.config.MultiPaperConfiguration;
++import puregero.multipaper.threading.SynchronousPluginExecution;
+ 
+ import java.lang.reflect.Method;
+ import java.util.Arrays;
+@@ -51,7 +53,15 @@ class PaperEventManager {
+             }
+ 
+             try {
+-                registration.callEvent(event);
++                // MultiPaper start - run unsupported plugins in sync
++                if (event.isAsynchronous()) {
++                    registration.callEvent(event);
++                } else {
++                    SynchronousPluginExecution.execute(registration.getPlugin(), () -> {
++                        registration.callEvent(event);
++                    });
++                }
++                // MultiPaper end - run unsupported plugins in sync
+             } catch (AuthorNagException ex) {
+                 Plugin plugin = registration.getPlugin();
+ 
+diff --git a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
+index ca8ae8e1c51b937dac916e0b0dc94b5e2e61efeb..1ff1a2623a3e552d0b9321e3c593684782cb6aa7 100644
+--- a/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
++++ b/src/main/java/org/bukkit/craftbukkit/scheduler/CraftScheduler.java
+@@ -24,6 +24,7 @@ import org.bukkit.scheduler.BukkitRunnable;
+ import org.bukkit.scheduler.BukkitScheduler;
+ import org.bukkit.scheduler.BukkitTask;
+ import org.bukkit.scheduler.BukkitWorker;
++import puregero.multipaper.threading.SynchronousPluginExecution;
+ 
+ /**
+  * The fundamental concepts for this implementation:
+@@ -479,7 +480,7 @@ public class CraftScheduler implements BukkitScheduler {
+             if (task.isSync()) {
+                 this.currentTask = task;
+                 try {
+-                    task.run();
++                    SynchronousPluginExecution.execute(task.getOwner(), task::run); // MultiPaper - run unsupported plugins in sync
+                 } catch (final Throwable throwable) {
+                     // Paper start
+                     String msg = String.format(
+diff --git a/src/main/java/puregero/multipaper/threading/SynchronousPluginExecution.java b/src/main/java/puregero/multipaper/threading/SynchronousPluginExecution.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..ba9689f90b013b4354ade4f96140278741f2d32f
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/threading/SynchronousPluginExecution.java
+@@ -0,0 +1,79 @@
++package puregero.multipaper.threading;
++
++import com.mojang.logging.LogUtils;
++import org.bukkit.plugin.Plugin;
++import org.slf4j.Logger;
++import puregero.multipaper.config.MultiPaperConfiguration;
++
++import java.util.Comparator;
++import java.util.Map;
++import java.util.TreeSet;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.locks.ReentrantLock;
++
++public class SynchronousPluginExecution {
++
++    private static final Logger LOGGER = LogUtils.getClassLogger();
++
++    private static final Map<String, ReentrantLock> locks = new ConcurrentHashMap<>();
++
++    public static void execute(Plugin plugin, RunnableWithException runnable) throws Exception {
++        if (!MultiPaperConfiguration.get().verticalScaling.runUnsupportedPluginsInSync || plugin.getDescription().isFoliaSupported()) {
++            // Multi-thread safe plugin, run it straight away
++            runnable.run();
++            return;
++        }
++
++        // Lock the plugins in a predictable order to prevent deadlocks
++        TreeSet<Plugin> pluginsToLock = new TreeSet<>(Comparator.comparing(Plugin::getName));
++
++        fillPluginsToLock(plugin, pluginsToLock);
++
++        for (Plugin pluginToLock : pluginsToLock) {
++            locks.computeIfAbsent(pluginToLock.getName(), (name) -> new ReentrantLock()).lock();
++        }
++
++        try {
++            runnable.run();
++        } finally {
++            for (Plugin pluginToLock : pluginsToLock) {
++                locks.get(pluginToLock.getName()).unlock();
++            }
++        }
++    }
++
++    private static void fillPluginsToLock(Plugin plugin, TreeSet<Plugin> pluginsToLock) {
++        if (pluginsToLock.contains(plugin)) {
++            // Cyclic graphhhh
++            return;
++        }
++
++        if (plugin.getDescription().isFoliaSupported()) {
++            // Multi-thread safe plugin, we don't need to lock it
++            return;
++        }
++
++        pluginsToLock.add(plugin);
++
++        for (String depend : plugin.getDescription().getDepend()) {
++            Plugin dependPlugin = plugin.getServer().getPluginManager().getPlugin(depend);
++            if (dependPlugin != null) {
++                fillPluginsToLock(dependPlugin, pluginsToLock);
++            } else {
++                LOGGER.warn("Could not find dependency " + depend + " for plugin " + plugin.getName() + " even though it is a required dependency - this code shouldn't've been able to be run!");
++            }
++        }
++
++        for (String softDepend : plugin.getDescription().getSoftDepend()) {
++            Plugin softDependPlugin = plugin.getServer().getPluginManager().getPlugin(softDepend);
++            if (softDependPlugin != null) {
++                fillPluginsToLock(softDependPlugin, pluginsToLock);
++            }
++        }
++    }
++
++    public interface RunnableWithException {
++        void run() throws Exception;
++    }
++
++}

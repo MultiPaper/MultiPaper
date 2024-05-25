@@ -1,0 +1,104 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 25 May 2024 13:07:30 +0900
+Subject: [PATCH] TrackedEntity
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
+index a97f6b6646c31ee8879223a202b83a5662024d04..ec789b9391cc311fad435b4bc46d2c5fcdb4532f 100644
+--- a/src/main/java/net/minecraft/server/level/ChunkMap.java
++++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
+@@ -42,6 +42,7 @@ import java.util.Set;
+ import java.util.concurrent.CancellationException;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.CompletionException;
++import java.util.concurrent.ConcurrentHashMap;
+ import java.util.concurrent.Executor;
+ import java.util.concurrent.atomic.AtomicInteger;
+ import java.util.function.BooleanSupplier;
+@@ -140,7 +141,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+     public final AtomicInteger tickingGenerated; // Paper - public
+     private final String storageName;
+     private final PlayerMap playerMap;
+-    public final Int2ObjectMap<ChunkMap.TrackedEntity> entityMap;
++    public final ConcurrentHashMap<Integer, TrackedEntity> entityMap; // MultiPaper - use ConcurrentHashMap
+     private final Long2ByteMap chunkTypeCache;
+     private final Long2LongMap chunkSaveCooldowns;
+     private final Queue<Runnable> unloadQueue;
+@@ -254,7 +255,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         // Paper - rewrite chunk system
+         this.tickingGenerated = new AtomicInteger();
+         this.playerMap = new PlayerMap();
+-        this.entityMap = new Int2ObjectOpenHashMap();
++        this.entityMap = new ConcurrentHashMap<>(); // MultiPaper - use ConcurrentHashMap
+         this.chunkTypeCache = new Long2ByteOpenHashMap();
+         this.chunkSaveCooldowns = new Long2LongOpenHashMap();
+         this.unloadQueue = Queues.newConcurrentLinkedQueue();
+@@ -1118,7 +1119,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+                         ServerPlayer entityplayer = (ServerPlayer) entity;
+ 
+                         this.updatePlayerStatus(entityplayer, true);
+-                        ObjectIterator objectiterator = this.entityMap.values().iterator();
++                        Iterator<ChunkMap.TrackedEntity> objectiterator = this.entityMap.values().iterator(); // MultiPaper
+ 
+                         while (objectiterator.hasNext()) {
+                             ChunkMap.TrackedEntity playerchunkmap_entitytracker1 = (ChunkMap.TrackedEntity) objectiterator.next();
+@@ -1138,7 +1139,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         org.spigotmc.AsyncCatcher.catchOp("entity untrack"); // Spigot
+         if (entity instanceof ServerPlayer entityplayer) {
+             this.updatePlayerStatus(entityplayer, false);
+-            ObjectIterator objectiterator = this.entityMap.values().iterator();
++            Iterator<ChunkMap.TrackedEntity> objectiterator = this.entityMap.values().iterator(); // MultiPaper
+ 
+             while (objectiterator.hasNext()) {
+                 ChunkMap.TrackedEntity playerchunkmap_entitytracker = (ChunkMap.TrackedEntity) objectiterator.next();
+@@ -1157,6 +1158,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+ 
+     // Paper start - optimised tracker
+     private final void processTrackQueue() {
++        if (true) return; // MultiPaper - handle ourselves
+         //this.level.timings.tracker1.startTiming(); // Purpur
+         try {
+             for (TrackedEntity tracker : this.entityMap.values()) {
+@@ -1188,7 +1190,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         // Paper end - optimized tracker
+         List<ServerPlayer> list = Lists.newArrayList();
+         List<ServerPlayer> list1 = this.level.players();
+-        ObjectIterator objectiterator = this.entityMap.values().iterator();
++        Iterator<ChunkMap.TrackedEntity> objectiterator = this.entityMap.values().iterator(); // MultiPaper
+         //this.level.timings.tracker1.startTiming(); // Paper // Purpur
+ 
+         ChunkMap.TrackedEntity playerchunkmap_entitytracker;
+@@ -1336,7 +1338,7 @@ public class ChunkMap extends ChunkStorage implements ChunkHolder.PlayerProvider
+         // Paper start - use distance map to optimise tracker
+         com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> lastTrackerCandidates;
+ 
+-        final void updatePlayers(com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> newTrackerCandidates) {
++        public final void updatePlayers(com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> newTrackerCandidates) { // MultiPaper - make public
+             com.destroystokyo.paper.util.misc.PooledLinkedHashSets.PooledObjectLinkedOpenHashSet<ServerPlayer> oldTrackerCandidates = this.lastTrackerCandidates;
+             this.lastTrackerCandidates = newTrackerCandidates;
+ 
+diff --git a/src/main/java/puregero/multipaper/threading/MultiPaperEntityTicker.java b/src/main/java/puregero/multipaper/threading/MultiPaperEntityTicker.java
+index 68b41b85db26bb7e7ff3ed03b7a9a652b0d1371e..5067fa3defb5c589a563899df5f0bd2d31d8f80f 100644
+--- a/src/main/java/puregero/multipaper/threading/MultiPaperEntityTicker.java
++++ b/src/main/java/puregero/multipaper/threading/MultiPaperEntityTicker.java
+@@ -1,5 +1,6 @@
+ package puregero.multipaper.threading;
+ 
++import net.minecraft.server.level.ChunkMap;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.world.entity.Entity;
+ 
+@@ -31,6 +32,12 @@ public class MultiPaperEntityTicker {
+                     //gameprofilerfiller.pop(); // Purpur
+                 }
+             }
++
++            ChunkMap.TrackedEntity tracker = entity.tracker;
++            if (tracker != null) {
++                tracker.updatePlayers(entity.getPlayersInTrackRange());
++                tracker.serverEntity.sendChanges();
++            }
+         }
+     }
+ 

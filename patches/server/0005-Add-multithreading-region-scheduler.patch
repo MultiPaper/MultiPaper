@@ -1,0 +1,695 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Sat, 4 May 2024 14:40:58 +0900
+Subject: [PATCH] Add multithreading region scheduler
+
+
+diff --git a/src/main/java/io/papermc/paper/util/TickThread.java b/src/main/java/io/papermc/paper/util/TickThread.java
+index bdaf062f9b66ceab303a0807eca301342886a8ea..5216c3f6ef1abe30c4f4c4343512b1c64604075b 100644
+--- a/src/main/java/io/papermc/paper/util/TickThread.java
++++ b/src/main/java/io/papermc/paper/util/TickThread.java
+@@ -12,6 +12,8 @@ import net.minecraft.world.level.Level;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.Vec3;
+ import org.bukkit.Bukkit;
++import puregero.multipaper.region.RegionPos;
++
+ import java.util.concurrent.atomic.AtomicInteger;
+ 
+ public class TickThread extends Thread {
+@@ -114,46 +116,76 @@ public class TickThread extends Thread {
+     }
+ 
+     public static boolean isShutdownThread() {
+-        return false;
++        return Thread.currentThread() == MinecraftServer.getServer().shutdownThread;
+     }
+ 
+     public static boolean isTickThreadFor(final ServerLevel world, final BlockPos pos) {
+-        return isTickThread();
++        return isTickThreadFor(world, new ChunkPos(pos));
+     }
+ 
+     public static boolean isTickThreadFor(final ServerLevel world, final ChunkPos pos) {
+-        return isTickThread();
++        return world.getServer().forceTicks || isShutdownThread() || world.chunkScheduler.getRegionLocker().hasLock(RegionPos.forChunk(pos));
+     }
+ 
+     public static boolean isTickThreadFor(final ServerLevel world, final Vec3 pos) {
+-        return isTickThread();
++        return isTickThreadFor(world, pos.x, pos.z);
+     }
+ 
+     public static boolean isTickThreadFor(final ServerLevel world, final int chunkX, final int chunkZ) {
+-        return isTickThread();
++        return isTickThreadFor(world, new ChunkPos(chunkX, chunkZ));
+     }
+ 
+     public static boolean isTickThreadFor(final ServerLevel world, final AABB aabb) {
+-        return isTickThread();
++        return isTickThreadFor(world, CoordinateUtils.getChunkCoordinate(aabb.minX), CoordinateUtils.getChunkCoordinate(aabb.minZ), CoordinateUtils.getChunkCoordinate(aabb.maxX), CoordinateUtils.getChunkCoordinate(aabb.maxZ));
+     }
+ 
+     public static boolean isTickThreadFor(final ServerLevel world, final double blockX, final double blockZ) {
+-        return isTickThread();
++        return isTickThreadFor(world, CoordinateUtils.getChunkCoordinate(blockX), CoordinateUtils.getChunkCoordinate(blockZ));
+     }
+ 
+     public static boolean isTickThreadFor(final ServerLevel world, final Vec3 position, final Vec3 deltaMovement, final int buffer) {
+-        return isTickThread();
++        int fromChunkX = CoordinateUtils.getChunkCoordinate(position.x);
++        int fromChunkZ = CoordinateUtils.getChunkCoordinate(position.z);
++        int toChunkX = CoordinateUtils.getChunkCoordinate(position.x + deltaMovement.x);
++        int toChunkZ = CoordinateUtils.getChunkCoordinate(position.z + deltaMovement.z);
++
++        int minChunkX = Math.min(fromChunkX, toChunkX) - buffer;
++        int minChunkZ = Math.min(fromChunkZ, toChunkZ) - buffer;
++        int maxChunkX = Math.max(fromChunkX, toChunkX) + buffer;
++        int maxChunkZ = Math.max(fromChunkZ, toChunkZ) + buffer;
++
++        return isTickThreadFor(world, minChunkX, minChunkZ, maxChunkX, maxChunkZ);
+     }
+ 
+     public static boolean isTickThreadFor(final ServerLevel world, final int fromChunkX, final int fromChunkZ, final int toChunkX, final int toChunkZ) {
+-        return isTickThread();
++        if (world.getServer().forceTicks || isShutdownThread()) return true;
++
++        int fromRegionX = fromChunkX >> RegionPos.REGION_SHIFT;
++        int fromRegionZ = fromChunkZ >> RegionPos.REGION_SHIFT;
++        int toRegionX = toChunkX >> RegionPos.REGION_SHIFT;
++        int toRegionZ = toChunkZ >> RegionPos.REGION_SHIFT;
++
++        int minRegionX = Math.min(fromRegionX, toRegionX);
++        int maxRegionX = Math.max(fromRegionX, toRegionX);
++        int minRegionZ = Math.min(fromRegionZ, toRegionZ);
++        int maxRegionZ = Math.max(fromRegionZ, toRegionZ);
++
++        for (int x = minRegionX; x <= maxRegionX; x++) {
++            for (int z = minRegionZ; z <= maxRegionZ; z++) {
++                if (!world.chunkScheduler.getRegionLocker().hasLock(new RegionPos(x, z))) {
++                    return false;
++                }
++            }
++        }
++
++        return true;
+     }
+ 
+     public static boolean isTickThreadFor(final ServerLevel world, final int chunkX, final int chunkZ, final int radius) {
+-        return isTickThread();
++        return isTickThreadFor(world, chunkX - radius, chunkZ - radius, chunkX + radius, chunkZ + radius);
+     }
+ 
+     public static boolean isTickThreadFor(final Entity entity) {
+-        return isTickThread();
++        return isTickThreadFor((ServerLevel) entity.level(), entity.chunkPosition());
+     }
+ }
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index 330bae815c0a332e3dc9fa7b224c9f92098199b9..d3239eb3378b66103e178e58a51efb128919c0bf 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -191,6 +191,7 @@ import org.bukkit.event.server.ServerLoadEvent;
+ // CraftBukkit end
+ 
+ import co.aikar.timings.MinecraftTimings; // Paper
++import puregero.multipaper.threading.MultiPaperTickThread;
+ 
+ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTask> implements ServerInfo, CommandSource, AutoCloseable {
+ 
+@@ -976,6 +977,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         MinecraftServer.LOGGER.info("Stopping server");
+         Commands.COMMAND_SENDING_POOL.shutdownNow(); // Paper - Perf: Async command map building; Shutdown and don't bother finishing
+         MinecraftTimings.stopServer(); // Paper
++        MultiPaperTickThread.stopServer(); // MultiPaper
+         // Purpur start
+         if (upnp) {
+             if (dev.omega24.upnp4j.UPnP4J.close(this.getPort(), dev.omega24.upnp4j.util.Protocol.TCP)) {
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index 7924e3c597164f71056cd58dd167ee8b1d41b9c3..5aa9a56a530d40bd61c813c39cf5c60be4815429 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -50,7 +50,6 @@ import net.minecraft.core.particles.ParticleOptions;
+ import net.minecraft.core.registries.BuiltInRegistries;
+ import net.minecraft.core.registries.Registries;
+ import net.minecraft.network.chat.Component;
+-import net.minecraft.network.chat.MutableComponent;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket;
+ import net.minecraft.network.protocol.game.ClientboundBlockEventPacket;
+@@ -78,8 +77,6 @@ import net.minecraft.util.Mth;
+ import net.minecraft.util.ProgressListener;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.util.Unit;
+-import net.minecraft.util.datafix.DataFixTypes;
+-import net.minecraft.util.profiling.ProfilerFiller;
+ import net.minecraft.util.valueproviders.IntProvider;
+ import net.minecraft.util.valueproviders.UniformInt;
+ import net.minecraft.world.DifficultyInstance;
+@@ -134,16 +131,13 @@ import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.level.chunk.LevelChunkSection;
+ import net.minecraft.world.level.chunk.storage.EntityStorage;
+ import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
+-import net.minecraft.world.level.chunk.storage.SimpleRegionStorage;
+ import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
+ import net.minecraft.world.level.dimension.LevelStem;
+ import net.minecraft.world.level.dimension.end.EndDragonFight;
+-import net.minecraft.world.level.entity.EntityPersistentStorage;
+ import net.minecraft.world.level.entity.EntityTickList;
+ import net.minecraft.world.level.entity.EntityTypeTest;
+ import net.minecraft.world.level.entity.LevelCallback;
+ import net.minecraft.world.level.entity.LevelEntityGetter;
+-import net.minecraft.world.level.entity.PersistentEntitySectionManager;
+ import net.minecraft.world.level.gameevent.DynamicGameEventListener;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.level.gameevent.GameEventDispatcher;
+@@ -180,6 +174,7 @@ import org.bukkit.event.entity.CreatureSpawnEvent;
+ import org.bukkit.event.server.MapInitializeEvent;
+ import org.bukkit.event.weather.LightningStrikeEvent;
+ import org.bukkit.event.world.TimeSkipEvent;
++import puregero.multipaper.threading.MultiPaperRegionScheduler;
+ // CraftBukkit end
+ 
+ public class ServerLevel extends Level implements WorldGenLevel {
+@@ -223,6 +218,7 @@ public class ServerLevel extends Level implements WorldGenLevel {
+     private double preciseTime; // Purpur
+     private boolean forceTime; // Purpur
+     private final RandomSequences randomSequences;
++    public final MultiPaperRegionScheduler chunkScheduler = new MultiPaperRegionScheduler(); // MultiPaper
+     public long lastMidTickExecuteFailure; // Paper - execute chunk tasks mid tick
+ 
+     // CraftBukkit start
+diff --git a/src/main/java/net/minecraft/world/level/ChunkPos.java b/src/main/java/net/minecraft/world/level/ChunkPos.java
+index 54cd046587c2f9dd26204bfa4eb65b8ad52b2d5e..542379e2fa11df8af8ee11ee12c4372a724db5c0 100644
+--- a/src/main/java/net/minecraft/world/level/ChunkPos.java
++++ b/src/main/java/net/minecraft/world/level/ChunkPos.java
+@@ -7,6 +7,7 @@ import java.util.stream.StreamSupport;
+ import javax.annotation.Nullable;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.SectionPos;
++import puregero.multipaper.region.RegionPos;
+ 
+ public class ChunkPos {
+     private static final int SAFETY_MARGIN = 1056;
+@@ -24,6 +25,7 @@ public class ChunkPos {
+     private static final int HASH_A = 1664525;
+     private static final int HASH_C = 1013904223;
+     private static final int HASH_Z_XOR = -559038737;
++    @Nullable private RegionPos regionPos; // MultiPaper
+ 
+     public ChunkPos(int x, int z) {
+         this.x = x;
+@@ -43,6 +45,16 @@ public class ChunkPos {
+         this.longKey = asLong(this.x, this.z); // Paper
+     }
+ 
++    // MultiPaper start
++    public RegionPos getRegionPos() {
++        if (this.regionPos == null) {
++            // Cache the RegionPos to minimize object creation
++            this.regionPos = new RegionPos(RegionPos.asLong(this));
++        }
++        return this.regionPos;
++    }
++    // MultiPaper end
++
+     public static ChunkPos minFromRegion(int x, int z) {
+         return new ChunkPos(x << 5, z << 5);
+     }
+diff --git a/src/main/java/puregero/multipaper/region/RegionPos.java b/src/main/java/puregero/multipaper/region/RegionPos.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..495cf5d3a0efb96b6adad7e7b33962e85acde211
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/region/RegionPos.java
+@@ -0,0 +1,105 @@
++package puregero.multipaper.region;
++
++import com.mojang.logging.LogUtils;
++import net.minecraft.world.level.ChunkPos;
++import org.slf4j.Logger;
++import puregero.multipaper.config.MultiPaperConfiguration;
++
++// Copy of ChunkPos basically, but separate to avoid accidental usage as a ChunkPos
++public class RegionPos {
++
++    private static final Logger LOGGER = LogUtils.getClassLogger();
++
++    public static final int REGION_SIZE; // eg 8 (for an 8x8 region)
++    public static final int REGION_SHIFT; // eg 3 (1 << 3 == 8)
++    public static final int REGION_SIZE_MASK; // eg 7 (9 % 8 == 9 & 7 == 1)
++
++    static {
++        // desiredRegionSize = 7 -> shift = 3, size = 8, mask = 7
++        // desiredRegionSize = 8 -> shift = 3, size = 8, mask = 7
++        // desiredRegionSize = 9 -> shift = 4, size = 16, mask = 15
++        int desiredRegionSize = MultiPaperConfiguration.get().verticalScaling.regionSize - 1;
++        int shift = 0;
++        while (desiredRegionSize > 0) {
++            shift++;
++            desiredRegionSize >>= 1;
++        }
++
++        REGION_SIZE = 1 << shift;
++        REGION_SHIFT = shift;
++        REGION_SIZE_MASK = (1 << shift) - 1;
++
++        if (REGION_SIZE <= 1) {
++            throw new IllegalStateException("!!! Region size is " + REGION_SIZE + " chunk, this is too small. It must be at least 2 chunks !!!");
++        }
++
++        if (REGION_SIZE < 8) {
++            LOGGER.warn("Region size is less than 8 chunks, this will cause issues unless you know what you're doing!!!");
++        }
++
++        LOGGER.info("Using region size: {}, shift={}, mask={}", REGION_SIZE, REGION_SHIFT, REGION_SIZE_MASK);
++    }
++
++    public final int x;
++    public final int z;
++    public final long longKey; // Paper
++
++    public RegionPos(int rx, int rz) {
++        this.x = rx;
++        this.z = rz;
++        this.longKey = RegionPos.asLong(this.x, this.z);
++    }
++
++    public RegionPos(long regionKey) {
++        this.x = (int) regionKey;
++        this.z = (int) (regionKey >> 32);
++        this.longKey = regionKey;
++    }
++
++    public static RegionPos forChunk(ChunkPos chunkPos) {
++        return chunkPos.getRegionPos();
++    }
++
++    public static long asLong(ChunkPos chunkPos) {
++        return asLong(chunkPos.x >> REGION_SHIFT, chunkPos.z >> REGION_SHIFT);
++    }
++
++    public static long asLong(RegionPos regionPos) {
++        return asLong(regionPos.x, regionPos.z);
++    }
++
++    public static long asLong(int regionX, int regionZ) {
++        return (long)regionX & 4294967295L | ((long)regionZ & 4294967295L) << 32;
++    }
++
++    public int getLowerChunkX() {
++        return this.x << REGION_SHIFT;
++    }
++
++    public int getLowerChunkZ() {
++        return this.z << REGION_SHIFT;
++    }
++
++    public int getUpperChunkX() {
++        return getLowerChunkX() + REGION_SIZE - 1;
++    }
++
++    public int getUpperChunkZ() {
++        return getLowerChunkZ() + REGION_SIZE - 1;
++    }
++
++    @Override
++    public int hashCode() {
++        return ChunkPos.hash(this.x, this.z);
++    }
++
++    @Override
++    public boolean equals(Object object) {
++        return this == object || object instanceof RegionPos regionPos && this.x == regionPos.x && this.z == regionPos.z;
++    }
++
++    @Override
++    public String toString() {
++        return "RegionPos[" + this.x + ", " + this.z + "]";
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/threading/MultiPaperRegionLocker.java b/src/main/java/puregero/multipaper/threading/MultiPaperRegionLocker.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..5faabd96d271d7acd734cc620e25c4b6558057a2
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/threading/MultiPaperRegionLocker.java
+@@ -0,0 +1,128 @@
++package puregero.multipaper.threading;
++
++import com.google.common.collect.ImmutableSet;
++import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
++import puregero.multipaper.region.RegionPos;
++import puregero.multipaper.util.ObjectHolder;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.List;
++import java.util.Set;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.locks.LockSupport;
++import java.util.function.Supplier;
++
++public class MultiPaperRegionLocker {
++
++    private static final int REGION_LOCK_RADIUS = 1;
++
++    private final ConcurrentHashMap<RegionPos, Thread> lockedRegions = new ConcurrentHashMap<>();
++
++    private final ThreadLocal<Set<RegionPos>> localLocks = ThreadLocal.withInitial(ObjectOpenHashSet::new);
++    private final ThreadLocal<Set<RegionPos>> unmodifiableLocalLocks = ThreadLocal.withInitial(() -> Collections.unmodifiableSet(localLocks.get()));
++
++    /**
++     * Checks if the current thread holds a lock for the given region
++     */
++    public boolean hasLock(RegionPos regionPos) {
++        return localLocks.get().contains(regionPos);
++    }
++
++    /**
++     * Returns an unmodifiable view of the locked regions for the current thread.
++     */
++    public Set<RegionPos> getLockedRegions() {
++        // Use an unmodifiable view to ensure the underlying set doesn't get accidentally modified
++        return unmodifiableLocalLocks.get();
++    }
++
++    /**
++     * Lock the region and run the runnable. If the region is already locked, wait until it is unlocked.
++     * Can be called recursively and will respect existing locks created by the same thread.
++     */
++    public <T> T lockRegion(RegionPos regionPos, Supplier<T> runnableWithReturnValue) {
++        int tries = 0;
++        ObjectHolder<T> returnValue = new ObjectHolder<>();
++
++        while (!tryLockNow(regionPos, () -> {
++            returnValue.value(runnableWithReturnValue.get());
++        })) {
++            LockSupport.parkNanos(Math.min(100_000, 1_000 * (++tries)));
++        }
++
++        return returnValue.value();
++    }
++
++    /**
++     * Lock the region and run the runnable. If the region is already locked, wait until it is unlocked.
++     * Can be called recursively and will respect existing locks created by the same thread.
++     */
++    public void lockRegion(RegionPos regionPos, Runnable runnable) {
++        lockRegion(regionPos, () -> {
++            runnable.run();
++            return null;
++        });
++    }
++
++    /**
++     * Try to acquire the region lock immediately, if successful run the runnable.
++     * If unsuccessful, return false and the runnable will not be run.
++     * If the region is already locked, it will return unsuccessfully immediately instead of waiting to try to acquire the lock.
++     * Can be called recursively and will respect existing locks created by the same thread.
++     * This method will sync the lock with other servers.
++     * @return true if the lock was acquired and the runnable was run, false if the runnable was not run
++     */
++    public boolean tryLockNow(RegionPos centerPos, Runnable ifSuccess) {
++        return tryReadOnlyLockNow(centerPos, ifSuccess);
++    }
++
++    /**
++     * Try to acquire the region lock immediately, if successful run the runnable.
++     * If unsuccessful, return false and the runnable will not be run.
++     * If the region is already locked, it will return unsuccessfully immediately instead of waiting to try to acquire the lock.
++     * Can be called recursively and will respect existing locks created by the same thread.
++     * The specified region must not be modified within this lock. This method will not sync the lock with other servers.
++     * return true if the lock was acquired and the runnable was run, false if the runnable was not run
++     */
++    public boolean tryReadOnlyLockNow(RegionPos centerPos, Runnable ifSuccess) {
++        List<RegionPos> regionsToUnlock = new ArrayList<>((REGION_LOCK_RADIUS * 2 + 1) * (REGION_LOCK_RADIUS * 2 + 1));
++        Thread currentThread = Thread.currentThread();
++
++        try {
++            for (int x = -REGION_LOCK_RADIUS; x <= REGION_LOCK_RADIUS; x++) {
++                for (int z = -REGION_LOCK_RADIUS; z <= REGION_LOCK_RADIUS; z++) {
++                    RegionPos regionPos = x == 0 && z == 0 ? centerPos : new RegionPos(centerPos.x + x, centerPos.z + z);
++                    Thread owner = lockedRegions.compute(regionPos, (k, prevValue) -> {
++                        if (prevValue == null) {
++                            // This region is unlocked, let's lock it
++                            regionsToUnlock.add(regionPos);
++                            localLocks.get().add(regionPos);
++                            return currentThread;
++                        } else {
++                            // This region is already locked, it could be already locked by us or someone else
++                            return prevValue;
++                        }
++                    });
++
++                    if (!currentThread.equals(owner)) {
++                        // Not locked by us, abort
++                        return false;
++                    }
++                }
++            }
++
++            // Only run the runnable if this thread owns all the locks
++            ifSuccess.run();
++
++            return true;
++        } finally {
++            // Release any locks we took
++            for (RegionPos regionPos : regionsToUnlock) {
++                lockedRegions.remove(regionPos, currentThread);
++                localLocks.get().remove(regionPos);
++            }
++        }
++    }
++
++}
+diff --git a/src/main/java/puregero/multipaper/threading/MultiPaperRegionScheduler.java b/src/main/java/puregero/multipaper/threading/MultiPaperRegionScheduler.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..6b855a4d7bc564978fcb231e86232fbaa6bd655a
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/threading/MultiPaperRegionScheduler.java
+@@ -0,0 +1,135 @@
++package puregero.multipaper.threading;
++
++import net.minecraft.server.level.ServerLevel;
++import puregero.multipaper.region.RegionPos;
++
++import java.util.Map;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.ConcurrentHashMap;
++
++public class MultiPaperRegionScheduler {
++
++    private final MultiPaperRegionLocker locker = new MultiPaperRegionLocker();
++    private final Map<RegionPos, CompletableFuture<Void>> chunkQueue = new ConcurrentHashMap<>(); // Maintain order when scheduling for one chunk
++
++    public static CompletableFuture<Void> schedule(ServerLevel level, RegionPos regionPos, Runnable runnable) {
++        return level.chunkScheduler.schedule(regionPos, runnable);
++    }
++
++    /**
++     * Schedule a task to run on the given region's thread.
++     */
++    public CompletableFuture<Void> schedule(RegionPos regionPos, Runnable runnable) {
++        CompletableFuture<Void> future = chunkQueue.compute(regionPos, (key, value) -> {
++            if (value == null) {
++                return createTask(regionPos, runnable);
++            } else {
++                // Ensure each chunk task is run in scheduled order
++                return value.thenCompose(v -> createTask(regionPos, runnable));
++            }
++        });
++        future.thenRun(() -> chunkQueue.remove(regionPos, future));
++        return future;
++    }
++
++    /**
++     * Avoid using this often. Locking massive parts of the world can take time and will freeze these regions during the process.
++     */
++    public CompletableFuture<Void> scheduleOnMany(Runnable runnable, RegionPos... posArray) {
++        CompletableFuture<Void> future = new CompletableFuture<>();
++
++        MultiPaperTickThread.getExecutor().execute(() -> {
++            runOnMany(sortPredictably(posArray), runnable, future);
++        });
++
++        return future;
++    }
++
++    /**
++     * Sort the region positions in a predictable order to avoid deadlocks.
++     */
++    private RegionPos[] sortPredictably(RegionPos[] posArray) {
++        // This should only be used on very small arrays, usually just 2 elements, so this simple O(n^2) sort is fine
++        for (int i = 0; i < posArray.length; i++) {
++            for (int j = i + 1; j < posArray.length; j++) {
++                if (compare(posArray[i], posArray[j]) > 0) {
++                    RegionPos temp = posArray[i];
++                    posArray[i] = posArray[j];
++                    posArray[j] = temp;
++                }
++            }
++        }
++        return posArray;
++    }
++
++    private int compare(RegionPos a, RegionPos b) {
++        int x = Integer.compare(a.x, b.x);
++        if (x != 0) {
++            return x;
++        }
++        return Integer.compare(a.z, b.z);
++    }
++
++    private CompletableFuture<Void> createTask(RegionPos regionPos, Runnable runnable) {
++        CompletableFuture<Void> future = new CompletableFuture<>();
++
++        MultiPaperTickThread.getExecutor().execute(() -> {
++            run(regionPos, runnable, future);
++        });
++
++        return future;
++    }
++
++    private void run(RegionPos regionPos, Runnable runnable, CompletableFuture<Void> future) {
++        try {
++            if (!locker.tryLockNow(regionPos, () -> {
++                runnable.run();
++                future.complete(null);
++            })) {
++                // Retry later
++                MultiPaperTickThread.getExecutor().schedule(() -> run(regionPos, runnable, future), 1, java.util.concurrent.TimeUnit.MILLISECONDS);
++            }
++        } catch (Exception e) {
++            future.completeExceptionally(e);
++        }
++    }
++
++    private void runOnMany(RegionPos[] regionPosArray, Runnable runnable, CompletableFuture<Void> future) {
++        try {
++            // Recursive runnables to lock each region in order
++            Runnable[] runnables = new Runnable[regionPosArray.length + 1];
++            for (int i = 0; i < regionPosArray.length; i++) {
++                int finalI = i;
++                runnables[i] = () -> {
++                    try {
++                        locker.tryLockNow(regionPosArray[finalI], runnables[finalI + 1]);
++                    } catch (Exception e) {
++                        future.completeExceptionally(e);
++                    }
++                };
++            }
++            runnables[runnables.length - 1] = () -> {
++                try {
++                    runnable.run();
++                    future.complete(null);
++                } catch (Exception e) {
++                    future.completeExceptionally(e);
++                }
++            };
++
++            runnables[0].run();
++
++            if (!future.isDone()) {
++                // Retry later
++                MultiPaperTickThread.getExecutor().schedule(() -> runOnMany(regionPosArray, runnable, future), 1, java.util.concurrent.TimeUnit.MILLISECONDS);
++            }
++        } catch (Exception e) {
++            future.completeExceptionally(e);
++        }
++    }
++
++    public MultiPaperRegionLocker getRegionLocker() {
++        return locker;
++    }
++
++}
+diff --git a/src/main/java/puregero/multipaper/threading/MultiPaperTickThread.java b/src/main/java/puregero/multipaper/threading/MultiPaperTickThread.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..eac9c360e6f050910fcd1505971b3b11569283f0
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/threading/MultiPaperTickThread.java
+@@ -0,0 +1,57 @@
++package puregero.multipaper.threading;
++
++import com.mojang.logging.LogUtils;
++import io.papermc.paper.util.TickThread;
++import org.slf4j.Logger;
++import puregero.multipaper.config.MultiPaperConfiguration;
++
++import java.util.concurrent.ScheduledThreadPoolExecutor;
++import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicInteger;
++
++public class MultiPaperTickThread extends TickThread {
++
++    private static final Logger LOGGER = LogUtils.getClassLogger();
++
++    private static final AtomicInteger ID_GENERATOR = new AtomicInteger();
++
++    private static final ScheduledThreadPoolExecutor executor;
++
++    static {
++        int threadCount = MultiPaperConfiguration.get().verticalScaling.threadCount;
++
++        if (threadCount <= 0) {
++            threadCount = Math.max(Runtime.getRuntime().availableProcessors() - 1, 1);
++        }
++
++        executor = new ScheduledThreadPoolExecutor(threadCount, r -> new MultiPaperTickThread(r, "MultiPaperTickThread-%d"));
++
++        LOGGER.info("Using {} threads", threadCount);
++    }
++
++    public MultiPaperTickThread(Runnable run, String name) {
++        super(run, String.format(name, ID_GENERATOR.incrementAndGet()));
++    }
++
++    public static boolean isMultiPaperTickThread() {
++        // Use this method to check if it's a multipaper tick thread, to ensure future potential support for VirtualThreads
++        return Thread.currentThread() instanceof MultiPaperTickThread;
++    }
++
++    static ScheduledThreadPoolExecutor getExecutor() {
++        return executor;
++    }
++
++    public static void stopServer() {
++        executor.shutdown();
++        try {
++            executor.awaitTermination(5, TimeUnit.SECONDS);
++        } catch (InterruptedException e) {
++            throw new RuntimeException(e);
++        }
++        if (!executor.isTerminated()) {
++            LOGGER.warn("Failed to stop tick threads after 5 seconds. Terminating...");
++            executor.shutdownNow();
++        }
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/util/ObjectHolder.java b/src/main/java/puregero/multipaper/util/ObjectHolder.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..840b90f124b6b403906f89fe1807f60dde947ebf
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/util/ObjectHolder.java
+@@ -0,0 +1,22 @@
++package puregero.multipaper.util;
++
++public class ObjectHolder <T> {
++
++    T value;
++
++    public ObjectHolder() {
++        this(null);
++    }
++
++    public ObjectHolder(T object) {
++        this.value = object;
++    }
++
++    public T value() {
++        return value;
++    }
++
++    public void value(T value) {
++        this.value = value;
++    }
++}

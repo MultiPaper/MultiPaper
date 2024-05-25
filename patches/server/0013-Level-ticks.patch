@@ -1,0 +1,265 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Fri, 17 May 2024 00:26:43 +0900
+Subject: [PATCH] Level ticks
+
+
+diff --git a/src/main/java/net/minecraft/server/level/ServerLevel.java b/src/main/java/net/minecraft/server/level/ServerLevel.java
+index 5c9f33457252f17bcc2a97242a726934040ebc94..2c4aa7a10f073227fbb98fa419e224a4caab4693 100644
+--- a/src/main/java/net/minecraft/server/level/ServerLevel.java
++++ b/src/main/java/net/minecraft/server/level/ServerLevel.java
+@@ -176,6 +176,7 @@ import org.bukkit.event.entity.CreatureSpawnEvent;
+ import org.bukkit.event.server.MapInitializeEvent;
+ import org.bukkit.event.weather.LightningStrikeEvent;
+ import org.bukkit.event.world.TimeSkipEvent;
++import puregero.multipaper.region.LevelTicksRegionProxy;
+ import puregero.multipaper.region.RegionPos;
+ import puregero.multipaper.threading.MultiPaperRegionScheduler;
+ // CraftBukkit end
+@@ -202,8 +203,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+     private final SleepStatus sleepStatus;
+     private int emptyTime;
+     private final PortalForcer portalForcer;
+-    private final LevelTicks<Block> blockTicks;
+-    private final LevelTicks<Fluid> fluidTicks;
++    public final LevelTicksRegionProxy<Block> blockTicks; // MultiPaper
++    public final LevelTicksRegionProxy<Fluid> fluidTicks; // MultiPaper
+     private final PathTypeCache pathTypesByPosCache;
+     final Set<Mob> navigatingMobs;
+     final ThreadLocal<Boolean> isUpdatingNavigations = ThreadLocal.withInitial(() -> false); // MultiPaper - make thread local
+@@ -706,8 +707,8 @@ public class ServerLevel extends Level implements WorldGenLevel {
+         // CraftBukkit end
+         this.players = new CopyOnWriteArrayList<>(); // MultiPaper - thread-safe (players should not be changing worlds often, thus copy-on-write is sufficient)
+         this.entityTickList = new EntityTickList();
+-        this.blockTicks = new LevelTicks<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier());
+-        this.fluidTicks = new LevelTicks<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier());
++        this.blockTicks = new LevelTicksRegionProxy<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier()); // MultiPaper
++        this.fluidTicks = new LevelTicksRegionProxy<>(this::isPositionTickingWithEntitiesLoaded, this.getProfilerSupplier()); // MultiPaper
+         this.pathTypesByPosCache = new PathTypeCache();
+         this.navigatingMobs = new ObjectOpenHashSet();
+         this.blockEvents = new ObjectLinkedOpenHashSet();
+@@ -1412,23 +1413,25 @@ public class ServerLevel extends Level implements WorldGenLevel {
+         this.emptyTime = 0;
+     }
+ 
+-    private void tickFluid(BlockPos pos, Fluid fluid) {
++    public void tickFluid(BlockPos pos, Fluid fluid) { // MultiPaper - make public
++        TickThread.ensureTickThread(this, pos, "Cannot tick fluid outside of tick thread"); // MultiPaper
+         FluidState fluid1 = this.getFluidState(pos);
+ 
+         if (fluid1.is(fluid)) {
+             fluid1.tick(this, pos);
+         }
+-        MinecraftServer.getServer().executeMidTickTasks(); // Paper - exec chunk tasks during world tick
++        // MinecraftServer.getServer().executeMidTickTasks(); // Paper - exec chunk tasks during world tick // MultiPaper - unnecessary now
+ 
+     }
+ 
+-    private void tickBlock(BlockPos pos, Block block) {
++    public void tickBlock(BlockPos pos, Block block) { // MultiPaper - make public
++        TickThread.ensureTickThread(this, pos, "Cannot tick block outside of tick thread"); // MultiPaper
+         BlockState iblockdata = this.getBlockState(pos);
+ 
+         if (iblockdata.is(block)) {
+             iblockdata.tick(this, pos, this.random);
+         }
+-        MinecraftServer.getServer().executeMidTickTasks(); // Paper - exec chunk tasks during world tick
++        // MinecraftServer.getServer().executeMidTickTasks(); // Paper - exec chunk tasks during world tick // MultiPaper - unnecessary now
+ 
+     }
+ 
+diff --git a/src/main/java/net/minecraft/world/level/LevelAccessor.java b/src/main/java/net/minecraft/world/level/LevelAccessor.java
+index 54d13eebc9b01e9d77f51011b7de95b80bc21669..60fccf860bc6264e701463f3993035b67f8dc5c8 100644
+--- a/src/main/java/net/minecraft/world/level/LevelAccessor.java
++++ b/src/main/java/net/minecraft/world/level/LevelAccessor.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.level;
+ 
+ import javax.annotation.Nullable;
++
++import io.papermc.paper.util.TickThread;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.core.Holder;
+@@ -8,6 +10,7 @@ import net.minecraft.core.particles.ParticleOptions;
+ import net.minecraft.core.registries.Registries;
+ import net.minecraft.resources.ResourceKey;
+ import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.sounds.SoundEvent;
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.util.RandomSource;
+@@ -47,20 +50,24 @@ public interface LevelAccessor extends CommonLevelAccessor, LevelTimeAccess {
+     }
+ 
+     default void scheduleTick(BlockPos pos, Block block, int delay, TickPriority priority) {
++        if (this instanceof ServerLevel serverLevel) TickThread.ensureTickThread(serverLevel, pos, "Cannot schedule outside of tick thread"); // MultiPaper
+         this.getBlockTicks().schedule(this.createTick(pos, block, delay, priority));
+     }
+ 
+     default void scheduleTick(BlockPos pos, Block block, int delay) {
++        if (this instanceof ServerLevel serverLevel) TickThread.ensureTickThread(serverLevel, pos, "Cannot schedule outside of tick thread"); // MultiPaper
+         this.getBlockTicks().schedule(this.createTick(pos, block, delay));
+     }
+ 
+     LevelTickAccess<Fluid> getFluidTicks();
+ 
+     default void scheduleTick(BlockPos pos, Fluid fluid, int delay, TickPriority priority) {
++        if (this instanceof ServerLevel serverLevel) TickThread.ensureTickThread(serverLevel, pos, "Cannot schedule outside of tick thread"); // MultiPaper
+         this.getFluidTicks().schedule(this.createTick(pos, fluid, delay, priority));
+     }
+ 
+     default void scheduleTick(BlockPos pos, Fluid fluid, int delay) {
++        if (this instanceof ServerLevel serverLevel) TickThread.ensureTickThread(serverLevel, pos, "Cannot schedule outside of tick thread"); // MultiPaper
+         this.getFluidTicks().schedule(this.createTick(pos, fluid, delay));
+     }
+ 
+diff --git a/src/main/java/net/minecraft/world/ticks/LevelTicks.java b/src/main/java/net/minecraft/world/ticks/LevelTicks.java
+index a6d62abd3102770652f914b9d697c6d3c2533cfc..5473c7ea4da15d7acc2092ddbe4dd3baa84c14ea 100644
+--- a/src/main/java/net/minecraft/world/ticks/LevelTicks.java
++++ b/src/main/java/net/minecraft/world/ticks/LevelTicks.java
+@@ -282,4 +282,10 @@ public class LevelTicks<T> implements LevelTickAccess<T> {
+     interface PosAndContainerConsumer<T> {
+         void accept(long chunkPos, LevelChunkTicks<T> chunkTickScheduler);
+     }
++
++    // MultiPaper start
++    public boolean isEmpty() {
++        return this.allContainers.isEmpty();
++    }
++    // MultiPaper end
+ }
+diff --git a/src/main/java/puregero/multipaper/region/LevelTicksRegionProxy.java b/src/main/java/puregero/multipaper/region/LevelTicksRegionProxy.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f711b2ee6092f1c1a7c8449b9c34ebd2edc1b7f
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/region/LevelTicksRegionProxy.java
+@@ -0,0 +1,114 @@
++package puregero.multipaper.region;
++
++import com.mojang.logging.LogUtils;
++import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
++import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Vec3i;
++import net.minecraft.util.profiling.ProfilerFiller;
++import net.minecraft.world.level.ChunkPos;
++import net.minecraft.world.level.levelgen.structure.BoundingBox;
++import net.minecraft.world.ticks.LevelChunkTicks;
++import net.minecraft.world.ticks.LevelTicks;
++import net.minecraft.world.ticks.ScheduledTick;
++import org.slf4j.Logger;
++import puregero.multipaper.util.SimpleStampedLock;
++
++import java.util.Optional;
++import java.util.function.BiConsumer;
++import java.util.function.LongPredicate;
++import java.util.function.Supplier;
++
++public class LevelTicksRegionProxy<T> extends LevelTicks<T> {
++
++    private static final Logger LOGGER = LogUtils.getClassLogger();
++
++    private final LongPredicate tickingFutureReadyPredicate;
++    private final Supplier<ProfilerFiller> profilerGetter;
++    private final Long2ObjectMap<LevelTicks<T>> regions = new Long2ObjectOpenHashMap<>();
++    private final SimpleStampedLock regionsLock = new SimpleStampedLock();
++
++    public LevelTicksRegionProxy(LongPredicate tickingFutureReadyPredicate, Supplier<ProfilerFiller> profilerGetter) {
++        super(tickingFutureReadyPredicate, profilerGetter);
++        this.tickingFutureReadyPredicate = tickingFutureReadyPredicate;
++        this.profilerGetter = profilerGetter;
++    }
++
++    private LevelTicks<T> createRegionLevelTicks() {
++        return new LevelTicks<>(tickingFutureReadyPredicate, profilerGetter);
++    }
++
++    public Optional<LevelTicks<T>> get(BlockPos pos) {
++        return get(new ChunkPos(pos));
++    }
++
++    public Optional<LevelTicks<T>> get(ChunkPos pos) {
++        return get(RegionPos.forChunk(pos));
++    }
++
++    public Optional<LevelTicks<T>> get(RegionPos pos) {
++        return Optional.ofNullable(regionsLock.optimisticRead(() -> regions.get(pos.longKey)));
++    }
++
++    public void addContainer(ChunkPos pos, LevelChunkTicks<T> scheduler) {
++        get(pos).orElseGet(() -> {
++            return regionsLock.write(() -> regions.computeIfAbsent(RegionPos.forChunk(pos).longKey, k -> createRegionLevelTicks()));
++        }).addContainer(pos, scheduler);
++    }
++
++    public void removeContainer(ChunkPos pos) {
++        get(pos).ifPresent(v -> {
++            v.removeContainer(pos);
++
++            if (v.isEmpty()) {
++                regionsLock.write(() -> regions.remove(RegionPos.forChunk(pos).longKey));
++            }
++        });
++    }
++
++    @Override
++    public void schedule(ScheduledTick<T> orderedTick) {
++        get(orderedTick.pos()).orElseThrow(() -> new IllegalArgumentException("Chunk not loaded: " + orderedTick.pos())).schedule(orderedTick);
++    }
++
++    public void tick(RegionPos regionPos, long time, int maxTicks, BiConsumer<BlockPos, T> ticker) {
++        get(regionPos).ifPresent(v -> {
++            v.tick(time, maxTicks, ticker);
++        });
++    }
++
++    @Override
++    public void tick(long time, int maxTicks, BiConsumer<BlockPos, T> ticker) {
++        // Do nothing
++    }
++
++    @Override
++    public boolean hasScheduledTick(BlockPos pos, T type) {
++        return get(pos).map(v -> v.hasScheduledTick(pos, type)).orElse(false);
++    }
++
++    @Override
++    public boolean willTickThisTick(BlockPos pos, T type) {
++        return get(pos).map(v -> v.willTickThisTick(pos, type)).orElse(false);
++    }
++
++    @Override
++    public void clearArea(BoundingBox box) {
++        // Surely no one will miss this
++    }
++
++    @Override
++    public void copyArea(BoundingBox box, Vec3i offset) {
++        // Surely no one will miss this
++    }
++
++    @Override
++    public void copyAreaFrom(LevelTicks<T> scheduler, BoundingBox box, Vec3i offset) {
++        // Surely no one will miss this
++    }
++
++    @Override
++    public int count() {
++        return -1;
++    }
++}
+diff --git a/src/main/java/puregero/multipaper/threading/MultiPaperChunkTicker.java b/src/main/java/puregero/multipaper/threading/MultiPaperChunkTicker.java
+index f708cee785c1e86406d1eab2a29a53f507e79be8..f6a12adfbc11a5449d089bcb1bbf1d5b992f4c36 100644
+--- a/src/main/java/puregero/multipaper/threading/MultiPaperChunkTicker.java
++++ b/src/main/java/puregero/multipaper/threading/MultiPaperChunkTicker.java
+@@ -56,6 +56,9 @@ public class MultiPaperChunkTicker {
+         region.tickTasks();
+         region.forEach(chunk -> _tickChunk(level, chunk, spawnercreature_d));
+ 
++        level.blockTicks.tick(region.getRegionPos(), level.getGameTime(), level.paperConfig().environment.maxBlockTicks, level::tickBlock);
++        level.fluidTicks.tick(region.getRegionPos(), level.getGameTime(), level.paperConfig().environment.maxBlockTicks, level::tickFluid);
++
+         region.getPlayers().forEach(MultiPaperPlayerTicker::tickPlayer);
+ 
+         while (region.getInternalTaskQueue().executeTask());

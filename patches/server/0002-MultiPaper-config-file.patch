@@ -5,10 +5,18 @@ Subject: [PATCH] MultiPaper config file
 
 
 diff --git a/src/main/java/net/minecraft/server/Main.java b/src/main/java/net/minecraft/server/Main.java
-index 411f1f8c6be072cfc5ba88cbec38dbc4300a41d1..7f2d0e52cd03b498b437350a1f972df7c09178a8 100644
+index 0f7d6da8685716604f0749d4f5b60730a44cde73..c2dc50007572dc4a62830e36531131032d32b1a7 100644
 --- a/src/main/java/net/minecraft/server/Main.java
 +++ b/src/main/java/net/minecraft/server/Main.java
-@@ -69,6 +69,9 @@ import net.minecraft.SharedConstants;
+@@ -23,7 +23,6 @@ import joptsimple.util.PathConverter;
+ import joptsimple.util.PathProperties;
+ import net.minecraft.CrashReport;
+ import net.minecraft.DefaultUncaughtExceptionHandler;
+-import net.minecraft.SharedConstants;
+ import net.minecraft.Util;
+ import net.minecraft.commands.Commands;
+ import net.minecraft.core.Registry;
+@@ -69,6 +68,9 @@ import net.minecraft.SharedConstants;
  import org.bukkit.configuration.file.YamlConfiguration;
  // CraftBukkit end
  
@@ -18,21 +26,20 @@ index 411f1f8c6be072cfc5ba88cbec38dbc4300a41d1..7f2d0e52cd03b498b437350a1f972df7
  public class Main {
  
      private static final Logger LOGGER = LogUtils.getLogger();
-@@ -119,6 +122,9 @@ public class Main {
+@@ -119,6 +121,8 @@ public class Main {
                  JvmProfiler.INSTANCE.start(Environment.SERVER);
              }
  
 +            MultiPaperConfigurationLoader.init((File) optionset.valueOf("multipaper-settings")); // MultiPaper
-+            System.setProperty("multipaper.master-connection.my-name", MultiPaperConfiguration.get().masterConnection.myName); // MultiPaper - remember this property even after config reloads
 +
              // Purpur start - load config files early
              org.bukkit.configuration.file.YamlConfiguration purpurConfiguration = io.papermc.paper.configuration.PaperConfigurations.loadLegacyConfigFile((File) optionset.valueOf("purpur-settings"));
              org.purpurmc.purpur.PurpurConfig.clampEnchantLevels = purpurConfiguration.getBoolean("settings.enchantment.clamp-levels");
 diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-index 1547547f51b91fad1aa7f0d6a462aacf0b21dfba..dff415eec1d71d05152ce5bf1230fe3a27d88800 100644
+index 6e78500a6265b0192095379704b1d661ef56ba32..5abd5ced015be7de740d504b5c0b0620822f22ac 100644
 --- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
 +++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
-@@ -263,6 +263,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
+@@ -259,6 +259,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  import org.yaml.snakeyaml.error.MarkedYAMLException;
  
  import net.md_5.bungee.api.chat.BaseComponent; // Spigot
@@ -40,7 +47,7 @@ index 1547547f51b91fad1aa7f0d6a462aacf0b21dfba..dff415eec1d71d05152ce5bf1230fe3a
  
  import javax.annotation.Nullable; // Paper
  import javax.annotation.Nonnull; // Paper
-@@ -575,6 +576,7 @@ public final class CraftServer implements Server {
+@@ -577,6 +578,7 @@ public final class CraftServer implements Server {
              this.commandMap.registerServerAliases();
              DefaultPermissions.registerCorePermissions();
              CraftDefaultPermissions.registerCorePermissions();
@@ -49,10 +56,10 @@ index 1547547f51b91fad1aa7f0d6a462aacf0b21dfba..dff415eec1d71d05152ce5bf1230fe3a
              this.helpMap.initializeCommands();
              this.syncCommands();
 diff --git a/src/main/java/org/bukkit/craftbukkit/Main.java b/src/main/java/org/bukkit/craftbukkit/Main.java
-index 222865a3cee62f244a566092a7d814efe478ee01..9ff77eccb2747847df85b513e84f5fa26b257b6e 100644
+index 6d8e9cf4ee496b8748654e792ce438f512c3d946..7356f7eebb51832c3455eab749ed27201bb741d2 100644
 --- a/src/main/java/org/bukkit/craftbukkit/Main.java
 +++ b/src/main/java/org/bukkit/craftbukkit/Main.java
-@@ -183,6 +183,14 @@ public class Main {
+@@ -184,6 +184,14 @@ public class Main {
                      .describedAs("Yml file");
                  // Purpur end
  
@@ -83,10 +90,10 @@ index 0000000000000000000000000000000000000000..7cdf20efd4f220f55d7b86abce19e84f
 +}
 diff --git a/src/main/java/puregero/multipaper/config/MultiPaperConfiguration.java b/src/main/java/puregero/multipaper/config/MultiPaperConfiguration.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..65d7ce213a0f06e6a2335c6cc8c09e1bf48b099e
+index 0000000000000000000000000000000000000000..a198aadad3acdf431321e05f62b392d408246a4c
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/config/MultiPaperConfiguration.java
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,67 @@
 +package puregero.multipaper.config;
 +
 +import io.papermc.paper.configuration.ConfigurationPart;
@@ -114,40 +121,41 @@ index 0000000000000000000000000000000000000000..65d7ce213a0f06e6a2335c6cc8c09e1b
 +        MultiPaperConfiguration.instance = instance;
 +    }
 +
-+    public MasterConnection masterConnection;
++    public VerticalScaling verticalScaling;
 +
-+    public class MasterConnection extends ConfigurationPart  {
-+        public boolean advertiseToBuiltInProxy = true;
++    public class VerticalScaling extends ConfigurationPart {
 +
-+        // One day we'll get comments in yaml files
-+        // @Comment("""
-+        //
-+        // Set the address used to connect to the master database here.
-+        // """)
-+        public String masterAddress = "localhost:35353";
++        public int threadCount = -1;
++        public int regionSize = 8;
++        public boolean runUnsupportedPluginsInSync = true;
 +
-+        // One day we'll get comments in yaml files
-+        // @Comment("""
-+        //
-+        // Give this server a name. This can be the same name you used for this server in
-+        // BungeeCord or Velocity, or you can come up with a random name. Each server must
-+        // have a unique name.
-+        // """)
-+        public String myName = "server" + Double.toString(Math.random()).substring(2, 7);
 +    }
 +
-+    public SyncSettings syncSettings;
++    public HorizontalScaling horizontalScaling;
 +
-+    public class SyncSettings extends ConfigurationPart  {
++    public class HorizontalScaling extends ConfigurationPart {
 +
-+        public Files files;
++        public DatabaseConnection databaseConnection;
 +
-+        public class Files extends ConfigurationPart {
-+            public List<String> filesToNotSync = List.of("plugins/bStats");
-+            public List<String> filesToOnlyUploadOnServerStop = List.of("plugins/MyPluginDirectory/my_big_database.db");
-+            public List<String> filesToSyncInRealTime = List.of("plugins/MyPluginDirectory/userdata");
-+            public List<String> filesToSyncOnStartup = List.of("myconfigfile.yml", "plugins/MyPlugin.jar");
-+            public boolean logFileSyncs = true;
++        public class DatabaseConnection extends ConfigurationPart {
++
++            public String databaseAddress = "";
++
++        }
++
++        public SyncSettings syncSettings;
++
++        public class SyncSettings extends ConfigurationPart {
++
++            public Files files;
++
++            public class Files extends ConfigurationPart {
++                public List<String> filesToNotSync = List.of("plugins/bStats");
++                public List<String> filesToOnlyUploadOnServerStop = List.of("plugins/MyPluginDirectory/my_big_database.db");
++                public List<String> filesToSyncInRealTime = List.of("plugins/MyPluginDirectory/userdata");
++                public List<String> filesToSyncOnStartup = List.of("myconfigfile.yml", "plugins/MyPlugin.jar");
++                public boolean logFileSyncs = true;
++            }
 +        }
 +    }
 +
@@ -155,10 +163,10 @@ index 0000000000000000000000000000000000000000..65d7ce213a0f06e6a2335c6cc8c09e1b
 +}
 diff --git a/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java b/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8ec8815b011917ba7c285ff5943ac147adce844c
+index 0000000000000000000000000000000000000000..903f47c87045334f05fae22c48d8dad05897dd08
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/config/MultiPaperConfigurationLoader.java
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,140 @@
 +package puregero.multipaper.config;
 +
 +import io.papermc.paper.configuration.ConfigurationLoaders;
@@ -251,14 +259,19 @@ index 0000000000000000000000000000000000000000..8ec8815b011917ba7c285ff5943ac147
 +    }
 +
 +    private static void transformLegacyConfig(ConfigurationNode node, MultiPaperConfiguration config) {
-+        getAndRemove(node, "bungeecordName", value -> config.masterConnection.myName = value.getString());
-+        getAndRemove(node, "multipaperMasterAddress", value -> config.masterConnection.masterAddress = value.getString());
-+        getAndRemove(node, "advertiseToBuiltInProxy", value -> config.masterConnection.advertiseToBuiltInProxy = value.getBoolean());
-+        getAndRemove(node, "logFileSyncing", value -> config.syncSettings.files.logFileSyncs = value.getBoolean());
-+        getAndRemove(node, "filesToSyncOnStartup", value -> config.syncSettings.files.filesToSyncOnStartup = value.getList(String.class));
-+        getAndRemove(node, "filesToSyncInRealTime", value -> config.syncSettings.files.filesToSyncInRealTime = value.getList(String.class));
-+        getAndRemove(node, "filesToOnlyUploadOnServerStop", value -> config.syncSettings.files.filesToOnlyUploadOnServerStop = value.getList(String.class));
-+        getAndRemove(node, "filesToNotSync", value -> config.syncSettings.files.filesToNotSync = value.getList(String.class));
++        getAndRemove(node, "master-connection.master-address", value -> config.horizontalScaling.databaseConnection.databaseAddress = value.getString());
++        getAndRemove(node, "sync-settings.files.log-file-syncs", value -> config.horizontalScaling.syncSettings.files.logFileSyncs = value.getBoolean());
++        getAndRemove(node, "sync-settings.files.files-to-sync-on-startup", value -> config.horizontalScaling.syncSettings.files.filesToSyncOnStartup = value.getList(String.class));
++        getAndRemove(node, "sync-settings.files.files-to-sync-in-real-time", value -> config.horizontalScaling.syncSettings.files.filesToSyncInRealTime = value.getList(String.class));
++        getAndRemove(node, "sync-settings.files.files-to-only-upload-on-server-stop", value -> config.horizontalScaling.syncSettings.files.filesToOnlyUploadOnServerStop = value.getList(String.class));
++        getAndRemove(node, "sync-settings.files.files-to-not-sync", value -> config.horizontalScaling.syncSettings.files.filesToNotSync = value.getList(String.class));
++
++        getAndRemove(node, "multipaperMasterAddress", value -> config.horizontalScaling.databaseConnection.databaseAddress = value.getString());
++        getAndRemove(node, "logFileSyncing", value -> config.horizontalScaling.syncSettings.files.logFileSyncs = value.getBoolean());
++        getAndRemove(node, "filesToSyncOnStartup", value -> config.horizontalScaling.syncSettings.files.filesToSyncOnStartup = value.getList(String.class));
++        getAndRemove(node, "filesToSyncInRealTime", value -> config.horizontalScaling.syncSettings.files.filesToSyncInRealTime = value.getList(String.class));
++        getAndRemove(node, "filesToOnlyUploadOnServerStop", value -> config.horizontalScaling.syncSettings.files.filesToOnlyUploadOnServerStop = value.getList(String.class));
++        getAndRemove(node, "filesToNotSync", value -> config.horizontalScaling.syncSettings.files.filesToNotSync = value.getList(String.class));
 +    }
 +
 +    private static void getAndRemove(ConfigurationNode node, String key, ExceptionableConsumer<ConfigurationNode> consumer) {

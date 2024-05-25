@@ -11,7 +11,7 @@ pluginManagement {
 
 rootProject.name = "multipaper"
 
-for (name in listOf("MultiPaper-MasterMessagingProtocol", "MultiPaper-API", "MultiPaper-Server", "MultiPaper-Master")) {
+for (name in listOf("MultiPaper-DatabaseMessagingProtocol", "MultiPaper-API", "MultiPaper-Server", "MultiPaper-Database")) {
     val projName = name.toLowerCase(Locale.ENGLISH)
     include(projName)
     findProject(":$projName")!!.projectDir = file(name)

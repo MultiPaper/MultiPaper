@@ -376,7 +376,7 @@ index a8eb0db33a9b15b5b32d0533e6432a8d6d445fe2..fb6fc045b2644b59c08a629b6bd24c36
          Util.shutdownExecutors(); // Paper
          LOGGER.info("Closing Server");
 diff --git a/src/main/java/net/minecraft/server/level/ChunkHolder.java b/src/main/java/net/minecraft/server/level/ChunkHolder.java
-index e2202389a2c4133a183cca59c4e909fc419379ab..72411e43a4c1da627ae1dec77a051476e12d0b58 100644
+index e2202389a2c4133a183cca59c4e909fc419379ab..213d9a06c785d2c62d6f54ca06746daf781e3df2 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkHolder.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkHolder.java
 @@ -2,12 +2,14 @@ package net.minecraft.server.level;
@@ -423,15 +423,27 @@ index e2202389a2c4133a183cca59c4e909fc419379ab..72411e43a4c1da627ae1dec77a051476
      private boolean hasChangedSections;
      private final ShortSet[] changedBlocksPerSection;
      private final BitSet blockChangedLightSectionFilter;
-@@ -240,6 +250,7 @@ public class ChunkHolder {
+@@ -240,12 +250,15 @@ public class ChunkHolder {
      // Paper - rewrite chunk system
  
      public void blockChanged(BlockPos pos) {
 +        if (addChangesToPlayersOnly && !MultiPaper.isChunkLocal(this.chunkMap.level.getChunkIfLoaded(pos))) { broadcastBlockToPlayersLater(pos); return; } // MultiPaper
          // Paper start - replace player chunk loader
-         if (this.playersSentChunkTo.size() == 0) {
-             return;
-@@ -257,6 +268,8 @@ public class ChunkHolder {
+-        if (this.playersSentChunkTo.size() == 0) {
+-            return;
+-        }
++        // MultiPaper start - save block changes even if there's no players, as there might be servers to send them to
++        // if (this.playersSentChunkTo.size() == 0) {
++        //     return;
++        // }
++        // MultiPaper end - save block changes even if there's no players, as there might be servers to send them to
+         // Paper end - replace player chunk loader
+-        LevelChunk chunk = this.getSendingChunk(); // Paper - no-tick view distance
++        LevelChunk chunk = this.chunkMap.level.getChunkSource().getChunkAtIfLoadedImmediately(this.pos.x, this.pos.z); // this.getSendingChunk(); // Paper - no-tick view distance // MultiPaper - if we modify this chunk, even if it's not sent to players, we still need to send it to other servers
+ 
+         if (chunk != null) {
+             int i = this.levelHeightAccessor.getSectionIndex(pos.getY());
+@@ -257,6 +270,8 @@ public class ChunkHolder {
              }
  
              this.changedBlocksPerSection[i].add(SectionPos.sectionRelativePos(pos));
@@ -440,7 +452,7 @@ index e2202389a2c4133a183cca59c4e909fc419379ab..72411e43a4c1da627ae1dec77a051476
          }
      }
  
-@@ -301,8 +314,45 @@ public class ChunkHolder {
+@@ -301,8 +316,45 @@ public class ChunkHolder {
          this.chunkMap.needsChangeBroadcasting.add(this);
      }
      // Paper end - optimise chunk tick iteration
@@ -486,7 +498,7 @@ index e2202389a2c4133a183cca59c4e909fc419379ab..72411e43a4c1da627ae1dec77a051476
          if (this.needsBroadcastChanges()) { // Paper - moved into above, other logic needs to call
              Level world = chunk.getLevel();
              List list;
-@@ -319,6 +369,7 @@ public class ChunkHolder {
+@@ -319,6 +371,7 @@ public class ChunkHolder {
                  this.blockChangedLightSectionFilter.clear();
              }
  
@@ -494,7 +506,16 @@ index e2202389a2c4133a183cca59c4e909fc419379ab..72411e43a4c1da627ae1dec77a051476
              if (this.hasChangedSections) {
                  list = this.getPlayers(false); // Paper - rewrite chunk system
  
-@@ -335,6 +386,7 @@ public class ChunkHolder {
+@@ -327,7 +380,7 @@ public class ChunkHolder {
+ 
+                     if (shortset != null) {
+                         this.changedBlocksPerSection[i] = null;
+-                        if (!list.isEmpty()) {
++                        // if (!list.isEmpty()) { // MultiPaper - send block changes even if there's no players, as there might be servers to send them to
+                             int j = this.levelHeightAccessor.getSectionYFromSectionIndex(i);
+                             SectionPos sectionposition = SectionPos.of(chunk.getPos(), j);
+ 
+@@ -335,6 +388,7 @@ public class ChunkHolder {
                                  BlockPos blockposition = sectionposition.relativeToBlockPos(shortset.iterator().nextShort());
                                  BlockState iblockdata = world.getBlockState(blockposition);
  
@@ -502,7 +523,7 @@ index e2202389a2c4133a183cca59c4e909fc419379ab..72411e43a4c1da627ae1dec77a051476
                                  this.broadcast(list, new ClientboundBlockUpdatePacket(blockposition, iblockdata));
                                  this.broadcastBlockEntityIfNeeded(list, world, blockposition, iblockdata);
                              } else {
-@@ -345,6 +397,7 @@ public class ChunkHolder {
+@@ -345,11 +399,12 @@ public class ChunkHolder {
                                  // CraftBukkit start
                                  List finalList = list;
                                  packetplayoutmultiblockchange.runUpdates((blockposition1, iblockdata1) -> {
@@ -510,7 +531,13 @@ index e2202389a2c4133a183cca59c4e909fc419379ab..72411e43a4c1da627ae1dec77a051476
                                      this.broadcastBlockEntityIfNeeded(finalList, world, blockposition1, iblockdata1);
                                      // CraftBukkit end
                                  });
-@@ -374,6 +427,8 @@ public class ChunkHolder {
+                             }
+-                        }
++                        // } // MultiPaper - send block changes even if there's no players, as there might be servers to send them to
+                     }
+                 }
+ 
+@@ -374,6 +429,8 @@ public class ChunkHolder {
              if (packet != null) {
                  this.broadcast(players, packet);
              }
@@ -519,7 +546,7 @@ index e2202389a2c4133a183cca59c4e909fc419379ab..72411e43a4c1da627ae1dec77a051476
          }
  
      }
-@@ -398,6 +453,13 @@ public class ChunkHolder {
+@@ -398,6 +455,13 @@ public class ChunkHolder {
      // Paper end - rewrite chunk system
  
      private void broadcast(List<ServerPlayer> players, Packet<?> packet) {

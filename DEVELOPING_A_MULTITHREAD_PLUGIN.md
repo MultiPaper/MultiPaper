@@ -136,3 +136,19 @@ public void updateEntityCommand(Player player, Entity entity) {
 
 Note that these two examples use Paper's Scheduler API, so you must reference
 the paper api rather than the spigot api in your dependencies.
+
+## 4. Use entity.teleportAsync
+
+This one's easy enough.
+
+Do this:
+
+```java
+entity.teleportAsync(location);
+```
+
+Not this:
+
+```java
+entity.teleport(location); // Do not do this
+```

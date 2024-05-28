@@ -218,14 +218,16 @@ index 54cd046587c2f9dd26204bfa4eb65b8ad52b2d5e..542379e2fa11df8af8ee11ee12c4372a
      }
 diff --git a/src/main/java/puregero/multipaper/region/RegionPos.java b/src/main/java/puregero/multipaper/region/RegionPos.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..495cf5d3a0efb96b6adad7e7b33962e85acde211
+index 0000000000000000000000000000000000000000..e99ce8b04a773e4604ca1ac7bd560a605d9f9368
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/region/RegionPos.java
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,111 @@
 +package puregero.multipaper.region;
 +
 +import com.mojang.logging.LogUtils;
++import net.minecraft.core.BlockPos;
 +import net.minecraft.world.level.ChunkPos;
++import org.bukkit.Location;
 +import org.slf4j.Logger;
 +import puregero.multipaper.config.MultiPaperConfiguration;
 +
@@ -282,6 +284,10 @@ index 0000000000000000000000000000000000000000..495cf5d3a0efb96b6adad7e7b33962e8
 +
 +    public static RegionPos forChunk(ChunkPos chunkPos) {
 +        return chunkPos.getRegionPos();
++    }
++
++    public static RegionPos forLocation(Location location) {
++        return forChunk(new ChunkPos(new BlockPos(location.getBlockX(), location.getBlockY(), location.getBlockZ())));
 +    }
 +
 +    public static long asLong(ChunkPos chunkPos) {
@@ -463,10 +469,10 @@ index 0000000000000000000000000000000000000000..5faabd96d271d7acd734cc620e25c4b6
 +}
 diff --git a/src/main/java/puregero/multipaper/threading/MultiPaperRegionScheduler.java b/src/main/java/puregero/multipaper/threading/MultiPaperRegionScheduler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..6b855a4d7bc564978fcb231e86232fbaa6bd655a
+index 0000000000000000000000000000000000000000..165d830ac07d82894c0820b6ccb7c33e5377aad6
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/threading/MultiPaperRegionScheduler.java
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,194 @@
 +package puregero.multipaper.threading;
 +
 +import net.minecraft.server.level.ServerLevel;
@@ -514,6 +520,39 @@ index 0000000000000000000000000000000000000000..6b855a4d7bc564978fcb231e86232fba
 +        return future;
 +    }
 +
++    public static CompletableFuture<Void> scheduleAcrossLevels(ServerLevel level1, RegionPos regionPos1, ServerLevel level2, RegionPos regionPos2, Runnable runnable) {
++        if (level1 == level2) {
++            // We don't sort the regionPos in this method because we assume they're a different level, use the method that does sort them instead
++            return level1.chunkScheduler.scheduleOnMany(runnable, regionPos1, regionPos2);
++        }
++
++        ServerLevel finalLevel1;
++        RegionPos finalRegionPos1;
++        ServerLevel finalLevel2;
++        RegionPos finalRegionPos2;
++
++        // Sort predictably to avoid deadlocks
++        if (compare(level1, level2) > 0) {
++            finalLevel1 = level2;
++            finalRegionPos1 = regionPos2;
++            finalLevel2 = level1;
++            finalRegionPos2 = regionPos1;
++        } else {
++            finalLevel1 = level1;
++            finalRegionPos1 = regionPos1;
++            finalLevel2 = level2;
++            finalRegionPos2 = regionPos2;
++        }
++
++        CompletableFuture<Void> future = new CompletableFuture<>();
++
++        MultiPaperTickThread.getExecutor().execute(() -> {
++            runAcrossLevels(finalLevel1, finalRegionPos1, finalLevel2, finalRegionPos2, runnable, future);
++        });
++
++        return future;
++    }
++
 +    /**
 +     * Sort the region positions in a predictable order to avoid deadlocks.
 +     */
@@ -531,12 +570,16 @@ index 0000000000000000000000000000000000000000..6b855a4d7bc564978fcb231e86232fba
 +        return posArray;
 +    }
 +
-+    private int compare(RegionPos a, RegionPos b) {
++    private static int compare(RegionPos a, RegionPos b) {
 +        int x = Integer.compare(a.x, b.x);
 +        if (x != 0) {
 +            return x;
 +        }
 +        return Integer.compare(a.z, b.z);
++    }
++
++    private static int compare(ServerLevel a, ServerLevel b) {
++        return a.uuid.compareTo(b.uuid);
 +    }
 +
 +    private CompletableFuture<Void> createTask(RegionPos regionPos, Runnable runnable) {
@@ -591,6 +634,28 @@ index 0000000000000000000000000000000000000000..6b855a4d7bc564978fcb231e86232fba
 +            if (!future.isDone()) {
 +                // Retry later
 +                MultiPaperTickThread.getExecutor().schedule(() -> runOnMany(regionPosArray, runnable, future), 1, java.util.concurrent.TimeUnit.MILLISECONDS);
++            }
++        } catch (Exception e) {
++            future.completeExceptionally(e);
++        }
++    }
++
++    private static void runAcrossLevels(ServerLevel level1, RegionPos regionPos1, ServerLevel level2, RegionPos regionPos2, Runnable runnable, CompletableFuture<Void> future) {
++        try {
++            level1.chunkScheduler.locker.tryLockNow(regionPos1, () -> {
++                level2.chunkScheduler.locker.tryLockNow(regionPos2, () -> {
++                    try {
++                        runnable.run();
++                        future.complete(null);
++                    } catch (Exception e) {
++                        future.completeExceptionally(e);
++                    }
++                });
++            });
++
++            if (!future.isDone()) {
++                // Retry later
++                MultiPaperTickThread.getExecutor().schedule(() -> runAcrossLevels(level1, regionPos1, level2, regionPos2, runnable, future), 1, java.util.concurrent.TimeUnit.MILLISECONDS);
 +            }
 +        } catch (Exception e) {
 +            future.completeExceptionally(e);

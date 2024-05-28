@@ -5,7 +5,7 @@ Subject: [PATCH] Teleportation
 
 
 diff --git a/src/main/java/net/minecraft/server/commands/TeleportCommand.java b/src/main/java/net/minecraft/server/commands/TeleportCommand.java
-index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..137e7c768693226e21fdb43b1956602ddad8a1be 100644
+index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..54d88d05bded806ab4c5f612f244e99d99b07fc2 100644
 --- a/src/main/java/net/minecraft/server/commands/TeleportCommand.java
 +++ b/src/main/java/net/minecraft/server/commands/TeleportCommand.java
 @@ -12,7 +12,10 @@ import java.util.EnumSet;
@@ -27,15 +27,16 @@ index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..137e7c768693226e21fdb43b1956602d
  import net.minecraft.world.level.Level;
  import net.minecraft.world.phys.Vec2;
  import net.minecraft.world.phys.Vec3;
-@@ -37,6 +41,7 @@ import org.bukkit.Location;
+@@ -37,6 +41,8 @@ import org.bukkit.Location;
  import org.bukkit.craftbukkit.CraftWorld;
  import org.bukkit.event.entity.EntityTeleportEvent;
  import org.bukkit.event.player.PlayerTeleportEvent;
 +import puregero.multipaper.region.RegionPos;
++import puregero.multipaper.threading.MultiPaperRegionScheduler;
  // CraftBukkit end
  
  public class TeleportCommand {
-@@ -162,9 +167,19 @@ public class TeleportCommand {
+@@ -162,9 +168,19 @@ public class TeleportCommand {
              float f3 = Mth.wrapDegrees(pitch);
  
              // CraftBukkit start - Teleport event
@@ -51,13 +52,13 @@ index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..137e7c768693226e21fdb43b1956602d
 +                if (TickThread.isTickThreadFor(target) && TickThread.isTickThreadFor(world, toPos)) {
 +                    task.run();
 +                } else {
-+                    world.chunkScheduler.scheduleOnMany(task, RegionPos.forChunk(target.chunkPosition()), RegionPos.forChunk(toPos));
++                    MultiPaperRegionScheduler.scheduleAcrossLevels((ServerLevel) target.level(), RegionPos.forChunk(target.chunkPosition()), world, RegionPos.forChunk(toPos), task);
 +                }
 +                // MultiPaper end - Run teleports on the correct thread
              } else {
                  Location to = new Location(world.getWorld(), x, y, z, f2, f3);
                  EntityTeleportEvent event = new EntityTeleportEvent(target.getBukkitEntity(), target.getBukkitEntity().getLocation(), to);
-@@ -174,17 +189,29 @@ public class TeleportCommand {
+@@ -174,17 +190,29 @@ public class TeleportCommand {
                  }
                  to = event.getTo(); // Paper - actually track new location
  
@@ -81,10 +82,10 @@ index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..137e7c768693226e21fdb43b1956602d
 +                Runnable task = () -> {
 +                    result.complete(target.teleportTo(finalWorld, finalX, finalY, finalZ, movementFlags, finalF2, finalF3));
 +                };
-+                if (TickThread.isTickThreadFor(target) && TickThread.isTickThreadFor(world, toPos)) {
++                if (TickThread.isTickThreadFor(target) && TickThread.isTickThreadFor(finalWorld, toPos)) {
 +                    task.run();
 +                } else {
-+                    world.chunkScheduler.scheduleOnMany(task, RegionPos.forChunk(target.chunkPosition()), RegionPos.forChunk(toPos));
++                    MultiPaperRegionScheduler.scheduleAcrossLevels((ServerLevel) target.level(), RegionPos.forChunk(target.chunkPosition()), finalWorld, RegionPos.forChunk(toPos), task);
 +                }
 +                // MultiPaper end - Run teleports on the correct thread
              }
@@ -96,7 +97,7 @@ index 54851f6cc0d5fddb32a9a1e84a4f5ae41af18758..137e7c768693226e21fdb43b1956602d
                  // CraftBukkit end
                  if (facingLocation != null) {
                      facingLocation.perform(source, target);
-@@ -209,8 +236,7 @@ public class TeleportCommand {
+@@ -209,8 +237,7 @@ public class TeleportCommand {
  
                      entitycreature.getNavigation().stop();
                  }
@@ -119,3 +120,117 @@ index 162087bd74f53dce7eef9efa7e85c83538db23a7..ff841b91a4c3f41bc39781339dbf639a
          // CraftBukkit end
          ChunkPos chunkcoordintpair = new ChunkPos(BlockPos.containing(d0, d1, d2));
  
+diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
+index 852613327dd20d1758612ec1026772b4e556d3de..bf3b25db00d62d1cafc9ba1921553bdf6a4b5bab 100644
+--- a/src/main/java/net/minecraft/world/entity/Entity.java
++++ b/src/main/java/net/minecraft/world/entity/Entity.java
+@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
+ import com.google.common.collect.Sets;
+ import com.google.common.collect.UnmodifiableIterator;
+ import com.mojang.logging.LogUtils;
++import io.papermc.paper.util.TickThread;
+ import it.unimi.dsi.fastutil.objects.Object2DoubleArrayMap;
+ import it.unimi.dsi.fastutil.objects.Object2DoubleMap;
+ import java.util.Arrays;
+@@ -109,6 +110,7 @@ import net.minecraft.world.level.dimension.DimensionType;
+ import net.minecraft.world.level.dimension.LevelStem;
+ import net.minecraft.world.level.entity.EntityAccess;
+ import net.minecraft.world.level.entity.EntityInLevelCallback;
++import net.minecraft.world.level.entity.LevelCallback;
+ import net.minecraft.world.level.gameevent.DynamicGameEventListener;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.level.levelgen.Heightmap;
+@@ -2140,6 +2142,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+     }
+ 
+     public void moveTo(double x, double y, double z, float yaw, float pitch) {
++        if (levelCallback != EntityInLevelCallback.NULL) TickThread.ensureTickThread((ServerLevel) level(), position.x, position.z, "Can't move entity to async destination"); // MultiPaper - can't teleport into other regions
+         // Paper start - Fix Entity Teleportation and cancel velocity if teleported
+         if (!preserveMotion) {
+             this.deltaMovement = Vec3.ZERO;
+@@ -3797,6 +3800,7 @@ public abstract class Entity implements SyncedDataHolder, Nameable, EntityAccess
+                     this.setDeltaMovement(shapedetectorshape.speed);
+                     return this;
+                 }
++                TickThread.ensureTickThread(worldserver, position.x, position.z, "Can't teleport entity to async destination"); // MultiPaper - can't teleport into other regions
+                 this.unRide();
+                 // CraftBukkit end
+ 
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+index aef9a80b3beffc0fe6dbfac9b24989a80e98c25d..5afc547b41ab33c1ae22a362b8e1092958c9f221 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftWorld.java
+@@ -5,6 +5,7 @@ import com.google.common.base.Predicates;
+ import com.google.common.collect.ImmutableList;
+ import com.google.common.collect.ImmutableMap;
+ import com.mojang.datafixers.util.Pair;
++import io.papermc.paper.util.TickThread;
+ import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
+ import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+ import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+@@ -2537,7 +2538,7 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+     // Paper start
+     public java.util.concurrent.CompletableFuture<Chunk> getChunkAtAsync(int x, int z, boolean gen, boolean urgent) {
+         warnUnsafeChunk("getting a faraway chunk async", x, z); // Paper
+-        if (Bukkit.isPrimaryThread()) {
++        if (TickThread.isTickThreadFor(getHandle(), x, z)) { // MultiPaper - ensure it's the chunk's thread
+             net.minecraft.world.level.chunk.LevelChunk immediate = this.world.getChunkSource().getChunkAtIfLoadedImmediately(x, z);
+             if (immediate != null) {
+                 return java.util.concurrent.CompletableFuture.completedFuture(new CraftChunk(immediate));
+@@ -2554,11 +2555,11 @@ public class CraftWorld extends CraftRegionAccessor implements World {
+         java.util.concurrent.CompletableFuture<Chunk> ret = new java.util.concurrent.CompletableFuture<>();
+ 
+         io.papermc.paper.chunk.system.ChunkSystem.scheduleChunkLoad(this.getHandle(), x, z, gen, ChunkStatus.FULL, true, priority, (c) -> {
+-            net.minecraft.server.MinecraftServer.getServer().scheduleOnMain(() -> {
++            // net.minecraft.server.MinecraftServer.getServer().scheduleOnMain(() -> { // MultiPaper - this is already on the main thread
+                 net.minecraft.world.level.chunk.LevelChunk chunk = (net.minecraft.world.level.chunk.LevelChunk)c;
+                 if (chunk != null) this.addTicket(x, z); // Paper
+                 ret.complete(chunk == null ? null : new CraftChunk(chunk));
+-            });
++            // }); // MultiPaper - this is already on the main thread
+         });
+ 
+         return ret;
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
+index 0ed18542fd8e2a992dc56a5f421eaa840e0af193..9fc8cb99b575e9e3f037de22bc8a03b29317e4cc 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftEntity.java
+@@ -8,6 +8,9 @@ import com.google.common.collect.Lists;
+ import java.util.List;
+ import java.util.Set;
+ import java.util.UUID;
++
++import io.papermc.paper.util.TickThread;
++import net.minecraft.core.BlockPos;
+ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.nbt.Tag;
+ import net.minecraft.network.chat.Component;
+@@ -19,6 +22,7 @@ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.boss.EnderDragonPart;
+ import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
+ import net.minecraft.world.entity.projectile.AbstractArrow;
++import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.phys.AABB;
+ import org.bukkit.EntityEffect;
+ import org.bukkit.Location;
+@@ -57,6 +61,8 @@ import org.bukkit.util.NumberConversions;
+ import org.bukkit.util.Vector;
+ 
+ import net.md_5.bungee.api.chat.BaseComponent; // Spigot
++import puregero.multipaper.region.RegionPos;
++import puregero.multipaper.threading.MultiPaperRegionScheduler;
+ 
+ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+     private static PermissibleBase perm;
+@@ -1070,7 +1076,10 @@ public abstract class CraftEntity implements org.bukkit.entity.Entity {
+                 for (net.minecraft.world.level.chunk.ChunkAccess chunk : list) {
+                     chunkProviderServer.addTicketAtLevel(net.minecraft.server.level.TicketType.POST_TELEPORT, chunk.getPos(), 33, CraftEntity.this.getEntityId());
+                 }
+-                net.minecraft.server.MinecraftServer.getServer().scheduleOnMain(() -> {
++                MultiPaperRegionScheduler.scheduleAcrossLevels(
++                        (ServerLevel) CraftEntity.this.getHandle().level(), RegionPos.forChunk(CraftEntity.this.getHandle().chunkPosition()),
++                        world, RegionPos.forLocation(locationClone),
++                        () -> { // MultiPaper - Run teleports on the correct threads
+                     try {
+                         ret.complete(CraftEntity.this.teleport(locationClone, cause, teleportFlags) ? Boolean.TRUE : Boolean.FALSE);
+                     } catch (Throwable throwable) {

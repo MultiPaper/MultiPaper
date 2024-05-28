@@ -112,7 +112,7 @@ index e1ffd62f4ebceecb9bc5471df3da406cffea0483..140bff5cbb948116fc63a31dba4b895d
          synchronized (this.chunkHolders) {
              this.chunkHolders.remove(CoordinateUtils.getChunkKey(holder.chunkX, holder.chunkZ));
 diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
-index 049e20407033073b06fcdeb46c38485f4926d778..8ae9dad1c0286e17956aa97bf0915bd06d9e8964 100644
+index 049e20407033073b06fcdeb46c38485f4926d778..c7fdea820341ac116255e3cd8a9d5e28edf0e9aa 100644
 --- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
 +++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkTaskScheduler.java
 @@ -11,6 +11,8 @@ import io.papermc.paper.chunk.system.scheduling.queue.RadiusAwarePrioritisedExec
@@ -155,6 +155,15 @@ index 049e20407033073b06fcdeb46c38485f4926d778..8ae9dad1c0286e17956aa97bf0915bd0
          TickThread.ensureTickThread("Cannot execute main thread task off-main");
          return this.mainThreadExecutor.executeTask();
      }
+@@ -486,7 +505,7 @@ public final class ChunkTaskScheduler {
+ 
+     public void scheduleChunkLoad(final int chunkX, final int chunkZ, final ChunkStatus toStatus, final boolean addTicket,
+                                   final PrioritisedExecutor.Priority priority, final Consumer<ChunkAccess> onComplete) {
+-        if (!TickThread.isTickThread()) {
++        if (!TickThread.isTickThreadFor(world, chunkX, chunkZ)) { // MultiPaper - ensure on chunk's thread
+             this.scheduleChunkTask(chunkX, chunkZ, () -> {
+                 ChunkTaskScheduler.this.scheduleChunkLoad(chunkX, chunkZ, toStatus, addTicket, priority, onComplete);
+             }, priority);
 @@ -774,16 +793,19 @@ public final class ChunkTaskScheduler {
  
      public PrioritisedExecutor.PrioritisedTask createChunkTask(final int chunkX, final int chunkZ, final Runnable run,

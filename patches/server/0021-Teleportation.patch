@@ -120,6 +120,230 @@ index 162087bd74f53dce7eef9efa7e85c83538db23a7..ff841b91a4c3f41bc39781339dbf639a
          // CraftBukkit end
          ChunkPos chunkcoordintpair = new ChunkPos(BlockPos.containing(d0, d1, d2));
  
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 94a7194de023208917e29e22b7d5fd9e8d90846c..8f237d9f3ee31304146f602bf9c382daabf9fc48 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -2981,19 +2981,27 @@ public class ServerGamePacketListenerImpl extends ServerCommonPacketListenerImpl
+         switch (packetplayinclientcommand_enumclientcommand) {
+             case PERFORM_RESPAWN:
+                 if (this.player.wonGame) {
+-                    this.player.wonGame = false;
+-                    this.player = this.server.getPlayerList().respawn(this.player, this.server.getLevel(this.player.getRespawnDimension()), true, null, true, RespawnReason.END_PORTAL, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag.END_PORTAL); // Paper - Expand PlayerRespawnEvent
+-                    CriteriaTriggers.CHANGED_DIMENSION.trigger(this.player, Level.END, Level.OVERWORLD);
++                    // MultiPaper start - async respawn
++                    this.server.getPlayerList().respawnAsync(this.player, this.server.getLevel(this.player.getRespawnDimension()), true, null, true, RespawnReason.END_PORTAL, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag.END_PORTAL).thenAccept(player -> { // Paper - Expand PlayerRespawnEvent
++                        this.player.wonGame = false;
++                        this.player = player;
++                        CriteriaTriggers.CHANGED_DIMENSION.trigger(this.player, Level.END, Level.OVERWORLD);
++                    });
++                    // MultiPaper end - async respawn
+                 } else {
+                     if (this.player.getHealth() > 0.0F) {
+                         return;
+                     }
+ 
+-                    this.player = this.server.getPlayerList().respawn(this.player, false, RespawnReason.DEATH);
+-                    if (this.server.isHardcore()) {
+-                        this.player.setGameMode(GameType.SPECTATOR, org.bukkit.event.player.PlayerGameModeChangeEvent.Cause.HARDCORE_DEATH, null); // Paper - Expand PlayerGameModeChangeEvent
+-                        ((GameRules.BooleanValue) this.player.level().getGameRules().getRule(GameRules.RULE_SPECTATORSGENERATECHUNKS)).set(false, this.player.serverLevel()); // CraftBukkit - per-world
+-                    }
++                    // MultiPaper start - async respawn
++                    this.server.getPlayerList().respawnAsync(this.player, false, RespawnReason.DEATH).thenAccept(player -> {
++                        this.player = player;
++                        if (this.server.isHardcore()) {
++                            this.player.setGameMode(GameType.SPECTATOR, org.bukkit.event.player.PlayerGameModeChangeEvent.Cause.HARDCORE_DEATH, null); // Paper - Expand PlayerGameModeChangeEvent
++                            ((GameRules.BooleanValue) this.player.level().getGameRules().getRule(GameRules.RULE_SPECTATORSGENERATECHUNKS)).set(false, this.player.serverLevel()); // CraftBukkit - per-world
++                        }
++                    });
++                    // MultiPaper end - async respawn
+                 }
+                 break;
+             case REQUEST_STATS:
+diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
+index e8d6a2b1a0870da97e3a004486ad94a725d313a5..7186515bb246261d04a62c4cd0c939b7a19e4da9 100644
+--- a/src/main/java/net/minecraft/server/players/PlayerList.java
++++ b/src/main/java/net/minecraft/server/players/PlayerList.java
+@@ -22,9 +22,13 @@ import java.util.Objects;
+ import java.util.Optional;
+ import java.util.Set;
+ import java.util.UUID;
++import java.util.concurrent.CompletableFuture;
+ import java.util.function.Function;
+ import java.util.function.Predicate;
++import javax.annotation.Nonnull;
+ import javax.annotation.Nullable;
++
++import io.papermc.paper.util.TickThread;
+ import net.minecraft.ChatFormatting;
+ import net.minecraft.FileUtil;
+ import net.minecraft.commands.CommandSourceStack;
+@@ -88,6 +92,7 @@ import net.minecraft.util.Mth;
+ import net.minecraft.world.effect.MobEffectInstance;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.GameRules;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.Blocks;
+@@ -123,6 +128,8 @@ import org.bukkit.event.player.PlayerRespawnEvent;
+ import org.bukkit.event.player.PlayerRespawnEvent.RespawnReason;
+ import org.bukkit.event.player.PlayerSpawnChangeEvent;
+ import puregero.multipaper.MultiPaper;
++import puregero.multipaper.region.RegionPos;
++import puregero.multipaper.threading.MultiPaperRegionScheduler;
+ // CraftBukkit end
+ 
+ public abstract class PlayerList {
+@@ -837,12 +844,52 @@ public abstract class PlayerList {
+     }
+ 
+     public ServerPlayer respawn(ServerPlayer entityplayer, ServerLevel worldserver, boolean flag, Location location, boolean avoidSuffocation, RespawnReason reason, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag...respawnFlags) {
++        // MultiPaper start - async respawn
++        throw new UnsupportedOperationException("Cannot respawn player synchronously");
++    }
++
++    public CompletableFuture<ServerPlayer> respawnAsync(ServerPlayer entityplayer, boolean flag, RespawnReason reason) {
++        return this.respawnAsync(entityplayer, this.server.getLevel(entityplayer.getRespawnDimension()), flag, null, true, reason);
++    }
++
++    @Nullable private CompletableFuture<ServerPlayer> currentRespawnFuture = null;
++    public CompletableFuture<ServerPlayer> respawnAsync(ServerPlayer entityplayer, ServerLevel worldserver, boolean flag, Location location, boolean avoidSuffocation, RespawnReason reason, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag...respawnFlags) {
++        if (currentRespawnFuture != null && !currentRespawnFuture.isDone()) {
++            throw new IllegalStateException("An async respawn is already in progress!");
++        }
++        CompletableFuture<ServerPlayer> future = currentRespawnFuture = new CompletableFuture<>();
++        // MultiPaper end - async respawn
+         // Paper end - Expand PlayerRespawnEvent
+         entityplayer.stopRiding(); // CraftBukkit
+-        this.players.remove(entityplayer);
+-        this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot
+-        entityplayer.serverLevel().removePlayerImmediately(entityplayer, Entity.RemovalReason.DISCARDED);
++        // this.players.remove(entityplayer); // MultiPaper - don't do this, we're reusing the same entity
++        // this.playersByName.remove(entityplayer.getScoreboardName().toLowerCase(java.util.Locale.ROOT)); // Spigot // MultiPaper - don't do this, we're reusing the same entity
++        // entityplayer.serverLevel().removePlayerImmediately(entityplayer, Entity.RemovalReason.DISCARDED); // MultiPaper - do later
+         BlockPos blockposition = entityplayer.getRespawnPosition();
++
++        // MultiPaper start - run on respawn position thread
++        Runnable task = () -> respawnAsyncGetRespawnPosition(future, entityplayer, blockposition, worldserver, flag, location, avoidSuffocation, reason, respawnFlags);
++
++        ServerLevel fromLevel = entityplayer.serverLevel();
++        ChunkPos fromPos = entityplayer.chunkPosition();
++        ServerLevel toLevel = this.server.getLevel(entityplayer.getRespawnDimension());
++        BlockPos toPos = blockposition;
++
++        if (toLevel == null || toPos == null) {
++            toLevel = this.server.getLevel(Level.OVERWORLD);
++            toPos = toLevel.getSharedSpawnPos();
++        }
++
++        if (TickThread.isTickThreadFor(fromLevel, fromPos) && TickThread.isTickThreadFor(toLevel, toPos)) {
++            task.run();
++        } else {
++            MultiPaperRegionScheduler.scheduleAcrossLevels(fromLevel, RegionPos.forChunk(fromPos), toLevel, RegionPos.forChunk(new ChunkPos(toPos)), task);
++        }
++
++        return future;
++    }
++    private void respawnAsyncGetRespawnPosition(CompletableFuture<ServerPlayer> future, ServerPlayer entityplayer, BlockPos blockposition, ServerLevel worldserver, boolean flag, Location location, boolean avoidSuffocation, RespawnReason reason, org.bukkit.event.player.PlayerRespawnEvent.RespawnFlag...respawnFlags) {
++        // MultiPaper end - run on respawn position thread
++
+         float f = entityplayer.getRespawnAngle();
+         boolean flag1 = entityplayer.isRespawnForced();
+         /* CraftBukkit start
+@@ -863,17 +910,19 @@ public abstract class PlayerList {
+         entityplayer.wonGame = false;
+         // CraftBukkit end
+ 
+-        entityplayer1.connection = entityplayer.connection;
+-        entityplayer1.restoreFrom(entityplayer, flag);
+-        entityplayer1.setId(entityplayer.getId());
+-        entityplayer1.setMainArm(entityplayer.getMainArm());
+-        Iterator iterator = entityplayer.getTags().iterator();
++        // MultiPaper start - it's the same entity, just skip the copy process rather than figuring out how to rearrange it
++        // entityplayer1.connection = entityplayer.connection;
++        // entityplayer1.restoreFrom(entityplayer, flag);
++        // entityplayer1.setId(entityplayer.getId());
++        // entityplayer1.setMainArm(entityplayer.getMainArm());
++        // Iterator iterator = entityplayer.getTags().iterator();
+ 
+-        while (iterator.hasNext()) {
+-            String s = (String) iterator.next();
++        // while (iterator.hasNext()) {
++        //     String s = (String) iterator.next();
+ 
+-            entityplayer1.addTag(s);
+-        }
++        //     entityplayer1.addTag(s);
++        // }
++        // MultiPaper end - it's the same entity, just skip the copy process rather than figuring out how to rearrange it
+ 
+         boolean flag2 = false;
+ 
+@@ -933,7 +982,7 @@ public abstract class PlayerList {
+             this.cserver.getPluginManager().callEvent(respawnEvent);
+             // Spigot Start
+             if (entityplayer.connection.isDisconnected()) {
+-                return entityplayer;
++                future.complete(entityplayer); return; // return entityplayer; // MultiPaper
+             }
+             // Spigot End
+ 
+@@ -948,6 +997,32 @@ public abstract class PlayerList {
+         } else {
+             location.setWorld(worldserver.getWorld());
+         }
++
++        // MultiPaper start - run on new respawn position thread, in case a plugin modified it
++        BlockPos finalBlockposition = blockposition;
++        Location finalLocation = location;
++        boolean finalIsLocAltered = isLocAltered;
++        boolean finalFlag = flag2;
++        boolean finalIsRespawn = isRespawn;
++        boolean finalIsBedSpawn = isBedSpawn;
++        Runnable task = () -> respawnAsyncFinal(future, entityplayer, finalBlockposition, flag, finalLocation, avoidSuffocation, finalIsLocAltered, flag1, finalFlag, fromWorld, finalIsRespawn, finalIsBedSpawn);
++
++        ServerLevel fromLevel = entityplayer.serverLevel();
++        ChunkPos fromPos = entityplayer.chunkPosition();
++        ServerLevel toLevel = ((CraftWorld) location.getWorld()).getHandle();
++        BlockPos toPos = new BlockPos(location.getBlockX(), location.getBlockY(), location.getBlockZ());
++
++        if (TickThread.isTickThreadFor(fromLevel, fromPos) && TickThread.isTickThreadFor(toLevel, toPos)) {
++            task.run();
++        } else {
++            MultiPaperRegionScheduler.scheduleAcrossLevels(fromLevel, RegionPos.forChunk(fromPos), toLevel, RegionPos.forChunk(new ChunkPos(toPos)), task);
++        }
++    }
++    private void respawnAsyncFinal(CompletableFuture<ServerPlayer> future, ServerPlayer entityplayer1, BlockPos blockposition, boolean flag, Location location, boolean avoidSuffocation, boolean isLocAltered, boolean flag1, boolean flag2, org.bukkit.World fromWorld, boolean isRespawn, boolean isBedSpawn) {
++        ServerPlayer entityplayer = entityplayer1;
++        entityplayer.serverLevel().removePlayerImmediately(entityplayer, Entity.RemovalReason.DISCARDED);
++        // MultiPaper end - run on respawn position thread
++
+         ServerLevel worldserver1 = ((CraftWorld) location.getWorld()).getHandle();
+         entityplayer1.spawnIn(worldserver1);
+         entityplayer1.unsetRemoved();
+@@ -975,9 +1050,9 @@ public abstract class PlayerList {
+         this.sendPlayerPermissionLevel(entityplayer1);
+         if (!entityplayer.connection.isDisconnected()) {
+             worldserver1.addRespawnedPlayer(entityplayer1);
+-            this.players.add(entityplayer1);
+-            this.playersByName.put(entityplayer1.getScoreboardName().toLowerCase(java.util.Locale.ROOT), entityplayer1); // Spigot
+-            this.playersByUUID.put(entityplayer1.getUUID(), entityplayer1);
++            // this.players.add(entityplayer1); // MultiPaper - don't do this, we're reusing the same entity
++            // this.playersByName.put(entityplayer1.getScoreboardName().toLowerCase(java.util.Locale.ROOT), entityplayer1); // Spigot // MultiPaper - don't do this, we're reusing the same entity
++            // this.playersByUUID.put(entityplayer1.getUUID(), entityplayer1); // MultiPaper - don't do this, we're reusing the same entity
+         }
+         // entityplayer1.initInventoryMenu();
+         entityplayer1.setHealth(entityplayer1.getHealth());
+@@ -1018,7 +1093,7 @@ public abstract class PlayerList {
+         // Paper end - Add PlayerPostRespawnEvent
+ 
+         // CraftBukkit end
+-        return entityplayer1;
++        future.complete(entityplayer1); // return entityplayer1; // MultiPaper
+     }
+ 
+     public void sendPlayerPermissionLevel(ServerPlayer player) {
 diff --git a/src/main/java/net/minecraft/world/entity/Entity.java b/src/main/java/net/minecraft/world/entity/Entity.java
 index 852613327dd20d1758612ec1026772b4e556d3de..bf3b25db00d62d1cafc9ba1921553bdf6a4b5bab 100644
 --- a/src/main/java/net/minecraft/world/entity/Entity.java
@@ -234,3 +458,16 @@ index 0ed18542fd8e2a992dc56a5f421eaa840e0af193..9fc8cb99b575e9e3f037de22bc8a03b2
                      try {
                          ret.complete(CraftEntity.this.teleport(locationClone, cause, teleportFlags) ? Boolean.TRUE : Boolean.FALSE);
                      } catch (Throwable throwable) {
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index 241340a6d66f17f2a31fb03ff0dfab121b856368..e1c1b5a10efb492b92bf45915048a711fd1c5227 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -3355,7 +3355,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player {
+         {
+             if ( CraftPlayer.this.getHealth() <= 0 && CraftPlayer.this.isOnline() )
+             {
+-                CraftPlayer.this.server.getServer().getPlayerList().respawn( CraftPlayer.this.getHandle(), false, org.bukkit.event.player.PlayerRespawnEvent.RespawnReason.PLUGIN );
++                CraftPlayer.this.server.getServer().getPlayerList().respawnAsync( CraftPlayer.this.getHandle(), false, org.bukkit.event.player.PlayerRespawnEvent.RespawnReason.PLUGIN ); // MultiPaper - async respawning
+             }
+         }
+ 

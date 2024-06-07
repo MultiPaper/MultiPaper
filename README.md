@@ -119,7 +119,7 @@ java
   -Dproperties.view-distance=16
   -Dpaper.global.proxies.proxy-protocol=true
   -Dspigot.world-settings.default.entity-tracking-range.players=128
-  -Dmultipaper.sync-settings.filesToSyncOnStartup="myconfigfile.yml;plugins/MyPlugin.jar"
+  -Dmultipaper.sync-settings.files.files-to-sync-on-startup="myconfigfile.yml;plugins/MyPlugin.jar"
   -jar multipaper.jar
 ```
 

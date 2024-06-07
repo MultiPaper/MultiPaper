@@ -63,16 +63,16 @@ paperweight {
     remapRepo.set("https://repo.papermc.io/repository/maven-public/")
     decompileRepo.set("https://repo.papermc.io/repository/maven-public/")
 
-    useStandardUpstream("Purpur") {
-        url.set(github("PurpurMC", "Purpur"))
-        ref.set(providers.gradleProperty("purpurRef"))
+    useStandardUpstream("ShreddedPaper") {
+        url.set(github("MultiPaper", "ShreddedPaper"))
+        ref.set(providers.gradleProperty("shreddedpaperRef"))
         
         withStandardPatcher {
-            apiSourceDirPath.set("Purpur-API") 
+            apiSourceDirPath.set("ShreddedPaper-API")
             apiPatchDir.set(layout.projectDirectory.dir("patches/api"))
             apiOutputDir.set(layout.projectDirectory.dir("MultiPaper-API"))
 
-            serverSourceDirPath.set("Purpur-Server")
+            serverSourceDirPath.set("ShreddedPaper-Server")
             serverPatchDir.set(layout.projectDirectory.dir("patches/server"))
             serverOutputDir.set(layout.projectDirectory.dir("MultiPaper-Server"))
         }
@@ -85,9 +85,9 @@ paperweight {
         }
     }
 
-    tasks.register("purpurRefLatest") {
+    tasks.register("shreddedpaperRefLatest") {
         // Update the paperRef in gradle.properties to be the latest commit
-        val tempDir = layout.cacheDir("purpurRefLatest");
+        val tempDir = layout.cacheDir("shreddedpaperRefLatest");
         val file = "gradle.properties";
         
         doFirst {
@@ -95,15 +95,15 @@ paperweight {
                     val sha: String
             )
 
-            val purpurLatestCommitJson = layout.cache.resolve("purpurLatestCommit.json");
-            download.get().download("https://api.github.com/repos/PurpurMC/Purpur/commits/ver/1.20.6", purpurLatestCommitJson);
-            val purpurLatestCommit = gson.fromJson<paper.libs.com.google.gson.JsonObject>(purpurLatestCommitJson)["sha"].asString;
+            val shreddedpaperLatestCommitJson = layout.cache.resolve("shreddedpaperLatestCommit.json");
+            download.get().download("https://api.github.com/repos/MultiPaper/ShreddedPaper/commits/main", shreddedpaperLatestCommitJson);
+            val shreddedpaperLatestCommit = gson.fromJson<paper.libs.com.google.gson.JsonObject>(shreddedpaperLatestCommitJson)["sha"].asString;
 
             copy {
                 from(file)
                 into(tempDir)
                 filter { line: String ->
-                    line.replace("purpurRef = .*".toRegex(), "purpurRef = $purpurLatestCommit")
+                    line.replace("shreddedpaperRef = .*".toRegex(), "shreddedpaperRef = $shreddedpaperLatestCommit")
                 }
             }
         }

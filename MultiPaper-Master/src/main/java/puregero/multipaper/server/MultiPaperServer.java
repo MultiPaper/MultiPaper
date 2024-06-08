@@ -53,18 +53,18 @@ public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, Serve
 
         new MultiPaperServer(address, port);
 
-        new CommandLineInput().run();
+        if (new CommandLineInput().run()) {
+            System.out.println("Exiting safely...");
 
-        System.out.println("Exiting safely...");
+            awaitAsyncTasks();
 
-        awaitAsyncTasks();
+            System.out.println("Shutting down event loop...");
+            eventLoopGroup.shutdownGracefully().await();
 
-        System.out.println("Shutting down event loop...");
-        eventLoopGroup.shutdownGracefully().await();
+            awaitAsyncTasks();
 
-        awaitAsyncTasks();
-
-        System.exit(0);
+            System.exit(0);
+        }
     }
 
     private static void awaitAsyncTasks() {

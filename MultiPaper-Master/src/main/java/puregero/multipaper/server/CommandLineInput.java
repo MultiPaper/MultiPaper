@@ -2,10 +2,9 @@ package puregero.multipaper.server;
 
 import java.util.Scanner;
 
-public class CommandLineInput extends Thread {
+public class CommandLineInput {
 
-    @Override
-    public void run() {
+    public boolean run() {
         Scanner scanner = new Scanner(System.in);
 
         while (scanner.hasNextLine()) {
@@ -15,10 +14,10 @@ public class CommandLineInput extends Thread {
                 System.out.println("Shutting down servers...");
                 ServerConnection.shutdownAndWait();
                 System.out.println("Shutdown complete");
-                return;
+                return true;
             } else if (line.equalsIgnoreCase("exit")) {
                 System.out.println("Exiting...");
-                return;
+                return true;
             } else if (line.equalsIgnoreCase("threaddump")) {
                 System.out.println("Printing thread dump...");
                 for (Thread thread : Thread.getAllStackTraces().keySet()) {
@@ -32,6 +31,9 @@ public class CommandLineInput extends Thread {
                 System.out.println("Unknown command, use 'shutdown' to shutdown all servers or 'exit' to stop just this master server");
             }
         }
+
+        // No command line detected
+        return false;
     }
 
 }

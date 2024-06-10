@@ -40,6 +40,28 @@ index 13144ea01bc27db95a13b267d39529b012a4c9c4..76796539d0aaf09ae34a8b45613bbb8c
          if (this.channel == null) {
              this.delayedDisconnect = disconnectReason;
          }
+diff --git a/src/main/java/net/minecraft/network/FriendlyByteBuf.java b/src/main/java/net/minecraft/network/FriendlyByteBuf.java
+index 1f4b64a5f812376c499c98cb4be62469bd0b7dbe..9b69dee2dc5cc23440ab4daf2052796d7eaf2f1f 100644
+--- a/src/main/java/net/minecraft/network/FriendlyByteBuf.java
++++ b/src/main/java/net/minecraft/network/FriendlyByteBuf.java
+@@ -98,6 +98,8 @@ public class FriendlyByteBuf extends ByteBuf {
+     private static final int MAX_PUBLIC_KEY_LENGTH = 512;
+     private static final Gson GSON = new Gson();
+ 
++    public long maxNbtSize = 2097152L; // MultiPaper
++
+     public static boolean hasItemSerializeEvent = false; // Purpur
+ 
+     public FriendlyByteBuf(ByteBuf parent) {
+@@ -650,7 +652,7 @@ public class FriendlyByteBuf extends ByteBuf {
+ 
+     @Nullable
+     public CompoundTag readNbt() {
+-        return this.readNbt(new NbtAccounter(2097152L));
++        return this.readNbt(new NbtAccounter(maxNbtSize)); // MultiPaper
+     }
+ 
+     @Nullable
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
 index 8c536848a4b5910096a6ef78a7c3bfc9336abc2f..a8eb0db33a9b15b5b32d0533e6432a8d6d445fe2 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
@@ -800,10 +822,10 @@ index 0000000000000000000000000000000000000000..d6d16bfeec41efd36c15812249d40ba3
 +}
 diff --git a/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..ffad33ee86b671c39284558493dfa0b67abccbcd
+index 0000000000000000000000000000000000000000..cab651911ef8f1739a65477a88b8f5eff84dfb1b
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/externalserverprotocol/PlayerCreatePacket.java
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,115 @@
 +package puregero.multipaper.externalserverprotocol;
 +
 +import com.mojang.authlib.GameProfile;
@@ -854,6 +876,7 @@ index 0000000000000000000000000000000000000000..ffad33ee86b671c39284558493dfa0b6
 +    }
 +
 +    public PlayerCreatePacket(FriendlyByteBuf in) {
++        in.maxNbtSize = Long.MAX_VALUE; // Allow unlimited NBT size
 +        gameProfile = in.readGameProfile();
 +        world = in.readUtf();
 +        x = in.readDouble();

@@ -30,7 +30,7 @@ dependencies {
 tasks.jar {
     manifest {
         attributes(
-            "Main-Class" to "puregero.multipaper.server.MultiPaperServer",
+            "Main-Class" to "io.multipaper.database.MultiPaperDatabase",
             "Minecraft-Version" to "${properties["mcVersion"]}",
             "Database-Version" to "${properties["databaseVersion"]}"
         )

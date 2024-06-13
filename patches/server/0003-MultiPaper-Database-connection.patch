@@ -1,0 +1,304 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 13 Jun 2024 10:25:38 +0900
+Subject: [PATCH] MultiPaper Database connection
+
+
+diff --git a/build.gradle.kts b/build.gradle.kts
+index b1c70490956f6b77bb8bbb372a4ad5bbca0efe94..bdf17d88442f114b894ead8b89870233b2734c81 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -13,6 +13,7 @@ configurations.named(log4jPlugins.compileClasspathConfigurationName) {
+ val alsoShade: Configuration by configurations.creating
+ 
+ dependencies {
++    implementation(project(":multipaper-databasemessagingprotocol")) // MultiPaper
+     implementation(project(":multipaper-api")) // Purpur // ShreddedPaper // MultiPaper
+     // Paper start
+     implementation("org.jline:jline-terminal-jansi:3.21.0")
+diff --git a/src/main/java/io/multipaper/MultiPaper.java b/src/main/java/io/multipaper/MultiPaper.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..c18bc806edb2f627a5b14d097f48e76e0108e92b
+--- /dev/null
++++ b/src/main/java/io/multipaper/MultiPaper.java
+@@ -0,0 +1,55 @@
++package io.multipaper;
++
++import com.mojang.logging.LogUtils;
++import io.multipaper.config.MultiPaperConfiguration;
++import io.multipaper.connection.MultiPaperDatabaseConnectionPool;
++import io.multipaper.databasemessagingprotocol.messages.databasebound.DatabaseBoundMessage;
++import io.multipaper.databasemessagingprotocol.messages.databasebound.StartMessage;
++import io.multipaper.databasemessagingprotocol.messages.databasebound.WriteTickTimeMessage;
++import io.multipaper.databasemessagingprotocol.messages.serverbound.ServerBoundMessage;
++import io.multipaper.databasemessagingprotocol.messages.serverbound.SetSecretMessage;
++import org.slf4j.Logger;
++
++import java.net.InetSocketAddress;
++import java.net.SocketAddress;
++import java.util.concurrent.CompletableFuture;
++
++public class MultiPaper {
++
++    private static final Logger LOGGER = LogUtils.getClassLogger();
++
++    private static String secret;
++
++    public static CompletableFuture<ServerBoundMessage> sendMessage(DatabaseBoundMessage message) {
++        return MultiPaperDatabaseConnectionPool.sendMessage(message);
++    }
++
++    public static <T extends ServerBoundMessage> CompletableFuture<T> sendMessage(DatabaseBoundMessage message, Class<T> expectedResponseClass) {
++        return sendMessage(message).thenApply(reply -> {
++            if (expectedResponseClass.isInstance(reply)) {
++                return expectedResponseClass.cast(reply);
++            } else {
++                LOGGER.error("Unexpected response type for {}: {}, expected {}", message.getClass().getSimpleName(), reply.getClass().getSimpleName(), expectedResponseClass.getSimpleName());
++                throw new IllegalStateException("Unexpected response type for " + message.getClass().getSimpleName() + ": " + reply.getClass().getSimpleName() + ", expected " + expectedResponseClass.getSimpleName());
++            }
++        });
++    }
++
++    public static void onStart(SocketAddress bindAddress) {
++        MultiPaper.sendMessage(new StartMessage(
++                System.getProperty("server.address", ((InetSocketAddress) bindAddress).getAddress().getHostAddress()),
++                MultiPaperConfiguration.get().masterConnection.advertiseToBuiltInProxy ? ((InetSocketAddress) bindAddress).getPort() : 0
++        ), SetSecretMessage.class).thenAccept(response -> {
++            secret = response.secret;
++        });
++    }
++
++    public static String getSecret() {
++        return secret;
++    }
++
++    public static void sendTickTime(long time, double tps) {
++        MultiPaper.sendMessage(new WriteTickTimeMessage(time, (float) tps));
++    }
++
++}
+diff --git a/src/main/java/io/multipaper/connection/MultiPaperDatabaseConnection.java b/src/main/java/io/multipaper/connection/MultiPaperDatabaseConnection.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..7b69e11a4da481c6bf291c67916fcf25ab796ffd
+--- /dev/null
++++ b/src/main/java/io/multipaper/connection/MultiPaperDatabaseConnection.java
+@@ -0,0 +1,101 @@
++package io.multipaper.connection;
++
++import com.mojang.logging.LogUtils;
++import io.multipaper.config.MultiPaperConfiguration;
++import io.netty.channel.ChannelHandlerContext;
++import io.netty.channel.socket.SocketChannel;
++import org.slf4j.Logger;
++import io.multipaper.databasemessagingprotocol.MessageBootstrap;
++import io.multipaper.databasemessagingprotocol.messages.databasebound.DatabaseBoundMessage;
++import io.multipaper.databasemessagingprotocol.messages.databasebound.DatabaseBoundProtocol;
++import io.multipaper.databasemessagingprotocol.messages.databasebound.HelloMessage;
++import io.multipaper.databasemessagingprotocol.messages.serverbound.ServerBoundMessage;
++import io.multipaper.databasemessagingprotocol.messages.serverbound.ServerBoundMessageHandler;
++import io.multipaper.databasemessagingprotocol.messages.serverbound.ServerBoundProtocol;
++
++import java.util.UUID;
++import java.util.concurrent.CompletableFuture;
++
++public class MultiPaperDatabaseConnection extends ServerBoundMessageHandler {
++
++    private static final Logger LOGGER = LogUtils.getClassLogger();
++    private static final UUID THIS_SERVERS_UUID = UUID.randomUUID();
++
++    public static int TIMEOUT_MS = 15_000;
++
++    private long lastMessageTimeMs = System.currentTimeMillis();
++    private final MessageBootstrap<ServerBoundMessage, DatabaseBoundMessage> bootstrap;
++    private final CompletableFuture<Void> onConnected = new CompletableFuture<>();
++    private SocketChannel channel;
++    private CompletableFuture<ServerBoundMessage> messageListener;
++    private boolean closed = false;
++
++    public MultiPaperDatabaseConnection() {
++        System.setProperty("multipaper.netty.threads", System.getProperty("multipaper.netty.threads", Integer.toString(Math.min(Runtime.getRuntime().availableProcessors(), 3))));
++        this.bootstrap = new MessageBootstrap<>(new ServerBoundProtocol(), new DatabaseBoundProtocol(), (channel, bootstrap) -> channel.pipeline().addLast(this));
++        connect();
++    }
++
++    private void connect() {
++        String server = MultiPaperConfiguration.get().masterConnection.masterAddress;
++        LOGGER.info("Connecting to {}...", server);
++        String[] serverParts = server.split(":");
++        this.bootstrap.connectTo(serverParts[0], Integer.parseInt(serverParts[1]));
++    }
++
++    @Override
++    public void channelActive(ChannelHandlerContext ctx) {
++        this.channel = (SocketChannel) ctx.channel();
++        LOGGER.info("Connected to {}", channel.remoteAddress());
++        this.channel.writeAndFlush(new HelloMessage(
++                MultiPaperConfiguration.get().masterConnection.myName,
++                THIS_SERVERS_UUID,
++                this.bootstrap.getInboundProtocol().getProtocolHash(),
++                this.bootstrap.getOutboundProtocol().getProtocolHash()
++        ));
++        this.onConnected.complete(null);
++    }
++
++    @Override
++    public void channelInactive(ChannelHandlerContext ctx) {
++        this.closed = true;
++        LOGGER.info("Lost connection to {}", ((SocketChannel) ctx.channel()).remoteAddress());
++    }
++
++    public CompletableFuture<ServerBoundMessage> sendMessage(DatabaseBoundMessage message) {
++        this.messageListener = new CompletableFuture<>();
++        this.onConnected.thenRun(() -> {
++            this.channel.writeAndFlush(message);
++        });
++        return messageListener;
++    }
++
++    public boolean isAlive() {
++        if (this.closed) {
++            return false;
++        }
++
++        if (System.currentTimeMillis() - this.lastMessageTimeMs > TIMEOUT_MS) {
++            close();
++            return false;
++        }
++
++        return true;
++    }
++
++    public void close() {
++        this.closed = true;
++        channel.close();
++    }
++
++    @Override
++    public void handle(ServerBoundMessage message) {
++        if (this.messageListener == null || this.messageListener.isDone()) {
++            LOGGER.error("Received unexpected message: {}", message.getClass().getSimpleName());
++            return;
++        }
++
++        this.lastMessageTimeMs = System.currentTimeMillis();
++        this.messageListener.complete(message);
++    }
++}
+diff --git a/src/main/java/io/multipaper/connection/MultiPaperDatabaseConnectionPool.java b/src/main/java/io/multipaper/connection/MultiPaperDatabaseConnectionPool.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..084287b329f1924ebb1bb9441e2cfaf28f8df2e3
+--- /dev/null
++++ b/src/main/java/io/multipaper/connection/MultiPaperDatabaseConnectionPool.java
+@@ -0,0 +1,60 @@
++package io.multipaper.connection;
++
++import com.mojang.logging.LogUtils;
++import org.slf4j.Logger;
++import io.multipaper.databasemessagingprotocol.messages.databasebound.DatabaseBoundMessage;
++import io.multipaper.databasemessagingprotocol.messages.serverbound.ServerBoundMessage;
++
++import java.util.Queue;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.ConcurrentLinkedQueue;
++import java.util.concurrent.TimeUnit;
++
++public class MultiPaperDatabaseConnectionPool {
++
++    private static final Logger LOGGER = LogUtils.getClassLogger();
++
++    private static final Queue<MultiPaperDatabaseConnection> pool = new ConcurrentLinkedQueue<>();
++
++    public static CompletableFuture<ServerBoundMessage> sendMessage(DatabaseBoundMessage message) {
++        MultiPaperDatabaseConnection connection = getOrCreateConnection();
++
++        CompletableFuture<ServerBoundMessage> future = new CompletableFuture<>();
++
++        connection.sendMessage(message)
++                .completeOnTimeout(null, MultiPaperDatabaseConnection.TIMEOUT_MS, TimeUnit.MILLISECONDS)
++                .thenAccept(response -> {
++                    if (response == null) {
++                        // Timedout
++                        LOGGER.warn("Connection to database timed out. Reconnecting. Tried sending a {}", message.getClass().getSimpleName());
++                        connection.close();
++                        sendMessage(message).thenAccept(future::complete);
++                        return;
++                    }
++                    future.complete(response);
++                    addToPool(connection);
++                })
++                .exceptionally(ex -> {
++                    future.completeExceptionally(ex);
++                    return null;
++                });
++
++        return future;
++    }
++
++    private static MultiPaperDatabaseConnection getOrCreateConnection() {
++        MultiPaperDatabaseConnection connection;
++        do {
++            connection = pool.poll();
++            if (connection == null) {
++                connection = new MultiPaperDatabaseConnection();
++            }
++        } while (!connection.isAlive());
++        return connection;
++    }
++
++    private static void addToPool(MultiPaperDatabaseConnection connection) {
++        pool.add(connection);
++    }
++
++}
+diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
+index efa7aee51fd3063360a8ab2e5ab96839140b4ca8..1df36f9edc7e27f9c282abd48ffefca79ced54e2 100644
+--- a/src/main/java/net/minecraft/server/MinecraftServer.java
++++ b/src/main/java/net/minecraft/server/MinecraftServer.java
+@@ -14,6 +14,7 @@ import com.mojang.authlib.GameProfileRepository;
+ import com.mojang.authlib.minecraft.MinecraftSessionService;
+ import com.mojang.datafixers.DataFixer;
+ import com.mojang.logging.LogUtils;
++import io.multipaper.MultiPaper;
+ import io.multipaper.shreddedpaper.ShreddedPaper;
+ import io.multipaper.shreddedpaper.threading.ShreddedPaperPlayerTicker;
+ import io.papermc.paper.util.TickThread;
+@@ -1664,6 +1665,7 @@ public abstract class MinecraftServer extends ReentrantBlockableEventLoop<TickTa
+         this.tickTimes10s.add(this.tickCount, j);
+         this.tickTimes60s.add(this.tickCount, j);
+         // Paper end - Add tick times API and /mspt command
++        MultiPaper.sendTickTime(k - i, recentTps[0]); // MultiPaper
+         this.logTickMethodTime(i);
+         //this.profiler.pop(); // Purpur
+         org.spigotmc.WatchdogThread.tick(); // Spigot
+diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+index 7507624e1e40b902855ac846f64a39a23e5a3646..e51dd2eb58c1be245d82bef08c7553f6dcbb873a 100644
+--- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -9,6 +9,7 @@ import java.io.BufferedWriter;
+ import java.io.IOException;
+ import java.io.InputStreamReader;
+ import java.net.InetAddress;
++import java.net.InetSocketAddress;
+ import java.net.Proxy;
+ import java.nio.charset.StandardCharsets;
+ import java.nio.file.Files;
+@@ -19,6 +20,11 @@ import java.util.Locale;
+ import java.util.Optional;
+ import java.util.function.BooleanSupplier;
+ import javax.annotation.Nullable;
++
++import io.multipaper.MultiPaper;
++import io.multipaper.connection.MultiPaperDatabaseConnection;
++import io.multipaper.connection.MultiPaperDatabaseConnectionPool;
++import io.multipaper.databasemessagingprotocol.messages.databasebound.StartMessage;
+ import net.minecraft.DefaultUncaughtExceptionHandler;
+ import net.minecraft.DefaultUncaughtExceptionHandlerWithName;
+ import net.minecraft.SharedConstants;
+@@ -344,6 +350,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+             DedicatedServer.LOGGER.warn("To change this, set \"online-mode\" to \"true\" in the server.properties file.");
+         }
+ 
++        MultiPaper.onStart(bindAddress); // MultiPaper
+ 
+         if (!OldUsersConverter.serverReadyAfterUserconversion(this)) {
+             return false;

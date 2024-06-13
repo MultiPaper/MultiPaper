@@ -1,0 +1,30 @@
+package io.multipaper.databasemessagingprotocol.messages.databasebound;
+
+import io.multipaper.databasemessagingprotocol.ExtendedByteBuf;
+
+public class ReadPlayerMessage extends DatabaseBoundMessage {
+
+    public final String world;
+    public final String uuid;
+
+    public ReadPlayerMessage(String world, String uuid) {
+        this.world = world;
+        this.uuid = uuid;
+    }
+
+    public ReadPlayerMessage(ExtendedByteBuf byteBuf) {
+        world = byteBuf.readString();
+        uuid = byteBuf.readString();
+    }
+
+    @Override
+    public void write(ExtendedByteBuf byteBuf) {
+        byteBuf.writeString(world);
+        byteBuf.writeString(uuid);
+    }
+
+    @Override
+    public void handle(DatabaseBoundMessageHandler handler) {
+        handler.handle(this);
+    }
+}

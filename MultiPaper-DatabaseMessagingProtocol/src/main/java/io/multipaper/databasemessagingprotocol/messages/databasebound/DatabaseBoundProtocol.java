@@ -15,6 +15,7 @@ public class DatabaseBoundProtocol extends Protocol<DatabaseBoundMessage> {
         addMessage(ReadPlayerMessage.class, ReadPlayerMessage::new);
         addMessage(ReadStatsMessage.class, ReadStatsMessage::new);
         addMessage(ReadUidMessage.class, ReadUidMessage::new);
+        addMessage(RequestServersListMessage.class, RequestServersListMessage::new);
         addMessage(StartMessage.class, StartMessage::new);
         addMessage(WriteAdvancementsMessage.class, WriteAdvancementsMessage::new);
         addMessage(WriteChunkMessage.class, WriteChunkMessage::new);

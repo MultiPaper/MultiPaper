@@ -9,6 +9,7 @@ import io.multipaper.database.handlers.ReadLevelHandler;
 import io.multipaper.database.handlers.ReadPlayerHandler;
 import io.multipaper.database.handlers.ReadStatsHandler;
 import io.multipaper.database.handlers.ReadUidHandler;
+import io.multipaper.database.handlers.RequestServersListHandler;
 import io.multipaper.database.handlers.StartHandler;
 import io.multipaper.database.handlers.WriteAdvancementsHandler;
 import io.multipaper.database.handlers.WriteChunkHandler;
@@ -31,6 +32,7 @@ import io.multipaper.databasemessagingprotocol.messages.databasebound.ReadLevelM
 import io.multipaper.databasemessagingprotocol.messages.databasebound.ReadPlayerMessage;
 import io.multipaper.databasemessagingprotocol.messages.databasebound.ReadStatsMessage;
 import io.multipaper.databasemessagingprotocol.messages.databasebound.ReadUidMessage;
+import io.multipaper.databasemessagingprotocol.messages.databasebound.RequestServersListMessage;
 import io.multipaper.databasemessagingprotocol.messages.databasebound.StartMessage;
 import io.multipaper.databasemessagingprotocol.messages.databasebound.WriteAdvancementsMessage;
 import io.multipaper.databasemessagingprotocol.messages.databasebound.WriteChunkMessage;
@@ -159,6 +161,11 @@ public class ServerConnection extends DatabaseBoundMessageHandler {
     @Override
     public void handle(ReadUidMessage message) {
         ReadUidHandler.handle(this, message);
+    }
+
+    @Override
+    public void handle(RequestServersListMessage message) {
+        RequestServersListHandler.handle(this, message);
     }
 
     @Override

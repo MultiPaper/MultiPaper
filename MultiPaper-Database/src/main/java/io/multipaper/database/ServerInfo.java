@@ -54,6 +54,10 @@ public class ServerInfo {
         return uuid;
     }
 
+    public long getLastMessageTime() {
+        return lastMessageTime;
+    }
+
     public void setLastMessageTime(long lastMessageTime) {
         this.lastMessageTime = lastMessageTime;
     }

@@ -24,6 +24,8 @@ public abstract class DatabaseBoundMessageHandler extends MessageHandler<Databas
 
     public abstract void handle(ReadUidMessage message);
 
+    public abstract void handle(RequestServersListMessage message);
+
     public abstract void handle(StartMessage message);
 
     public abstract void handle(WriteAdvancementsMessage message);

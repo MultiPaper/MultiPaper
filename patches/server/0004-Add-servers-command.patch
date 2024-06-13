@@ -1,0 +1,164 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Thu, 13 Jun 2024 11:14:33 +0900
+Subject: [PATCH] Add /servers command
+
+
+diff --git a/src/main/java/io/multipaper/commands/MultiPaperCommands.java b/src/main/java/io/multipaper/commands/MultiPaperCommands.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..9a4affd16112ed172272f8dc1367345bbde74fc3
+--- /dev/null
++++ b/src/main/java/io/multipaper/commands/MultiPaperCommands.java
+@@ -0,0 +1,26 @@
++package io.multipaper.commands;
++
++import net.minecraft.server.MinecraftServer;
++import org.bukkit.command.Command;
++
++import java.util.HashMap;
++import java.util.Map;
++
++public class MultiPaperCommands {
++
++    private static final Map<String, Command> COMMANDS = new HashMap<>();
++    static {
++        for (Command command : new Command[] {
++                new ServersCommand("servers")
++        }) {
++            COMMANDS.put(command.getName(), command);
++        }
++    }
++
++    public static void registerCommands(final MinecraftServer server) {
++        COMMANDS.forEach((s, command) -> {
++            server.server.getCommandMap().register(s, "multipaper", command);
++        });
++    }
++
++}
+diff --git a/src/main/java/io/multipaper/commands/ServersCommand.java b/src/main/java/io/multipaper/commands/ServersCommand.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..4c9ec8014f33d48e0b66e511c0bb9bcfe6a84980
+--- /dev/null
++++ b/src/main/java/io/multipaper/commands/ServersCommand.java
+@@ -0,0 +1,79 @@
++package io.multipaper.commands;
++
++import io.multipaper.MultiPaper;
++import io.multipaper.databasemessagingprotocol.messages.databasebound.RequestServersListMessage;
++import io.multipaper.databasemessagingprotocol.messages.serverbound.ServerInfoListMessage;
++import net.kyori.adventure.text.minimessage.MiniMessage;
++import org.bukkit.command.Command;
++import org.bukkit.command.CommandSender;
++
++import java.util.concurrent.CompletableFuture;
++
++public class ServersCommand extends Command {
++    public ServersCommand(String command) {
++        super(command);
++        setPermission("multipaper.command.servers");
++    }
++
++    // Use a cache to prevent abuse by players
++    private CompletableFuture<ServerInfoListMessage> serverInfoListCache = null;
++    private long lastServerInfoListRequestTime = 0; // ms
++    private static final long SERVER_INFO_LIST_CACHE_TIME = 1000; // ms
++
++    private CompletableFuture<ServerInfoListMessage> getServerInfoList() {
++        if (serverInfoListCache != null && System.currentTimeMillis() - lastServerInfoListRequestTime < SERVER_INFO_LIST_CACHE_TIME) {
++            return serverInfoListCache;
++        }
++
++        lastServerInfoListRequestTime = System.currentTimeMillis();
++        return serverInfoListCache = MultiPaper.sendMessage(new RequestServersListMessage(), ServerInfoListMessage.class);
++    }
++
++    @Override
++    public boolean execute(CommandSender sender, String commandLabel, String[] args) {
++        if (!testPermission(sender)) return false;
++
++        getServerInfoList().thenAccept(message -> {
++            StringBuilder stringBuilder = new StringBuilder();
++            stringBuilder.append("<gray>[Servers] (Avg Tick Time / Tps / Player Count)");
++
++            for (ServerInfoListMessage.Server server : message.servers) {
++                String tickTime = server.averageTickTime() + "ms";
++                if (server.tps() >= 19.9) {
++                    tickTime = "<green>" + tickTime;
++                } else if (server.tps() >= 17.5) {
++                    tickTime = "<yellow>" + tickTime;
++                } else {
++                    tickTime = "<red>" + tickTime;
++                }
++
++                String tpsString = String.format("%.1f tps", server.tps());
++
++                int players = 0;
++
++                // TODO
++//                for (ServerPlayer player : MinecraftServer.getServer().getPlayerList().players) {
++//                    if ((MultiPaper.isMe(server.uuid()) && MultiPaper.isRealPlayer(player))
++//                            || (player instanceof ExternalPlayer && ((ExternalPlayer) player).externalServerConnection == server.getConnection())) {
++//                        players++;
++//                    }
++//                }
++
++                String playersString = players + " player";
++                if (players != 1) {
++                    playersString += "s";
++                }
++
++                if (!server.isAlive()) {
++                    stringBuilder.append(String.format("\n<dark_gray>[%s] %sms, %s, %s", server.name(), server.averageTickTime(), tpsString, playersString));
++                } else {
++                    stringBuilder.append(String.format("\n<green>[%s<green>] %s<green>, %s, %s",
++                            (MultiPaper.isMe(server.uuid()) ? "<gold>" : "") + server.name(), tickTime, tpsString, playersString));
++                }
++            }
++
++            sender.sendMessage(MiniMessage.miniMessage().deserialize(stringBuilder.toString()));
++        });
++        return true;
++    }
++}
+\ No newline at end of file
+diff --git a/src/main/java/io/multipaper/permissions/MultiPaperCommandPermissions.java b/src/main/java/io/multipaper/permissions/MultiPaperCommandPermissions.java
+index b06ea7ca929f820d8132690eb2dd37f40ba47de1..8f93997814dbbe37ce61e710061361298e57ac3d 100644
+--- a/src/main/java/io/multipaper/permissions/MultiPaperCommandPermissions.java
++++ b/src/main/java/io/multipaper/permissions/MultiPaperCommandPermissions.java
+@@ -1,6 +1,7 @@
+ package io.multipaper.permissions;
+ 
+ import org.bukkit.permissions.Permission;
++import org.bukkit.permissions.PermissionDefault;
+ import org.bukkit.util.permissions.DefaultPermissions;
+ import org.jetbrains.annotations.NotNull;
+ 
+@@ -11,6 +12,7 @@ public class MultiPaperCommandPermissions {
+     public static void registerPermissions(@NotNull Permission parent) {
+         Permission commands = DefaultPermissions.registerPermission(ROOT, "Gives the user the ability to use all MultiPaper commands", parent);
+ 
++        DefaultPermissions.registerPermission(PREFIX + "servers", "Servers command", PermissionDefault.TRUE, commands);
+ 
+         commands.recalculatePermissibles();
+     }
+diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+index e51dd2eb58c1be245d82bef08c7553f6dcbb873a..7073aabc3659eb736a436784476fb91930579b03 100644
+--- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -22,6 +22,7 @@ import java.util.function.BooleanSupplier;
+ import javax.annotation.Nullable;
+ 
+ import io.multipaper.MultiPaper;
++import io.multipaper.commands.MultiPaperCommands;
+ import io.multipaper.connection.MultiPaperDatabaseConnection;
+ import io.multipaper.connection.MultiPaperDatabaseConnectionPool;
+ import io.multipaper.databasemessagingprotocol.messages.databasebound.StartMessage;
+@@ -250,6 +251,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+         org.purpurmc.purpur.PurpurConfig.registerCommands();
+         // Purpur end
+         ShreddedPaperCommands.registerCommands(this); // ShreddedPaper
++        MultiPaperCommands.registerCommands(this); // MultiPaper
+         com.destroystokyo.paper.VersionHistoryManager.INSTANCE.getClass(); // Paper - load version history now
+ 
+         this.setPvpAllowed(dedicatedserverproperties.pvp);

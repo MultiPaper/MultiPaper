@@ -18,10 +18,10 @@ index b1c70490956f6b77bb8bbb372a4ad5bbca0efe94..bdf17d88442f114b894ead8b89870233
      implementation("org.jline:jline-terminal-jansi:3.21.0")
 diff --git a/src/main/java/io/multipaper/MultiPaper.java b/src/main/java/io/multipaper/MultiPaper.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..c18bc806edb2f627a5b14d097f48e76e0108e92b
+index 0000000000000000000000000000000000000000..377ff6cbee9caad31c1126719711d55bcc379b2b
 --- /dev/null
 +++ b/src/main/java/io/multipaper/MultiPaper.java
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,66 @@
 +package io.multipaper;
 +
 +import com.mojang.logging.LogUtils;
@@ -36,11 +36,14 @@ index 0000000000000000000000000000000000000000..c18bc806edb2f627a5b14d097f48e76e
 +
 +import java.net.InetSocketAddress;
 +import java.net.SocketAddress;
++import java.util.UUID;
 +import java.util.concurrent.CompletableFuture;
 +
 +public class MultiPaper {
 +
 +    private static final Logger LOGGER = LogUtils.getClassLogger();
++
++    private static final UUID THIS_SERVERS_UUID = UUID.randomUUID();
 +
 +    private static String secret;
 +
@@ -76,16 +79,25 @@ index 0000000000000000000000000000000000000000..c18bc806edb2f627a5b14d097f48e76e
 +        MultiPaper.sendMessage(new WriteTickTimeMessage(time, (float) tps));
 +    }
 +
++    public static boolean isMe(UUID uuid) {
++        return THIS_SERVERS_UUID.equals(uuid);
++    }
++
++    public static UUID getMyServerUuid() {
++        return THIS_SERVERS_UUID;
++    }
++
 +}
 diff --git a/src/main/java/io/multipaper/connection/MultiPaperDatabaseConnection.java b/src/main/java/io/multipaper/connection/MultiPaperDatabaseConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..7b69e11a4da481c6bf291c67916fcf25ab796ffd
+index 0000000000000000000000000000000000000000..47cb10802fb7a0f0d4fe8a35eaee24e1ede1f4f5
 --- /dev/null
 +++ b/src/main/java/io/multipaper/connection/MultiPaperDatabaseConnection.java
 @@ -0,0 +1,101 @@
 +package io.multipaper.connection;
 +
 +import com.mojang.logging.LogUtils;
++import io.multipaper.MultiPaper;
 +import io.multipaper.config.MultiPaperConfiguration;
 +import io.netty.channel.ChannelHandlerContext;
 +import io.netty.channel.socket.SocketChannel;
@@ -104,7 +116,6 @@ index 0000000000000000000000000000000000000000..7b69e11a4da481c6bf291c67916fcf25
 +public class MultiPaperDatabaseConnection extends ServerBoundMessageHandler {
 +
 +    private static final Logger LOGGER = LogUtils.getClassLogger();
-+    private static final UUID THIS_SERVERS_UUID = UUID.randomUUID();
 +
 +    public static int TIMEOUT_MS = 15_000;
 +
@@ -134,7 +145,7 @@ index 0000000000000000000000000000000000000000..7b69e11a4da481c6bf291c67916fcf25
 +        LOGGER.info("Connected to {}", channel.remoteAddress());
 +        this.channel.writeAndFlush(new HelloMessage(
 +                MultiPaperConfiguration.get().masterConnection.myName,
-+                THIS_SERVERS_UUID,
++                MultiPaper.getMyServerUuid(),
 +                this.bootstrap.getInboundProtocol().getProtocolHash(),
 +                this.bootstrap.getOutboundProtocol().getProtocolHash()
 +        ));
@@ -251,7 +262,7 @@ index 0000000000000000000000000000000000000000..084287b329f1924ebb1bb9441e2cfaf2
 +
 +}
 diff --git a/src/main/java/net/minecraft/server/MinecraftServer.java b/src/main/java/net/minecraft/server/MinecraftServer.java
-index efa7aee51fd3063360a8ab2e5ab96839140b4ca8..1df36f9edc7e27f9c282abd48ffefca79ced54e2 100644
+index efa7aee51fd3063360a8ab2e5ab96839140b4ca8..74ca344ab149cf523f1ab5a6448f549350fb0c67 100644
 --- a/src/main/java/net/minecraft/server/MinecraftServer.java
 +++ b/src/main/java/net/minecraft/server/MinecraftServer.java
 @@ -14,6 +14,7 @@ import com.mojang.authlib.GameProfileRepository;
@@ -266,7 +277,7 @@ index efa7aee51fd3063360a8ab2e5ab96839140b4ca8..1df36f9edc7e27f9c282abd48ffefca7
          this.tickTimes10s.add(this.tickCount, j);
          this.tickTimes60s.add(this.tickCount, j);
          // Paper end - Add tick times API and /mspt command
-+        MultiPaper.sendTickTime(k - i, recentTps[0]); // MultiPaper
++        MultiPaper.sendTickTime(j, recentTps[0]); // MultiPaper
          this.logTickMethodTime(i);
          //this.profiler.pop(); // Purpur
          org.spigotmc.WatchdogThread.tick(); // Spigot

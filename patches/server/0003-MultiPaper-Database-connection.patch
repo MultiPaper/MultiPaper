@@ -90,10 +90,10 @@ index 0000000000000000000000000000000000000000..377ff6cbee9caad31c1126719711d55b
 +}
 diff --git a/src/main/java/io/multipaper/connection/MultiPaperDatabaseConnection.java b/src/main/java/io/multipaper/connection/MultiPaperDatabaseConnection.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..47cb10802fb7a0f0d4fe8a35eaee24e1ede1f4f5
+index 0000000000000000000000000000000000000000..047f79c7cd1b3700e9e398f7aa0bf321578d38ce
 --- /dev/null
 +++ b/src/main/java/io/multipaper/connection/MultiPaperDatabaseConnection.java
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,107 @@
 +package io.multipaper.connection;
 +
 +import com.mojang.logging.LogUtils;
@@ -110,7 +110,6 @@ index 0000000000000000000000000000000000000000..47cb10802fb7a0f0d4fe8a35eaee24e1
 +import io.multipaper.databasemessagingprotocol.messages.serverbound.ServerBoundMessageHandler;
 +import io.multipaper.databasemessagingprotocol.messages.serverbound.ServerBoundProtocol;
 +
-+import java.util.UUID;
 +import java.util.concurrent.CompletableFuture;
 +
 +public class MultiPaperDatabaseConnection extends ServerBoundMessageHandler {
@@ -142,6 +141,11 @@ index 0000000000000000000000000000000000000000..47cb10802fb7a0f0d4fe8a35eaee24e1
 +    @Override
 +    public void channelActive(ChannelHandlerContext ctx) {
 +        this.channel = (SocketChannel) ctx.channel();
++        if (this.closed) {
++            this.channel.close();
++            return;
++        }
++
 +        LOGGER.info("Connected to {}", channel.remoteAddress());
 +        this.channel.writeAndFlush(new HelloMessage(
 +                MultiPaperConfiguration.get().masterConnection.myName,
@@ -181,7 +185,9 @@ index 0000000000000000000000000000000000000000..47cb10802fb7a0f0d4fe8a35eaee24e1
 +
 +    public void close() {
 +        this.closed = true;
-+        channel.close();
++        if (this.channel != null) {
++            this.channel.close();
++        }
 +    }
 +
 +    @Override

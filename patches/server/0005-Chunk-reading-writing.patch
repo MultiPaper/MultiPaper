@@ -1,0 +1,158 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: PureGero <puregero@gmail.com>
+Date: Tue, 18 Jun 2024 16:17:35 +0900
+Subject: [PATCH] Chunk reading/writing
+
+
+diff --git a/src/main/java/io/multipaper/MultiPaper.java b/src/main/java/io/multipaper/MultiPaper.java
+index 377ff6cbee9caad31c1126719711d55bcc379b2b..1d0642426cc84d1c891eb97e20dcaf67d06f3ea1 100644
+--- a/src/main/java/io/multipaper/MultiPaper.java
++++ b/src/main/java/io/multipaper/MultiPaper.java
+@@ -4,16 +4,33 @@ import com.mojang.logging.LogUtils;
+ import io.multipaper.config.MultiPaperConfiguration;
+ import io.multipaper.connection.MultiPaperDatabaseConnectionPool;
+ import io.multipaper.databasemessagingprotocol.messages.databasebound.DatabaseBoundMessage;
++import io.multipaper.databasemessagingprotocol.messages.databasebound.ReadChunkMessage;
+ import io.multipaper.databasemessagingprotocol.messages.databasebound.StartMessage;
++import io.multipaper.databasemessagingprotocol.messages.databasebound.WriteChunkMessage;
+ import io.multipaper.databasemessagingprotocol.messages.databasebound.WriteTickTimeMessage;
++import io.multipaper.databasemessagingprotocol.messages.serverbound.DataMessage;
+ import io.multipaper.databasemessagingprotocol.messages.serverbound.ServerBoundMessage;
+ import io.multipaper.databasemessagingprotocol.messages.serverbound.SetSecretMessage;
++import io.papermc.paper.util.TickThread;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.NbtIo;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerLevel;
+ import org.slf4j.Logger;
+ 
++import java.io.ByteArrayInputStream;
++import java.io.ByteArrayOutputStream;
++import java.io.DataInputStream;
++import java.io.DataOutputStream;
++import java.io.IOException;
+ import java.net.InetSocketAddress;
+ import java.net.SocketAddress;
+ import java.util.UUID;
+ import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.locks.LockSupport;
++import java.util.function.BooleanSupplier;
++import java.util.zip.DeflaterOutputStream;
++import java.util.zip.InflaterInputStream;
+ 
+ public class MultiPaper {
+ 
+@@ -63,4 +80,81 @@ public class MultiPaper {
+         return THIS_SERVERS_UUID;
+     }
+ 
++    public static <T> T managedJoin(CompletableFuture<T> future) {
++        if (!future.isDone() && TickThread.isTickThread()) {
++            // We are on the tick thread, so we need to make sure none of the tasks are blocking us
++            managedBlock(future::isDone);
++        }
++
++        return future.join();
++    }
++
++    public static void managedBlock(BooleanSupplier stopCondition) {
++        if (MinecraftServer.getServer().getRunningThread() == Thread.currentThread() || TickThread.isShutdownThread()) {
++            // Main thread, so use the main thread task manager
++            MinecraftServer.getServer().managedBlock(stopCondition);
++            return;
++        }
++
++        // Tick thread, so only tick chunk tasks as we may own the lock on the chunks
++        do {
++            if (!pollTask()) {
++                waitForTasks();
++            }
++        } while (!stopCondition.getAsBoolean());
++    }
++
++    private static boolean pollTask() {
++        boolean ret = false;
++
++        for (ServerLevel level : MinecraftServer.getServer().getAllLevels()) {
++            ret |= level.getChunkSource().pollTask();
++        }
++
++        return ret;
++    }
++
++    private static void waitForTasks() {
++        Thread.yield();
++        LockSupport.parkNanos("waiting for tasks", 100_000L);
++    }
++
++    public static byte[] nbtToBytes(CompoundTag compoundTag) throws IOException {
++        if (compoundTag == null) {
++            return new byte[0];
++        }
++        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
++        NbtIo.write(compoundTag, new DataOutputStream(buffer));
++        return buffer.toByteArray();
++    }
++
++    public static CompoundTag nbtFromBytes(byte[] data) throws IOException {
++        return NbtIo.read(new DataInputStream(new ByteArrayInputStream(data)));
++    }
++
++    public static CompoundTag readChunk(String path, int cx, int cz) throws IOException {
++        DataMessage message = managedJoin(sendMessage(new ReadChunkMessage(path, cx, cz), DataMessage.class));
++
++        if (message.data.length == 0) {
++            return null;
++        }
++
++        DataInputStream in = new DataInputStream(new InflaterInputStream(new ByteArrayInputStream(message.data)));
++        return NbtIo.read(in);
++    }
++
++    public static void writeChunk(String path, int cx, int cz, CompoundTag tag) throws IOException {
++        byte[] data = tag == null ? new byte[0] : nbtToBytes(tag);
++
++        if (data.length > 0) {
++            ByteArrayOutputStream baos = new ByteArrayOutputStream();
++            DeflaterOutputStream deflateOut = new DeflaterOutputStream(baos);
++            deflateOut.write(data);
++            deflateOut.close();
++            data = baos.toByteArray();
++        }
++
++        managedJoin(sendMessage(new WriteChunkMessage(path, cx, cz, data, tag != null && tag.contains("multipaper.transient"))));
++    }
++
+ }
+diff --git a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
+index 1090b7e36e3c1c105bc36135b82751c651f237d4..a56f795146ef828ef0306a8851258995f5bb6852 100644
+--- a/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
++++ b/src/main/java/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.world.level.chunk.storage;
+ 
++import io.multipaper.MultiPaper;
+ import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
+ import it.unimi.dsi.fastutil.objects.ObjectIterator;
+ import java.io.DataInput;
+@@ -194,6 +195,7 @@ public class RegionFileStorage implements AutoCloseable {
+ 
+     @Nullable
+     public CompoundTag read(ChunkPos pos) throws IOException {
++        if (true) return MultiPaper.readChunk(this.folder.toString(), pos.x, pos.z); // MultiPaper
+         // CraftBukkit start - SPIGOT-5680: There's no good reason to preemptively create files on read, save that for writing
+         RegionFile regionfile = this.getRegionFile(pos, true, true); // Paper
+         if (regionfile == null) {
+@@ -301,6 +303,12 @@ public class RegionFileStorage implements AutoCloseable {
+     }
+ 
+     protected void write(ChunkPos pos, @Nullable CompoundTag nbt) throws IOException {
++        // MultiPaper start
++        if (true) {
++            MultiPaper.writeChunk(this.folder.toString(), pos.x, pos.z, nbt);
++            return;
++        }
++        // MultiPaper end
+         // Paper start - rewrite chunk system
+         RegionFile regionfile = this.getRegionFile(pos, nbt == null, true); // CraftBukkit
+         if (nbt == null && regionfile == null) {

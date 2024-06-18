@@ -30,11 +30,11 @@ public class WriteChunkHandler {
     }
 
     private static void writeData(WriteChunkMessage message, byte[] data) {
-        RegionFileCache.putChunkDeflatedData(ReadChunkHandler.getWorldDir(message.world, message.path), message.cx, message.cz, data);
+        RegionFileCache.putChunkDeflatedData(ReadChunkHandler.validateFile(message.path), message.cx, message.cz, data);
     }
 
     private static void handleTransientEntities(WriteChunkMessage message) {
-        byte[] data = RegionFileCache.getChunkDeflatedData(ReadChunkHandler.getWorldDir(message.world, message.path), message.cx, message.cz);
+        byte[] data = RegionFileCache.getChunkDeflatedData(ReadChunkHandler.validateFile(message.path), message.cx, message.cz);
 
         CompoundTag transientEntities = CompoundTag.read(new DataInputStream(new ByteArrayInputStream(message.data))).asCompound();
 

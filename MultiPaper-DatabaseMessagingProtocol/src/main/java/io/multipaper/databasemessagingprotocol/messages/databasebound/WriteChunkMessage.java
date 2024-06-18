@@ -4,19 +4,17 @@ import io.multipaper.databasemessagingprotocol.ExtendedByteBuf;
 
 public class WriteChunkMessage extends DatabaseBoundMessage {
 
-    public final String world;
     public final String path;
     public final int cx;
     public final int cz;
     public final byte[] data;
     public final boolean isTransientEntities;
 
-    public WriteChunkMessage(String world, String path, int cx, int cz, byte[] data) {
-        this(world, path, cx, cz, data, false);
+    public WriteChunkMessage(String path, int cx, int cz, byte[] data) {
+        this(path, cx, cz, data, false);
     }
 
-    public WriteChunkMessage(String world, String path, int cx, int cz, byte[] data, boolean isTransientEntities) {
-        this.world = world;
+    public WriteChunkMessage(String path, int cx, int cz, byte[] data, boolean isTransientEntities) {
         this.path = path;
         this.cx = cx;
         this.cz = cz;
@@ -25,7 +23,6 @@ public class WriteChunkMessage extends DatabaseBoundMessage {
     }
 
     public WriteChunkMessage(ExtendedByteBuf byteBuf) {
-        world = byteBuf.readString();
         path = byteBuf.readString();
         cx = byteBuf.readInt();
         cz = byteBuf.readInt();
@@ -36,7 +33,6 @@ public class WriteChunkMessage extends DatabaseBoundMessage {
 
     @Override
     public void write(ExtendedByteBuf byteBuf) {
-        byteBuf.writeString(world);
         byteBuf.writeString(path);
         byteBuf.writeInt(cx);
         byteBuf.writeInt(cz);

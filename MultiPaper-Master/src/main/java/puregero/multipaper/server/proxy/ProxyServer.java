@@ -95,6 +95,7 @@ public class ProxyServer extends Thread {
     private void accept(SelectionKey key) {
         SocketChannel socketChannel = null;
         SocketChannel destinationChannel = null;
+        SocketAddress destinationAddress = null;
 
         try {
             ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
@@ -106,7 +107,7 @@ public class ProxyServer extends Thread {
 
             socketChannel.configureBlocking(false);
 
-            SocketAddress destinationAddress = getSuitableServer();
+            destinationAddress = getSuitableServer();
 
             if (destinationAddress == null) {
                 System.out.println("No available servers for " + socketChannel.getRemoteAddress() + " to connect to");
@@ -132,6 +133,10 @@ public class ProxyServer extends Thread {
 
             System.out.println(socketChannel.getRemoteAddress() + " has connected to " + destinationChannel.getRemoteAddress());
         } catch (IOException e) {
+            if (destinationAddress != null) {
+                System.err.println("Error while connecting to " + destinationAddress);
+            }
+
             e.printStackTrace();
 
             if (socketChannel != null) {

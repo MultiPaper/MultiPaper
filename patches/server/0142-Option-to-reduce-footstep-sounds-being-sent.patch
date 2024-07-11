@@ -5,7 +5,7 @@ Subject: [PATCH] Option to reduce footstep sounds being sent
 
 
 diff --git a/src/main/java/net/minecraft/server/players/PlayerList.java b/src/main/java/net/minecraft/server/players/PlayerList.java
-index 61f2fb4b9ff5120f596bebd817ae2c6e4e395493..c3462753df53ee197b4a002cbff21d538932420f 100644
+index 61f2fb4b9ff5120f596bebd817ae2c6e4e395493..968ccc67ab5baa829bc0ab0fa752afc536d6691c 100644
 --- a/src/main/java/net/minecraft/server/players/PlayerList.java
 +++ b/src/main/java/net/minecraft/server/players/PlayerList.java
 @@ -1,6 +1,5 @@
@@ -63,12 +63,13 @@ index 61f2fb4b9ff5120f596bebd817ae2c6e4e395493..c3462753df53ee197b4a002cbff21d53
  
      // CraftBukkit start
      private CraftServer cserver;
-@@ -1290,8 +1291,11 @@ public abstract class PlayerList {
+@@ -1290,8 +1291,12 @@ public abstract class PlayerList {
      }
  
      public void broadcast(@Nullable net.minecraft.world.entity.player.Player player, double x, double y, double z, double distance, ResourceKey<Level> worldKey, Packet<?> packet) {
 +        boolean shouldReduceBroadcast = shouldReduceBroadcast(packet); // MultiPaper - reduce footsteps
 +        broadcastStartIndex++; // MultiPaper - add randomness to broadcast order
++        if (broadcastStartIndex < 0) broadcastStartIndex = 0; // MultiPaper - add randomness to broadcast order
 +        int count = 0; // MultiPaper - reduce footsteps
          for (int i = 0; i < this.players.size(); ++i) {
 -            ServerPlayer entityplayer = (ServerPlayer) this.players.get(i);
@@ -76,7 +77,7 @@ index 61f2fb4b9ff5120f596bebd817ae2c6e4e395493..c3462753df53ee197b4a002cbff21d53
  
              // CraftBukkit start - Test if player receiving packet can see the source of the packet
              if (player != null && !entityplayer.getBukkitEntity().canSee(player.getBukkitEntity())) {
-@@ -1306,12 +1310,39 @@ public abstract class PlayerList {
+@@ -1306,12 +1311,39 @@ public abstract class PlayerList {
  
                  if (d4 * d4 + d5 * d5 + d6 * d6 < distance * distance) {
                      entityplayer.connection.send(packet);

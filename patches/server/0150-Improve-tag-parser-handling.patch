@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Nassim Jahnke <nassim@njahnke.dev>
+Date: Mon, 5 Feb 2024 11:54:04 +0100
+Subject: [PATCH] Improve tag parser handling
+
+
+diff --git a/src/main/java/net/minecraft/nbt/TagParser.java b/src/main/java/net/minecraft/nbt/TagParser.java
+index fbfe810e8be6cb159742f7fd85e7491b9cefa4dc..3fde50bbfbc5ffe0b9f5eb5d0d207a804ee89a31 100644
+--- a/src/main/java/net/minecraft/nbt/TagParser.java
++++ b/src/main/java/net/minecraft/nbt/TagParser.java
+@@ -38,6 +38,7 @@ public class TagParser {
+     private static final Pattern SHORT_PATTERN = Pattern.compile("[-+]?(?:0|[1-9][0-9]*)s", 2);
+     private static final Pattern INT_PATTERN = Pattern.compile("[-+]?(?:0|[1-9][0-9]*)");
+     private final StringReader reader;
++    private int depth; // Paper
+ 
+     public static CompoundTag parseTag(String string) throws CommandSyntaxException {
+         return (new TagParser(new StringReader(string))).readSingleStruct();
+@@ -146,6 +147,7 @@ public class TagParser {
+ 
+     public CompoundTag readStruct() throws CommandSyntaxException {
+         this.expect('{');
++        this.increaseDepth(); // Paper
+         CompoundTag compoundTag = new CompoundTag();
+         this.reader.skipWhitespace();
+ 
+@@ -169,6 +171,7 @@ public class TagParser {
+         }
+ 
+         this.expect('}');
++        this.depth--; // Paper
+         return compoundTag;
+     }
+ 
+@@ -178,6 +181,7 @@ public class TagParser {
+         if (!this.reader.canRead()) {
+             throw ERROR_EXPECTED_VALUE.createWithContext(this.reader);
+         } else {
++            this.increaseDepth(); // Paper
+             ListTag listTag = new ListTag();
+             TagType<?> tagType = null;
+ 
+@@ -203,6 +207,7 @@ public class TagParser {
+             }
+ 
+             this.expect(']');
++            this.depth--; // Paper
+             return listTag;
+         }
+     }
+@@ -241,11 +246,11 @@ public class TagParser {
+                 }
+ 
+                 if (typeReader == ByteTag.TYPE) {
+-                    list.add((T)((NumericTag)tag).getAsByte());
++                    list.add((T)((NumericTag)tag).getAsNumber()); // Paper - decompile fix
+                 } else if (typeReader == LongTag.TYPE) {
+-                    list.add((T)((NumericTag)tag).getAsLong());
++                    list.add((T)((NumericTag)tag).getAsNumber()); // Paper - decompile fix
+                 } else {
+-                    list.add((T)((NumericTag)tag).getAsInt());
++                    list.add((T)((NumericTag)tag).getAsNumber()); // Paper - decompile fix
+                 }
+ 
+                 if (this.hasElementSeparator()) {
+@@ -276,4 +281,11 @@ public class TagParser {
+         this.reader.skipWhitespace();
+         this.reader.expect(c);
+     }
++
++    private void increaseDepth() {
++        this.depth++;
++        if (this.depth > 512) {
++            throw new IllegalArgumentException("NBT tag is too complex, depth > 512");
++        }
++    }
+ }
+diff --git a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+index 4ab13ea3692391295f633541fe0846f94396cc23..dfdfe77bce375ed0fc3a627cbf6e785ec50c4a22 100644
+--- a/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
++++ b/src/main/java/net/minecraft/server/network/ServerGamePacketListenerImpl.java
+@@ -993,8 +993,18 @@ public class ServerGamePacketListenerImpl implements ServerPlayerConnection, Tic
+                 if (!event.isCancelled()) {
+ 
+                     this.server.scheduleOnMain(() -> { // This needs to be on main
+-                        ParseResults<CommandSourceStack> parseresults = this.server.getCommands().getDispatcher().parse(stringreader, this.player.createCommandSourceStack());
+-
++                        // Paper start - Handle non-reoverable exceptions
++                        ParseResults<CommandSourceStack> parseresults;
++                        try {
++                            parseresults = this.server.getCommands().getDispatcher().parse(stringreader, this.player.createCommandSourceStack());
++                        } catch (final Throwable e) { // This is fine:tm:
++                            if (LOGGER.isDebugEnabled()) {
++                                LOGGER.error("Exception parsing command", e);
++                            }
++                            this.disconnect(Component.translatable("disconnect.spam"), org.bukkit.event.player.PlayerKickEvent.Cause.SPAM);
++                            return;
++                        }
++                        // Paper end - Handle non-reoverable exceptions
+                         this.server.getCommands().getDispatcher().getCompletionSuggestions(parseresults).thenAccept((suggestions) -> {
+                             // Paper start - Don't tab-complete namespaced commands if send-namespaced is false
+                             if (!org.spigotmc.SpigotConfig.sendNamespaced && suggestions.getRange().getStart() <= 1) {

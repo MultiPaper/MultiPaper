@@ -44,6 +44,7 @@ public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, Serve
 
         if (args.length > 1) {
             try {
+                setupGracefulShutdown();
                 ProxyServer.openServer(Integer.parseInt(args[1]));
             } catch (NumberFormatException e) {
                 System.err.println("Usage: java -jar MultiPaperServer.jar <[address:]port> [proxy port]");
@@ -54,15 +55,6 @@ public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, Serve
         new MultiPaperServer(address, port);
 
         if (new CommandLineInput().run()) {
-            System.out.println("Exiting safely...");
-
-            awaitAsyncTasks();
-
-            System.out.println("Shutting down event loop...");
-            eventLoopGroup.shutdownGracefully().await();
-
-            awaitAsyncTasks();
-
             System.exit(0);
         }
     }
@@ -102,5 +94,23 @@ public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, Serve
                 System.out.println("[MultiPaperMaster] Listening on " + (address == null ? "0.0.0.0" : address) + ":" + port);
             }
         });
+    }
+
+    private static void setupGracefulShutdown() {
+        var shutdownListener = new Thread(() -> {
+            System.out.println("Exiting safely...");
+
+            awaitAsyncTasks();
+
+            System.out.println("Shutting down event loop...");
+            try {
+                eventLoopGroup.shutdownGracefully().await();
+            } catch (InterruptedException e) {
+                throw new RuntimeException("Error while waiting event loop group shutdown", e);
+            }
+
+            awaitAsyncTasks();
+        });
+        Runtime.getRuntime().addShutdownHook(shutdownListener);
     }
 }

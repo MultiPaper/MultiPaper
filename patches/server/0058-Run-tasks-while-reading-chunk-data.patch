@@ -28,8 +28,33 @@ index 53674f72ec9fc4938dcd8f844e0cdb3165af6085..c156c9a67c55ec23589bd60d3e653049
              return ret.join();
          } catch (final CompletionException ex) {
              throw new IOException(ex);
+diff --git a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
+index 259c3a1c34f592bde4600ad2a057d4cc143a648a..d3202f05547de34d8f67917669b30b63b5d43268 100644
+--- a/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
++++ b/src/main/java/io/papermc/paper/chunk/system/scheduling/ChunkHolderManager.java
+@@ -35,6 +35,7 @@ import net.minecraft.server.level.TicketType;
+ import net.minecraft.util.SortedArraySet;
+ import net.minecraft.util.Unit;
+ import net.minecraft.world.level.ChunkPos;
++import org.bukkit.Bukkit;
+ import org.bukkit.plugin.Plugin;
+ import org.slf4j.Logger;
+ import java.io.IOException;
+@@ -995,7 +996,11 @@ public final class ChunkHolderManager {
+         }
+ 
+         // Note: no need to busy wait on the chunk queue, poi load will complete off-main
+-
++        // MultiPaper start - don't block the main thread
++        if (!isCompleted.get() && Bukkit.isPrimaryThread()) {
++            world.chunkSource.mainThreadProcessor.managedBlock(isCompleted::get);
++        }
++        // MultiPaper end
+         boolean interrupted = false;
+         while (!isCompleted.get()) {
+             interrupted |= Thread.interrupted();
 diff --git a/src/main/java/net/minecraft/server/level/ChunkMap.java b/src/main/java/net/minecraft/server/level/ChunkMap.java
-index 4d6b1f77913335b5fc4a4fe0eefc9f827c6010e0..816314f9e14524fb83c010c191d7806b8506ff72 100644
+index 856cb07ae771879010d884e22ad6c637b821a918..2c3fa9ad4191f6f000361693103a5efea4dd46c6 100644
 --- a/src/main/java/net/minecraft/server/level/ChunkMap.java
 +++ b/src/main/java/net/minecraft/server/level/ChunkMap.java
 @@ -1,6 +1,7 @@

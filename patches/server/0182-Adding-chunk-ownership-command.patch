@@ -1,0 +1,92 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: x4n4th <djlafey@gmail.com>
+Date: Tue, 18 Oct 2022 17:34:48 -0400
+Subject: [PATCH] Adding chunk ownership command
+
+Adding chunk ownership command
+
+Change chunk command to mpclaim
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+index 75c47d4c51e41cce641d79b5cd3d0bb4eccd5cff..7a86a7ce0ab57c8022c7bb3cc7289c035aeb22e8 100644
+--- a/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
++++ b/src/main/java/org/bukkit/craftbukkit/command/CraftCommandMap.java
+@@ -4,10 +4,7 @@ import java.util.Map;
+ import org.bukkit.Server;
+ import org.bukkit.command.Command;
+ import org.bukkit.command.SimpleCommandMap;
+-import puregero.multipaper.commands.MPDebugCommand;
+-import puregero.multipaper.commands.MPMapCommand;
+-import puregero.multipaper.commands.SListCommand;
+-import puregero.multipaper.commands.ServersCommand;
++import puregero.multipaper.commands.*;
+
+ public class CraftCommandMap extends SimpleCommandMap {
+
+@@ -29,6 +26,7 @@ public class CraftCommandMap extends SimpleCommandMap {
+         register("multipaper", new ServersCommand("servers"));
+         register("multipaper", new MPMapCommand("mpmap"));
+         register("multipaper", new SListCommand("slist"));
++        register("multipaper", new MPClaimCommand("mpclaim"));
+     }
+     // MultiPaper end
+
+diff --git a/src/main/java/puregero/multipaper/commands/MPClaimCommand.java b/src/main/java/puregero/multipaper/commands/MPClaimCommand.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..81931c5f6519f5f5a968fa64c8d212ac7f1dc2d9
+--- /dev/null
++++ b/src/main/java/puregero/multipaper/commands/MPClaimCommand.java
+@@ -0,0 +1,53 @@
++package puregero.multipaper.commands;
++
++import org.bukkit.ChatColor;
++import org.bukkit.command.Command;
++import org.bukkit.command.CommandSender;
++import org.bukkit.entity.Player;
++import org.jetbrains.annotations.NotNull;
++import puregero.multipaper.MultiPaper;
++import puregero.multipaper.mastermessagingprotocol.ChunkKey;
++import puregero.multipaper.mastermessagingprotocol.messages.masterbound.RequestChunkOwnershipMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.BooleanMessageReply;
++
++import java.util.ArrayList;
++import java.util.List;
++
++public class MPClaimCommand extends Command {
++
++    public MPClaimCommand(String command) {
++        super(command);
++        setPermission("multipaper.command.mpclaim");
++    }
++
++    @Override
++    public boolean execute(@NotNull CommandSender sender, @NotNull String commandLabel, String[] args) {
++        if (!testPermission(sender)) return false;
++
++        if (!(sender instanceof Player player)) {
++            sender.sendMessage(ChatColor.RED + "Only players can execute this command.");
++            return false;
++        }
++
++        List<ChunkKey> chunkKeyList = new ArrayList<>();
++
++        chunkKeyList.add(new ChunkKey(player.getWorld().getName(), player.getChunk().getX(), player.getChunk().getZ()));
++
++        MultiPaper.getConnection().sendAndAwaitReply(
++            new RequestChunkOwnershipMessage(
++                    player.getWorld().getName(),
++                    chunkKeyList.toArray(ChunkKey[]::new),
++                    true
++            ),
++            BooleanMessageReply.class
++        ).thenAccept((booleanMessageReply) -> {
++            if(booleanMessageReply.result){
++                sender.sendMessage(ChatColor.WHITE + "Chunk ownership changed");
++            } else {
++                sender.sendMessage(ChatColor.RED + "Unable to change chunk ownership");
++            }
++        });
++
++        return true;
++    }
++}

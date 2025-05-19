@@ -441,10 +441,10 @@ index ea63d650445e5c1222ecacf4633bc22fc3593271..0d60372a2d8958b209d3c31392aafb52
      public static void sendTickTime(long time, double tps) {
 diff --git a/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8917a8abace6ce77c35c849ccb0ff4506d32b83d
+index 0000000000000000000000000000000000000000..455538a2d614c5bb484578f4233f80222f5acedd
 --- /dev/null
 +++ b/src/main/java/puregero/multipaper/MultiPaperInventoryHandler.java
-@@ -0,0 +1,381 @@
+@@ -0,0 +1,399 @@
 +package puregero.multipaper;
 +
 +import io.papermc.paper.chunk.system.scheduling.NewChunkHolder;
@@ -617,16 +617,23 @@ index 0000000000000000000000000000000000000000..8917a8abace6ce77c35c849ccb0ff450
 +                        // The item has probably duplicated, try to find one of the copies and remove it
 +                        LOGGER.info(player.getScoreboardName() + ": An external server tried to replace " + replacingItem + " with a " + item + ", but that item is now a " + currentItem + ". Searching for duped items to remove...");
 +                        int count = replacingItem.getCount();
-+                        int removeCount = removeItem(replacingItem, player, count);
++                        int removeCursorCount = removeItemFromCursor(replacingItem, player, count);
 +
-+                        if (count != removeCount) {
-+                            LOGGER.info(player.getScoreboardName() + ": Removed " + (count - removeCount) + " duped items from the player's inventory");
++                        if (count != removeCursorCount) {
++                            LOGGER.info(player.getScoreboardName() + ": Removed " + (count - removeCursorCount) + " duped items from the player's cursor");
 +                        }
 +
-+                        if (removeCount > 0) {
-+                            int removedEntityCount = removeItemEntity(replacingItem, player, removeCount);
-+                            if (removeCount != removedEntityCount) {
-+                                LOGGER.info(player.getScoreboardName() + ": Removed " + (removeCount - removedEntityCount) + " duped items from items on the ground");
++                        if (removeCursorCount > 0) {
++                            int removeInventoryCount = removeItem(replacingItem, player, removeCursorCount);
++                            if (removeCursorCount != removeInventoryCount) {
++                                LOGGER.info(player.getScoreboardName() + ": Removed " + (removeCursorCount - removeInventoryCount) + " duped items from the player's inventory");
++                            }
++
++                            if (removeInventoryCount > 0) {
++                                int removedEntityCount = removeItemEntity(replacingItem, player, removeInventoryCount);
++                                if (removeInventoryCount != removedEntityCount) {
++                                    LOGGER.info(player.getScoreboardName() + ": Removed " + (removeInventoryCount - removedEntityCount) + " duped items from items on the ground");
++                                }
 +                            }
 +                        }
 +                    }
@@ -660,6 +667,22 @@ index 0000000000000000000000000000000000000000..8917a8abace6ce77c35c849ccb0ff450
 +                        return 0;
 +                    }
 +                }
++            }
++        }
++
++        return count;
++    }
++
++    private static int removeItemFromCursor(ItemStack replacingItem, ServerPlayer player, int count) {
++        ItemStack cursor = player.containerMenu.getCarried();
++        if (ItemStack.isSameItemSameTags(cursor, replacingItem)) {
++            if (cursor.getCount() < count) {
++                count -= cursor.getCount();
++                cursor.setCount(0);
++                player.containerMenu.setCarried(ItemStack.EMPTY);
++            } else {
++                cursor.setCount(cursor.getCount() - count);
++                return 0;
 +            }
 +        }
 +
@@ -739,11 +762,6 @@ index 0000000000000000000000000000000000000000..8917a8abace6ce77c35c849ccb0ff450
 +    }
 +
 +    public static void broadcastComponentChanges(ServerPlayer player, NonNullListFilter<? extends ItemStack> inventoryComponent) {
-+        if (!player.didPlayerJoinEvent) {
-+            // Don't update the inventory until they fully join
-+            return;
-+        }
-+
 +        if (inventoryComponent.isDirty) {
 +            inventoryComponent.isDirty = false;
 +            ListTag items = new ListTag();
